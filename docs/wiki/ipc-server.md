@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # IPC server
@@ -22,7 +22,10 @@ commands return `ok:false` and keep it open. Time-control and status commands go
 through `Loop.Do` and reply with the full `StatusData` (built by `statusData`, which
 adds world/daemon/log sections around the loop's clock snapshot); `state` goes
 through `Loop.DoState` and replies with `StateData` — the canonical world-state JSON
-plus the `last_seq` it reflects.
+plus the `last_seq` it reflects. `llm_call` submits to the optional
+[[llm-orchestrator]] (`SetLLM`; 2-minute timeout per call) — a slow or dead model
+blocks only the calling session, never the loop; `statusDataFull` appends the
+orchestrator's snapshot to status responses.
 
 **Broadcast path**: the loop's notify callback is `Server.Broadcast`, which offers
 committed events to each session under a non-blocking send into a

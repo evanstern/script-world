@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # Testing strategy
@@ -37,7 +37,10 @@ temp world. Proves: status round trip <2 s; subscribe-from-zero delivers strictl
 consecutive seqs; abrupt disconnects and wire garbage leave the loop ticking;
 commands are idempotent and land in the log as events; the `state` command's
 coherence contract holds (no push predates the snapshot's `last_seq`, and a replica
-built from it applies subsequent pushes cleanly — the [[tui-client]] pattern).
+built from it applies subsequent pushes cleanly — the [[tui-client]] pattern); and
+`llm_call` routes through a live [[llm-orchestrator]] while a killed inference
+endpoint leaves the loop ticking (the package's own suite covers routing, metering,
+ceiling refusal, and circuit recovery against httptest mock providers).
 
 **E2E** (`e2e/`): `TestMain` builds the binary once; scenarios mirror
 `specs/001-world-daemon/quickstart.md` — A: always-on + detach-is-not-pause; B:

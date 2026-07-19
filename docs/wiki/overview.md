@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # Overview
@@ -21,8 +21,9 @@ tasks and plugs into this substrate.
 ## How it works
 
 One Go module (`github.com/evanstern/script-world`, Go 1.22+; external deps: pure-Go
-SQLite plus Bubble Tea/Lipgloss for the TUI) builds one binary, `cmd/scriptworld`,
-which is both the daemon and every client tool. Data planes:
+SQLite, Bubble Tea/Lipgloss for the TUI, and the official Anthropic Go SDK for the
+cloud inference tier) builds one binary, `cmd/scriptworld`, which is both the daemon
+and every client tool. Data planes:
 
 - **Simulation plane**: a single goroutine in `internal/sim` owns all world state and
   advances it in deterministic ticks (1 tick = 1 game second). All external input enters
@@ -48,6 +49,7 @@ mean multiple daemons. There is no global state anywhere.
 ## Connections
 
 [[design-grounding]] records why the system has this shape. [[sim-loop]] is the heart;
+the [[llm-orchestrator]] is the (strictly quarantined) voice of the models;
 [[event-log]] and [[snapshots]] its memory; [[ipc-server]], [[tui-client]], and
 [[cli-scriptworld]] its face. [[daemon-lifecycle]] ties them into a process.
 
