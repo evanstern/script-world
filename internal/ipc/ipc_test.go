@@ -199,6 +199,12 @@ func TestTimeControlCommands(t *testing.T) {
 	if _, err := c.Status("set_speed", SetSpeedArgs{Speed: "9000x"}); err == nil {
 		t.Error("invalid speed should be rejected")
 	}
+	// No LLM on this harness: max stays legal for pure-sim worlds (TASK-20).
+	if sd, err = c.Status("set_speed", SetSpeedArgs{Speed: "max"}); err != nil {
+		t.Fatalf("pure-sim world must accept max: %v", err)
+	} else if sd.Clock.Speed != "max" {
+		t.Errorf("speed = %s, want max", sd.Clock.Speed)
+	}
 
 	if sd, err = c.Status("resume", nil); err != nil || sd.Clock.Paused {
 		t.Fatalf("resume: %v %+v", err, sd.Clock)
@@ -360,6 +366,19 @@ func TestLLMCallAndDegradedWorld(t *testing.T) {
 	}
 	if sd.LLM == nil || sd.LLM.Local.Model != "test-local" {
 		t.Fatalf("status missing llm section: %+v", sd.LLM)
+	}
+
+	// With an LLM configured, max is refused with an actionable error and
+	// 32x is the legal ceiling (TASK-20).
+	if _, err := c.Status("set_speed", SetSpeedArgs{Speed: "max"}); err == nil {
+		t.Error("LLM world must refuse speed max")
+	} else if !strings.Contains(err.Error(), "32x") {
+		t.Errorf("max refusal should point at 32x: %v", err)
+	}
+	if sd, err := c.Status("set_speed", SetSpeedArgs{Speed: "32x"}); err != nil {
+		t.Fatalf("32x on an LLM world: %v", err)
+	} else if sd.Clock.Speed != "32x" {
+		t.Errorf("speed = %s, want 32x", sd.Clock.Speed)
 	}
 
 	// Kill the local model (AC#3): calls fail, the world does not.

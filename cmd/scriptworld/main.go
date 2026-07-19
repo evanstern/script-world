@@ -20,7 +20,7 @@ Usage:
   scriptworld tail <dir> [--since SEQ] [--follow]  print events from the log
   scriptworld pause <dir>                          pause game time
   scriptworld resume <dir>                         resume game time
-  scriptworld speed <dir> <1x|4x|8x|16x|max>       set game speed
+  scriptworld speed <dir> <1x|4x|8x|16x|32x|max>       set game speed
   scriptworld llm <dir> <kind> <prompt...>         one-shot LLM call via the daemon
                                                    (kinds: planner, conversation,
                                                     consolidation, narrator, drama)

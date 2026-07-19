@@ -318,7 +318,7 @@ func cmdSpeed(args []string) error {
 		return err
 	}
 	if fs.NArg() < 2 {
-		return fmt.Errorf("usage: scriptworld speed <dir> <1x|4x|8x|16x|max>")
+		return fmt.Errorf("usage: scriptworld speed <dir> <1x|4x|8x|16x|32x|max>")
 	}
 	dir, val := fs.Arg(0), fs.Arg(1)
 	if _, err := clock.ParseSpeed(val); err != nil {
@@ -413,7 +413,7 @@ func cmdAttach(args []string) error {
 			}
 		case "speed":
 			if len(fields) < 2 {
-				fmt.Println("usage: speed <1x|4x|8x|16x|max>")
+				fmt.Println("usage: speed <1x|4x|8x|16x|32x|max>")
 				continue
 			}
 			if sd, err := c.Status("set_speed", ipc.SetSpeedArgs{Speed: fields[1]}); err != nil {

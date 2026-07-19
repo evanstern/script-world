@@ -246,6 +246,13 @@ func (c *session) handle(req Request) {
 			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
 			return
 		}
+		// Uncapped ticking outruns any model by orders of magnitude, so max
+		// is reserved for pure-sim worlds (TASK-20).
+		if clock.Speed(args.Speed) == clock.SpeedMax && c.srv.llm != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false,
+				Error: "speed max is reserved for pure-sim worlds; this world has an LLM configured — top speed is 32x (delete llm.json to unlock max)"})
+			return
+		}
 		c.replyStatus(req.ID, "set_speed", clock.Speed(args.Speed))
 	case "llm_call":
 		if c.srv.llm == nil {
