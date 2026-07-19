@@ -109,7 +109,24 @@ func parseOutcome(text string) (convoOutcome, error) {
 		}
 		return r
 	}
-	o.ToneA, o.ToneB = clamp(o.RawToneA), clamp(o.RawToneB)
+	// Per-participant tones (TASK-22); the pre-TASK-22 pair shape
+	// (tone_a/tone_b) still parses so older prompts and models degrade
+	// gracefully.
+	if len(o.RawTones) > 0 {
+		for _, v := range o.RawTones {
+			o.Tones = append(o.Tones, clamp(v))
+		}
+	} else {
+		o.Tones = []int{clamp(o.RawToneA), clamp(o.RawToneB)}
+	}
+	if len(o.Topics) > 3 {
+		o.Topics = o.Topics[:3]
+	}
+	for i, t := range o.Topics {
+		if len(t) > 40 {
+			o.Topics[i] = t[:40]
+		}
+	}
 	if strings.EqualFold(strings.TrimSpace(o.Retold), "null") {
 		o.Retold = ""
 	}

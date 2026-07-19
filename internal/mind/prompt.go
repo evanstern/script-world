@@ -125,6 +125,19 @@ func socialContext(s *sim.State, idx int) string {
 	if len(bonds) > 0 {
 		fmt.Fprintf(&b, "People: %s.\n", strings.Join(bonds, "; "))
 	}
+	// Last-conversation callback (TASK-22): the durable record ring gives
+	// prompts continuity across encounters.
+	if r, ok := sim.LastConversationInvolving(s, idx); ok {
+		var others []string
+		for _, p := range r.Participants {
+			if p != idx && p >= 0 && p < len(s.Agents) {
+				others = append(others, s.Agents[p].Name)
+			}
+		}
+		if len(others) > 0 && r.Gist != "" {
+			fmt.Fprintf(&b, "Last conversation, with %s: %s\n", strings.Join(others, " and "), r.Gist)
+		}
+	}
 	for _, d := range s.Debts {
 		if d.Status != "open" {
 			continue
