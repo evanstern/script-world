@@ -326,9 +326,16 @@ func TestMusingBestEffort(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing"}); !errors.Is(err, ErrTierBusy) {
-		t.Fatalf("busy tier must drop musings: got %v", err)
+	if _, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
+		t.Fatalf("busy tier must drop best-effort musings: got %v", err)
 	}
+	// A starved musing (fairness floor) drops BestEffort and queues like
+	// any other call — admission must not refuse it.
+	done := make(chan error, 1)
+	go func() {
+		_, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "starved musing"})
+		done <- err
+	}()
 
 	// Drain everything; a musing on a quiet tier goes through, locally.
 	close(release)
@@ -339,9 +346,17 @@ func TestMusingBestEffort(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing"})
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("starved (non-best-effort) musing must be served: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("starved musing never completed")
+	}
+	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
 	if err != nil {
-		t.Fatalf("quiet tier must serve musings: %v", err)
+		t.Fatalf("quiet tier must serve best-effort musings: %v", err)
 	}
 	if resp.Tier != TierLocal || resp.Text != "a quiet thought" {
 		t.Errorf("musing response: %+v", resp)

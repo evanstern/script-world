@@ -63,6 +63,11 @@ type Request struct {
 	System    string `json:"system,omitempty"`
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
+	// BestEffort requests drop-when-busy admission: the call is refused
+	// with ErrTierBusy whenever its tier has work waiting. Callers that
+	// may not displace real cognition (musings) set this; their fairness
+	// floor is the caller's business, not the orchestrator's.
+	BestEffort bool `json:"best_effort,omitempty"`
 }
 
 type Response struct {
@@ -170,9 +175,9 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// Conversations are interactive — a turn mid-dialogue must not wait
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
-	// Musings are the opposite extreme: pure flavor, admitted only when
-	// nothing else is waiting — they may never displace real cognition.
-	if req.Kind == KindMusing && (len(t.queue) > 0 || len(t.prio) > 0) {
+	// Best-effort work (musings) is the opposite extreme: admitted only
+	// when nothing else is waiting, refused instantly otherwise.
+	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0) {
 		return Response{}, ErrTierBusy
 	}
 	q := t.queue

@@ -50,6 +50,12 @@ const (
 	museCadenceTicks = 900 // 15 game-minutes
 	museTimeout      = callTimeout
 	museMaxTokens    = 48
+	// museStarveWindow is the fairness floor: best-effort admission loses
+	// every race on a saturated tier (live finding: back-to-back planner
+	// calls at ~50s each admit zero musings), so a musing starved this
+	// long rides the normal queue like any other call. Worst-case cost:
+	// one 48-token call per window.
+	museStarveWindow = 2 * time.Minute
 )
 
 type Mind struct {
@@ -67,8 +73,9 @@ type Mind struct {
 	pairSeen    map[[2]int]int64
 	pending     [sim.AgentCount]bool // trigger armed before nextDue
 
-	museDue  [sim.AgentCount]int64
-	museBusy atomic.Bool // one musing in flight at a time
+	museDue    [sim.AgentCount]int64
+	museBusy   atomic.Bool  // one musing in flight at a time
+	lastMuseOK atomic.Int64 // wall unix-nano of the last landed musing
 
 	events chan []store.Event
 	done   chan struct{}
@@ -269,11 +276,13 @@ func (md *Mind) muse() {
 	name := md.replica.Agents[pick].Name
 	system := musingSystemPrompt(name, md.personas[pick])
 	prompt := userPrompt(md.replica, pick, md.k)
+	starved := time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
 	go func() {
 		defer md.museBusy.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)
 		resp, err := md.orch.Submit(ctx, llm.Request{
 			Kind: llm.KindMusing, System: system, Prompt: prompt, MaxTokens: museMaxTokens,
+			BestEffort: !starved,
 		})
 		cancel()
 		if err != nil {
@@ -289,7 +298,9 @@ func (md *Mind) muse() {
 		}
 		if err := md.social.InjectSocial([]store.Event{{Type: "agent.thought", Payload: payload}}); err != nil {
 			log.Printf("mind: %s musing rejected: %v", name, err)
+			return
 		}
+		md.lastMuseOK.Store(time.Now().UnixNano())
 	}()
 }
 
