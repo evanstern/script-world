@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 2a1608f2cf9d525cbe451f8a40b7b355e30cd692
+verified_against: 7f776a3540c8fd6a518d5134e5d97bf014331c46
 ---
 
 # LLM orchestrator
@@ -36,7 +36,10 @@ default.
 
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
 queue the worker drains first — dialogue turns are interactive, while planner
-thoughts tolerate staleness (the reflex grace covers them). A worker-side hard cap
+thoughts tolerate staleness (the reflex grace covers them). Musings
+(`KindMusing`, local) sit at the opposite extreme: best-effort admission
+refuses them with `ErrTierBusy` the moment either local queue has work
+waiting — flavor may never displace real cognition (TASK-21). A worker-side hard cap
 (`workerCallCap`, 2 min) bounds any single provider call so a hung transport can
 never wedge a tier. **Submit** is synchronous with immediate admission control, each failure mode a
 distinct error: `ErrBudgetExhausted` (cloud ceiling reached — checked BEFORE any

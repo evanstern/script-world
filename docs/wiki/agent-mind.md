@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: 71549b84207c15964bf8a1be904b14906bc209f0
 ---
 
 # Agent mind
@@ -54,6 +54,15 @@ records `agent.intent_set (source: planner)` + `agent.thought`. Failures of any 
 (dead model, budget, garbage output, impossible goal) emit nothing; the reflex grace
 (120 ticks idle) is the floor under every gap, and remains the permanent degraded
 mode.
+
+**Musings** (TASK-21): between planner calls each agent has a 15-game-minute
+best-effort musing cadence (staggered half a slot off the planner stagger).
+A musing is one `llm.KindMusing` call (same situation + memory window, a
+plain-sentence system frame, MaxTokens 48) whose reply lands as a single
+`agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
+interiority with zero goal effect. Single-flight and detached from the absorb
+loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy`) or unusable replies
+drop the musing silently — never queued, never retried.
 
 ## Connections
 
