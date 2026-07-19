@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # Daemon lifecycle
@@ -30,11 +30,15 @@ Startup sequence:
    from [[worldmap-generation]]), then `ReplayEvents(seq > snapshot.seq)` through the
    reducer, bumping `Tick` to the highest event tick ([[snapshots]]). Recovery
    duration is measured and recorded.
-6. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
+6. LLM orchestrator ([[llm-orchestrator]]): started only when `llm.json` exists in
+   the save dir (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit —
+   config-gated, fully outside the loop, so inference failures can never touch the
+   simulation.
+7. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
    `signal.NotifyContext(SIGTERM, SIGINT)` cancel — so the protocol `shutdown`
    command and Unix signals share one graceful path. `SetLoop` closes the
    loop↔server mutual reference. The stale socket is removed before `Listen`.
-7. `daemon.started` event appended (payload carries tick and `recovery_ms`) and
+8. `daemon.started` event appended (payload carries tick and `recovery_ms`) and
    broadcast; then `srv.Serve()` in a goroutine and `loop.Run(ctx)` in the
    foreground.
 

@@ -258,7 +258,7 @@ func eventRow(e store.Event) string {
 }
 
 func (m Model) metatronView() string {
-	return styleBox.Render(strings.Join([]string{
+	lines := []string{
 		"METATRON CONSOLE",
 		"",
 		"The angel has not yet been summoned.",
@@ -266,7 +266,26 @@ func (m Model) metatronView() string {
 		styleDim.Render("Conversation with Metatron — judging your intents, shaping"),
 		styleDim.Render("dreams and omens — arrives with TASK-12. Its charter will be"),
 		styleDim.Render("the only player-editable prompt in the game."),
-	}, "\n"))
+	}
+	if m.status != nil && m.status.LLM != nil {
+		l := m.status.LLM
+		up := func(b bool) string {
+			if b {
+				return styleAgent.Render("up")
+			}
+			return styleErr.Render("down")
+		}
+		lines = append(lines, "",
+			"THE ANGEL'S VOICE (llm orchestrator)",
+			fmt.Sprintf("  local  %-14s %s · queue %d", l.Local.Model, up(l.Local.Up), l.Local.Queue),
+			fmt.Sprintf("  cloud  %-14s %s · queue %d", l.Cloud.Model, up(l.Cloud.Up), l.Cloud.Queue),
+			fmt.Sprintf("  spend  $%.2f of $%.0f (%s)", l.Spent, l.Budget, l.Month),
+		)
+		if l.Spent >= l.Budget {
+			lines = append(lines, styleErr.Render("  budget exhausted — cloud calls refused"))
+		}
+	}
+	return styleBox.Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) soulsView() string {

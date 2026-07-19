@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # IPC protocol
@@ -32,7 +32,11 @@ Commands: `status`, `state` (returns `StateData{state, last_seq}` — the full
 canonical world-state JSON plus the log position it reflects, captured coherently in
 one loop iteration; subscribe with `since: last_seq` for a gapless live replica),
 `subscribe` (`SubscribeArgs{since}` — replay after that seq, then live, gapless),
-`unsubscribe`, `pause`, `resume`, `set_speed` (`SetSpeedArgs{speed}`), `shutdown`.
+`unsubscribe`, `pause`, `resume`, `set_speed` (`SetSpeedArgs{speed}`), `llm_call`
+(`LLMCallArgs{kind, system, prompt, max_tokens}` → an `llm.Response` with tier,
+model, tokens, cost, latency — errors when the world has no orchestrator), and
+`shutdown`. `StatusData` gains an optional `llm` section (tier health, queue depths,
+monthly spend vs budget) when the orchestrator is enabled.
 
 `StatusData` is the shared response shape for status/pause/resume/set_speed, with four
 sections: `world` (name, seed, format_version), `clock` (tick, game_time, paused,

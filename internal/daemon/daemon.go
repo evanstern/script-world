@@ -17,6 +17,7 @@ import (
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/ipc"
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -61,6 +62,21 @@ func Run(dir string) error {
 	srv := ipc.NewServer(w, st, cancel)
 	loop := sim.NewLoop(state, w.Map(), st, srv.Broadcast)
 	srv.SetLoop(loop)
+
+	// LLM orchestrator: optional (config-gated), fully outside the sim loop —
+	// an unreachable model degrades the AI layer, never the world.
+	if llmCfg, err := llm.LoadConfig(w.LLMConfigPath()); err != nil {
+		return err
+	} else if llmCfg != nil {
+		orch, err := llm.New(*llmCfg, st)
+		if err != nil {
+			return err
+		}
+		defer orch.Close()
+		srv.SetLLM(orch)
+		fmt.Printf("daemon: llm orchestrator on (local %s @ %s, cloud %s, budget $%.0f/mo)\n",
+			llmCfg.Local.Model, llmCfg.Local.Endpoint, llmCfg.Cloud.Model, llmCfg.MonthlyBudgetUSD)
+	}
 
 	// Stale socket from a crashed daemon: the pidfile said no one is alive.
 	os.Remove(w.SockPath())

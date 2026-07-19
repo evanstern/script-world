@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # scriptworld CLI
@@ -42,6 +42,9 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
   `dropped` pushes by re-subscribing. Quit detaches; the world keeps running.
 - `tail <dir> [--since SEQ] [--follow]` — history from the store (default last 20),
   works with no daemon; `--follow` additionally subscribes live and requires one.
+- `llm <dir> <kind> <prompt...> [--system] [--max-tokens]` — one-shot model call via
+  the daemon's `llm_call` command, printing tier, model, tokens, cost, and latency
+  ([[llm-orchestrator]]). `new` also writes the default `llm.json` config.
 
 `parseDirFlags` accepts both `cmd <dir> --flag` and `cmd --flag <dir>` orderings.
 

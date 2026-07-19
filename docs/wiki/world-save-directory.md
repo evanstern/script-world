@@ -4,7 +4,7 @@ description: One directory = one world run — manifest (world.json), path helpe
 kind: component
 sources:
   - internal/world/world.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cee600e086a1be15868205c16c395ee33aaa397e
 ---
 
 # World save directory
@@ -29,8 +29,10 @@ so the map is never stored ([[worldmap-generation]]).
 - `Open(dir)` reads and validates the manifest: unknown `format_version` or a
   `tick_game_seconds` other than 1 is a hard error, so an old binary can never
   half-load a newer world.
-- Path helpers centralize layout: `DBPath()` → `world.db`, `SockPath()` →
-  `daemon.sock`, `PidPath()` → `daemon.pid`, `LogPath()` → `daemon.log`.
+- Path helpers centralize layout: `DBPath()` → `world.db`, `LLMConfigPath()` →
+  `llm.json` (the [[llm-orchestrator]] config, written by `new`, deletable to
+  disable inference), `SockPath()` → `daemon.sock`, `PidPath()` → `daemon.pid`,
+  `LogPath()` → `daemon.log`.
 
 Runtime files (`daemon.sock`, `daemon.pid`) exist only while a daemon runs and are
 swept by [[daemon-lifecycle]] when stale. The full layout is documented in

@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -29,7 +31,8 @@ type Server struct {
 	w        *world.World
 	st       *store.Store
 	loop     *sim.Loop
-	shutdown func() // requests daemon shutdown (graceful)
+	llm      *llm.Orchestrator // nil when the world has no llm.json
+	shutdown func()            // requests daemon shutdown (graceful)
 	started  time.Time
 
 	ln net.Listener
@@ -48,6 +51,9 @@ func NewServer(w *world.World, st *store.Store, shutdown func()) *Server {
 		sessions: make(map[*session]struct{}),
 	}
 }
+
+// SetLLM attaches the optional orchestrator (before Serve).
+func (s *Server) SetLLM(o *llm.Orchestrator) { s.llm = o }
 
 // SetLoop wires the sim loop in after construction (loop and server
 // reference each other: the loop notifies the server, the server commands
@@ -160,6 +166,15 @@ func (s *Server) statusData(cs sim.Status) StatusData {
 	}
 }
 
+func (s *Server) statusDataFull(cs sim.Status) StatusData {
+	sd := s.statusData(cs)
+	if s.llm != nil {
+		st := s.llm.StatusSnapshot()
+		sd.LLM = &st
+	}
+	return sd
+}
+
 // session is one attached client.
 type session struct {
 	srv  *Server
@@ -232,6 +247,35 @@ func (c *session) handle(req Request) {
 			return
 		}
 		c.replyStatus(req.ID, "set_speed", clock.Speed(args.Speed))
+	case "llm_call":
+		if c.srv.llm == nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "llm orchestrator disabled (no llm.json in the save directory)"})
+			return
+		}
+		var args LLMCallArgs
+		if req.Args == nil || json.Unmarshal(req.Args, &args) != nil || args.Prompt == "" {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "malformed args (need kind, prompt)"})
+			return
+		}
+		// Sessions are per-goroutine; a slow model must not block other
+		// commands on this connection — but sessions already handle one
+		// request at a time, so a bounded call here is acceptable.
+		ctx, cancelCall := context.WithTimeout(context.Background(), 2*time.Minute)
+		resp, err := c.srv.llm.Submit(ctx, llm.Request{
+			Kind: llm.Kind(args.Kind), System: args.System,
+			Prompt: args.Prompt, MaxTokens: args.MaxTokens,
+		})
+		cancelCall()
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
 	case "subscribe":
 		var args SubscribeArgs
 		if req.Args != nil {
@@ -258,7 +302,7 @@ func (c *session) replyStatus(id int64, cmd string, speed clock.Speed) {
 		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
 		return
 	}
-	data, err := json.Marshal(c.srv.statusData(cs))
+	data, err := json.Marshal(c.srv.statusDataFull(cs))
 	if err != nil {
 		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
 		return

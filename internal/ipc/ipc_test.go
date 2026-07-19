@@ -3,11 +3,14 @@ package ipc
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -305,5 +308,80 @@ func TestStatusDataShape(t *testing.T) {
 		if !strings.Contains(string(b), key) {
 			t.Errorf("status shape missing %s in %s", key, b)
 		}
+	}
+}
+
+// TestLLMCallAndDegradedWorld covers the llm_call protocol command and AC#3:
+// a dead inference endpoint degrades LLM calls while the simulation ticks on
+// untouched.
+func TestLLMCallAndDegradedWorld(t *testing.T) {
+	h := newHarness(t, clock.SpeedMax)
+
+	// A live local mock proves routing over the protocol.
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "thought"}}},
+			"usage":   map[string]any{"prompt_tokens": 3, "completion_tokens": 2},
+		})
+	}))
+	defer mock.Close()
+
+	orch, err := llm.New(llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: mock.URL, Model: "test-local"},
+		Cloud:            llm.CloudConfig{Model: "claude-opus-4-8", Endpoint: "http://127.0.0.1:1", InputUSDPerMTok: 5, OutputUSDPerMTok: 25},
+	}, h.st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer orch.Close()
+	h.srv.SetLLM(orch)
+
+	c := h.dial(t)
+
+	// Routed call succeeds and reports its tier.
+	data, err := c.Call("llm_call", LLMCallArgs{Kind: "planner", Prompt: "what next?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp llm.Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Tier != llm.TierLocal || resp.Text != "thought" {
+		t.Errorf("llm_call response: %+v", resp)
+	}
+
+	// Status carries the llm section.
+	sd, err := c.Status("status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sd.LLM == nil || sd.LLM.Local.Model != "test-local" {
+		t.Fatalf("status missing llm section: %+v", sd.LLM)
+	}
+
+	// Kill the local model (AC#3): calls fail, the world does not.
+	mock.Close()
+	before, _ := c.Status("status", nil)
+	for i := 0; i < 4; i++ {
+		c.Call("llm_call", LLMCallArgs{Kind: "planner", Prompt: "hello?"})
+	}
+	time.Sleep(300 * time.Millisecond)
+	after, err := c.Status("status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Clock.Tick <= before.Clock.Tick {
+		t.Fatal("simulation stalled while LLM tier was down (AC#3)")
+	}
+	if after.LLM.Local.Up {
+		t.Error("local tier should report down after repeated failures")
+	}
+
+	// Cloud tier at a dead port: same story, plus the error reaches the client.
+	if _, err := c.Call("llm_call", LLMCallArgs{Kind: "narrator", Prompt: "x"}); err == nil {
+		t.Error("cloud call against dead endpoint should error")
 	}
 }

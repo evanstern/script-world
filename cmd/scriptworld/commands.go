@@ -19,6 +19,7 @@ import (
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/daemon"
 	"github.com/evanstern/script-world/internal/ipc"
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/tui"
@@ -90,7 +91,47 @@ func cmdNew(args []string) error {
 	if err := st.AppendEvents([]store.Event{{Tick: 0, Type: "world.created", Payload: payload}}); err != nil {
 		return err
 	}
-	fmt.Printf("created world %q in %s (seed %d)\nstart it with: scriptworld start %s\n", *name, dir, *seed, dir)
+	if err := llm.WriteDefault(w.LLMConfigPath()); err != nil {
+		return err
+	}
+	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: scriptworld start %s\n",
+		*name, dir, *seed, w.LLMConfigPath(), dir)
+	return nil
+}
+
+func cmdLLM(args []string) error {
+	fs := flag.NewFlagSet("llm", flag.ContinueOnError)
+	system := fs.String("system", "", "system prompt")
+	maxTokens := fs.Int64("max-tokens", 0, "max output tokens (cloud tier)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 3 {
+		return fmt.Errorf("usage: scriptworld llm <dir> <kind> <prompt...>")
+	}
+	dir, kind := fs.Arg(0), fs.Arg(1)
+	prompt := strings.Join(fs.Args()[2:], " ")
+	w, err := world.Open(dir)
+	if err != nil {
+		return err
+	}
+	c, err := ipc.Dial(w.SockPath())
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	data, err := c.Call("llm_call", ipc.LLMCallArgs{
+		Kind: kind, System: *system, Prompt: prompt, MaxTokens: *maxTokens,
+	})
+	if err != nil {
+		return err
+	}
+	var resp llm.Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	fmt.Printf("[%s tier · %s · %d in / %d out tokens · $%.4f · %dms]\n%s\n",
+		resp.Tier, resp.Model, resp.InputTokens, resp.OutputTokens, resp.CostUSD, resp.Millis, resp.Text)
 	return nil
 }
 
