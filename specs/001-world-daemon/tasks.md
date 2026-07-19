@@ -104,9 +104,9 @@ pause state and full history intact; Scenario E — copied dir is a runnable wor
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T028 [P] Run full quickstart.md scenarios manually against the built binary; fix any drift between contracts and behavior; record results in specs/001-world-daemon/quickstart-results.md
-- [ ] T029 [P] Update README.md with build/run instructions for the daemon substrate (replacing pitch-only content where it claims features that now exist)
-- [ ] T030 `go vet ./...` clean; `gofmt -l .` empty; race detector pass on test suite (`go test -race ./...`)
+- [X] T028 [P] Run full quickstart.md scenarios manually against the built binary; fix any drift between contracts and behavior; record results in specs/001-world-daemon/quickstart-results.md
+- [X] T029 [P] Update README.md with build/run instructions for the daemon substrate (replacing pitch-only content where it claims features that now exist)
+- [X] T030 `go vet ./...` clean; `gofmt -l .` empty; race detector pass on test suite (`go test -race ./...`)
 
 ---
 
