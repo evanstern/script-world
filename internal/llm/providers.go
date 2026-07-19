@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -20,18 +19,22 @@ type caller interface {
 	call(ctx context.Context, req Request) (text string, inTok, outTok int64, err error)
 }
 
-// --- local tier: OpenAI-compatible chat completions (Ollama et al.) ---
+// --- OpenAI-compatible chat completions (Ollama, 9router, et al.) ---
+// Serves the local tier always, and the cloud tier when
+// cloud.provider = "openai_compat".
 
 type openaiCompat struct {
 	endpoint string
 	model    string
+	apiKey   string
 	client   *http.Client
 }
 
-func newOpenAICompat(cfg LocalConfig) *openaiCompat {
+func newOpenAICompat(endpoint, model, apiKey string) *openaiCompat {
 	return &openaiCompat{
-		endpoint: strings.TrimRight(cfg.Endpoint, "/"),
-		model:    cfg.Model,
+		endpoint: strings.TrimRight(endpoint, "/"),
+		model:    model,
+		apiKey:   apiKey,
 		client:   &http.Client{Timeout: 120 * time.Second},
 	}
 }
@@ -50,6 +53,9 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 	body, err := json.Marshal(map[string]any{
 		"model":    o.model,
 		"messages": msgs,
+		// Some routers (9router) stream by default; this decoder wants one
+		// JSON object, so pin it.
+		"stream": false,
 	})
 	if err != nil {
 		return "", 0, 0, err
@@ -60,6 +66,9 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 		return "", 0, 0, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if o.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
+	}
 
 	resp, err := o.client.Do(httpReq)
 	if err != nil {
@@ -68,7 +77,7 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", 0, 0, fmt.Errorf("local tier HTTP %d: %s", resp.StatusCode, snippet)
+		return "", 0, 0, fmt.Errorf("chat-completions HTTP %d: %s", resp.StatusCode, snippet)
 	}
 
 	var out struct {
@@ -83,10 +92,10 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", 0, 0, fmt.Errorf("local tier response: %w", err)
+		return "", 0, 0, fmt.Errorf("chat-completions response: %w", err)
 	}
 	if len(out.Choices) == 0 {
-		return "", 0, 0, fmt.Errorf("local tier returned no choices")
+		return "", 0, 0, fmt.Errorf("chat-completions returned no choices")
 	}
 	return out.Choices[0].Message.Content, out.Usage.PromptTokens, out.Usage.CompletionTokens, nil
 }
@@ -100,15 +109,21 @@ type anthropicCaller struct {
 
 func newAnthropicCaller(cfg CloudConfig) *anthropicCaller {
 	var opts []option.RequestOption
-	if cfg.APIKeyEnv != "" {
-		if key := os.Getenv(cfg.APIKeyEnv); key != "" {
-			opts = append(opts, option.WithAPIKey(key))
-		}
+	if key := cfg.key(); key != "" {
+		opts = append(opts, option.WithAPIKey(key))
 	}
 	if cfg.Endpoint != "" {
 		opts = append(opts, option.WithBaseURL(cfg.Endpoint))
 	}
 	return &anthropicCaller{client: anthropic.NewClient(opts...), model: cfg.Model}
+}
+
+// newCloudCaller picks the cloud tier's transport from the config.
+func newCloudCaller(cfg CloudConfig) caller {
+	if cfg.Provider == ProviderOpenAICompat {
+		return newOpenAICompat(cfg.Endpoint, cfg.Model, cfg.key())
+	}
+	return newAnthropicCaller(cfg)
 }
 
 func (a *anthropicCaller) call(ctx context.Context, req Request) (string, int64, int64, error) {

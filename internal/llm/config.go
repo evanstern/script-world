@@ -8,8 +8,10 @@ import (
 )
 
 // Config is llm.json in the world save directory. Endpoints, models, and
-// pricing live here; API keys never do — only the NAME of an environment
-// variable that carries one.
+// pricing live here; hosted-API keys never do — only the NAME of an
+// environment variable that carries one. The one exception is api_key,
+// meant for keys that guard LAN-local routers and secure nothing beyond
+// the operator's own machines.
 type Config struct {
 	MonthlyBudgetUSD float64     `json:"monthly_budget_usd"`
 	Local            LocalConfig `json:"local"`
@@ -22,17 +24,40 @@ type Config struct {
 type LocalConfig struct {
 	Endpoint string `json:"endpoint"` // e.g. http://localhost:11434/v1
 	Model    string `json:"model"`
+	APIKey   string `json:"api_key,omitempty"` // local routers only
 }
 
-// CloudConfig is the cloud tier: the Anthropic Messages API via the
-// official SDK. Pricing feeds the spend meter.
+// Cloud provider values. Empty means ProviderAnthropic.
+const (
+	ProviderAnthropic    = "anthropic"     // the Anthropic Messages API via the official SDK
+	ProviderOpenAICompat = "openai_compat" // any OpenAI-compatible chat-completions router
+)
+
+// CloudConfig is the cloud tier: the Anthropic API by default, or any
+// OpenAI-compatible router (e.g. a LAN-local 9router) when provider says
+// so. Pricing feeds the spend meter either way.
 type CloudConfig struct {
+	Provider         string  `json:"provider,omitempty"` // "anthropic" (default) | "openai_compat"
 	Model            string  `json:"model"`
 	InputUSDPerMTok  float64 `json:"input_usd_per_mtok"`
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
-	APIKeyEnv        string  `json:"api_key_env"` // env var NAME holding the key
-	// Endpoint overrides the API base URL (tests, proxies); empty = default.
+	APIKeyEnv        string  `json:"api_key_env"`       // env var NAME holding the key
+	APIKey           string  `json:"api_key,omitempty"` // inline key, local routers only
+	// Endpoint overrides the API base URL (required for openai_compat;
+	// tests/proxies for anthropic); empty = the Anthropic default.
 	Endpoint string `json:"endpoint,omitempty"`
+}
+
+// key resolves the credential: an inline local-router key wins, else the
+// named environment variable, else empty (Ollama-style open endpoints).
+func (c CloudConfig) key() string {
+	if c.APIKey != "" {
+		return c.APIKey
+	}
+	if c.APIKeyEnv != "" {
+		return os.Getenv(c.APIKeyEnv)
+	}
+	return ""
 }
 
 // DefaultConfig matches the grounding decisions: local Ollama for the
@@ -72,6 +97,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.MonthlyBudgetUSD <= 0 {
 		return nil, fmt.Errorf("%s: monthly_budget_usd must be positive", path)
+	}
+	switch cfg.Cloud.Provider {
+	case "", ProviderAnthropic, ProviderOpenAICompat:
+	default:
+		return nil, fmt.Errorf("%s: unknown cloud.provider %q", path, cfg.Cloud.Provider)
+	}
+	if cfg.Cloud.Provider == ProviderOpenAICompat && cfg.Cloud.Endpoint == "" {
+		return nil, fmt.Errorf("%s: cloud.provider %q requires cloud.endpoint", path, ProviderOpenAICompat)
 	}
 	return &cfg, nil
 }
