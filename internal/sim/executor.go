@@ -85,7 +85,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 						continue
 					}
 					if abs(s.Agents[w].X-a.X)+abs(s.Agents[w].Y-a.Y) <= witnessRadius {
-						events = append(events, memoryEvent(nextTick, w, salWitnessDeath,
+						events = append(events, memoryAboutEvent(nextTick, w, i, -80, salWitnessDeath,
 							"Watched %s die of %s.", a.Name, cause))
 					}
 				}
@@ -147,13 +147,150 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
-	// Adjacent idle agents pass the time together (talk-intent primitive;
-	// the social fabric proper is TASK-8).
+	// Adjacent idle agents: give/repay first (debts bind), then talk with a
+	// verbatim rumor fallback (the social fabric's model-free floor).
 	if nextTick%60 == 30 {
-		events = append(events, talkEvents(s, nextTick)...)
+		events = append(events, socialEvents(s, nextTick)...)
+	}
+
+	// Hourly ledger due-check: overdue open debts break, permanently.
+	if nextTick%3600 == 0 {
+		for _, d := range s.Debts {
+			if d.Status == "open" && nextTick > d.Due {
+				events = append(events,
+					store.Event{Tick: nextTick, Type: "social.promise_broken",
+						Payload: mustPayload(PromiseBrokenPayload{ID: d.ID})},
+					store.Event{Tick: nextTick, Type: "social.relation_changed",
+						Payload: mustPayload(RelationChangedPayload{
+							A: d.Creditor, B: d.Debtor,
+							TrustDelta: brokenTrustPenalty, AffectionDelta: brokenAffectPenalty,
+							Reason: "promise broken"})},
+					memoryAboutEvent(nextTick, d.Creditor, d.Debtor, toneNeverPaid, salNeverPaid,
+						"%s never repaid the food I gave them.", s.Agents[d.Debtor].Name))
+			}
+		}
 	}
 
 	return events
+}
+
+// socialEvents runs the adjacency slot: repayment, gifts to the starving,
+// or a talk (with the deterministic verbatim rumor fallback). One social
+// beat per heartbeat keeps the fabric legible.
+func socialEvents(s *State, nextTick int64) []store.Event {
+	var events []store.Event
+	give := func(from, to int) {
+		f, t := &s.Agents[from], &s.Agents[to]
+		events = append(events,
+			store.Event{Tick: nextTick, Type: "social.gave",
+				Payload: mustPayload(GavePayload{From: from, To: to, Kind: "food"})},
+			store.Event{Tick: nextTick, Type: "social.relation_changed",
+				Payload: mustPayload(RelationChangedPayload{
+					A: to, B: from, TrustDelta: giveTrustToGiver, AffectionDelta: giveAffectionToGiver,
+					Reason: "shared food"})},
+			store.Event{Tick: nextTick, Type: "social.relation_changed",
+				Payload: mustPayload(RelationChangedPayload{
+					A: from, B: to, TrustDelta: 0, AffectionDelta: giveAffectionToRecv,
+					Reason: "shared food"})},
+			memoryAboutEvent(nextTick, to, from, toneSaved, salWasSaved,
+				"%s gave me food when I needed it.", f.Name),
+			memoryEvent(nextTick, from, salGaveHelp, "Gave food to %s.", t.Name))
+	}
+
+	for i := range s.Agents {
+		a := &s.Agents[i]
+		if a.Dead || a.Asleep {
+			continue
+		}
+		for j := i + 1; j < len(s.Agents); j++ {
+			b := &s.Agents[j]
+			if b.Dead || b.Asleep || abs(a.X-b.X)+abs(a.Y-b.Y) != 1 {
+				continue
+			}
+			// 1) Repay an open debt when able.
+			if deb, cred, ok := repayable(s, i, j, nextTick); ok {
+				give(deb, cred)
+				return events
+			}
+			// 2) Give to a starving neighbor.
+			if giver, recv, ok := giveable(s, i, j, nextTick); ok {
+				give(giver, recv)
+				return events
+			}
+			// 3) Talk (+ verbatim rumor fallback). Villagers chat while
+			// working — requiring mutual idleness starved the fabric once
+			// planners kept everyone permanently tasked (cooldowns still
+			// bound the chatter).
+			if canTalk(a, nextTick) && canTalk(b, nextTick) {
+				events = append(events,
+					store.Event{Tick: nextTick, Type: "agent.talked",
+						Payload: mustPayload(TalkedPayload{A: i, B: j})},
+					store.Event{Tick: nextTick, Type: "social.relation_changed",
+						Payload: mustPayload(RelationChangedPayload{
+							A: i, B: j, AffectionDelta: talkAffection, Reason: "talked"})},
+					store.Event{Tick: nextTick, Type: "social.relation_changed",
+						Payload: mustPayload(RelationChangedPayload{
+							A: j, B: i, AffectionDelta: talkAffection, Reason: "talked"})},
+					memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
+					memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name))
+				// Deterministic gossip floor: the better-stocked teller
+				// passes one rumor verbatim (the mind's conversations
+				// paraphrase instead when a model is available).
+				if tell, ok := TellableFor(s, i, j); ok {
+					events = append(events, rumorTellEvent(nextTick, i, j, tell))
+				} else if tell, ok := TellableFor(s, j, i); ok {
+					events = append(events, rumorTellEvent(nextTick, j, i, tell))
+				}
+				return events
+			}
+		}
+	}
+	return events
+}
+
+func rumorTellEvent(tick int64, from, to int, tell Tellable) store.Event {
+	return store.Event{Tick: tick, Type: "social.rumor_told",
+		Payload: mustPayload(RumorToldPayload{
+			From: from, To: to, RumorID: tell.RumorID, Subject: tell.Subject,
+			Tone: tell.Tone, Text: tell.Text, Confidence: tell.Confidence,
+		})}
+}
+
+// repayable: one of the pair owes the other and can spare a meal.
+func repayable(s *State, i, j int, tick int64) (debtor, creditor int, ok bool) {
+	for _, d := range s.Debts {
+		if d.Status != "open" || d.Kind != "food" {
+			continue
+		}
+		if d.Debtor == i && d.Creditor == j && canGive(&s.Agents[i], tick) {
+			return i, j, true
+		}
+		if d.Debtor == j && d.Creditor == i && canGive(&s.Agents[j], tick) {
+			return j, i, true
+		}
+	}
+	return 0, 0, false
+}
+
+// giveable: one is starving, the other has spare food.
+func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
+	a, b := &s.Agents[i], &s.Agents[j]
+	if a.Needs.Food < giveNeedBelow && canGive(b, tick) {
+		return j, i, true
+	}
+	if b.Needs.Food < giveNeedBelow && canGive(a, tick) {
+		return i, j, true
+	}
+	return 0, 0, false
+}
+
+func canGive(a *Agent, tick int64) bool {
+	return a.Inv.Food >= giveKeepsAtLeast &&
+		(a.LastGive == 0 || tick-a.LastGive >= giveCooldownSec)
+}
+
+func canTalk(a *Agent, tick int64) bool {
+	return a.LastTalk == 0 || tick-a.LastTalk >= talkCooldownSec
 }
 
 // executeAtTarget runs the arrival/work/completion state machine for the
@@ -261,33 +398,6 @@ func wakeReason(a *Agent, night bool) bool {
 		return true
 	}
 	return a.Needs.Food < 150 && a.Inv.Food > 0
-}
-
-func talkEvents(s *State, nextTick int64) []store.Event {
-	var events []store.Event
-	for i := range s.Agents {
-		a := &s.Agents[i]
-		if a.Dead || a.Asleep || a.Intent != nil || nextTick-a.LastTalk < talkCooldownSec {
-			continue
-		}
-		for j := i + 1; j < len(s.Agents); j++ {
-			b := &s.Agents[j]
-			if b.Dead || b.Asleep || b.Intent != nil || nextTick-b.LastTalk < talkCooldownSec {
-				continue
-			}
-			if abs(a.X-b.X)+abs(a.Y-b.Y) == 1 {
-				events = append(events, store.Event{
-					Tick: nextTick, Type: "agent.talked",
-					Payload: mustPayload(TalkedPayload{A: i, B: j}),
-				})
-				events = append(events,
-					memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
-					memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name))
-				return events // one conversation per heartbeat keeps it simple
-			}
-		}
-	}
-	return events
 }
 
 func minInt(a, b int) int {

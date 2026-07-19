@@ -2,6 +2,7 @@ package sim
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -42,9 +43,10 @@ type InjectArgs struct {
 }
 
 type command struct {
-	name   string // "status" | "state" | "pause" | "resume" | "set_speed" | "inject_intent"
+	name   string // status | state | pause | resume | set_speed | inject_intent | inject_social
 	speed  clock.Speed
 	inject *InjectArgs
+	social []store.Event
 	reply  chan commandResult
 }
 
@@ -99,6 +101,35 @@ func (l *Loop) Do(name string, speed clock.Speed) (Status, error) {
 // sim ONLY through here — as recorded input.
 func (l *Loop) InjectIntent(args InjectArgs) error {
 	cmd := command{name: "inject_intent", inject: &args, reply: make(chan commandResult, 1)}
+	select {
+	case l.commands <- cmd:
+	case <-l.done:
+		return errors.New("simulation loop is not running")
+	}
+	select {
+	case res := <-cmd.reply:
+		return res.err
+	case <-l.done:
+		return errors.New("simulation loop stopped")
+	}
+}
+
+// injectSocialWhitelist fences what the mind may write into deterministic
+// space: conversation content, its social effects, and gist memories — never
+// sim-mutating types like deaths or moves.
+var injectSocialWhitelist = map[string]bool{
+	"social.relation_changed":  true,
+	"social.rumor_told":        true,
+	"social.conversation_turn": true,
+	"social.conversation":      true,
+	"agent.memory_added":       true,
+}
+
+// InjectSocial applies a batch of whitelisted social events atomically at
+// the next tick boundary (all-or-nothing): ticks are re-stamped, payloads
+// dry-run on a state copy first, then applied and recorded.
+func (l *Loop) InjectSocial(events []store.Event) error {
+	cmd := command{name: "inject_social", social: events, reply: make(chan commandResult, 1)}
 	select {
 	case l.commands <- cmd:
 	case <-l.done:
@@ -282,6 +313,40 @@ func (l *Loop) handleCommand(cmd command) error {
 		} else if cmd.speed != l.state.Speed {
 			emit("clock.speed_set", SpeedSetPayload{Speed: cmd.speed})
 		}
+	case "inject_social":
+		batch := cmd.social
+		if len(batch) == 0 {
+			err = fmt.Errorf("empty social batch")
+			break
+		}
+		for i := range batch {
+			if !injectSocialWhitelist[batch[i].Type] {
+				err = fmt.Errorf("event type %q not injectable", batch[i].Type)
+				break
+			}
+			batch[i].Tick = l.state.Tick
+			batch[i].Seq = 0
+			batch[i].WallTime = ""
+		}
+		if err != nil {
+			break
+		}
+		// Dry-run on a copy: the batch lands atomically or not at all.
+		probe := &State{}
+		if uerr := json.Unmarshal(l.state.Marshal(), probe); uerr != nil {
+			err = uerr
+			break
+		}
+		for _, e := range batch {
+			if aerr := probe.Apply(e); aerr != nil {
+				err = fmt.Errorf("social batch rejected: %w", aerr)
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+		events = append(events, batch...)
 	case "inject_intent":
 		in := cmd.inject
 		if in.Agent < 0 || in.Agent >= len(l.state.Agents) {

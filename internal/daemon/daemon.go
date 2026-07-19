@@ -96,7 +96,7 @@ func Run(dir string) error {
 		srv.SetLLM(orch)
 		fmt.Printf("daemon: llm orchestrator on (local %s @ %s, cloud %s, budget $%.0f/mo)\n",
 			llmCfg.Local.Model, llmCfg.Local.Endpoint, llmCfg.Cloud.Model, llmCfg.MonthlyBudgetUSD)
-		md, err := mind.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
+		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
 		if err != nil {
 			return err
 		}

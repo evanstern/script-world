@@ -3,6 +3,7 @@ package mind
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -18,6 +19,82 @@ var validGoals = map[string]bool{
 	"build_fire": true, "build_shelter": true,
 	"eat": true, "sleep": true, "wander": true,
 	"goto_warmth": true, "talk_to": true,
+}
+
+// firstJSON extracts the first balanced JSON object from model output.
+func firstJSON(text string) (string, error) {
+	start := strings.IndexByte(text, '{')
+	if start < 0 {
+		return "", fmt.Errorf("no JSON object in reply")
+	}
+	depth := 0
+	for i := start; i < len(text); i++ {
+		switch text[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return text[start : i+1], nil
+			}
+		}
+	}
+	return "", fmt.Errorf("unterminated JSON object")
+}
+
+// parseSay extracts a conversation utterance.
+func parseSay(text string) (string, error) {
+	raw, err := firstJSON(text)
+	if err != nil {
+		return "", err
+	}
+	var r struct {
+		Say string `json:"say"`
+	}
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		return "", fmt.Errorf("bad say JSON: %w", err)
+	}
+	r.Say = strings.TrimSpace(r.Say)
+	if r.Say == "" {
+		return "", fmt.Errorf("empty utterance")
+	}
+	if len(r.Say) > 300 {
+		r.Say = r.Say[:300]
+	}
+	return r.Say, nil
+}
+
+// parseOutcome extracts the conversation summary with clamped tones.
+func parseOutcome(text string) (convoOutcome, error) {
+	raw, err := firstJSON(text)
+	if err != nil {
+		return convoOutcome{}, err
+	}
+	var o convoOutcome
+	if err := json.Unmarshal([]byte(raw), &o); err != nil {
+		return convoOutcome{}, fmt.Errorf("bad outcome JSON: %w", err)
+	}
+	if o.Gist == "" {
+		return convoOutcome{}, fmt.Errorf("empty gist")
+	}
+	if len(o.Gist) > 200 {
+		o.Gist = o.Gist[:200]
+	}
+	clamp := func(v float64) int {
+		r := int(math.Round(v))
+		if r < -2 {
+			return -2
+		}
+		if r > 2 {
+			return 2
+		}
+		return r
+	}
+	o.ToneA, o.ToneB = clamp(o.RawToneA), clamp(o.RawToneB)
+	if strings.EqualFold(strings.TrimSpace(o.Retold), "null") {
+		o.Retold = ""
+	}
+	return o, nil
 }
 
 // parseReply extracts the first JSON object from model output and validates

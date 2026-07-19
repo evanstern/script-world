@@ -13,12 +13,24 @@ import (
 // executor's job; selection is a pure function shared by the mind's prompts
 // and the tests.
 
-// memoryEvent builds an agent.memory_added event.
+// memoryEvent builds a personal agent.memory_added event (no gossip subject).
 func memoryEvent(tick int64, agent int, salience int, format string, args ...any) store.Event {
 	return store.Event{
 		Tick: tick, Type: "agent.memory_added",
 		Payload: mustPayload(MemoryAddedPayload{
+			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience, Subject: -1,
+		}),
+	}
+}
+
+// memoryAboutEvent marks a gossip-worthy memory about another agent — the
+// seed rumors are born from (TASK-8).
+func memoryAboutEvent(tick int64, agent, subject, tone, salience int, format string, args ...any) store.Event {
+	return store.Event{
+		Tick: tick, Type: "agent.memory_added",
+		Payload: mustPayload(MemoryAddedPayload{
 			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience,
+			Subject: subject, Tone: tone,
 		}),
 	}
 }

@@ -72,6 +72,11 @@ func userPrompt(s *sim.State, idx int, k int) string {
 		fmt.Fprintf(&b, "Nearby: %s.\n", strings.Join(nearby, ", "))
 	}
 
+	// Social context (TASK-8): bonds, debts, reputation, the loudest rumor.
+	if social := socialContext(s, idx); social != "" {
+		b.WriteString(social)
+	}
+
 	window := sim.SelectMemories(&a, s.Seed, idx, s.Tick, k)
 	if len(window) > 0 {
 		b.WriteString("\nYou remember:\n")
@@ -81,6 +86,58 @@ func userPrompt(s *sim.State, idx int, k int) string {
 	}
 
 	b.WriteString("\nWhat do you do next?")
+	return b.String()
+}
+
+// socialContext renders a compact bonds/debts/reputation/rumor block.
+func socialContext(s *sim.State, idx int) string {
+	var b strings.Builder
+	var bonds []string
+	for _, r := range s.Relations {
+		if r.From != idx {
+			continue
+		}
+		switch {
+		case r.Affection >= 100:
+			bonds = append(bonds, fmt.Sprintf("you like %s", s.Agents[r.To].Name))
+		case r.Affection <= -100:
+			bonds = append(bonds, fmt.Sprintf("you resent %s", s.Agents[r.To].Name))
+		case r.Trust <= -100:
+			bonds = append(bonds, fmt.Sprintf("you distrust %s", s.Agents[r.To].Name))
+		}
+	}
+	if len(bonds) > 4 {
+		bonds = bonds[:4]
+	}
+	if len(bonds) > 0 {
+		fmt.Fprintf(&b, "People: %s.\n", strings.Join(bonds, "; "))
+	}
+	for _, d := range s.Debts {
+		if d.Status != "open" {
+			continue
+		}
+		if d.Debtor == idx {
+			fmt.Fprintf(&b, "You owe %s one %s (due %s).\n", s.Agents[d.Creditor].Name, d.Kind, clock.Format(d.Due))
+		} else if d.Creditor == idx {
+			fmt.Fprintf(&b, "%s owes you one %s.\n", s.Agents[d.Debtor].Name, d.Kind)
+		}
+	}
+	rep := sim.Reputation(s, idx)
+	switch {
+	case rep >= 700:
+		b.WriteString("Your word is respected in the village.\n")
+	case rep <= 300:
+		b.WriteString("People say you don't keep your word.\n")
+	}
+	best := sim.KnownRumor{Confidence: -1}
+	for _, kr := range s.Agents[idx].Known {
+		if kr.Confidence > best.Confidence && kr.From >= 0 { // heard, not own secret
+			best = kr
+		}
+	}
+	if best.Confidence > 0 {
+		fmt.Fprintf(&b, "You have heard: %q\n", best.Text)
+	}
 	return b.String()
 }
 

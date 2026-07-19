@@ -41,15 +41,17 @@ type Intent struct {
 }
 
 type Agent struct {
-	Name     string    `json:"name"`
-	X        int       `json:"x"`
-	Y        int       `json:"y"`
-	Needs    Needs     `json:"needs"`
-	Inv      Inventory `json:"inv"`
-	Asleep   bool      `json:"asleep"`
-	Dead     bool      `json:"dead"`
-	Intent   *Intent   `json:"intent,omitempty"`
-	LastTalk int64     `json:"last_talk"`
+	Name     string       `json:"name"`
+	X        int          `json:"x"`
+	Y        int          `json:"y"`
+	Needs    Needs        `json:"needs"`
+	Inv      Inventory    `json:"inv"`
+	Asleep   bool         `json:"asleep"`
+	Dead     bool         `json:"dead"`
+	Intent   *Intent      `json:"intent,omitempty"`
+	LastTalk int64        `json:"last_talk"`
+	LastGive int64        `json:"last_give,omitempty"`
+	Known    []KnownRumor `json:"known,omitempty"`
 	// Memories accrete via agent.memory_added events (TASK-7); soul.md is a
 	// rendered view of this list. Bounded later by TASK-9 consolidation.
 	Memories []Memory `json:"memories,omitempty"`
@@ -61,11 +63,14 @@ type Agent struct {
 }
 
 // Memory is one episodic record; salience 1..10 weights the working-memory
-// window ([[research R2/R3]]).
+// window. Subject/Tone (TASK-8) mark gossip-worthy memories about another
+// agent — the seeds rumors are born from (−1 subject = purely personal).
 type Memory struct {
 	Text     string `json:"text"`
 	Salience int    `json:"salience"`
 	Tick     int64  `json:"tick"`
+	Subject  int    `json:"subject"`
+	Tone     int    `json:"tone,omitempty"`
 }
 
 // Structure is player-visible built stuff; the map itself never contains
@@ -214,6 +219,8 @@ type (
 		Agent    int    `json:"agent"`
 		Text     string `json:"text"`
 		Salience int    `json:"salience"`
+		Subject  int    `json:"subject"`
+		Tone     int    `json:"tone,omitempty"`
 	}
 	ThoughtPayload struct {
 		Agent  int    `json:"agent"`

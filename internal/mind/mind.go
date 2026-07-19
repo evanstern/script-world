@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/evanstern/script-world/internal/llm"
@@ -33,19 +34,28 @@ const (
 	encounterCooldownTicks = 2 * 3600 // per pair
 	encounterRadius        = 1
 	callTimeout            = 90 * time.Second
+	// planDebounceTicks floors the gap between one agent's planner calls:
+	// completion triggers re-arm on every finished act, and without a floor
+	// the trigger→plan→act→complete→trigger loop saturates the local tier
+	// (starving conversations). Pending triggers stay armed and fire once
+	// the window opens.
+	planDebounceTicks = 300 // 5 game-minutes
 )
 
 type Mind struct {
-	orch     Submitter
-	loop     Injector
-	replica  *sim.State
-	m        *worldmap.Map
-	personas [sim.AgentCount]string
-	k        int
+	orch      Submitter
+	loop      Injector
+	social    SocialInjector
+	convoBusy atomic.Bool
+	replica   *sim.State
+	m         *worldmap.Map
+	personas  [sim.AgentCount]string
+	k         int
 
-	nextDue  [sim.AgentCount]int64
-	pairSeen map[[2]int]int64
-	pending  [sim.AgentCount]bool // trigger armed before nextDue
+	nextDue     [sim.AgentCount]int64
+	lastPlanned [sim.AgentCount]int64
+	pairSeen    map[[2]int]int64
+	pending     [sim.AgentCount]bool // trigger armed before nextDue
 
 	events chan []store.Event
 	done   chan struct{}
@@ -53,7 +63,7 @@ type Mind struct {
 
 // New starts the driver from a state snapshot. Cadence is staggered so eight
 // agents never think in the same game-minute.
-func New(orch Submitter, loop Injector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string) (*Mind, error) {
+func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string) (*Mind, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -61,6 +71,7 @@ func New(orch Submitter, loop Injector, m *worldmap.Map, seed uint64, stateJSON 
 	md := &Mind{
 		orch:     orch,
 		loop:     loop,
+		social:   social,
 		replica:  replica,
 		m:        m,
 		personas: personas,
@@ -125,6 +136,8 @@ func (md *Mind) absorb(batch []store.Event) {
 			}
 		case "agent.moved":
 			md.armEncounters(e)
+		case "agent.talked":
+			md.maybeStartConversation(e)
 		}
 	}
 }
@@ -171,7 +184,11 @@ func (md *Mind) plan() {
 		if !md.pending[i] && tick < md.nextDue[i] {
 			continue
 		}
+		if tick-md.lastPlanned[i] < planDebounceTicks {
+			continue // debounced; pending stays armed for a later batch
+		}
 		md.pending[i] = false
+		md.lastPlanned[i] = tick
 		md.nextDue[i] = tick + sim.PlannerCadenceTicks
 
 		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)

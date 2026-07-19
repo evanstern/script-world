@@ -89,7 +89,13 @@ func cmdNew(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := st.AppendEvents([]store.Event{{Tick: 0, Type: "world.created", Payload: payload}}); err != nil {
+	genesis := []store.Event{{Tick: 0, Type: "world.created", Payload: payload}}
+	secretEvents, err := persona.SecretEvents()
+	if err != nil {
+		return err
+	}
+	genesis = append(genesis, secretEvents...)
+	if err := st.AppendEvents(genesis); err != nil {
 		return err
 	}
 	if err := llm.WriteDefault(w.LLMConfigPath()); err != nil {

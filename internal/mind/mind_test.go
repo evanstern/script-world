@@ -79,7 +79,7 @@ func newHarness(t *testing.T, reply string) *harness {
 	}
 	h.loop = sim.NewLoop(state, m, st, notify)
 
-	md, err := New(model, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{})
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{})
 	if err != nil {
 		t.Fatal(err)
 	}
