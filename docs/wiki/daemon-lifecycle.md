@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # Daemon lifecycle
@@ -25,9 +25,11 @@ Startup sequence:
    store meta; later runs must match the manifest exactly, catching save directories
    corrupted or spliced from two runs.
 4. `CheckContiguity` — a holed event log refuses to run ([[event-log]]).
-5. `recoverState` — newest hash-valid snapshot unmarshaled into `sim.NewState(seed)`,
-   then `ReplayEvents(seq > snapshot.seq)` through the reducer, bumping `Tick` to the
-   highest event tick ([[snapshots]]). Recovery duration is measured and recorded.
+5. `recoverState` — newest hash-valid snapshot unmarshaled into
+   `sim.NewState(seed, w.Map())` (genesis derives terrain-valid wanderer positions
+   from [[worldmap-generation]]), then `ReplayEvents(seq > snapshot.seq)` through the
+   reducer, bumping `Tick` to the highest event tick ([[snapshots]]). Recovery
+   duration is measured and recorded.
 6. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
    `signal.NotifyContext(SIGTERM, SIGINT)` cancel — so the protocol `shutdown`
    command and Unix signals share one graceful path. `SetLoop` closes the

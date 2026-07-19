@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 var (
@@ -85,45 +85,129 @@ func (m Model) tabsView() string {
 	return strings.Join(tabs, " ")
 }
 
-// mapView renders the village grid from the live replica.
+// Terrain glyphs. Night dims the palette rather than hiding the world.
+var (
+	styleWater  = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	styleTree   = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	styleForage = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	styleDen    = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+)
+
+// mapView renders a camera window over the generated terrain with the live
+// replica's wanderers on top. The camera follows the wanderer centroid;
+// arrow keys pan (panX/panY), 'c' recenters.
 func (m Model) mapView() string {
-	if m.replica == nil {
-		return styleDim.Render("waiting for world state…")
+	gm := m.gameMap
+	if gm == nil {
+		return styleDim.Render("no terrain (world manifest missing?)")
 	}
-	glyphs := map[[2]int]string{}
-	for i, w := range m.replica.Wanderers {
-		g := string(rune('A' + i))
-		if w.Asleep {
-			g = styleAsleep.Render(strings.ToLower(g))
-		} else {
-			g = styleAgent.Render(g)
+
+	// Viewport size from the terminal, 2 columns per tile.
+	vw, vh := 32, 18
+	if m.width > 8 {
+		if w := (m.width - 6) / 2; w < vw || m.width >= 80 {
+			vw = w
 		}
-		glyphs[[2]int{w.X, w.Y}] = g
 	}
-	dot := "·"
-	if m.replica.Night {
-		dot = styleNight.Render("·")
+	if m.height > 12 {
+		vh = m.height - 10
 	}
-	var rows []string
-	for y := 0; y < sim.GridSize; y++ {
-		var row strings.Builder
-		for x := 0; x < sim.GridSize; x++ {
-			if g, ok := glyphs[[2]int{x, y}]; ok {
-				row.WriteString(g + " ")
+	if vw > gm.W {
+		vw = gm.W
+	}
+	if vh > gm.H {
+		vh = gm.H
+	}
+
+	// Camera center: wanderer centroid + pan offset, clamped to the map.
+	cx, cy := gm.W/2, gm.H/2
+	if m.replica != nil && len(m.replica.Wanderers) > 0 {
+		sx, sy := 0, 0
+		for _, w := range m.replica.Wanderers {
+			sx += w.X
+			sy += w.Y
+		}
+		cx, cy = sx/len(m.replica.Wanderers), sy/len(m.replica.Wanderers)
+	}
+	cx += m.panX
+	cy += m.panY
+	x0 := clampInt(cx-vw/2, 0, gm.W-vw)
+	y0 := clampInt(cy-vh/2, 0, gm.H-vh)
+
+	agents := map[[2]int]string{}
+	if m.replica != nil {
+		for i, w := range m.replica.Wanderers {
+			g := string(rune('A' + i))
+			if w.Asleep {
+				g = styleAsleep.Render(strings.ToLower(g))
 			} else {
-				row.WriteString(dot + " ")
+				g = styleAgent.Render(g)
 			}
+			agents[[2]int{w.X, w.Y}] = g
+		}
+	}
+	dens := map[[2]int]bool{}
+	for _, d := range gm.Dens {
+		dens[[2]int{d.X, d.Y}] = true
+	}
+
+	night := m.replica != nil && m.replica.Night
+	tile := func(x, y int) string {
+		if g, ok := agents[[2]int{x, y}]; ok {
+			return g
+		}
+		if dens[[2]int{x, y}] {
+			return styleDen.Render("ᴥ")
+		}
+		var s string
+		var st lipgloss.Style
+		switch gm.At(x, y) {
+		case worldmap.Water:
+			s, st = "~", styleWater
+		case worldmap.Tree:
+			s, st = "♠", styleTree
+		case worldmap.Forage:
+			s, st = "\"", styleForage
+		default:
+			s, st = "·", styleDim
+		}
+		if night {
+			st = st.Faint(true)
+		}
+		return st.Render(s)
+	}
+
+	var rows []string
+	for y := y0; y < y0+vh; y++ {
+		var row strings.Builder
+		for x := x0; x < x0+vw; x++ {
+			row.WriteString(tile(x, y) + " ")
 		}
 		rows = append(rows, strings.TrimRight(row.String(), " "))
 	}
 	grid := styleBox.Render(strings.Join(rows, "\n"))
 
 	phase := "day"
-	if m.replica.Night {
+	if night {
 		phase = styleNight.Render("night")
 	}
-	legend := styleDim.Render(fmt.Sprintf("%s · A/B wanderers (lowercase = asleep)", phase))
+	legend := styleDim.Render(fmt.Sprintf(
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ᴥden · A/B wanderers (lowercase asleep) · arrows pan, c center",
+		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
 	return grid + "\n" + legend
+}
+
+func clampInt(v, lo, hi int) int {
+	if hi < lo {
+		hi = lo
+	}
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // chronicleView is the raw event feed until TASK-11 narrates it.

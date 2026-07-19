@@ -4,7 +4,7 @@ description: One directory = one world run — manifest (world.json), path helpe
 kind: component
 sources:
   - internal/world/world.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # World save directory
@@ -17,7 +17,10 @@ stopped world's directory is a complete, restorable archive.
 
 `Manifest` (serialized as `world.json` at the dir root) carries `name`, `seed`
 (uint64), `created_at` (RFC3339, metadata only — wall time never enters sim state),
-`format_version` (currently 1), and `tick_game_seconds` (fixed 1).
+`format_version` (currently 1), `tick_game_seconds` (fixed 1), and
+`map_width`/`map_height` (default 64×64; zero/absent values from older saves default
+on `Open`). `World.Map()` regenerates the terrain from those fields — deterministic,
+so the map is never stored ([[worldmap-generation]]).
 
 - `Create(dir, name, seed)` refuses any existing non-empty directory, creates
   `agents/` (empty — flat files for later features live there), and writes the

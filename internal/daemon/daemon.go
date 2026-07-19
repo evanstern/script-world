@@ -59,7 +59,7 @@ func Run(dir string) error {
 	defer cancel()
 
 	srv := ipc.NewServer(w, st, cancel)
-	loop := sim.NewLoop(state, st, srv.Broadcast)
+	loop := sim.NewLoop(state, w.Map(), st, srv.Broadcast)
 	srv.SetLoop(loop)
 
 	// Stale socket from a crashed daemon: the pidfile said no one is alive.
@@ -106,7 +106,7 @@ func appendDaemonEvent(st *store.Store, srv *ipc.Server, typ string, payload any
 // resumes at max(snapshot tick, last event tick); quiet trailing ticks
 // re-run deterministically.
 func recoverState(w *world.World, st *store.Store) (*sim.State, error) {
-	state := sim.NewState(w.Manifest.Seed)
+	state := sim.NewState(w.Manifest.Seed, w.Map())
 	var since int64
 	if snap, err := st.LatestValidSnapshot(); err != nil {
 		return nil, err

@@ -34,12 +34,13 @@ func newHarness(t *testing.T, speed clock.Speed) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := sim.NewState(42)
+	gm := w.Map()
+	state := sim.NewState(42, gm)
 	state.Speed = speed
 
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := NewServer(w, st, cancel)
-	loop := sim.NewLoop(state, st, srv.Broadcast)
+	loop := sim.NewLoop(state, gm, st, srv.Broadcast)
 	srv.SetLoop(loop)
 	if err := srv.Listen(); err != nil {
 		t.Fatal(err)

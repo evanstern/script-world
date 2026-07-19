@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # Testing strategy
@@ -21,7 +21,9 @@ real `scriptworld`.
 
 **Unit determinism harness** (`internal/sim/sim_test.go`): `driveTicks` replicates
 the loop's semantics minus the real-time scheduler — commands injected at exact tick
-boundaries. Proves: same seed + same command timeline over 10k ticks → byte-identical
+boundaries, with the generated terrain threaded through exactly as the live loop does.
+(Terrain generation has its own determinism/AC suite in `internal/worldmap`, covered
+by [[worldmap-generation]].) Proves: same seed + same command timeline over 10k ticks → byte-identical
 event sequences and equal state hashes; different seeds diverge; replaying the logged
 events over genesis (then re-living the quiet tail) reproduces the live state hash
 exactly; the day/night cycle behaves (nobody moves at night).

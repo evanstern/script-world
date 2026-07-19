@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # TUI client
@@ -34,12 +34,15 @@ down and reconnects from a fresh state snapshot, because the replica may have mi
 events. A 1-second poll refreshes the clock/status line (quiet ticks produce no
 events, so the replica's tick alone would lag).
 
-Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — the 16×16 grid
-from `sim.GridSize`, wanderers as A/B glyphs, lowercase when asleep, night-tinted
-dots), **chronicle** (raw event feed until TASK-11 narrates it), **metatron** (stub
-until TASK-12), **souls** (lists `agents/`; stub prose until TASK-7). Time controls:
-space toggles pause/resume based on last-known status; `[`/`]` step through
-`speedSteps` (1x → 4x → 8x → 16x → max); `q` detaches — the world keeps running.
+Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — a camera
+window over the generated terrain from `Model.gameMap` (regenerated locally via
+`world.Map()`, [[worldmap-generation]]): water/trees/forage/dens glyphs with the
+replica's wanderers on top, A/B, lowercase when asleep, palette dimmed at night; the
+camera follows the wanderer centroid, arrow keys pan, `c` recenters), **chronicle**
+(raw event feed until TASK-11 narrates it), **metatron** (stub until TASK-12),
+**souls** (lists `agents/`; stub prose until TASK-7). Time controls: space toggles
+pause/resume based on last-known status; `[`/`]` step through `speedSteps`
+(1x → 4x → 8x → 16x → max); `q` detaches — the world keeps running.
 
 ## Connections
 
