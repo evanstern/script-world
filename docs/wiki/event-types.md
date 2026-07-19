@@ -8,7 +8,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 7f776a3540c8fd6a518d5134e5d97bf014331c46
+verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
 ---
 
 # Event types
@@ -42,7 +42,7 @@ TUI) will read.
 | `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone}` | executor heuristics; convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds ([[agent-mind]], [[social-fabric]]) |
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command (planner); `inject_social` (musing) | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
-| `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets ([[social-fabric]]) |
+| `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets; `social.conversation` appends the bounded record ring (TASK-22, [[social-fabric]]) |
 
 Conventions: `clock.*` are applied player/scheduler commands; `sim.*` and `agent.*`
 are world happenings (pure functions of state + seed + tick); `daemon.*` are process

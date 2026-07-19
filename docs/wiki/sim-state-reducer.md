@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
 ---
 
 # Sim state & reducer
@@ -15,7 +15,8 @@ degraded, effective rate) plus the living world — agents with needs/intents/
 inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
 latch), structures, cleared trees, harvested forage, den cooldowns, and the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
-variants ([[social-fabric]]; executor types in `agents.go`; memories belong to
+variants, and the bounded conversation-record ring ([[social-fabric]]; executor
+types in `agents.go`; memories belong to
 [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to

@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 5d47761ff2fd609c0a019036f67a6c7c314e9661
+verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
 ---
 
 # Agent mind
@@ -44,7 +44,8 @@ per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, compl
 idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floored
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
-context block (bonds, debts, reputation, loudest rumor — [[social-fabric]]), and
+context block (bonds, debts, reputation, loudest rumor, and the
+last-conversation callback from the record ring — [[social-fabric]], TASK-22), and
 the driver also runs conversations (see [[social-fabric]]). Due agents
 get one serialized planner call (`llm.KindPlanner`, persona system prefix, situation
 + memory window suffix, MaxTokens 256); the first JSON object in the reply is parsed

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
 ---
 
 # Social fabric
@@ -41,13 +41,27 @@ tick-0 events; only the conversation driver may pass one — owner→listener tr
 `SecretTrustGate` (700) plus a seeded 1-in-3 roll — after which it spreads like
 any rumor.
 
-**Conversations** (`mind/convo.go`): on the executor's `agent.talked` beat, the
-driver (slot = 1, immutable snapshot, 6-min deadline) runs 2 utterances per side
-(within the grounding's "~5 cap"; ~45 s/utterance is honest 12B pace) plus one
-outcome call (gist, float-tolerant tones, rumor paraphrase). Effects land as ONE
-atomic `inject_social` batch through the loop's whitelisted door — turns, summary,
-dual gist memories, tone edges, at most one rumor. Any failure injects nothing;
+**Conversations** (`mind/convo.go`, scenes in TASK-22): on the executor's
+`agent.talked` beat, the driver (slot = 1, immutable snapshot, 6-min deadline)
+forms a **scene**: the founding pair plus any awake villager within
+`sceneJoinRadius` (2) of the founding speaker, up to `sceneCap` (4). Round-robin
+turns, `ConvoTurnsPerSide` (2) each; the snapshot carries each participant's
+feelings toward every other, open debts inside the scene, and the last
+conversation between the founding pair (from the record ring below). One outcome
+call returns gist, 1–3 topic tags, per-participant tones (the pre-TASK-22
+`tone_a`/`tone_b` shape still parses), and the rumor paraphrase. Effects land as
+ONE atomic `inject_social` batch — turns, summary, and per participant×counterpart
+fodder: a gist memory **about** the counterpart (subject-tagged, toned ×30 — a
+`TellableFor` gossip seed) and a tone edge per pair, reason-tagged with the first
+topic; at most one rumor between the founding pair. Any failure injects nothing;
 the primitive talk stands alone. Replay is model-free.
+
+**Conversation records** (TASK-22): `social.conversation` is no longer a reducer
+no-op — the payload (`participants`, `topics`, `tones`; empty participants means
+the legacy `[a, b]`) appends a `ConvoRecord` to `State.Conversations`, a bounded
+ring (`convoRecordCap` 64). `LastConversationBetween` / `LastConversationInvolving`
+serve it back to prompts — planner prompts carry a "Last conversation, with X:
+<gist>" line, so encounters have continuity instead of amnesia.
 
 ## Connections
 
