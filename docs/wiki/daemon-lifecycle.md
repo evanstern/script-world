@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Daemon lifecycle
@@ -26,7 +26,7 @@ Startup sequence:
    corrupted or spliced from two runs.
 4. `CheckContiguity` — a holed event log refuses to run ([[event-log]]).
 5. `recoverState` — newest hash-valid snapshot unmarshaled into
-   `sim.NewState(seed, w.Map())` (genesis derives terrain-valid wanderer positions
+   `sim.NewState(seed, w.Map())` (genesis derives terrain-valid agent positions
    from [[worldmap-generation]]), then `ReplayEvents(seq > snapshot.seq)` through the
    reducer, bumping `Tick` to the highest event tick ([[snapshots]]). Recovery
    duration is measured and recorded.

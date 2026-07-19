@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/worldmap/worldmap.go
   - internal/worldmap/noise.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # World map generation
@@ -44,9 +44,9 @@ apart. Zero dims default to `DefaultSize = 64`.
 ## Connections
 
 [[world-save-directory]]'s manifest carries `map_width`/`map_height` and `world.Map()`
-regenerates; [[placeholder-sim]] moves wanderers against `Passable`;
+regenerates; the [[executor]] overlays dynamic terrain on it and moves agents against effective passability;
 [[sim-state-reducer]]'s genesis places them on passable tiles; the [[tui-client]] map
-pane renders tiles and dens. Animal entities for the dens arrive with TASK-5.
+pane renders tiles and dens. Dens are huntable food sites with cooldowns as of TASK-5.
 
 ## Operational notes
 

@@ -4,7 +4,7 @@ description: Stateless randomness — every random decision is a PCG seeded from
 kind: pattern
 sources:
   - internal/sim/rng.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Deterministic RNG
@@ -35,8 +35,8 @@ Consequences:
 
 ## Connections
 
-[[placeholder-sim]] draws movement through this; [[sim-state-reducer]]'s genesis
-wanderer placement uses purpose `"genesis"`. The pattern is what makes
+The [[reflex-policy]] draws wander targets through this; [[sim-state-reducer]]'s genesis
+agent placement uses purpose `"genesis"`. The pattern is what makes
 [[sim-loop]]-level determinism (SC-006) cheap: the [[event-log]] plus the seed is a
 complete description of a run.
 

@@ -4,7 +4,7 @@ description: Game time math — 1 tick = 1 game second, epoch day 1 06:00, Speed
 kind: component
 sources:
   - internal/clock/clock.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Game clock
@@ -31,7 +31,7 @@ Key functions:
   what the scheduler in [[sim-loop]] paces against.
 - `GameTime(tick) (day, hour, min, sec)` — calendar coordinates via integer division;
   no floats, so no drift over weeks-long runs.
-- `SecondOfDay(tick)` — used by [[placeholder-sim]] to detect the 22:00 night start
+- `SecondOfDay(tick)` — used by the [[executor]] to detect the 22:00 night start
   and 06:00 day start boundaries by exact equality (valid because ticks are whole
   game seconds).
 - `Format(tick)` — the display form used everywhere: `"day N HH:MM"`.
@@ -39,7 +39,7 @@ Key functions:
 ## Connections
 
 [[sim-loop]] converts `Speed` to a scheduling interval; [[sim-state-reducer]] stores
-the current `Speed` and pause flag; [[placeholder-sim]] and [[event-types]] use
+the current `Speed` and pause flag; the [[executor]] and [[event-types]] use
 day/night boundary detection; [[cli-scriptworld]] prints `Format` output.
 
 ## Operational notes

@@ -68,7 +68,10 @@ func TestPaneNavigation(t *testing.T) {
 
 func TestMapRendersWanderers(t *testing.T) {
 	m := testModel(t)
-	m.replica.Wanderers = []sim.Wanderer{{X: 3, Y: 4}, {X: 10, Y: 2, Asleep: true}}
+	m.replica.Agents = []sim.Agent{
+		{Name: "Ash", X: 3, Y: 4},
+		{Name: "Birch", X: 10, Y: 2, Asleep: true},
+	}
 	view := m.mapView()
 	lines := strings.Split(view, "\n")
 	gridOnly := strings.Join(lines[:len(lines)-1], "\n") // drop the legend line
@@ -94,15 +97,15 @@ func TestApplyEventUpdatesReplicaAndChronicle(t *testing.T) {
 	stale := store.Event{Seq: 10, Tick: 5, Type: "agent.moved",
 		Payload: json.RawMessage(`{"agent":0,"x":9,"y":9}`)}
 	m.applyEvent(stale)
-	if len(m.events) != 0 || m.replica.Wanderers[0].X == 9 {
+	if len(m.events) != 0 || m.replica.Agents[0].X == 9 {
 		t.Fatal("stale event must not apply")
 	}
 
 	fresh := store.Event{Seq: 11, Tick: 60, Type: "agent.moved",
 		Payload: json.RawMessage(`{"agent":0,"x":7,"y":8}`)}
 	m.applyEvent(fresh)
-	if m.replica.Wanderers[0].X != 7 || m.replica.Wanderers[0].Y != 8 {
-		t.Errorf("replica not updated: %+v", m.replica.Wanderers[0])
+	if m.replica.Agents[0].X != 7 || m.replica.Agents[0].Y != 8 {
+		t.Errorf("replica not updated: %+v", m.replica.Agents[0])
 	}
 	if m.replica.Tick != 60 {
 		t.Errorf("replica tick = %d, want 60", m.replica.Tick)

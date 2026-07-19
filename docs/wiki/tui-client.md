@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # TUI client
@@ -37,10 +37,11 @@ events, so the replica's tick alone would lag).
 Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — a camera
 window over the generated terrain from `Model.gameMap` (regenerated locally via
 `world.Map()`, [[worldmap-generation]]): water/trees/forage/dens glyphs with the
-replica's wanderers on top, A/B, lowercase when asleep, palette dimmed at night; the
-camera follows the wanderer centroid, arrow keys pan, `c` recenters), **chronicle**
-(raw event feed until TASK-11 narrates it), **metatron** (stub until TASK-12),
-**souls** (lists `agents/`; stub prose until TASK-7). Time controls: space toggles
+replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲
+and shelters ⌂; the camera follows the living agents' centroid, arrow keys pan, `c`
+recenters), **chronicle** (raw event feed until TASK-11 narrates it), **metatron**
+(stub until TASK-12), **souls** (live agent bodies: status, current goal, five-cell
+needs gauges, inventory — persona/soul files arrive with TASK-7). Time controls: space toggles
 pause/resume based on last-known status; `[`/`]` step through `speedSteps`
 (1x → 4x → 8x → 16x → max); `q` detaches — the world keeps running.
 

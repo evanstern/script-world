@@ -66,14 +66,14 @@ func canonicalLog(t *testing.T, log []store.Event) []byte {
 }
 
 func TestDeterminismSameSeedSameTimeline(t *testing.T) {
-	const seed, ticks = 7, 10_000
+	const seed, ticks = 7, 30_000
 	m := testMap(seed)
 	a, b := NewState(seed, m), NewState(seed, m)
 	logA := driveTicks(t, a, m, ticks, commandTimeline())
 	logB := driveTicks(t, b, m, ticks, commandTimeline())
 
 	if len(logA) == 0 {
-		t.Fatal("10k ticks should produce events (minute moves, night at tick 57600? no — moves every 60)")
+		t.Fatal("30k executor ticks should produce events")
 	}
 	if !bytes.Equal(canonicalLog(t, logA), canonicalLog(t, logB)) {
 		t.Fatal("same seed + same command timeline produced different event sequences")
@@ -97,7 +97,7 @@ func TestDifferentSeedsDiverge(t *testing.T) {
 // max(snapshot tick, last event tick) and re-lives quiet trailing ticks),
 // must land on the exact live state.
 func TestReplayRebuildsState(t *testing.T) {
-	const seed, ticks = 99, 20_000
+	const seed, ticks = 99, 40_000
 	m := testMap(seed)
 	live := NewState(seed, m)
 	log := driveTicks(t, live, m, ticks, commandTimeline())
@@ -118,35 +118,214 @@ func TestReplayRebuildsState(t *testing.T) {
 	}
 }
 
-func TestDayNightCycle(t *testing.T) {
-	s := NewState(3, testMap(3))
-	// Run through night start (tick 16h) and next day start (tick 24h).
-	log := driveTicks(t, s, testMap(3), 24*3600+60, nil)
+// TestMultiStepIntentExecution is AC#1: with zero external input, an agent
+// forms an intent, walks a multi-tile path, works, and completes — the whole
+// chain visible in the log.
+func TestMultiStepIntentExecution(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	log := driveTicks(t, s, m, 8*3600, nil) // one working morning
 
-	var sawNight, sawDay, sleptDuringNight bool
+	type counts struct{ intents, moves, completions int }
+	perAgent := map[int]counts{}
+	completionTypes := map[string]bool{
+		"agent.foraged": true, "agent.chopped": true, "agent.hunted": true,
+		"agent.built": true, "agent.intent_done": true, "agent.slept": true,
+	}
 	for _, e := range log {
-		switch e.Type {
-		case "sim.night_started":
-			sawNight = true
-		case "sim.day_started":
-			sawDay = true
-		case "agent.moved":
-			if sec := clock.SecondOfDay(e.Tick); sec >= 22*3600 || sec < 6*3600 {
-				t.Errorf("agent moved at night (tick %d, second-of-day %d)", e.Tick, sec)
-			}
-		case "agent.slept":
-			sleptDuringNight = true
+		var p struct {
+			Agent int `json:"agent"`
+		}
+		json.Unmarshal(e.Payload, &p)
+		c := perAgent[p.Agent]
+		switch {
+		case e.Type == "agent.intent_set":
+			c.intents++
+		case e.Type == "agent.moved":
+			c.moves++
+		case completionTypes[e.Type]:
+			c.completions++
+		}
+		perAgent[p.Agent] = c
+	}
+	for i := 0; i < agentCount; i++ {
+		c := perAgent[i]
+		if c.intents == 0 || c.moves == 0 || c.completions == 0 {
+			t.Errorf("agent %d never ran a full intent chain: %+v", i, c)
 		}
 	}
-	if !sawNight || !sawDay || !sleptDuringNight {
-		t.Errorf("cycle incomplete: night=%v day=%v slept=%v", sawNight, sawDay, sleptDuringNight)
+	var worked bool
+	for _, e := range log {
+		if e.Type == "agent.foraged" || e.Type == "agent.chopped" {
+			worked = true
+			break
+		}
 	}
-	if s.Night {
-		t.Error("state should be daytime after 06:00 day start")
+	if !worked {
+		t.Error("no resource work in a full morning")
 	}
-	for i, w := range s.Wanderers {
-		if w.Asleep {
-			t.Errorf("wanderer %d still asleep after day start", i)
+}
+
+// TestNeedsDecayAndSatisfaction is AC#2 (satisfiable half): needs fall over
+// time and agents refill them from world resources unattended.
+func TestNeedsDecayAndSatisfaction(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	log := driveTicks(t, s, m, 12*3600, nil)
+
+	var ate, gathered, needsChanged bool
+	for _, e := range log {
+		switch e.Type {
+		case "agent.ate":
+			ate = true
+		case "agent.foraged", "agent.hunted":
+			gathered = true
+		case "agent.needs_changed":
+			needsChanged = true
+		}
+	}
+	if !needsChanged {
+		t.Fatal("needs never decayed")
+	}
+	if !gathered || !ate {
+		t.Errorf("agents did not feed themselves from the world: gathered=%v ate=%v", gathered, ate)
+	}
+	for i, a := range s.Agents {
+		if a.Dead {
+			t.Errorf("agent %d (%s) died within 12h on a resource-rich map", i, a.Name)
+		}
+	}
+}
+
+// TestStarvationDeath is AC#2 (lethal half): zero food and failing health
+// kill, with the cause recorded, and the dead stop acting.
+func TestStarvationDeath(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	for i := range s.Agents {
+		s.Agents[i].Needs.Food = 0
+		s.Agents[i].Needs.Health = 3 // one heartbeat from death
+	}
+	log := driveTicks(t, s, m, 120, nil)
+
+	died := 0
+	for _, e := range log {
+		if e.Type == "agent.died" {
+			var p DiedPayload
+			json.Unmarshal(e.Payload, &p)
+			if p.Cause != "starvation" {
+				t.Errorf("cause = %q, want starvation", p.Cause)
+			}
+			died++
+		}
+	}
+	if died != agentCount {
+		t.Fatalf("%d/%d agents died of starvation", died, agentCount)
+	}
+	for _, a := range s.Agents {
+		if !a.Dead {
+			t.Error("state should mark dead agents Dead")
+		}
+	}
+	tail := driveTicks(t, s, m, 240, nil)
+	for _, e := range tail {
+		if e.Type == "agent.intent_set" || e.Type == "agent.moved" {
+			t.Fatalf("dead agent still acting: %s", e.Type)
+		}
+	}
+}
+
+// TestNightWarmthMechanics is AC#3: night is mechanically distinct — cold
+// drains warmth outdoors, fire restores it, day does not, and exposure kills.
+func TestNightWarmthMechanics(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	nightTick := int64(16 * 3600) // 22:00 day 1
+
+	s := NewState(seed, m)
+	a0 := s.Agents[0]
+
+	// The decay mechanic in isolation.
+	coldNight := decayNeeds(a0.Needs, false, true, false)
+	day := decayNeeds(a0.Needs, false, false, false)
+	if coldNight.Warmth >= a0.Needs.Warmth {
+		t.Error("night outdoors should drain warmth")
+	}
+	if day.Warmth < a0.Needs.Warmth {
+		t.Error("daytime should not drain warmth")
+	}
+
+	// Fire warmth via world state.
+	s.Structures = append(s.Structures, Structure{Kind: "fire", X: a0.X + 1, Y: a0.Y})
+	if !warmAt(s, a0.X, a0.Y) {
+		t.Fatal("agent beside a fire should be warm")
+	}
+	byFire := decayNeeds(Needs{Health: 1000, Food: 500, Rest: 500, Warmth: 500, Morale: 500},
+		false, true, warmAt(s, a0.X, a0.Y))
+	if byFire.Warmth <= 500 {
+		t.Error("fire should restore warmth at night")
+	}
+
+	// Exposure death end-to-end.
+	freezing := NewState(seed, m)
+	freezing.Tick = nightTick
+	freezing.Night = true
+	for i := range freezing.Agents {
+		freezing.Agents[i].Needs.Warmth = 0
+		freezing.Agents[i].Needs.Health = 3
+		freezing.Agents[i].Needs.Food = 500 // isolate the exposure cause
+	}
+	log := driveTicks(t, freezing, m, nightTick+120, nil)
+	var exposed bool
+	for _, e := range log {
+		if e.Type == "agent.died" {
+			var p DiedPayload
+			json.Unmarshal(e.Payload, &p)
+			if p.Cause == "exposure" {
+				exposed = true
+			}
+		}
+	}
+	if !exposed {
+		t.Error("no exposure death despite zero warmth and critical health")
+	}
+}
+
+// TestVillageSurvivesTwoDays: the reflex policy keeps everyone alive through
+// two full day/night cycles on a fresh map — fire built, food found.
+func TestVillageSurvivesTwoDays(t *testing.T) {
+	if testing.Short() {
+		t.Skip("two full game days")
+	}
+	for _, seed := range []uint64{42, 7} {
+		m := testMap(seed)
+		s := NewState(seed, m)
+		log := driveTicks(t, s, m, 2*24*3600, nil)
+
+		var fires int
+		for _, e := range log {
+			if e.Type == "agent.built" {
+				var p BuiltPayload
+				json.Unmarshal(e.Payload, &p)
+				if p.Kind == "fire" {
+					fires++
+				}
+			}
+		}
+		if fires == 0 {
+			t.Errorf("seed %d: no fire built before the cold got them", seed)
+		}
+		alive := 0
+		for _, a := range s.Agents {
+			if !a.Dead {
+				alive++
+			}
+		}
+		if alive != agentCount {
+			t.Errorf("seed %d: only %d/%d agents survived two days", seed, alive, agentCount)
 		}
 	}
 }
