@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
+verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 ---
 
 # scriptworld CLI
@@ -20,8 +20,9 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
 2 for usage errors.
 
 - `new <dir> [--name] [--seed]` — `world.Create` + store + genesis `world.created`
-  event, writes the default `llm.json`, and seeds the eight personas
-  (`persona.Genesis`, the one-and-only persona write — [[agent-mind]]). Random default seed (crypto-random,
+  event, writes the default `llm.json`, seeds the eight personas
+  (`persona.Genesis`, the one-and-only persona write — [[agent-mind]]), and
+  appends the tick-0 secret events ([[social-fabric]]). Random default seed (crypto-random,
   right-shifted 12 bits to stay comfortably printable).
 - `daemon <dir>` — the foreground primitive: `daemon.Run` directly.
 - `start <dir>` — detached start: re-execs itself (`os.Executable()` + `daemon <dir>`)

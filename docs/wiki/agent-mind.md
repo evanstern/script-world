@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
+verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 ---
 
 # Agent mind
@@ -41,7 +41,11 @@ only truth, so souls survive restarts and travel with the save dir.
 
 **The mind driver** (`internal/mind`): a replica fed by the loop's notify fan-out;
 per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, completion
-idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown). Due agents
+idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floored
+by a 5-game-minute per-agent debounce (completion triggers otherwise form a
+feedback loop that saturates the local tier). Planner prompts carry a social
+context block (bonds, debts, reputation, loudest rumor — [[social-fabric]]), and
+the driver also runs conversations (see [[social-fabric]]). Due agents
 get one serialized planner call (`llm.KindPlanner`, persona system prefix, situation
 + memory window suffix, MaxTokens 256); the first JSON object in the reply is parsed
 against the goal vocabulary and injected via `Loop.InjectIntent` — which validates,
