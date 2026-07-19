@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 71549b84207c15964bf8a1be904b14906bc209f0
+verified_against: 5d47761ff2fd609c0a019036f67a6c7c314e9661
 ---
 
 # Agent mind
@@ -61,8 +61,12 @@ A musing is one `llm.KindMusing` call (same situation + memory window, a
 plain-sentence system frame, MaxTokens 48) whose reply lands as a single
 `agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
 interiority with zero goal effect. Single-flight and detached from the absorb
-loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy`) or unusable replies
-drop the musing silently — never queued, never retried.
+loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy` on `BestEffort`
+requests) or unusable replies drop the musing silently. One exception, the
+fairness floor: a musing starved past `museStarveWindow` (2 wall-minutes)
+drops the `BestEffort` flag and rides the normal queue — a saturated tier
+(live finding: back-to-back ~50s planner calls admit zero best-effort work)
+costs at most one 48-token call per window instead of total silence.
 
 ## Connections
 
