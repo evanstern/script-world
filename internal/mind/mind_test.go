@@ -17,19 +17,31 @@ import (
 )
 
 // mockModel is a Submitter returning canned planner replies (or errors).
+// Musing calls answer musingReply; empty means the busy-drop path (the
+// orchestrator's best-effort admission), so planner-focused tests are
+// untouched by the musing cadence.
 type mockModel struct {
-	mu      sync.Mutex
-	calls   atomic.Int64
-	reply   string
-	err     error
-	prompts []string
+	mu          sync.Mutex
+	calls       atomic.Int64
+	reply       string
+	musingReply string
+	err         error
+	prompts     []string
+	kinds       []llm.Kind
 }
 
 func (m *mockModel) Submit(_ context.Context, req llm.Request) (llm.Response, error) {
 	m.calls.Add(1)
 	m.mu.Lock()
 	m.prompts = append(m.prompts, req.Prompt)
+	m.kinds = append(m.kinds, req.Kind)
 	reply, err := m.reply, m.err
+	if req.Kind == llm.KindMusing {
+		reply = m.musingReply
+		if reply == "" {
+			err = llm.ErrTierBusy
+		}
+	}
 	m.mu.Unlock()
 	if err != nil {
 		return llm.Response{}, err
@@ -125,6 +137,78 @@ func (h *harness) waitEvents(t *testing.T, timeout time.Duration, match func(sto
 		time.Sleep(30 * time.Millisecond)
 	}
 	return found
+}
+
+// TestMusingsInjectThoughts is TASK-21 AC#1/#3: on their own cadence, agents
+// emit recorded agent.thought events with source "musing" that never carry a
+// goal — pure interiority landing through the social injection door.
+func TestMusingsInjectThoughts(t *testing.T) {
+	h := newHarness(t, `{"goal": "wander", "reason": "Stretching my legs."}`)
+	h.model.mu.Lock()
+	h.model.musingReply = "The wind smells like rain tonight."
+	h.model.mu.Unlock()
+
+	musings := h.waitEvents(t, 15*time.Second, func(e store.Event) bool {
+		if e.Type != "agent.thought" {
+			return false
+		}
+		var p sim.ThoughtPayload
+		json.Unmarshal(e.Payload, &p)
+		return p.Source == "musing"
+	})
+	if len(musings) == 0 {
+		t.Fatal("no musing thoughts appeared")
+	}
+	var p sim.ThoughtPayload
+	json.Unmarshal(musings[0].Payload, &p)
+	if p.Text != "The wind smells like rain tonight." {
+		t.Errorf("musing text: %q", p.Text)
+	}
+	if p.Agent < 0 || p.Agent >= sim.AgentCount {
+		t.Errorf("musing agent out of range: %d", p.Agent)
+	}
+}
+
+// TestMusingDropsAreSilent is TASK-21 AC#2: a busy tier (ErrTierBusy) drops
+// the musing without retry — no thought events, no intent disturbance, and
+// the planner keeps working.
+func TestMusingDropsAreSilent(t *testing.T) {
+	h := newHarness(t, `{"goal": "wander", "reason": "Stretching my legs."}`) // musingReply empty → every musing drops busy
+
+	intents := h.waitEvents(t, 15*time.Second, func(e store.Event) bool {
+		if e.Type != "agent.intent_set" {
+			return false
+		}
+		var p sim.IntentSetPayload
+		json.Unmarshal(e.Payload, &p)
+		return p.Source == "planner"
+	})
+	if len(intents) == 0 {
+		t.Fatal("planner starved while musings were dropping")
+	}
+	musings := h.waitEvents(t, 2*time.Second, func(e store.Event) bool {
+		if e.Type != "agent.thought" {
+			return false
+		}
+		var p sim.ThoughtPayload
+		json.Unmarshal(e.Payload, &p)
+		return p.Source == "musing"
+	})
+	if len(musings) != 0 {
+		t.Fatalf("dropped musings still produced %d thoughts", len(musings))
+	}
+}
+
+// TestParseMusing covers the reply hygiene: plain line in, JSON and empties out.
+func TestParseMusing(t *testing.T) {
+	if got, err := parseMusing("  \"I miss the sound of the river.\"  \nsecond line"); err != nil || got != "I miss the sound of the river." {
+		t.Errorf("parseMusing: %q %v", got, err)
+	}
+	for _, bad := range []string{"", "   ", `{"goal": "wander"}`} {
+		if _, err := parseMusing(bad); err == nil {
+			t.Errorf("parseMusing(%q): expected error", bad)
+		}
+	}
 }
 
 // TestPlannerDrivesAgents is AC#1: with a working model, planner-sourced

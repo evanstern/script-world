@@ -40,6 +40,13 @@ const (
 	// (starving conversations). Pending triggers stay armed and fire once
 	// the window opens.
 	planDebounceTicks = 300 // 5 game-minutes
+
+	// Musings (TASK-21): best-effort interiority between planner calls.
+	// The cadence is per agent; drops (busy tier, bad reply) cost a beat
+	// of silence and nothing else — musings are never queued or retried.
+	museCadenceTicks = 900 // 15 game-minutes
+	museTimeout      = 30 * time.Second
+	museMaxTokens    = 48
 )
 
 type Mind struct {
@@ -56,6 +63,9 @@ type Mind struct {
 	lastPlanned [sim.AgentCount]int64
 	pairSeen    map[[2]int]int64
 	pending     [sim.AgentCount]bool // trigger armed before nextDue
+
+	museDue  [sim.AgentCount]int64
+	museBusy atomic.Bool // one musing in flight at a time
 
 	events chan []store.Event
 	done   chan struct{}
@@ -82,6 +92,9 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 	}
 	for i := range md.nextDue {
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
+		// Musing stagger sits half a slot off the planner stagger so the
+		// two cadences interleave instead of colliding.
+		md.museDue[i] = replica.Tick + museCadenceTicks/2 + int64(i)*(museCadenceTicks/sim.AgentCount)
 	}
 	go md.run()
 	return md, nil
@@ -106,6 +119,7 @@ func (md *Mind) run() {
 		case batch := <-md.events:
 			md.absorb(batch)
 			md.plan()
+			md.muse()
 		}
 	}
 }
@@ -221,6 +235,59 @@ func (md *Mind) plan() {
 			log.Printf("mind: %s goal %q rejected: %v", a.Name, reply.Goal, err)
 		}
 	}
+}
+
+// muse fires at most one best-effort interior thought per batch (TASK-21):
+// pure flavor with no goal effect, run detached so it never blocks the
+// absorb loop, and dropped — never queued — whenever the tier is busy or
+// the reply is unusable. Snapshot strings are built synchronously; only the
+// model call and injection leave this goroutine.
+func (md *Mind) muse() {
+	if md.social == nil || !md.museBusy.CompareAndSwap(false, true) {
+		return
+	}
+	tick := md.replica.Tick
+	pick := -1
+	for i := range md.replica.Agents {
+		a := &md.replica.Agents[i]
+		if a.Dead || a.Asleep || tick < md.museDue[i] {
+			continue
+		}
+		if pick < 0 || md.museDue[i] < md.museDue[pick] {
+			pick = i // most overdue first
+		}
+	}
+	if pick < 0 {
+		md.museBusy.Store(false)
+		return
+	}
+	// Re-arm before the call: a dropped musing is silence, not a debt.
+	md.museDue[pick] = tick + museCadenceTicks
+	name := md.replica.Agents[pick].Name
+	system := musingSystemPrompt(name, md.personas[pick])
+	prompt := userPrompt(md.replica, pick, md.k)
+	go func() {
+		defer md.museBusy.Store(false)
+		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)
+		resp, err := md.orch.Submit(ctx, llm.Request{
+			Kind: llm.KindMusing, System: system, Prompt: prompt, MaxTokens: museMaxTokens,
+		})
+		cancel()
+		if err != nil {
+			return // best effort: busy or degraded tiers cost only silence
+		}
+		text, err := parseMusing(resp.Text)
+		if err != nil {
+			return
+		}
+		payload, err := json.Marshal(sim.ThoughtPayload{Agent: pick, Text: text, Source: "musing"})
+		if err != nil {
+			return
+		}
+		if err := md.social.InjectSocial([]store.Event{{Type: "agent.thought", Payload: payload}}); err != nil {
+			log.Printf("mind: %s musing rejected: %v", name, err)
+		}
+	}()
 }
 
 func (md *Mind) agentIndexByName(name string) int {

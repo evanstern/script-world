@@ -26,6 +26,9 @@ const (
 	KindConsolidation Kind = "consolidation"
 	KindNarrator      Kind = "narrator"
 	KindDrama         Kind = "drama"
+	// KindMusing is best-effort interiority (TASK-21): admitted only when
+	// the local tier is otherwise quiet, dropped without retry when not.
+	KindMusing Kind = "musing"
 )
 
 type Tier string
@@ -43,6 +46,7 @@ var routing = map[Kind]Tier{
 	KindConsolidation: TierCloud,
 	KindNarrator:      TierCloud,
 	KindDrama:         TierCloud,
+	KindMusing:        TierLocal,
 }
 
 var (
@@ -50,6 +54,7 @@ var (
 	ErrBudgetExhausted = errors.New("monthly cloud budget exhausted; call refused (raise monthly_budget_usd in llm.json or wait for the month to roll over)")
 	ErrTierDown        = errors.New("tier is down (circuit open); the world keeps running degraded")
 	ErrQueueFull       = errors.New("tier queue full; back off and retry")
+	ErrTierBusy        = errors.New("tier busy; best-effort call dropped")
 	ErrClosed          = errors.New("orchestrator closed")
 )
 
@@ -165,6 +170,11 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// Conversations are interactive — a turn mid-dialogue must not wait
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
+	// Musings are the opposite extreme: pure flavor, admitted only when
+	// nothing else is waiting — they may never displace real cognition.
+	if req.Kind == KindMusing && (len(t.queue) > 0 || len(t.prio) > 0) {
+		return Response{}, ErrTierBusy
+	}
 	q := t.queue
 	if req.Kind == KindConversation {
 		q = t.prio

@@ -1,9 +1,10 @@
 ---
 id: TASK-21
 title: 'Idle musings: thought-only mind calls between planner turns'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-19 22:27'
+updated_date: '2026-07-19 22:34'
 labels:
   - sim
   - llm
@@ -23,3 +24,13 @@ More idle thoughts across the game day (user request 2026-07-19). A dedicated li
 - [ ] #2 Musings never set or change intents and never displace planner/conversation calls (dropped when the tier is busy)
 - [ ] #3 Musing thoughts are recorded events visible in chronicle/souls surfaces and survive replay
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. llm: KindMusing routed TierLocal; best-effort admission — musings are refused (ErrTierBusy) unless both local queues are empty; CLI kind list updated
+2. sim/loop: add agent.thought to injectSocialWhitelist (musing door = the existing atomic social batch; thought events are reducer no-ops, chronicle material)
+3. mind: per-agent museDue cadence (900 ticks = 15 game-min, staggered between planner slots), single-flight goroutine (never blocks absorb), prompt = musing system + existing userPrompt situation/memory window, parse = one plain line (reject JSON-ish), inject one agent.thought{source: musing}
+4. Tests: llm routing + busy-drop; mind end-to-end musing injection + drop-on-error re-arm; suite
+5. Wiki: llm-orchestrator, sim-loop, agent-mind notes + re-pin
+<!-- SECTION:PLAN:END -->
