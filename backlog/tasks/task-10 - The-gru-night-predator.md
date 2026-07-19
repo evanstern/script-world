@@ -1,10 +1,10 @@
 ---
 id: TASK-10
 title: 'The gru: night predator'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 01:14'
-updated_date: '2026-07-19 21:57'
+updated_date: '2026-07-19 22:00'
 labels:
   - sim
 dependencies:
@@ -52,3 +52,9 @@ AC3 rumor/omen fuel: night-2 chain in the log: gru.emerged→gru.sighted→memor
 
 Full suite green including determinism/replay/e2e. Discovered during proving (filed separately): IPC state reply exceeds maxLineBytes (1MB) once memories grow unbounded on long runs without TASK-9 consolidation — TUI/attach clients get bufio ErrTooLong.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The gru shipped as an event-sourced entity (State.Gru): seeded nightly emergence from unlit border tiles at 22:00, withdrawal at 06:00; sight radius 8 with absolute protection from fire light (radius 3 > warmth 2) and shelter tiles, which the gru also never enters; greedy stalk + seeded prowl at 1 tile/4 ticks; adjacent wounds of 250 health on a 10-min cooldown, floored at 1 — wounds feed death-by-neglect, never execute. Victims wake and flee to warmth via the reflex (emergent curfew); witnessed attacks seed subject-tagged rumors served by TellableFor; sightings latch one omen memory per agent per night. Proven by 4 unit tests + full suite (determinism/replay/e2e) and a 1257-game-day live run: 0 daytime gru events, 186 non-lethal attacks, 0 deaths, village-wide gru rumor propagation. Wiki re-grounded (new gru note + 4 notes re-pinned). PR: https://github.com/evanstern/script-world/pull/10. Side discovery filed as TASK-19 (IPC 1MB state-line cap).
+<!-- SECTION:FINAL_SUMMARY:END -->
