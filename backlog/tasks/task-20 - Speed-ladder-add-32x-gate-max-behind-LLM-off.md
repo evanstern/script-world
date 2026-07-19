@@ -4,7 +4,7 @@ title: 'Speed ladder: add 32x; gate max behind LLM-off'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 22:27'
-updated_date: '2026-07-19 22:28'
+updated_date: '2026-07-19 22:31'
 labels:
   - engine
 dependencies: []
@@ -19,9 +19,9 @@ ordinal: 16000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 32x parses, paces at 32 ticks/sec, and is the top of the TUI speed ladder
-- [ ] #2 A world with LLM configured refuses 'max' with an actionable error; an LLM-off world still accepts it
-- [ ] #3 Full suite green — determinism/replay unaffected
+- [x] #1 32x parses, paces at 32 ticks/sec, and is the top of the TUI speed ladder
+- [x] #2 A world with LLM configured refuses 'max' with an actionable error; an LLM-off world still accepts it
+- [x] #3 Full suite green — determinism/replay unaffected
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -33,3 +33,9 @@ ordinal: 16000
 4. cmd usage text; tests: clock 32x parse/interval, ipc gate both ways
 5. suite + wiki (game-clock, ipc-protocol/server, tui-client notes as touched)
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Live proof (speed-proof world): 'speed 32x' → running at 32.0 t/s effective; 'speed max' with llm.json → refused with the actionable 32x/llm.json error; after deleting llm.json → max accepted. Unit: clock 32x parse+interval (31250µs), ipc gate both ways, TUI ladder ends at 32x. Full suite green; e2e worlds now drop llm.json post-create (pure-sim by construction). Wiki: 6 notes re-verified.
+<!-- SECTION:NOTES:END -->
