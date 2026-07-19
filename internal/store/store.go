@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -32,8 +33,9 @@ type Snapshot struct {
 }
 
 type Store struct {
-	db      *sql.DB
-	lastSeq int64
+	db *sql.DB
+	// lastSeq is written by the sim loop and read by IPC sessions.
+	lastSeq atomic.Int64
 }
 
 func Open(path string) (*Store, error) {
@@ -58,16 +60,18 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 	s := &Store{db: db}
-	if err := s.db.QueryRow("SELECT COALESCE(MAX(seq), 0) FROM events").Scan(&s.lastSeq); err != nil {
+	var last int64
+	if err := s.db.QueryRow("SELECT COALESCE(MAX(seq), 0) FROM events").Scan(&last); err != nil {
 		db.Close()
 		return nil, err
 	}
+	s.lastSeq.Store(last)
 	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) LastSeq() int64 { return s.lastSeq }
+func (s *Store) LastSeq() int64 { return s.lastSeq.Load() }
 
 // AppendEvents assigns contiguous seqs and writes the batch in one
 // transaction. Callers treat the batch as one tick's worth of history: none
@@ -82,8 +86,9 @@ func (s *Store) AppendEvents(events []Event) error {
 	}
 	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339)
+	last := s.lastSeq.Load()
 	for i := range events {
-		events[i].Seq = s.lastSeq + int64(i) + 1
+		events[i].Seq = last + int64(i) + 1
 		if events[i].WallTime == "" {
 			events[i].WallTime = now
 		}
@@ -97,7 +102,7 @@ func (s *Store) AppendEvents(events []Event) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.lastSeq += int64(len(events))
+	s.lastSeq.Store(last + int64(len(events)))
 	return nil
 }
 
