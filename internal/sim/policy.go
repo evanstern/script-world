@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"fmt"
+
 	"github.com/evanstern/script-world/internal/worldmap"
 )
 
@@ -126,6 +128,82 @@ func foodIntent(s *State, m *worldmap.Map, a *Agent, tick int64) (*Intent, bool)
 		return &Intent{Goal: "hunt", TargetX: p.X, TargetY: p.Y}, true
 	}
 	return nil, false
+}
+
+// resolveGoal turns a planner-chosen goal into a concrete, deterministic
+// intent at the tick boundary (research R5). The model steers; the sim
+// drives. Errors mean the goal is impossible right now — nothing is emitted.
+func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent int, tick int64) (*Intent, string, error) {
+	a := &s.Agents[idx]
+	switch goal {
+	case "eat":
+		if a.Inv.Food <= 0 {
+			return nil, "", fmt.Errorf("%s has nothing to eat", a.Name)
+		}
+		return nil, "agent.ate", nil
+	case "forage":
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool {
+			return effectiveKind(m, s, x, y) == worldmap.Forage
+		}); ok {
+			return &Intent{Goal: "forage", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no forage reachable")
+	case "hunt":
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool {
+			for _, d := range m.Dens {
+				if d.X == x && d.Y == y && denReadyAt(s, x, y, tick) {
+					return true
+				}
+			}
+			return false
+		}); ok {
+			return &Intent{Goal: "hunt", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no ready den reachable")
+	case "chop":
+		if in, ok := chopIntent(s, m, a); ok {
+			return in, "", nil
+		}
+		return nil, "", fmt.Errorf("no tree reachable")
+	case "build_fire", "build_shelter":
+		cost := fireWoodCost
+		if goal == "build_shelter" {
+			cost = shelterWoodCost
+		}
+		if a.Inv.Wood < cost {
+			return nil, "", fmt.Errorf("%s lacks wood (%d < %d)", a.Name, a.Inv.Wood, cost)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no build site reachable")
+	case "sleep":
+		return &Intent{Goal: "sleep", TargetX: a.X, TargetY: a.Y}, "", nil
+	case "goto_warmth":
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y) && passable(m, s, x, y) }); ok {
+			return &Intent{Goal: "goto_warmth", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no warmth anywhere")
+	case "wander":
+		r := rngAt(s.Seed, "wander", tick, idx)
+		for try := 0; try < 8; try++ {
+			dx, dy := int(r.Uint64N(9))-4, int(r.Uint64N(9))-4
+			if (dx != 0 || dy != 0) && passable(m, s, a.X+dx, a.Y+dy) {
+				return &Intent{Goal: "wander", TargetX: a.X + dx, TargetY: a.Y + dy}, "", nil
+			}
+		}
+		return nil, "", fmt.Errorf("nowhere to wander")
+	case "talk_to", "seek":
+		if targetAgent < 0 || targetAgent >= len(s.Agents) || targetAgent == idx {
+			return nil, "", fmt.Errorf("no such agent to seek")
+		}
+		t := &s.Agents[targetAgent]
+		if t.Dead {
+			return nil, "", fmt.Errorf("%s is dead", t.Name)
+		}
+		return &Intent{Goal: "seek", TargetX: t.X, TargetY: t.Y}, "", nil
+	}
+	return nil, "", fmt.Errorf("unknown goal %q", goal)
 }
 
 func chopIntent(s *State, m *worldmap.Map, a *Agent) (*Intent, bool) {

@@ -33,10 +33,19 @@ type Status struct {
 	LastSeq       int64       `json:"last_seq"`
 }
 
+// InjectArgs carries a planner decision into deterministic space.
+type InjectArgs struct {
+	Agent       int
+	Goal        string
+	TargetAgent int // for seek/talk_to; -1 otherwise
+	Reason      string
+}
+
 type command struct {
-	name  string // "status" | "state" | "pause" | "resume" | "set_speed"
-	speed clock.Speed
-	reply chan commandResult
+	name   string // "status" | "state" | "pause" | "resume" | "set_speed" | "inject_intent"
+	speed  clock.Speed
+	inject *InjectArgs
+	reply  chan commandResult
 }
 
 type commandResult struct {
@@ -82,6 +91,25 @@ func NewLoop(state *State, m *worldmap.Map, st *store.Store, notify func([]store
 func (l *Loop) Do(name string, speed clock.Speed) (Status, error) {
 	res, err := l.do(name, speed)
 	return res.status, err
+}
+
+// InjectIntent applies a planner decision at the next tick boundary: the
+// goal is validated and resolved deterministically, then recorded as
+// agent.intent_set (source planner) + agent.thought. Model output enters the
+// sim ONLY through here — as recorded input.
+func (l *Loop) InjectIntent(args InjectArgs) error {
+	cmd := command{name: "inject_intent", inject: &args, reply: make(chan commandResult, 1)}
+	select {
+	case l.commands <- cmd:
+	case <-l.done:
+		return errors.New("simulation loop is not running")
+	}
+	select {
+	case res := <-cmd.reply:
+		return res.err
+	case <-l.done:
+		return errors.New("simulation loop stopped")
+	}
 }
 
 // DoState returns a coherent snapshot of the full world state (canonical
@@ -253,6 +281,39 @@ func (l *Loop) handleCommand(cmd command) error {
 			err = perr
 		} else if cmd.speed != l.state.Speed {
 			emit("clock.speed_set", SpeedSetPayload{Speed: cmd.speed})
+		}
+	case "inject_intent":
+		in := cmd.inject
+		if in.Agent < 0 || in.Agent >= len(l.state.Agents) {
+			err = fmt.Errorf("no such agent %d", in.Agent)
+			break
+		}
+		a := &l.state.Agents[in.Agent]
+		if a.Dead {
+			err = fmt.Errorf("%s is dead", a.Name)
+			break
+		}
+		if a.Asleep {
+			err = fmt.Errorf("%s is asleep", a.Name)
+			break
+		}
+		intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
+		if rerr != nil {
+			err = rerr
+			break
+		}
+		if in.Reason != "" {
+			emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+		}
+		if direct == "agent.ate" {
+			emit("agent.ate", AgentPayload{Agent: in.Agent})
+		} else if intent != nil {
+			emit("agent.intent_set", IntentSetPayload{
+				Agent: in.Agent, Goal: intent.Goal,
+				TargetX: intent.TargetX, TargetY: intent.TargetY,
+				ResX: intent.ResX, ResY: intent.ResY,
+				Source: "planner",
+			})
 		}
 	default:
 		err = fmt.Errorf("unknown command %q", cmd.name)

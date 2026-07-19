@@ -20,6 +20,7 @@ import (
 	"github.com/evanstern/script-world/internal/daemon"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/script-world/internal/persona"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/tui"
@@ -92,6 +93,9 @@ func cmdNew(args []string) error {
 		return err
 	}
 	if err := llm.WriteDefault(w.LLMConfigPath()); err != nil {
+		return err
+	}
+	if err := persona.Genesis(dir); err != nil {
 		return err
 	}
 	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: scriptworld start %s\n",
