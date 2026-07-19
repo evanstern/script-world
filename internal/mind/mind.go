@@ -57,6 +57,12 @@ type Mind struct {
 	pairSeen    map[[2]int]int64
 	pending     [sim.AgentCount]bool // trigger armed before nextDue
 
+	// Planner calls run on their own single-flight worker (TASK-9 fix): a
+	// model call must never block the absorb loop, or the events channel
+	// overflows at high speed and edge triggers (sleeps!) are dropped.
+	planQ        chan planJob
+	planInFlight [sim.AgentCount]atomic.Bool
+
 	// Nightly consolidation (TASK-9): FIFO queue + per-agent in-flight guard.
 	consolQ        chan consolJob
 	consolInFlight [sim.AgentCount]atomic.Bool
@@ -81,6 +87,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		personas: personas,
 		k:        sim.WindowK,
 		pairSeen: map[[2]int]int64{},
+		planQ:    make(chan planJob, sim.AgentCount),
 		consolQ:  make(chan consolJob, sim.AgentCount),
 		events:   make(chan []store.Event, 256),
 		done:     make(chan struct{}),
@@ -89,6 +96,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
 	}
 	go md.run()
+	go md.planWorker()
 	go md.consolidateWorker()
 	return md, nil
 }
@@ -178,9 +186,19 @@ func (md *Mind) armEncounters(e store.Event) {
 	}
 }
 
-// plan runs due agents. Serialized (one model call at a time) — the local
-// tier is the throughput governor, and the orchestrator's queue is the
-// backpressure surface.
+// planJob is the immutable snapshot a planner call runs against; prompts are
+// built in the absorb goroutine (which owns the replica) and carried as
+// strings so the worker never touches shared state.
+type planJob struct {
+	agent  int
+	name   string
+	system string
+	prompt string
+}
+
+// plan enqueues due agents for the planner worker. It never blocks and never
+// calls a model — that is the worker's job. Single-flight per agent; the
+// worker serializes calls so the local tier remains the throughput governor.
 func (md *Mind) plan() {
 	tick := md.replica.Tick
 	for i := range md.replica.Agents {
@@ -195,39 +213,70 @@ func (md *Mind) plan() {
 		if tick-md.lastPlanned[i] < planDebounceTicks {
 			continue // debounced; pending stays armed for a later batch
 		}
-		md.pending[i] = false
-		md.lastPlanned[i] = tick
-		md.nextDue[i] = tick + sim.PlannerCadenceTicks
+		if md.planInFlight[i].Load() {
+			continue // one plan in flight per agent; pending stays armed
+		}
+		job := planJob{
+			agent:  i,
+			name:   a.Name,
+			system: systemPrompt(a.Name, md.personas[i]),
+			prompt: userPrompt(md.replica, i, md.k),
+		}
+		md.planInFlight[i].Store(true)
+		select {
+		case md.planQ <- job:
+			md.pending[i] = false
+			md.lastPlanned[i] = tick
+			md.nextDue[i] = tick + sim.PlannerCadenceTicks
+		default:
+			md.planInFlight[i].Store(false) // queue full; retry next batch
+		}
+	}
+}
 
-		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-		resp, err := md.orch.Submit(ctx, llm.Request{
-			Kind:      llm.KindPlanner,
-			System:    systemPrompt(a.Name, md.personas[i]),
-			Prompt:    userPrompt(md.replica, i, md.k),
-			MaxTokens: 256,
-		})
-		cancel()
-		if err != nil {
-			log.Printf("mind: %s planner call failed: %v", a.Name, err)
-			continue // reflex grace covers; next trigger retries
+// planWorker drains planner jobs one model call at a time.
+func (md *Mind) planWorker() {
+	for {
+		select {
+		case <-md.done:
+			return
+		case job := <-md.planQ:
+			md.runPlan(job)
 		}
-		reply, err := parseReply(resp.Text)
-		if err != nil {
-			log.Printf("mind: %s reply unusable: %v", a.Name, err)
-			continue
+	}
+}
+
+func (md *Mind) runPlan(job planJob) {
+	defer md.planInFlight[job.agent].Store(false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	resp, err := md.orch.Submit(ctx, llm.Request{
+		Kind:      llm.KindPlanner,
+		System:    job.system,
+		Prompt:    job.prompt,
+		MaxTokens: 256,
+	})
+	cancel()
+	if err != nil {
+		log.Printf("mind: %s planner call failed: %v", job.name, err)
+		return // reflex grace covers; next trigger retries
+	}
+	reply, err := parseReply(resp.Text)
+	if err != nil {
+		log.Printf("mind: %s reply unusable: %v", job.name, err)
+		return
+	}
+	target := -1
+	if reply.Goal == "talk_to" {
+		if target = md.agentIndexByName(reply.Target); target < 0 {
+			log.Printf("mind: %s wants to talk to unknown %q", job.name, reply.Target)
+			return
 		}
-		target := -1
-		if reply.Goal == "talk_to" {
-			if target = md.agentIndexByName(reply.Target); target < 0 {
-				log.Printf("mind: %s wants to talk to unknown %q", a.Name, reply.Target)
-				continue
-			}
-		}
-		if err := md.loop.InjectIntent(sim.InjectArgs{
-			Agent: i, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
-		}); err != nil {
-			log.Printf("mind: %s goal %q rejected: %v", a.Name, reply.Goal, err)
-		}
+	}
+	if err := md.loop.InjectIntent(sim.InjectArgs{
+		Agent: job.agent, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
+	}); err != nil {
+		log.Printf("mind: %s goal %q rejected: %v", job.name, reply.Goal, err)
 	}
 }
 
