@@ -4,7 +4,7 @@ title: 'Agent mind v1: persona/soul, memory window, planner'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 04:22'
+updated_date: '2026-07-19 04:25'
 labels:
   - spec-candidate
   - agents
@@ -27,6 +27,11 @@ Spec: specs/002-agent-mind
 - [ ] #1 8 seeded agents plan via local model on cadence + triggers and act through the executor
 - [ ] #2 persona.md is structurally read-only; soul.md accretes episodic memories with salience
 - [ ] #3 Planner context uses the top-K reranked window, never the whole soul
+- [ ] #4 Spec phase: Setup
+- [ ] #5 Spec phase: Foundational (blocking)
+- [ ] #6 Spec phase: US2 — personas & souls (files first: US1's prompts need them)
+- [ ] #7 Spec phase: US1 + US3 — the mind driver
+- [ ] #8 Spec phase: Polish
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -38,3 +43,9 @@ Spec: specs/002-agent-mind
 4. Tests: prompt-window AC (top-K never whole soul), persona immutability, memory accretion + selection determinism, mind integration with mock local LLM (cadence + triggers -> planner-sourced intents -> executor acts), full -race suite
 5. Wiki update, board close-out, PR
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync: Setup: 0/1 · Foundational (blocking): 0/6 · US2 — personas & souls (files first: US1's prompts need them): 0/4 · US1 + US3 — the mind driver: 0/6 · Polish: 0/3
+<!-- SECTION:NOTES:END -->
