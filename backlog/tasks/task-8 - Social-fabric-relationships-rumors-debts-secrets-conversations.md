@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: 'Social fabric: relationships, rumors, debts, secrets, conversations'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 05:10'
+updated_date: '2026-07-19 06:51'
 labels:
   - spec-candidate
   - agents
@@ -24,13 +24,13 @@ Spec: specs/003-social-fabric
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Social encounters read/write relationship edges; rumors mutate and carry provenance
-- [ ] #2 Broken promises persist in the ledger and move reputation
-- [ ] #3 Conversations run multi-turn within the cap and land in both souls
-- [ ] #4 Spec phase: Foundational sim core (blocking)
-- [ ] #5 Spec phase: Secrets + genesis (US3)
-- [ ] #6 Spec phase: Conversations (US4)
-- [ ] #7 Spec phase: Polish
+- [x] #1 Social encounters read/write relationship edges; rumors mutate and carry provenance
+- [x] #2 Broken promises persist in the ledger and move reputation
+- [x] #3 Conversations run multi-turn within the cap and land in both souls
+- [x] #4 Spec phase: Foundational sim core (blocking)
+- [x] #5 Spec phase: Secrets + genesis (US3)
+- [x] #6 Spec phase: Conversations (US4)
+- [x] #7 Spec phase: Polish
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,4 +50,14 @@ Spec: specs/003-social-fabric
 
 <!-- SECTION:NOTES:BEGIN -->
 spec-bridge sync: Foundational sim core (blocking): 0/6 · Secrets + genesis (US3): 0/1 · Conversations (US4): 0/4 · Polish: 0/2
+
+AC evidence: #1 TestEdgeRules + TestExecutorGiveAndDueCheck (deterministic edge rules end-to-end) + TestRumorProvenanceChain (3-hop From-chain, x4/5 decay, mutated text recorded, no telling the subject); live: talks moved edges, Bonds in soul.md. #2 TestLedgerLifecycle + due-check (open->kept, open->broken permanent, reputation 500+100k-200b, trust penalty, gossip-seed memory). #3 TestConversationRunsAndLands (cap, dual gist memories, tone edges, paraphrased rumor, atomic injection) + LIVE first landed conversation: Birch/Cedar 4 turns — authored persona clash performed ('Say something already! Your silence is driving me crazy'), gist in both souls, tones -2/-2 -> the village's first grudge (trust -24, affection -45, exact rule math). Engineering findings fixed live: chat-while-working, planner debounce, conversation priority lane + worker call cap, float tones. -race green 12 packages; replay model-free re-proven with social timelines.
+
+spec-bridge sync: Foundational sim core (blocking): 6/6 · Secrets + genesis (US3): 1/1 · Conversations (US4): 4/4 · Polish: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Foundational sim core (blocking): 6/6 · Secrets + genesis (US3): 1/1 · Conversations (US4): 4/4 · Polish: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
