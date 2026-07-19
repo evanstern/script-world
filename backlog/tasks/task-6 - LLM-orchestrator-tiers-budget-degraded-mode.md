@@ -44,6 +44,8 @@ Call layer for all model traffic: local tier via Ollama/9router (OpenAI-compatib
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on branch task-6-llm-orchestrator. internal/llm: two-tier call layer fully quarantined from the deterministic loop (LLM results only ever enter the world as recorded inputs). Routing per grounding (planner/conversation->local Ollama-compatible HTTP; consolidation/narrator/drama->cloud via official anthropic-sdk-go, claude-opus-4-8, prompt caching on system blocks). Spend meter persisted monthly in store meta; $100/mo ceiling refuses cloud calls at admission (zero HTTP) while local continues. Circuit breaker per tier (3 fails -> open, backoff 15s..5m, half-open probe); bounded queues (32) with fast ErrQueueFull. Config llm.json per save dir (keys by env-var name only). AC#1 proven by TestRouting + protocol-level test (mock providers count hits per tier); AC#2 by TestBudgetCeiling (refusal before HTTP, meter in status) + TestMeterPersistsAcrossRestart; AC#3 by TestDegradedAndRecovery + TestLLMCallAndDegradedWorld (dead endpoints, world ticks on) — plus live smoke: real Ollama call routed end-to-end through the daemon (cogito:3b answered a planner prompt; status showed tiers/spend). -race suite green (8 packages). Wiki: llm-orchestrator note added, 12 notes re-verified, gate green (21 notes).
+
+PR: https://github.com/evanstern/script-world/pull/5 (base main)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
