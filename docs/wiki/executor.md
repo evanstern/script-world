@@ -6,7 +6,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/terrain.go
-verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
+verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 ---
 
 # Executor
@@ -48,9 +48,11 @@ Structures (`fire`, `shelter`) exist only in state; `warmAt` is fire within Manh
 radius 2 or standing on a shelter.
 
 The executor also emits `agent.memory_added` events from the salience table in
-`memory.go` ([[agent-mind]]) alongside memorable happenings, and its reflex now
-fires only on agents idle past `reflexGraceTicks` (120) — the planner's injection
-window. `stepEvents` stays a pure function of (pre-tick state, map, next tick);
+`memory.go` ([[agent-mind]]) alongside memorable happenings; its reflex fires only
+on agents idle past `reflexGraceTicks` (120). The per-minute social beat
+(`socialEvents`, [[social-fabric]]) runs the adjacency ladder — repay an open
+debt, give to a starving neighbor, or talk (chat-while-working, cooldown-bounded)
+with a verbatim rumor fallback — and the hourly due-check breaks overdue debts. `stepEvents` stays a pure function of (pre-tick state, map, next tick);
 every effect is an event through [[sim-state-reducer]] — the determinism and replay guarantees of
 the substrate hold unchanged over the whole layer.
 

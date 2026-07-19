@@ -8,7 +8,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
+verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 ---
 
 # Event types
@@ -39,9 +39,10 @@ TUI) will read.
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
 | `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared |
 | `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent idle pair | +morale both, talk cooldown; both remember |
-| `agent.memory_added` | `MemoryAddedPayload{agent, text, salience}` | executor salience heuristics | append to `Memories` ([[agent-mind]]) |
+| `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone}` | executor heuristics; convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds ([[agent-mind]], [[social-fabric]]) |
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
+| `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets ([[social-fabric]]) |
 
 Conventions: `clock.*` are applied player/scheduler commands; `sim.*` and `agent.*`
 are world happenings (pure functions of state + seed + tick); `daemon.*` are process

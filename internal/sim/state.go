@@ -32,6 +32,12 @@ type State struct {
 	Cleared       []Point     `json:"cleared,omitempty"`
 	Harvested     []Harvest   `json:"harvested,omitempty"`
 	DenUses       []DenUse    `json:"den_uses,omitempty"`
+	// Social fabric (TASK-8) — all event-sourced.
+	Relations   []Relation `json:"relations,omitempty"`
+	Debts       []Debt     `json:"debts,omitempty"`
+	Rumors      []Rumor    `json:"rumors,omitempty"`
+	NextDebtID  int        `json:"next_debt_id,omitempty"`
+	NextRumorID int        `json:"next_rumor_id,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -174,7 +180,7 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick})
+		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick, Subject: p.Subject, Tone: p.Tone})
 	case "agent.thought":
 		// Chronicle material; no state effect.
 
@@ -366,6 +372,11 @@ func (s *State) Apply(e store.Event) error {
 		a.Dead = true
 		a.Asleep = false
 		a.Intent = nil
+	case "social.relation_changed", "social.gave", "social.promise_broken",
+		"social.rumor_told", "social.secret_seeded",
+		"social.conversation_turn", "social.conversation":
+		return s.applySocial(e)
+
 	case "agent.talked":
 		var p TalkedPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {

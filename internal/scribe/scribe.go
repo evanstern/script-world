@@ -72,6 +72,15 @@ func (s *Scribe) run() {
 					s.replica.Tick = e.Tick
 				}
 				switch e.Type {
+				case "social.relation_changed":
+					var p sim.RelationChangedPayload
+					if json.Unmarshal(e.Payload, &p) == nil {
+						dirty[p.A] = true
+					}
+				case "social.gave", "social.promise_broken":
+					for i := range s.replica.Agents {
+						dirty[i] = true
+					}
 				case "agent.memory_added", "agent.died":
 					var p struct {
 						Agent int `json:"agent"`
@@ -106,6 +115,29 @@ func (s *Scribe) render(idx int) {
 	}
 	for _, m := range a.Memories {
 		fmt.Fprintf(&b, "- **%s** (%d★) %s\n", clock.Format(m.Tick), m.Salience, m.Text)
+	}
+
+	// Bonds: the social fabric as this soul feels it.
+	var bonds []string
+	for _, r := range s.replica.Relations {
+		if r.From != idx || (r.Trust == 0 && r.Affection == 0) {
+			continue
+		}
+		bonds = append(bonds, fmt.Sprintf("- %s: trust %+d, affection %+d",
+			s.replica.Agents[r.To].Name, r.Trust, r.Affection))
+	}
+	var debts []string
+	for _, d := range s.replica.Debts {
+		if d.Status == "open" && d.Debtor == idx {
+			debts = append(debts, fmt.Sprintf("- owes %s one %s (due %s)",
+				s.replica.Agents[d.Creditor].Name, d.Kind, clock.Format(d.Due)))
+		}
+	}
+	if len(bonds)+len(debts) > 0 {
+		fmt.Fprintf(&b, "\n## Bonds\n\n*Reputation %d/1000.*\n\n", sim.Reputation(s.replica, idx))
+		for _, l := range append(bonds, debts...) {
+			b.WriteString(l + "\n")
+		}
 	}
 	os.WriteFile(persona.SoulPath(s.worldDir, a.Name), []byte(b.String()), 0o644)
 }

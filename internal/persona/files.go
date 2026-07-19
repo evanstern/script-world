@@ -1,12 +1,14 @@
 package persona
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/script-world/internal/store"
 )
 
 // Dir returns the agent's directory under the world's agents/ root.
@@ -58,4 +60,22 @@ func Load(worldDir string) [sim.AgentCount]string {
 		}
 	}
 	return out
+}
+
+// SecretEvents renders the genesis social.secret_seeded events (tick 0).
+// Called once by `scriptworld new` right after world.created.
+func SecretEvents() ([]store.Event, error) {
+	var events []store.Event
+	for i, name := range sim.AgentNames {
+		text, ok := Secrets[name]
+		if !ok {
+			return nil, fmt.Errorf("no authored secret for %q", name)
+		}
+		payload, err := json.Marshal(sim.SecretSeededPayload{Agent: i, Text: text, Tone: -70})
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, store.Event{Tick: 0, Type: "social.secret_seeded", Payload: payload})
+	}
+	return events, nil
 }

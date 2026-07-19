@@ -88,6 +88,10 @@ type Status struct {
 
 const queueCap = 32
 
+// workerCallCap bounds any single provider call at the worker, the last
+// line of defense against a hung transport freezing a tier.
+const workerCallCap = 2 * time.Minute
+
 type job struct {
 	ctx   context.Context
 	req   Request
@@ -104,6 +108,7 @@ type tier struct {
 	caller caller
 	health *tierHealth
 	queue  chan job
+	prio   chan job // interactive work (conversations) jumps the line
 }
 
 // Orchestrator routes, queues, meters, and degrades. One per daemon.
@@ -126,9 +131,9 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local),
-				health: &tierHealth{}, queue: make(chan job, queueCap)},
+				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
 			TierCloud: {name: TierCloud, caller: newAnthropicCaller(cfg.Cloud),
-				health: &tierHealth{}, queue: make(chan job, queueCap)},
+				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
 		},
 	}
 	for _, t := range o.tiers {
@@ -157,9 +162,16 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 		return Response{}, ErrTierDown
 	}
 
+	// Conversations are interactive — a turn mid-dialogue must not wait
+	// behind a backlog of planner thoughts (which tolerate staleness; the
+	// reflex grace covers them). Everything else rides the normal queue.
+	q := t.queue
+	if req.Kind == KindConversation {
+		q = t.prio
+	}
 	j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
 	select {
-	case t.queue <- j:
+	case q <- j:
 	default:
 		return Response{}, ErrQueueFull
 	}
@@ -175,16 +187,31 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 
 func (o *Orchestrator) worker(t *tier) {
 	for {
+		// Two-level priority: drain interactive work first.
+		var j job
 		select {
 		case <-o.done:
 			return
-		case j := <-t.queue:
+		case j = <-t.prio:
+		default:
+			select {
+			case <-o.done:
+				return
+			case j = <-t.prio:
+			case j = <-t.queue:
+			}
+		}
+		func() {
 			start := time.Now()
-			text, inTok, outTok, err := t.caller.call(j.ctx, j.req)
+			// Worker-side hard cap: no single call may wedge the tier,
+			// regardless of the caller's context or transport behavior.
+			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
+			text, inTok, outTok, err := t.caller.call(callCtx, j.req)
+			cancel()
 			if err != nil {
 				t.health.fail()
 				j.reply <- result{err: fmt.Errorf("%s tier: %w", t.name, err)}
-				continue
+				return
 			}
 			t.health.succeed()
 			resp := Response{
@@ -201,13 +228,13 @@ func (o *Orchestrator) worker(t *tier) {
 				if merr := o.meter.Add(resp.CostUSD); merr != nil {
 					// Metering must never lose money silently: surface it.
 					j.reply <- result{err: fmt.Errorf("spend meter: %w", merr)}
-					continue
+					return
 				}
 			} else {
 				resp.Model = o.cfg.Local.Model
 			}
 			j.reply <- result{resp: resp}
-		}
+		}()
 	}
 }
 

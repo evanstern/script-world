@@ -65,3 +65,17 @@ var Texts = map[string]string{
 **Bonds:** keeps Birch's secrets; needles Rowan because it's easy.
 `,
 }
+
+// Secrets: one authored secret per persona, seeded at genesis as a
+// still-private self-rumor (TASK-8). Strongly negative tone — these are the
+// fabric's buried charges.
+var Secrets = map[string]string{
+	"Ash":   "Ash once let the old village's fire die on watch, and people went hungry because of it.",
+	"Birch": "Birch saw Oak steal from the winter stores and has never told a soul.",
+	"Cedar": "Cedar's ninth axe stroke once went wide and nearly killed Rowan; Cedar swore it was the wind.",
+	"Rowan": "Rowan is the one who broke the old dam — the flood wasn't an accident.",
+	"Fern":  "Fern keeps a pebble from a grave nobody knows about.",
+	"Hazel": "Hazel ate half the shared stores last winter and blamed the rats.",
+	"Oak":   "Oak cried the whole first night alone in the woods and prays nobody ever learns it.",
+	"Sage":  "Sage remembers who really started the fire that burned the old village, and it wasn't who everyone blames.",
+}

@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 ---
 
 # LLM orchestrator
@@ -24,12 +24,17 @@ the substrate is structurally untouchable by inference.
 `planner` and `conversation` go **local** (free, the only viable home for ~3,800+
 calls/day); `consolidation`, `narrator`, and `drama` go **cloud**. The local tier
 (`providers.go`) speaks OpenAI-compatible chat-completions over raw HTTP (Ollama at
-`http://localhost:11434/v1` by default); the cloud tier uses the official
+`http://localhost:11434/v1`, default model `gemma4:12b-mlx` — the operator's
+always-on local model); the cloud tier uses the official
 `anthropic-sdk-go` against the Messages API (`claude-opus-4-8` default), with
 `cache_control` on system blocks so stable prompts (souls, charters) bill at
 cache-read rates on repeat calls.
 
-**Submit** is synchronous with immediate admission control, each failure mode a
+**Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
+queue the worker drains first — dialogue turns are interactive, while planner
+thoughts tolerate staleness (the reflex grace covers them). A worker-side hard cap
+(`workerCallCap`, 2 min) bounds any single provider call so a hung transport can
+never wedge a tier. **Submit** is synchronous with immediate admission control, each failure mode a
 distinct error: `ErrBudgetExhausted` (cloud ceiling reached — checked BEFORE any
 HTTP), `ErrTierDown` (circuit open — fails fast, no hang), `ErrQueueFull` (bounded
 per-tier queue of 32 saturated). That backpressure surface is what will let local

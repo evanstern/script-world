@@ -38,6 +38,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 
 - [[llm-orchestrator]] — two-tier model traffic: routing, spend ceiling, degraded mode
 - [[agent-mind]] — personas, souls, memory window, and the planner driver
+- [[social-fabric]] — relationships, rumors, debts, secrets, conversations
 
 ## Lifecycle & quality
 
