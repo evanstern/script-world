@@ -1,6 +1,6 @@
 ---
 name: llm-orchestrator
-description: Two-tier call layer for all model traffic — kind routing (local Ollama / cloud Anthropic), persisted monthly spend meter with hard ceiling, circuit-breaker degraded mode, bounded-queue backpressure
+description: Two-tier call layer for all model traffic — kind routing (local Ollama / cloud Anthropic-or-router), persisted monthly spend meter with hard ceiling, circuit-breaker degraded mode, bounded-queue backpressure
 kind: component
 sources:
   - internal/llm/llm.go
@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: 2a1608f2cf9d525cbe451f8a40b7b355e30cd692
 ---
 
 # LLM orchestrator
@@ -25,10 +25,14 @@ the substrate is structurally untouchable by inference.
 calls/day); `consolidation`, `narrator`, and `drama` go **cloud**. The local tier
 (`providers.go`) speaks OpenAI-compatible chat-completions over raw HTTP (Ollama at
 `http://localhost:11434/v1`, default model `gemma4:12b-mlx` — the operator's
-always-on local model); the cloud tier uses the official
+always-on local model); the cloud tier is provider-selectable
+(`cloud.provider`, TASK-15): the default `anthropic` uses the official
 `anthropic-sdk-go` against the Messages API (`claude-opus-4-8` default), with
 `cache_control` on system blocks so stable prompts (souls, charters) bill at
-cache-read rates on repeat calls.
+cache-read rates on repeat calls; `openai_compat` reuses the chat-completions
+caller for OpenAI-compatible routers (e.g. a LAN-local 9router), requires
+`cloud.endpoint`, and pins `stream: false` because some routers stream by
+default.
 
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
 queue the worker drains first — dialogue turns are interactive, while planner
@@ -52,9 +56,12 @@ half-open probe tests recovery, success resets. A killed model degrades the AI l
 the daemon and loop never notice.
 
 **Config** (`config.go`): `llm.json` in the save directory, written with defaults by
-`scriptworld new`; deleting the file disables the orchestrator entirely. API keys are
-never stored — only the *name* of an environment variable (`api_key_env`, default
-`ANTHROPIC_API_KEY`).
+`scriptworld new`; deleting the file disables the orchestrator entirely. Hosted-API
+keys are never stored — only the *name* of an environment variable (`api_key_env`,
+default `ANTHROPIC_API_KEY`). The one exception is the optional inline `api_key`
+(both tiers), intended solely for keys that guard LAN-local routers; when both are
+set the inline key wins. Provider values are validated at load time (`LoadConfig`
+rejects unknown providers and `openai_compat` without an endpoint).
 
 ## Connections
 
