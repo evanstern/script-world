@@ -14,11 +14,14 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/daemon"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/tui"
 	"github.com/evanstern/script-world/internal/world"
 )
 
@@ -285,6 +288,20 @@ func cmdSpeed(args []string) error {
 	}
 	fmt.Println(clockLine(sd))
 	return nil
+}
+
+func cmdUI(args []string) error {
+	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
+	dir, err := dirArg(fs, args)
+	if err != nil {
+		return err
+	}
+	w, err := world.Open(dir)
+	if err != nil {
+		return err
+	}
+	_, err = tea.NewProgram(tui.New(w), tea.WithAltScreen()).Run()
+	return err
 }
 
 func cmdAttach(args []string) error {

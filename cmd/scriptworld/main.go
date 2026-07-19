@@ -15,7 +15,8 @@ Usage:
   scriptworld start <dir>                          start a detached daemon
   scriptworld stop <dir>                           gracefully stop the daemon
   scriptworld status <dir> [--json]                report world/daemon status
-  scriptworld attach <dir>                         interactive event stream + commands
+  scriptworld ui <dir>                             full-screen TUI (map, chronicle, metatron, souls)
+  scriptworld attach <dir>                         line-mode event stream + commands
   scriptworld tail <dir> [--since SEQ] [--follow]  print events from the log
   scriptworld pause <dir>                          pause game time
   scriptworld resume <dir>                         resume game time
@@ -40,6 +41,8 @@ func main() {
 		err = cmdStop(args)
 	case "status":
 		err = cmdStatus(args)
+	case "ui":
+		err = cmdUI(args)
 	case "attach":
 		err = cmdAttach(args)
 	case "tail":
