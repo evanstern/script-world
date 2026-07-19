@@ -130,9 +130,9 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		meter: meter,
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
-			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local),
+			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
-			TierCloud: {name: TierCloud, caller: newAnthropicCaller(cfg.Cloud),
+			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
 		},
 	}

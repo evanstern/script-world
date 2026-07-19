@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -310,5 +311,73 @@ func TestConfigRoundTrip(t *testing.T) {
 	if cfg.MonthlyBudgetUSD != 100 || cfg.Cloud.Model != "claude-opus-4-8" ||
 		cfg.Cloud.APIKeyEnv != "ANTHROPIC_API_KEY" || cfg.Local.Endpoint == "" {
 		t.Errorf("default config wrong: %+v", cfg)
+	}
+}
+
+// TestCloudOpenAICompat: cloud.provider=openai_compat routes cloud kinds
+// through the chat-completions caller with Bearer auth and stream pinned
+// false (9router streams by default).
+func TestCloudOpenAICompat(t *testing.T) {
+	var sawAuth atomic.Bool
+	var sawStreamFalse atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		sawAuth.Store(r.Header.Get("Authorization") == "Bearer sk-router-local")
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if v, ok := body["stream"].(bool); ok && !v {
+			sawStreamFalse.Store(true)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "router says hi"}}},
+			"usage":   map[string]any{"prompt_tokens": 7, "completion_tokens": 3},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := testConfig("http://127.0.0.1:1", srv.URL, 100)
+	cfg.Cloud.Provider = ProviderOpenAICompat
+	cfg.Cloud.APIKey = "sk-router-local"
+	cfg.Cloud.APIKeyEnv = ""
+	o := newOrch(t, cfg, testStore(t))
+
+	resp, err := o.Submit(context.Background(), Request{Kind: KindNarrator, Prompt: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "router says hi" || resp.Tier != TierCloud {
+		t.Errorf("resp = %q via %s", resp.Text, resp.Tier)
+	}
+	if !sawAuth.Load() {
+		t.Error("router never saw the Bearer key")
+	}
+	if !sawStreamFalse.Load() {
+		t.Error("request did not pin stream:false")
+	}
+}
+
+// TestConfigProviderValidation: unknown providers and openai_compat without
+// an endpoint are rejected at load time, not at first call.
+func TestConfigProviderValidation(t *testing.T) {
+	write := func(cloud string) string {
+		p := filepath.Join(t.TempDir(), "llm.json")
+		data := `{"monthly_budget_usd": 100, "local": {"endpoint": "http://x", "model": "m"}, "cloud": ` + cloud + `}`
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	if _, err := LoadConfig(write(`{"model": "m", "provider": "sorcery"}`)); err == nil {
+		t.Error("unknown provider accepted")
+	}
+	if _, err := LoadConfig(write(`{"model": "m", "provider": "openai_compat"}`)); err == nil {
+		t.Error("openai_compat without endpoint accepted")
+	}
+	if _, err := LoadConfig(write(`{"model": "m", "provider": "openai_compat", "endpoint": "http://r/v1", "api_key": "k"}`)); err != nil {
+		t.Errorf("valid router config rejected: %v", err)
 	}
 }
