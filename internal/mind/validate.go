@@ -14,11 +14,25 @@ import (
 // night. Rejection reasons are stable strings recorded in the
 // agent.consolidated marker.
 
-// memRef is how the model references a buffer memory (contract: the prompt
-// supplies tick+hash for every memory it is shown).
-type memRef struct {
-	Tick int64  `json:"tick"`
-	Hash string `json:"hash"`
+// Buffer memories are shown to the model with ordinal labels ("m1".."m60")
+// and referenced back the same way — models transcribe short ordinals
+// reliably where they mangle hashes. parseMemRef maps a label to its
+// buffer index, or -1.
+func parseMemRef(ref string, bufferLen int) int {
+	if len(ref) < 2 || (ref[0] != 'm' && ref[0] != 'M') {
+		return -1
+	}
+	n := 0
+	for _, c := range ref[1:] {
+		if c < '0' || c > '9' {
+			return -1
+		}
+		n = n*10 + int(c-'0')
+	}
+	if n < 1 || n > bufferLen {
+		return -1
+	}
+	return n - 1
 }
 
 type beliefChange struct {
@@ -35,8 +49,8 @@ type beliefChange struct {
 type consolidationOutput struct {
 	Nature    string         `json:"nature"`
 	Gist      string         `json:"gist"`
-	Promote   []memRef       `json:"promote"`
-	Fade      []memRef       `json:"fade"`
+	Promote   []string       `json:"promote"` // ordinal refs, "m3"
+	Fade      []string       `json:"fade"`
 	Beliefs   []beliefChange `json:"beliefs"`
 	Narrative string         `json:"narrative"`
 }
@@ -47,7 +61,9 @@ const (
 	maxFades        = 8
 	maxBeliefEdits  = 4
 	maxNarrativeLen = 1200
-	maxGistLen      = 240
+	// Prompt asks for <200 chars; the cap allows overrun headroom (live
+	// finding: hard-failing a whole night on a wordy sentence is waste).
+	maxGistLen = 300
 )
 
 // validateConsolidation runs the three firewall layers against the exact
@@ -70,12 +86,8 @@ func validateConsolidation(out consolidationOutput, agent int, buffer []sim.Memo
 	if out.Narrative == "" || len(out.Narrative) > maxNarrativeLen {
 		return fmt.Errorf("bad_narrative")
 	}
-	inBuffer := make(map[memRef]bool, len(buffer))
-	for _, m := range buffer {
-		inBuffer[memRef{Tick: m.Tick, Hash: sim.MemoryHash(m.Text)}] = true
-	}
-	for _, r := range append(append([]memRef{}, out.Promote...), out.Fade...) {
-		if !inBuffer[r] {
+	for _, r := range append(append([]string{}, out.Promote...), out.Fade...) {
+		if parseMemRef(r, len(buffer)) < 0 {
 			return fmt.Errorf("unknown_memory_ref")
 		}
 	}

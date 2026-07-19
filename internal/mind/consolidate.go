@@ -138,6 +138,18 @@ func (md *Mind) runConsolidation(job consolJob) {
 		md.landMarker(job, sim.ConsolidationRejected, "unparseable", resp.CostUSD)
 		return
 	}
+	// Models routinely invent an ID for a belief they mean as new (live
+	// finding: 4/8 first-night rejections). ID bookkeeping is ours, not
+	// theirs — coerce unknown IDs to "new" before judging the output.
+	heldIDs := make(map[int]bool, len(job.held))
+	for _, b := range job.held {
+		heldIDs[b.ID] = true
+	}
+	for i := range out.Beliefs {
+		if out.Beliefs[i].ID != 0 && !heldIDs[out.Beliefs[i].ID] {
+			out.Beliefs[i].ID = 0
+		}
+	}
 	if verr := validateConsolidation(out, job.agent, job.buffer, job.held, job.anchor, job.drift); verr != nil {
 		md.landMarker(job, sim.ConsolidationRejected, verr.Error(), resp.CostUSD)
 		return
@@ -149,13 +161,28 @@ func (md *Mind) runConsolidation(job consolJob) {
 		b, _ := json.Marshal(payload)
 		batch = append(batch, store.Event{Type: typ, Payload: b})
 	}
+	// Map ordinal refs back to (tick, hash) — the durable identity the
+	// events carry — deduplicating repeats.
+	seen := map[int]bool{}
 	for _, r := range out.Promote {
+		i := parseMemRef(r, len(job.buffer))
+		if i < 0 || seen[i] {
+			continue
+		}
+		seen[i] = true
+		m := job.buffer[i]
 		add("agent.memory_promoted", sim.MemoryPromotedPayload{
-			Agent: job.agent, MemTick: r.Tick, TextHash: r.Hash, Boost: 3})
+			Agent: job.agent, MemTick: m.Tick, TextHash: sim.MemoryHash(m.Text), Boost: 3})
 	}
 	for _, r := range out.Fade {
+		i := parseMemRef(r, len(job.buffer))
+		if i < 0 || seen[i] {
+			continue
+		}
+		seen[i] = true
+		m := job.buffer[i]
 		add("agent.memory_faded", sim.MemoryFadedPayload{
-			Agent: job.agent, MemTick: r.Tick, TextHash: r.Hash})
+			Agent: job.agent, MemTick: m.Tick, TextHash: sim.MemoryHash(m.Text)})
 	}
 	add("agent.memory_added", sim.MemoryAddedPayload{
 		Agent: job.agent, Text: out.Gist, Salience: sim.SalDayGist, Subject: -1})
@@ -209,9 +236,9 @@ Your nature is fixed: %s. You must restate it verbatim in the "nature" field.`,
 
 func consolidateUserPrompt(job consolJob) string {
 	var b strings.Builder
-	b.WriteString("Today's memories (reference them ONLY by their tick and hash):\n")
-	for _, m := range job.buffer {
-		fmt.Fprintf(&b, "- [tick %d #%s] (salience %d) %s\n", m.Tick, sim.MemoryHash(m.Text), m.Salience, m.Text)
+	b.WriteString("Today's memories (reference them ONLY by their label, e.g. \"m3\"):\n")
+	for i, m := range job.buffer {
+		fmt.Fprintf(&b, "- [m%d] (salience %d) %s\n", i+1, m.Salience, m.Text)
 	}
 	if len(job.held) > 0 {
 		b.WriteString("\nBeliefs you already hold:\n")
@@ -228,10 +255,10 @@ func consolidateUserPrompt(job consolJob) string {
 	fmt.Fprintf(&b, `
 Reply with ONLY this JSON:
 {"nature": "<your nature, restated verbatim>",
- "gist": "<one sentence remembering this day, your voice, max 240 chars>",
- "promote": [{"tick": <tick>, "hash": "<hash>"}],   // up to %d memories worth keeping sharp
- "fade": [{"tick": <tick>, "hash": "<hash>"}],      // up to %d trivial memories to let go
- "beliefs": [{"id": 0, "statement": "...", "confidence": 0-100, "provenance": "witnessed|told|inferred", "source": -1, "subject": -1}],  // up to %d; id 0 = new, or revise a held id; subject/source are villager numbers, -1 = none
+ "gist": "<ONE short sentence remembering this day, your voice, under 200 characters>",
+ "promote": ["m1"],   // up to %d memory labels worth keeping sharp
+ "fade": ["m2"],      // up to %d trivial memory labels to let go
+ "beliefs": [{"id": 0, "statement": "...", "confidence": 0-100, "provenance": "witnessed|told|inferred", "source": -1, "subject": -1}],  // up to %d; id 0 = new belief, or a held belief's id to revise it; subject/source are villager numbers, -1 = none
  "narrative": "<who you are becoming, first person, your voice, max 1200 chars>"}`,
 		maxPromotes, maxFades, maxBeliefEdits)
 	return b.String()

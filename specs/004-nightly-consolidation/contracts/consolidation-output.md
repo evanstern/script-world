@@ -8,8 +8,8 @@ this JSON object (first `{...}` extracted, same tolerance as planner/convo parsi
 {
   "nature": "<the agent's temperament line, restated verbatim>",
   "gist": "<one-sentence memory of the day, in the agent's voice>",
-  "promote": [ {"tick": 612001, "hash": "a1b2c3d4"} ],
-  "fade":    [ {"tick": 611800, "hash": "99ffee00"} ],
+  "promote": [ "m3" ],
+  "fade":    [ "m7" ],
   "beliefs": [
     {
       "id": 0,
@@ -24,9 +24,13 @@ this JSON object (first `{...}` extracted, same tolerance as planner/convo parsi
 }
 ```
 
-The prompt supplies each buffer memory *with its `tick` and `hash`* so the model can only
-reference what it was shown. `id` 0 creates a belief; a nonzero `id` (from the "beliefs
-you hold" prompt section) revises one.
+The prompt labels each buffer memory with an ordinal (`m1`..`m60`, newest-last) and the
+model references those labels — live testing showed models mangle hashes but transcribe
+ordinals reliably; the driver maps labels back to the durable `(tick, hash)` identity the
+events carry, deduplicating repeats. `id` 0 creates a belief; a nonzero `id` (from the
+"beliefs you hold" prompt section) revises one — an unknown nonzero `id` is coerced to 0
+by the driver before validation (models routinely invent an ID for a belief they mean as
+new; ID bookkeeping is ours).
 
 ## Validator (deterministic, mechanical — internal/mind/validate.go)
 
@@ -34,11 +38,11 @@ Rejection reasons are stable strings recorded in the `agent.consolidated` marker
 
 **Layer 1 — structure**
 - parses as the schema above; unknown fields ignored
-- every promote/fade `(tick, hash)` resolves to a memory in the *sent* buffer
+- every promote/fade label parses as `mN` with `1 ≤ N ≤ len(sent buffer)`
 - `len(promote) ≤ 5`, `len(fade) ≤ 8`, `len(beliefs) ≤ 4`
 - confidence ∈ [0,100]; provenance ∈ {witnessed, told, inferred}; `source`/`subject`
   ∈ [−1, AgentCount)
-- gist non-empty, ≤ 240 chars; narrative non-empty, ≤ 1200 chars
+- gist non-empty, ≤ 300 chars (prompt asks < 200; headroom is deliberate); narrative non-empty, ≤ 1200 chars
 - belief revisions with nonzero `id` must reference an existing belief of that agent
 
 **Layer 2 — anchor echo**

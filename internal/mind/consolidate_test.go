@@ -50,13 +50,11 @@ func goodConsolidation() string {
 	return fmt.Sprintf(`{
   "nature": "%s",
   "gist": "A day of wolves, thin meals, and a promise from Cedar.",
-  "promote": [{"tick": 100, "hash": "%s"}],
-  "fade": [{"tick": 200, "hash": "%s"}],
+  "promote": ["m1"],
+  "fade": ["m2"],
   "beliefs": [{"id": 0, "statement": "Cedar keeps his word.", "confidence": 55, "provenance": "witnessed", "source": -1, "subject": 2}],
   "narrative": "I keep this village fed and I keep my head. The wolf worries me; the fire does not."
-}`, persona.Anchors["Ash"],
-		sim.MemoryHash("Saw a wolf at the treeline."),
-		sim.MemoryHash("Ate two berries."))
+}`, persona.Anchors["Ash"])
 }
 
 // TestConsolidationAcceptedLands is US1 AC-1: one sleep → one atomic batch

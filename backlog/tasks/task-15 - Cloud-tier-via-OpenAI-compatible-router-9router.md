@@ -1,10 +1,10 @@
 ---
 id: TASK-15
 title: Cloud tier via OpenAI-compatible router (9router)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 15:33'
-updated_date: '2026-07-19 15:46'
+updated_date: '2026-07-19 16:08'
 labels: []
 dependencies: []
 ordinal: 15000
@@ -41,3 +41,9 @@ Implemented on branch task-15-cloud-router (stacked on task-8-social-fabric; PR 
 
 PR opened against main after PR #7 merged.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Cloud tier is provider-selectable: anthropic (default) or openai_compat for LAN routers (9router). Inline api_key for local-router credentials only; stream:false pinned; validated at LoadConfig. Live-verified via village03 through 9router (cc/claude-haiku-4-5-20251001, 1251ms). Merged to main as PR #8.
+<!-- SECTION:FINAL_SUMMARY:END -->

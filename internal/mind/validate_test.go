@@ -12,8 +12,8 @@ func validOutput() consolidationOutput {
 	return consolidationOutput{
 		Nature:    persona.Anchors["Ash"],
 		Gist:      "A hard day, held together.",
-		Promote:   []memRef{{Tick: 100, Hash: sim.MemoryHash("saw a wolf")}},
-		Fade:      []memRef{{Tick: 200, Hash: sim.MemoryHash("ate berries")}},
+		Promote:   []string{"m1"},
+		Fade:      []string{"m2"},
 		Beliefs:   []beliefChange{{ID: 0, Statement: "Wolves hunt the ridge.", Confidence: 70, Provenance: sim.ProvenanceWitnessed, Source: -1, Subject: -1}},
 		Narrative: "I keep the village fed. Steady hands, steady fire.",
 	}
@@ -45,13 +45,13 @@ func TestValidatorStructuralTable(t *testing.T) {
 		reason string
 	}{
 		{"too many promotes", func(o *consolidationOutput) {
-			o.Promote = make([]memRef, maxPromotes+1)
+			o.Promote = make([]string, maxPromotes+1)
 			for i := range o.Promote {
-				o.Promote[i] = memRef{Tick: 100, Hash: sim.MemoryHash("saw a wolf")}
+				o.Promote[i] = "m1"
 			}
 		}, "too_many_promotes"},
 		{"unknown memory ref", func(o *consolidationOutput) {
-			o.Fade = []memRef{{Tick: 999, Hash: "deadbeef"}}
+			o.Fade = []string{"m99"}
 		}, "unknown_memory_ref"},
 		{"confidence out of range", func(o *consolidationOutput) {
 			o.Beliefs[0].Confidence = 101
