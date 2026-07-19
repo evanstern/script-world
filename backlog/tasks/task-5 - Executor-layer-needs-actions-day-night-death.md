@@ -4,7 +4,7 @@ title: 'Executor layer: needs, actions, day/night, death'
 status: Done
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 03:59'
+updated_date: '2026-07-19 04:00'
 labels:
   - engine
   - sim
@@ -43,6 +43,8 @@ Deterministic agent bodies: pathfinding; action primitives (forage, chop, gather
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on branch task-5-executor (PR will target main — TASK-4 merged as a true merge commit, verified ancestry). internal/sim executor layer: 4 named agents, integer needs (0-1000, cross-platform deterministic), multi-step intents with BFS pathing and timed work, reflex survival policy (permanent degraded-mode fallback), night warmth mechanics, death by starvation/exposure/collapse, event-sourced terrain overlays (cleared trees, forage regrowth, den cooldowns, fire/shelter structures). AC#1 proven by TestMultiStepIntentExecution (full intent chains, zero input); AC#2 by TestNeedsDecayAndSatisfaction + TestStarvationDeath (cause recorded, dead stay dead); AC#3 by TestNightWarmthMechanics (cold drains, fire restores, exposure kills). Determinism + replay re-proven over the executor (30-40k tick harnesses); TestVillageSurvivesTwoDays green on seeds 42+7. Live-run found and fixed a sleep/wake churn bug (fully-rested agents at night); known quirk noted: several agents may build fires in the same construction window. -race suite green incl fresh e2e. Wiki: placeholder-sim removed, executor + reflex-policy notes added, gate green (20 notes).
+
+PR: https://github.com/evanstern/script-world/pull/4 (base main)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
