@@ -51,6 +51,8 @@ spec-bridge sync: Setup (Shared Infrastructure): 0/3 · Foundational (Blocking P
 Implementation complete on branch 001-world-daemon: Go daemon (deterministic tick loop, 1 tick = 1 game s), SQLite append-only event log + snapshots, per-world save dirs, UDS JSON-lines client protocol, full CLI. Validated: go test -race ./... green (unit + integration + e2e); manual quickstart run recorded in specs/001-world-daemon/quickstart-results.md — 4x compression within 5%, pause exact, ~1.65M ticks/s at max, kill -9 recovery in 18ms across 95k events, archived save dir runnable. AC#1 proven by e2e Scenario A, AC#2 by Scenario B, AC#3 by Scenario C.
 
 spec-bridge sync: Setup (Shared Infrastructure): 3/3 · Foundational (Blocking Prerequisites): 9/9 · User Story 1 — The world runs without me (Priority: P1) 🎯 MVP: 7/7 · User Story 2 — Time is a dial (Priority: P2): 4/4 · User Story 3 — Nothing is ever lost (Priority: P3): 4/4 · Polish & Cross-Cutting Concerns: 3/3 — status In Progress → Done
+
+PR: https://github.com/evanstern/script-world/pull/1 (one task, one PR — branch 001-world-daemon)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
