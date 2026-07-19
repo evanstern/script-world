@@ -38,6 +38,8 @@ type State struct {
 	Rumors      []Rumor    `json:"rumors,omitempty"`
 	NextDebtID  int        `json:"next_debt_id,omitempty"`
 	NextRumorID int        `json:"next_rumor_id,omitempty"`
+	// Nightly consolidation (TASK-9).
+	NextBeliefID int `json:"next_belief_id,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -376,6 +378,10 @@ func (s *State) Apply(e store.Event) error {
 		"social.rumor_told", "social.secret_seeded",
 		"social.conversation_turn", "social.conversation":
 		return s.applySocial(e)
+
+	case "agent.memory_promoted", "agent.memory_faded", "agent.belief_revised",
+		"agent.narrative_set", "agent.consolidated":
+		return s.applyConsolidation(e)
 
 	case "agent.talked":
 		var p TalkedPayload

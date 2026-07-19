@@ -82,3 +82,59 @@ func TestDeathFreezesSoulHeader(t *testing.T) {
 	}
 	t.Fatal("soul header never marked death")
 }
+
+// TestSoulShowsConsolidatedGrowth (TASK-9, US2): two synthetic nights of
+// consolidation events render a changing narrative and beliefs with
+// confidence + provenance referencing two distinct days.
+func TestSoulShowsConsolidatedGrowth(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+
+	scr, err := New(dir, 42, m, state.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.Close()
+
+	night := func(tick int64, gist, narrative, belief string, conf int) []store.Event {
+		return []store.Event{
+			{Tick: tick, Type: "agent.memory_added", Payload: mustPayloadJSON(t,
+				sim.MemoryAddedPayload{Agent: 0, Text: gist, Salience: sim.SalDayGist, Subject: -1})},
+			{Tick: tick, Type: "agent.belief_revised", Payload: mustPayloadJSON(t,
+				sim.BeliefRevisedPayload{Agent: 0, BeliefID: 0, Statement: belief,
+					Confidence: conf, Provenance: sim.ProvenanceWitnessed, Source: -1, Subject: -1})},
+			{Tick: tick, Type: "agent.narrative_set", Payload: mustPayloadJSON(t,
+				sim.NarrativeSetPayload{Agent: 0, Text: narrative})},
+			{Tick: tick, Type: "agent.consolidated", Payload: mustPayloadJSON(t,
+				sim.ConsolidatedPayload{Agent: 0, Night: sim.NightIndex(tick), UpTo: tick,
+					Outcome: sim.ConsolidationAccepted, Beliefs: 1})},
+		}
+	}
+	scr.Observe(night(80000, "First night: wolves at the treeline.",
+		"I am the one who watches the dark.", "Wolves hunt the ridge.", 70))
+	scr.Observe(night(170000, "Second night: the fire held.",
+		"I am the one who keeps the fire.", "Fire keeps the wolves honest.", 60))
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+		s := string(data)
+		if strings.Contains(s, "## Who I am becoming") &&
+			strings.Contains(s, "I am the one who keeps the fire.") && // latest narrative won
+			!strings.Contains(s, "watches the dark") && // replaced, not appended
+			strings.Contains(s, "## Beliefs") &&
+			strings.Contains(s, "Wolves hunt the ridge. *(70% sure — witnessed, day 2") &&
+			strings.Contains(s, "Fire keeps the wolves honest. *(60% sure — witnessed, day 3") &&
+			strings.Contains(s, "First night: wolves at the treeline.") &&
+			strings.Contains(s, "Second night: the fire held.") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+	t.Fatalf("soul.md never showed consolidated growth; content:\n%s", data)
+}

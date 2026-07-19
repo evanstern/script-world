@@ -57,6 +57,10 @@ type Mind struct {
 	pairSeen    map[[2]int]int64
 	pending     [sim.AgentCount]bool // trigger armed before nextDue
 
+	// Nightly consolidation (TASK-9): FIFO queue + per-agent in-flight guard.
+	consolQ        chan consolJob
+	consolInFlight [sim.AgentCount]atomic.Bool
+
 	events chan []store.Event
 	done   chan struct{}
 }
@@ -77,6 +81,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		personas: personas,
 		k:        sim.WindowK,
 		pairSeen: map[[2]int]int64{},
+		consolQ:  make(chan consolJob, sim.AgentCount),
 		events:   make(chan []store.Event, 256),
 		done:     make(chan struct{}),
 	}
@@ -84,6 +89,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
 	}
 	go md.run()
+	go md.consolidateWorker()
 	return md, nil
 }
 
@@ -138,6 +144,8 @@ func (md *Mind) absorb(batch []store.Event) {
 			md.armEncounters(e)
 		case "agent.talked":
 			md.maybeStartConversation(e)
+		case "agent.slept":
+			md.maybeConsolidate(e)
 		}
 	}
 }
