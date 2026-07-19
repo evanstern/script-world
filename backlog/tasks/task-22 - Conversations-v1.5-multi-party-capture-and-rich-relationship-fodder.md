@@ -1,9 +1,10 @@
 ---
 id: TASK-22
 title: 'Conversations v1.5: multi-party capture and rich relationship fodder'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-19 22:27'
+updated_date: '2026-07-19 22:47'
 labels:
   - sim
   - llm
@@ -23,3 +24,17 @@ First slice of the interaction-system overhaul (user request 2026-07-19; full re
 - [ ] #2 Each participant stores structured fodder about each counterpart (gist memory with subject+tone, relation delta with reason, topic tags) retrievable by future prompts
 - [ ] #3 Conversation calls are prioritized over musings and observable (status/telemetry shows conversation activity)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Grounding: today's driver (internal/mind/convo.go) is strictly pairwise ([2] arrays), one global slot, ≤5 memory lines each, and social.conversation is a reducer NO-OP — records evaporate; only gist memories (subject -1, not gossipable) and tone-based relation deltas persist.
+
+Design:
+1. N-party scenes (2..4): on agent.talked, adjacent live+awake villagers within radius 2 of the pair join the scene. convoCtx goes slice-based; round-robin turns (2 rounds); every participant hears every turn.
+2. Durable record: social.conversation payload gains participants[], topics[], per-participant tones[]; reducer appends a bounded ring State.Conversations (cap 64) — the artifact future prompts read. Old two-party payloads keep applying (back-compat: empty participants => [a,b]).
+3. Relationship fodder per participant×counterpart: gist memory now subject=counterpart with tone (=> TellableFor gossip seed), relation deltas per pair with reason "conversation: <topic>", and prompts (planner + convo snapshot) carry "last time you spoke with X: <gist>" pulled from the ring.
+4. Optimization: conversations keep the prio lane and single slot; richer snapshot (relations both ways, open debts between participants, shared rumor knowledge, last-conversation callback); outcome call asks for gist + topics + per-participant tones in one JSON.
+5. Observability: State.Conversations count + last gist surface via state (souls/TUI chronicle already shows the events); daemon log lines retained.
+Tests: N-party scene formation from adjacency; reducer ring + back-compat; fodder events (subject-tagged gists tellable via TellableFor); prompt callback content; full suite. Live proof on muse-proof world at 4x.
+<!-- SECTION:PLAN:END -->
