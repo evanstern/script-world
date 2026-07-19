@@ -238,8 +238,8 @@ func TestStateCommand(t *testing.T) {
 	if state.Seed != 42 {
 		t.Errorf("state seed = %d, want 42", state.Seed)
 	}
-	if len(state.Wanderers) == 0 {
-		t.Error("state has no wanderers")
+	if len(state.Agents) == 0 {
+		t.Error("state has no agents")
 	}
 	if sd.LastSeq == 0 {
 		t.Error("state must report the log position it reflects")

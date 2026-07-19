@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -87,10 +85,12 @@ func (m Model) tabsView() string {
 
 // Terrain glyphs. Night dims the palette rather than hiding the world.
 var (
-	styleWater  = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-	styleTree   = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	styleForage = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	styleDen    = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	styleWater   = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	styleTree    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	styleForage  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	styleDen     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	styleFire    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+	styleShelter = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
 )
 
 // mapView renders a camera window over the generated terrain with the live
@@ -121,13 +121,19 @@ func (m Model) mapView() string {
 
 	// Camera center: wanderer centroid + pan offset, clamped to the map.
 	cx, cy := gm.W/2, gm.H/2
-	if m.replica != nil && len(m.replica.Wanderers) > 0 {
-		sx, sy := 0, 0
-		for _, w := range m.replica.Wanderers {
-			sx += w.X
-			sy += w.Y
+	if m.replica != nil {
+		sx, sy, n := 0, 0, 0
+		for _, a := range m.replica.Agents {
+			if a.Dead {
+				continue
+			}
+			sx += a.X
+			sy += a.Y
+			n++
 		}
-		cx, cy = sx/len(m.replica.Wanderers), sy/len(m.replica.Wanderers)
+		if n > 0 {
+			cx, cy = sx/n, sy/n
+		}
 	}
 	cx += m.panX
 	cy += m.panY
@@ -135,15 +141,27 @@ func (m Model) mapView() string {
 	y0 := clampInt(cy-vh/2, 0, gm.H-vh)
 
 	agents := map[[2]int]string{}
+	structures := map[[2]int]string{}
 	if m.replica != nil {
-		for i, w := range m.replica.Wanderers {
-			g := string(rune('A' + i))
-			if w.Asleep {
+		for _, st := range m.replica.Structures {
+			switch st.Kind {
+			case "fire":
+				structures[[2]int{st.X, st.Y}] = styleFire.Render("▲")
+			case "shelter":
+				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
+			}
+		}
+		for _, a := range m.replica.Agents {
+			g := strings.ToUpper(a.Name[:1])
+			switch {
+			case a.Dead:
+				g = styleErr.Render("†")
+			case a.Asleep:
 				g = styleAsleep.Render(strings.ToLower(g))
-			} else {
+			default:
 				g = styleAgent.Render(g)
 			}
-			agents[[2]int{w.X, w.Y}] = g
+			agents[[2]int{a.X, a.Y}] = g
 		}
 	}
 	dens := map[[2]int]bool{}
@@ -154,6 +172,9 @@ func (m Model) mapView() string {
 	night := m.replica != nil && m.replica.Night
 	tile := func(x, y int) string {
 		if g, ok := agents[[2]int{x, y}]; ok {
+			return g
+		}
+		if g, ok := structures[[2]int{x, y}]; ok {
 			return g
 		}
 		if dens[[2]int{x, y}] {
@@ -192,7 +213,7 @@ func (m Model) mapView() string {
 		phase = styleNight.Render("night")
 	}
 	legend := styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ᴥden · A/B wanderers (lowercase asleep) · arrows pan, c center",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ᴥden ▲fire ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
 	return grid + "\n" + legend
 }
@@ -249,24 +270,42 @@ func (m Model) metatronView() string {
 }
 
 func (m Model) soulsView() string {
-	agentsDir := filepath.Join(m.w.Dir, "agents")
-	entries, err := os.ReadDir(agentsDir)
-	if err != nil || len(entries) == 0 {
-		return styleBox.Render(strings.Join([]string{
-			"SOUL READER",
-			"",
-			"No souls inhabit this world yet.",
-			"",
-			styleDim.Render("persona.md / soul.md files appear under agents/ when the"),
-			styleDim.Render("agent mind lands (TASK-7). This pane will read them."),
-		}, "\n"))
-	}
 	var b strings.Builder
-	b.WriteString("SOUL READER — agents/\n\n")
-	for _, e := range entries {
-		b.WriteString("  " + e.Name() + "\n")
+	b.WriteString("SOUL READER\n\n")
+	if m.replica == nil || len(m.replica.Agents) == 0 {
+		b.WriteString(styleDim.Render("waiting for world state…"))
+		return styleBox.Render(strings.TrimRight(b.String(), "\n"))
 	}
+	for _, a := range m.replica.Agents {
+		status := "awake"
+		switch {
+		case a.Dead:
+			status = styleErr.Render("dead")
+		case a.Asleep:
+			status = styleAsleep.Render("asleep")
+		}
+		goal := "idle"
+		if a.Intent != nil {
+			goal = a.Intent.Goal
+		}
+		b.WriteString(fmt.Sprintf("%-8s %s · %s · (%d,%d)\n",
+			a.Name, status, goal, a.X, a.Y))
+		b.WriteString(styleDim.Render(fmt.Sprintf(
+			"         health %s food %s rest %s warmth %s morale %s · wood %d, meals %d",
+			bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
+			bar(a.Needs.Warmth), bar(a.Needs.Morale), a.Inv.Wood, a.Inv.Food)) + "\n\n")
+	}
+	b.WriteString(styleDim.Render("bodies only — persona.md / soul.md arrive with TASK-7"))
 	return styleBox.Render(strings.TrimRight(b.String(), "\n"))
+}
+
+// bar renders a 0..1000 need as a compact five-cell gauge.
+func bar(v int) string {
+	filled := v / 200
+	if v > 0 && filled == 0 {
+		filled = 1
+	}
+	return strings.Repeat("█", filled) + strings.Repeat("░", 5-filled)
 }
 
 func (m Model) footerView() string {
