@@ -1,10 +1,10 @@
 ---
 id: TASK-6
 title: 'LLM orchestrator: tiers, budget, degraded mode'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 04:05'
+updated_date: '2026-07-19 04:16'
 labels:
   - engine
   - llm
@@ -21,9 +21,9 @@ Call layer for all model traffic: local tier via Ollama/9router (OpenAI-compatib
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Planner/conversation calls route local; consolidation/narrator calls route cloud
-- [ ] #2 Live spend meter; hitting the budget ceiling throttles rather than silently overspending
-- [ ] #3 Killing the local model does not crash the world; a designed degraded state engages
+- [x] #1 Planner/conversation calls route local; consolidation/narrator calls route cloud
+- [x] #2 Live spend meter; hitting the budget ceiling throttles rather than silently overspending
+- [x] #3 Killing the local model does not crash the world; a designed degraded state engages
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -39,3 +39,15 @@ Call layer for all model traffic: local tier via Ollama/9router (OpenAI-compatib
 8. Tests: httptest mock providers — routing (AC#1), metering + ceiling throttle (AC#2), tier-down/fast-fail/recovery + world-keeps-ticking (AC#3); -race suite
 9. Wiki note llm-orchestrator + re-pins; PR; board close-out
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented on branch task-6-llm-orchestrator. internal/llm: two-tier call layer fully quarantined from the deterministic loop (LLM results only ever enter the world as recorded inputs). Routing per grounding (planner/conversation->local Ollama-compatible HTTP; consolidation/narrator/drama->cloud via official anthropic-sdk-go, claude-opus-4-8, prompt caching on system blocks). Spend meter persisted monthly in store meta; $100/mo ceiling refuses cloud calls at admission (zero HTTP) while local continues. Circuit breaker per tier (3 fails -> open, backoff 15s..5m, half-open probe); bounded queues (32) with fast ErrQueueFull. Config llm.json per save dir (keys by env-var name only). AC#1 proven by TestRouting + protocol-level test (mock providers count hits per tier); AC#2 by TestBudgetCeiling (refusal before HTTP, meter in status) + TestMeterPersistsAcrossRestart; AC#3 by TestDegradedAndRecovery + TestLLMCallAndDegradedWorld (dead endpoints, world ticks on) — plus live smoke: real Ollama call routed end-to-end through the daemon (cogito:3b answered a planner prompt; status showed tiers/spend). -race suite green (8 packages). Wiki: llm-orchestrator note added, 12 notes re-verified, gate green (21 notes).
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+LLM orchestrator shipped: all model traffic flows through one two-tier gateway — local (Ollama-compatible) for planner/conversation volume, cloud (Anthropic SDK, claude-opus-4-8) for consolidation/narrator/drama — with a persisted monthly spend meter that throttles at the $100 ceiling instead of overspending, per-tier circuit breakers that degrade gracefully when inference dies (the world never stops), bounded-queue backpressure for TASK-7, llm.json config per world, protocol/CLI/TUI surfaces, and live verification against real local inference.
+<!-- SECTION:FINAL_SUMMARY:END -->
