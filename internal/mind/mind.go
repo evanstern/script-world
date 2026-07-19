@@ -44,8 +44,11 @@ const (
 	// Musings (TASK-21): best-effort interiority between planner calls.
 	// The cadence is per agent; drops (busy tier, bad reply) cost a beat
 	// of silence and nothing else — musings are never queued or retried.
+	// museTimeout matches the planner's callTimeout: admission (not the
+	// deadline) is what keeps musings from displacing real work — once a
+	// quiet tier accepts one, a slow local model may take its time.
 	museCadenceTicks = 900 // 15 game-minutes
-	museTimeout      = 30 * time.Second
+	museTimeout      = callTimeout
 	museMaxTokens    = 48
 )
 
