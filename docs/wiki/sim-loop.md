@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Sim loop
@@ -48,6 +48,10 @@ via the loop's `done` channel if the loop has stopped. `Loop.DoState()` answers 
 protocol's `state` command with the canonical `State` JSON plus a status captured in
 the same loop iteration — the returned `last_seq` is exactly the log position the
 state reflects, which is what makes client-side replicas gapless.
+`Loop.InjectIntent` (the `inject_intent` command) is the single door for planner
+output ([[agent-mind]]): validated, resolved to coordinates deterministically at the
+boundary via `resolveGoal`, and recorded as `agent.intent_set (source: planner)` +
+`agent.thought` — model output enters the sim only as recorded input.
 
 ## Connections
 

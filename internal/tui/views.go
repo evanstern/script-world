@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/worldmap"
 )
@@ -313,6 +314,10 @@ func (m Model) soulsView() string {
 			"         health %s food %s rest %s warmth %s morale %s · wood %d, meals %d",
 			bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
 			bar(a.Needs.Warmth), bar(a.Needs.Morale), a.Inv.Wood, a.Inv.Food)) + "\n\n")
+		if n := len(a.Memories); n > 0 {
+			m := a.Memories[n-1]
+			b.WriteString(styleDim.Render(fmt.Sprintf("         ~ %s", sim.FormatMemory(m))) + "\n")
+		}
 	}
 	b.WriteString(styleDim.Render("bodies only — persona.md / soul.md arrive with TASK-7"))
 	return styleBox.Render(strings.TrimRight(b.String(), "\n"))

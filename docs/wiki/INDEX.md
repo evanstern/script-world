@@ -34,9 +34,10 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[tui-client]] — Bubble Tea four-pane client over a live log-shipped replica
 - [[cli-scriptworld]] — the single binary's subcommands and exit discipline
 
-## Inference
+## Inference & minds
 
 - [[llm-orchestrator]] — two-tier model traffic: routing, spend ceiling, degraded mode
+- [[agent-mind]] — personas, souls, memory window, and the planner driver
 
 ## Lifecycle & quality
 

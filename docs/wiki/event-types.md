@@ -8,7 +8,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Event types
@@ -28,7 +28,7 @@ TUI) will read.
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
 | `sim.day_started` / `sim.night_started` | `DayPayload{day}` | executor, 06:00/22:00 | `Night` flag only — waking is explicit |
 | `sim.forage_regrown` | `RegrownPayload{x, y}` | executor, regrow tick | harvest overlay removed |
-| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res}` | reflex policy | intent installed |
+| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res, source}` | reflex (grace-gated) or planner injection | intent installed; `source` says which mind chose it |
 | `agent.work_started` | `WorkStartedPayload{agent, tick}` | executor at target | `WorkStart` stamped |
 | `agent.intent_done` | `AgentPayload{agent}` | executor (done/invalid/unreachable) | intent cleared |
 | `agent.moved` | `AgentMovedPayload{agent, x, y}` | executor pathing | position updated |
@@ -38,7 +38,9 @@ TUI) will read.
 | `agent.slept` / `agent.woke` | `AgentPayload{agent}` | executor | sleep flag (slept clears intent) |
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
 | `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared |
-| `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent idle pair | +morale both, talk cooldown |
+| `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent idle pair | +morale both, talk cooldown; both remember |
+| `agent.memory_added` | `MemoryAddedPayload{agent, text, salience}` | executor salience heuristics | append to `Memories` ([[agent-mind]]) |
+| `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
 
 Conventions: `clock.*` are applied player/scheduler commands; `sim.*` and `agent.*`

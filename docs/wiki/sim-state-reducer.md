@@ -5,22 +5,23 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Sim state & reducer
 
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
 degraded, effective rate) plus the living world — agents with needs/intents/
-inventories, structures, cleared trees, harvested forage, den cooldowns ([[executor]]
-defines those types in `agents.go`). Its
+inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
+latch), structures, cleared trees, harvested forage, den cooldowns ([[executor]]
+defines those types in `agents.go`; memories belong to [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.
 
 ## How it works
 
-`NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), four
+`NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), eight
 named agents on distinct passable tiles via [[deterministic-rng]], with deliberately
 imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
 
