@@ -15,7 +15,8 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[sim-loop]] — single-goroutine fixed-timestep loop; command intents; auto-slow
 - [[sim-state-reducer]] — State + Apply: the single mutation path, live and replay
 - [[deterministic-rng]] — per-decision PCG from (seed, purpose, tick, index); no RNG state
-- [[placeholder-sim]] — two wanderers + day/night; scaffolding until real systems land
+- [[executor]] — agent bodies: needs, intents, death, terrain overlays
+- [[reflex-policy]] — survival decision ladder + deterministic BFS pathfinding
 - [[event-types]] — the event taxonomy and payload shapes
 
 ## Persistence

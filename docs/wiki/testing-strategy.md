@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Testing strategy
@@ -21,7 +21,11 @@ real `scriptworld`.
 
 **Unit determinism harness** (`internal/sim/sim_test.go`): `driveTicks` replicates
 the loop's semantics minus the real-time scheduler — commands injected at exact tick
-boundaries, with the generated terrain threaded through exactly as the live loop does.
+boundaries, terrain threaded through exactly as the live loop does. Now proven over
+the full [[executor]]: 30k–40k-tick determinism and replay harnesses, plus behavior
+suites — multi-step intent chains with zero input (AC#1), needs decay + self-feeding
+and starvation death with recorded cause (AC#2), night warmth mechanics and exposure
+death (AC#3), and a two-day unattended village survival run on multiple seeds.
 (Terrain generation has its own determinism/AC suite in `internal/worldmap`, covered
 by [[worldmap-generation]].) Proves: same seed + same command timeline over 10k ticks → byte-identical
 event sequences and equal state hashes; different seeds diverge; replaying the logged
@@ -58,5 +62,5 @@ Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
 
 `go test -race ./...` runs everything in ~25 s (e2e dominates). E2E timing assertions
 use deliberately loose bounds against CI jitter; tighten only with longer windows.
-When [[placeholder-sim]] is replaced, the day/night and determinism tests need
-re-targeting in the same change.
+The executor behavior suites are seed-pinned: policy tuning that changes behavior
+legitimately requires re-verifying (not deleting) the survival assertions.

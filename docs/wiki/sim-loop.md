@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Sim loop
@@ -51,7 +51,7 @@ state reflects, which is what makes client-side replicas gapless.
 
 ## Connections
 
-[[game-clock]] supplies intervals; [[placeholder-sim]] supplies tick events;
+[[game-clock]] supplies intervals; the [[executor]] supplies tick events;
 [[sim-state-reducer]] is the mutation path; [[event-log]] and [[snapshots]] persist;
 [[ipc-server]] feeds commands in and broadcasts events out; [[daemon-lifecycle]] owns
 the ctx whose cancellation triggers the final snapshot.

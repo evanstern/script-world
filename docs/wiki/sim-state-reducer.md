@@ -4,29 +4,33 @@ description: sim.State and Apply — the single event-driven mutation path used 
 kind: component
 sources:
   - internal/sim/state.go
-verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
+  - internal/sim/agents.go
+verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
 ---
 
 # Sim state & reducer
 
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
-degraded, effective rate) plus placeholder sim state (night flag, wanderers). Its
+degraded, effective rate) plus the living world — agents with needs/intents/
+inventories, structures, cleared trees, harvested forage, den cooldowns ([[executor]]
+defines those types in `agents.go`). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.
 
 ## How it works
 
-`NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), wanderer
-positions drawn from the seed via [[deterministic-rng]] onto passable terrain
-([[worldmap-generation]]'s `Passable`) — no stored RNG state.
+`NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), four
+named agents on distinct passable tiles via [[deterministic-rng]], with deliberately
+imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
 
-`Apply` switches on event type: `clock.paused`/`clock.resumed` flip `Paused`;
-`clock.speed_set` sets `Speed`; `clock.degraded`/`clock.recovered` maintain `Degraded`
-and `EffectiveRate`; `sim.night_started`/`sim.day_started` flip `Night` and wake
-wanderers; `agent.moved`/`agent.slept` update wanderer structs. Unknown types —
-including `daemon.*` and `world.created` — are recorded history but state no-ops, so
-new event types never break old replay.
+`Apply` switches on event type: `clock.*` maintain pause/speed/degradation;
+`sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
+`agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
+`agent.*` family ([[event-types]]) drives intents, movement, work products
+(inventory + overlays + structures), eating, sleep, talk, needs (absolute values),
+and death. Unknown types — including `daemon.*` and `world.created` — are recorded
+history but state no-ops, so new event types never break old replay.
 
 **Tick is deliberately not event-sourced**: quiet ticks (no events) advance the clock
 without a log row. The live loop mutates `state.Tick` directly; recovery sets it to
@@ -39,7 +43,7 @@ verification and the determinism tests. Wall-clock time never appears in state.
 
 ## Connections
 
-[[sim-loop]] generates events via [[placeholder-sim]] and applies them here;
+[[sim-loop]] generates events via the [[executor]] and applies them here;
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
 [[event-types]] lists every payload struct defined in this file.
 
