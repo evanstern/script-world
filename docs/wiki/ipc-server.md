@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # IPC server
@@ -20,7 +20,9 @@ spam garbage, or subscribe and stall, and the loop never notices.
 line-scanner (1 MiB max line). Malformed JSON closes that connection; unknown
 commands return `ok:false` and keep it open. Time-control and status commands go
 through `Loop.Do` and reply with the full `StatusData` (built by `statusData`, which
-adds world/daemon/log sections around the loop's clock snapshot).
+adds world/daemon/log sections around the loop's clock snapshot); `state` goes
+through `Loop.DoState` and replies with `StateData` — the canonical world-state JSON
+plus the `last_seq` it reflects.
 
 **Broadcast path**: the loop's notify callback is `Server.Broadcast`, which offers
 committed events to each session under a non-blocking send into a

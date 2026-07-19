@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # IPC protocol
@@ -28,9 +28,11 @@ Three envelopes:
 Clients demux on the presence of `id` vs `push` (`wireMsg` is the union used by the
 client reader). Responses and pushes may interleave.
 
-Commands: `status`, `subscribe` (`SubscribeArgs{since}` — replay after that seq, then
-live, gapless), `unsubscribe`, `pause`, `resume`, `set_speed`
-(`SetSpeedArgs{speed}`), `shutdown`.
+Commands: `status`, `state` (returns `StateData{state, last_seq}` — the full
+canonical world-state JSON plus the log position it reflects, captured coherently in
+one loop iteration; subscribe with `since: last_seq` for a gapless live replica),
+`subscribe` (`SubscribeArgs{since}` — replay after that seq, then live, gapless),
+`unsubscribe`, `pause`, `resume`, `set_speed` (`SetSpeedArgs{speed}`), `shutdown`.
 
 `StatusData` is the shared response shape for status/pause/resume/set_speed, with four
 sections: `world` (name, seed, format_version), `clock` (tick, game_time, paused,
@@ -44,7 +46,8 @@ malformed JSON → connection closed; daemon absent → socket connect fails fas
 
 [[ipc-server]] implements the daemon side; [[ipc-client]] the attach side;
 [[event-types]] defines what rides inside event pushes; [[cli-scriptworld]] renders
-`StatusData` for humans. The TASK-3 Bubble Tea TUI is the intended next consumer.
+`StatusData` for humans. The [[tui-client]] consumes `state` + `subscribe` to run its
+live replica.
 
 ## Operational notes
 

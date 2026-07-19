@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # scriptworld CLI
@@ -35,7 +35,9 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
   `LastEventTick`), clearly labeled "daemon not running".
 - `pause` / `resume` / `speed <v>` — one-shot time controls printing the resulting
   clock line.
-- `attach <dir>` — interactive: status header, live subscribe streamed to stdout,
+- `ui <dir>` — the full-screen Bubble Tea client ([[tui-client]]): map, chronicle,
+  metatron, souls panes over a live world replica; runs in the alternate screen.
+- `attach <dir>` — line-mode: status header, live subscribe streamed to stdout,
   stdin commands (`pause`, `resume`, `speed <v>`, `status`, `quit`); handles
   `dropped` pushes by re-subscribing. Quit detaches; the world keeps running.
 - `tail <dir> [--since SEQ] [--follow]` — history from the store (default last 20),
