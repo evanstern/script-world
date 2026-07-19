@@ -92,6 +92,7 @@ var (
 	styleDen     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 	styleFire    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 	styleShelter = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
+	styleGru     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView renders a camera window over the generated terrain with the live
@@ -170,8 +171,16 @@ func (m Model) mapView() string {
 		dens[[2]int{d.X, d.Y}] = true
 	}
 
+	gruX, gruY := -1, -1
+	if m.replica != nil && m.replica.Gru != nil {
+		gruX, gruY = m.replica.Gru.X, m.replica.Gru.Y
+	}
+
 	night := m.replica != nil && m.replica.Night
 	tile := func(x, y int) string {
+		if x == gruX && y == gruY {
+			return styleGru.Render("G")
+		}
 		if g, ok := agents[[2]int{x, y}]; ok {
 			return g
 		}

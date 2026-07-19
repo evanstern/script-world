@@ -38,6 +38,9 @@ type State struct {
 	Rumors      []Rumor    `json:"rumors,omitempty"`
 	NextDebtID  int        `json:"next_debt_id,omitempty"`
 	NextRumorID int        `json:"next_rumor_id,omitempty"`
+	// The gru (TASK-10) — nil while it is not abroad; omitempty keeps
+	// pre-TASK-10 snapshots valid.
+	Gru *Gru `json:"gru,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -376,6 +379,9 @@ func (s *State) Apply(e store.Event) error {
 		"social.rumor_told", "social.secret_seeded",
 		"social.conversation_turn", "social.conversation":
 		return s.applySocial(e)
+
+	case "gru.emerged", "gru.moved", "gru.sighted", "gru.attacked", "gru.withdrew":
+		return s.applyGru(e)
 
 	case "agent.talked":
 		var p TalkedPayload
