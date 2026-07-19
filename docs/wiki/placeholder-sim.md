@@ -4,7 +4,7 @@ description: Two wanderers on a 16×16 grid with a 22:00/06:00 day-night cycle �
 kind: component
 sources:
   - internal/sim/placeholder.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # Placeholder simulation
@@ -16,8 +16,8 @@ accidental gameplay.
 
 ## How it works
 
-Constants: `wandererCount = 2`, `gridSize = 16`, `nightStartSecond = 22*3600`,
-`dayStartSecond = 6*3600`.
+Constants: `wandererCount = 2`, `GridSize = 16` (exported for map rendering in the
+[[tui-client]]), `nightStartSecond = 22*3600`, `dayStartSecond = 6*3600`.
 
 `stepEvents(s *State, nextTick)` is a **pure function** of (state, next tick) — it
 must not mutate state; the loop applies its returned events through the reducer:

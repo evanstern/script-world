@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # Testing strategy
@@ -29,7 +29,9 @@ exactly; the day/night cycle behaves (nobody moves at night).
 **IPC integration** (`internal/ipc/ipc_test.go`): a real loop + server + store on a
 temp world. Proves: status round trip <2 s; subscribe-from-zero delivers strictly
 consecutive seqs; abrupt disconnects and wire garbage leave the loop ticking;
-commands are idempotent and land in the log as events.
+commands are idempotent and land in the log as events; the `state` command's
+coherence contract holds (no push predates the snapshot's `last_seq`, and a replica
+built from it applies subsequent pushes cleanly — the [[tui-client]] pattern).
 
 **E2E** (`e2e/`): `TestMain` builds the binary once; scenarios mirror
 `specs/001-world-daemon/quickstart.md` — A: always-on + detach-is-not-pause; B:

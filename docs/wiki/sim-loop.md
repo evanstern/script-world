@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # Sim loop
@@ -42,7 +42,10 @@ ticks/sec against the requested rate; sustained shortfall below 90% emits
 At max speed whatever is achieved is the contract — no degradation events.
 
 `Loop.Do(name, speed)` is the thread-safe entry used by IPC sessions; it fails cleanly
-via the loop's `done` channel if the loop has stopped.
+via the loop's `done` channel if the loop has stopped. `Loop.DoState()` answers the
+protocol's `state` command with the canonical `State` JSON plus a status captured in
+the same loop iteration — the returned `last_seq` is exactly the log position the
+state reflects, which is what makes client-side replicas gapless.
 
 ## Connections
 

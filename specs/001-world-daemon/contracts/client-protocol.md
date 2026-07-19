@@ -15,6 +15,7 @@ allowed; all equal (trusted localhost operator).
 | cmd | args | effect |
 |---|---|---|
 | `status` | — | snapshot of clock + world status |
+| `state` | — | full canonical world-state JSON + the `last_seq` it reflects; subscribe with `since: last_seq` to maintain a gapless live replica (added for the TASK-3 TUI) |
 | `subscribe` | `{"since": <seq>?}` | start event pushes; with `since`, first replays log events after that seq, then goes live (gapless) |
 | `unsubscribe` | — | stop pushes |
 | `pause` | — | pause game time (idempotent) |

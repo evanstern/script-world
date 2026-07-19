@@ -221,6 +221,54 @@ func TestTimeControlCommands(t *testing.T) {
 	}
 }
 
+func TestStateCommand(t *testing.T) {
+	h := newHarness(t, clock.SpeedMax)
+	c := h.dial(t)
+	waitForSeq(t, c, 20)
+
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state sim.State
+	if err := json.Unmarshal(sd.State, &state); err != nil {
+		t.Fatalf("state is not valid sim.State JSON: %v", err)
+	}
+	if state.Seed != 42 {
+		t.Errorf("state seed = %d, want 42", state.Seed)
+	}
+	if len(state.Wanderers) == 0 {
+		t.Error("state has no wanderers")
+	}
+	if sd.LastSeq == 0 {
+		t.Error("state must report the log position it reflects")
+	}
+
+	// Coherence contract: subscribing from LastSeq replays nothing already
+	// folded into the state — the first push has seq LastSeq+1 or later,
+	// and applying pushes to the state must not error.
+	since := sd.LastSeq
+	if err := c.Subscribe(&since); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		select {
+		case p := <-c.Pushes():
+			if p.Push != "event" {
+				continue
+			}
+			if p.Event.Seq <= sd.LastSeq {
+				t.Fatalf("push seq %d predates state's last_seq %d", p.Event.Seq, sd.LastSeq)
+			}
+			if err := state.Apply(*p.Event); err != nil {
+				t.Fatalf("state replica cannot apply pushed event: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no pushes after state+subscribe")
+		}
+	}
+}
+
 func TestUnknownCommandKeepsConnection(t *testing.T) {
 	h := newHarness(t, clock.Speed4x)
 	c := h.dial(t)

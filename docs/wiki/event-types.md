@@ -7,7 +7,7 @@ sources:
   - internal/sim/placeholder.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # Event types

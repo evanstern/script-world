@@ -29,6 +29,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[ipc-protocol]] — JSON-lines over UDS: requests, responses, pushes, status shape
 - [[ipc-server]] — sessions, gapless subscribe-replay, overflow drop, long-path sockets
 - [[ipc-client]] — dial, request correlation, push demux
+- [[tui-client]] — Bubble Tea four-pane client over a live log-shipped replica
 - [[cli-scriptworld]] — the single binary's subcommands and exit discipline
 
 ## Lifecycle & quality

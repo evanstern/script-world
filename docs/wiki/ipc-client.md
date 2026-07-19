@@ -4,7 +4,7 @@ description: Attach-side protocol client — dial with fast failure, request/res
 kind: component
 sources:
   - internal/ipc/client.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # IPC client
@@ -30,13 +30,16 @@ closes all pending channels and `pushes`, so both callers and push consumers unw
 deterministically.
 
 Conveniences: `Status(cmd, args)` unmarshals the shared `StatusData` shape;
-`Subscribe(since *int64)` issues the subscribe command — read events from `Pushes()`
-and handle the `"dropped"` push by re-subscribing from its `last_seq`.
+`FetchState()` unmarshals the `state` command's `StateData` (full world state + the
+log position it reflects); `Subscribe(since *int64)` issues the subscribe command —
+read events from `Pushes()` and handle the `"dropped"` push by re-subscribing from
+its `last_seq`.
 
 ## Connections
 
 [[ipc-protocol]] defines the wire; [[cli-scriptworld]]'s `status`/`attach`/`tail`/
-time-control commands are the current callers; [[ipc-server]] is the peer.
+time-control commands and the [[tui-client]] are the callers; [[ipc-server]] is the
+peer.
 
 ## Operational notes
 

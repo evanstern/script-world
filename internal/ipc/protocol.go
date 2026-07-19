@@ -50,6 +50,14 @@ type SetSpeedArgs struct {
 	Speed string `json:"speed"`
 }
 
+// StateData answers the "state" command: the full canonical sim.State JSON
+// plus the log position it reflects — subscribe with since=last_seq for a
+// gapless live replica.
+type StateData struct {
+	State   json.RawMessage `json:"state"`
+	LastSeq int64           `json:"last_seq"`
+}
+
 // StatusData is the shared response shape for status/pause/resume/set_speed.
 type StatusData struct {
 	World  WorldStatus  `json:"world"`

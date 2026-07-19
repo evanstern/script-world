@@ -10,7 +10,10 @@ import (
 // plug in. Two wanderers on a 16×16 grid; day/night at 06:00/22:00.
 const (
 	wandererCount = 2
-	gridSize      = 16
+
+	// GridSize is exported for clients that render the world (the TUI map).
+	GridSize = 16
+	gridSize = GridSize
 
 	nightStartSecond = 22 * 3600 // 22:00
 	dayStartSecond   = 6 * 3600  // 06:00

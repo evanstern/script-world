@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
 ---
 
 # Overview
@@ -20,8 +20,9 @@ tasks and plugs into this substrate.
 
 ## How it works
 
-One Go module (`github.com/evanstern/script-world`, Go 1.22+) builds one binary,
-`cmd/scriptworld`, which is both the daemon and every client tool. Data planes:
+One Go module (`github.com/evanstern/script-world`, Go 1.22+; external deps: pure-Go
+SQLite plus Bubble Tea/Lipgloss for the TUI) builds one binary, `cmd/scriptworld`,
+which is both the daemon and every client tool. Data planes:
 
 - **Simulation plane**: a single goroutine in `internal/sim` owns all world state and
   advances it in deterministic ticks (1 tick = 1 game second). All external input enters
@@ -30,14 +31,15 @@ One Go module (`github.com/evanstern/script-world`, Go 1.22+) builds one binary,
   log in the world's save directory; snapshots bound recovery time. The log is the
   source of truth; state is a reducer over it.
 - **Interface plane**: `internal/ipc` serves a JSON-lines protocol over a Unix domain
-  socket inside the save directory; `internal/daemon` wires the planes together and
-  owns process lifecycle.
+  socket inside the save directory; `internal/tui` is the Bubble Tea full-screen
+  client over that protocol; `internal/daemon` wires the planes together and owns
+  process lifecycle.
 
 Layering (imports point downward only):
 
 ```
 cmd/scriptworld → daemon → ipc → sim → store
-                                clock ┘   world
+                → tui   ↗       clock ┘   world
 ```
 
 Each world run is one save directory and at most one daemon process; multiple worlds
@@ -46,8 +48,8 @@ mean multiple daemons. There is no global state anywhere.
 ## Connections
 
 [[design-grounding]] records why the system has this shape. [[sim-loop]] is the heart;
-[[event-log]] and [[snapshots]] its memory; [[ipc-server]] and [[cli-scriptworld]] its
-face. [[daemon-lifecycle]] ties them into a process.
+[[event-log]] and [[snapshots]] its memory; [[ipc-server]], [[tui-client]], and
+[[cli-scriptworld]] its face. [[daemon-lifecycle]] ties them into a process.
 
 ## Operational notes
 

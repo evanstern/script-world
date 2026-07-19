@@ -33,13 +33,14 @@ type Status struct {
 }
 
 type command struct {
-	name  string // "status" | "pause" | "resume" | "set_speed"
+	name  string // "status" | "state" | "pause" | "resume" | "set_speed"
 	speed clock.Speed
 	reply chan commandResult
 }
 
 type commandResult struct {
 	status Status
+	state  []byte // canonical State JSON; set only for "state" commands
 	err    error
 }
 
@@ -76,17 +77,30 @@ func NewLoop(state *State, st *store.Store, notify func([]store.Event)) *Loop {
 // Do submits a command to the loop and waits for the resulting status.
 // Safe from any goroutine; fails cleanly if the loop has stopped.
 func (l *Loop) Do(name string, speed clock.Speed) (Status, error) {
+	res, err := l.do(name, speed)
+	return res.status, err
+}
+
+// DoState returns a coherent snapshot of the full world state (canonical
+// JSON) plus the clock status captured in the same loop iteration — the
+// last_seq in the status is exactly the log position the state reflects.
+func (l *Loop) DoState() ([]byte, Status, error) {
+	res, err := l.do("state", "")
+	return res.state, res.status, err
+}
+
+func (l *Loop) do(name string, speed clock.Speed) (commandResult, error) {
 	cmd := command{name: name, speed: speed, reply: make(chan commandResult, 1)}
 	select {
 	case l.commands <- cmd:
 	case <-l.done:
-		return Status{}, errors.New("simulation loop is not running")
+		return commandResult{}, errors.New("simulation loop is not running")
 	}
 	select {
 	case res := <-cmd.reply:
-		return res.status, res.err
+		return res, res.err
 	case <-l.done:
-		return Status{}, errors.New("simulation loop stopped")
+		return commandResult{}, errors.New("simulation loop stopped")
 	}
 }
 
@@ -217,9 +231,12 @@ func (l *Loop) handleCommand(cmd command) error {
 	}
 
 	var err error
+	var stateJSON []byte
 	switch cmd.name {
 	case "status":
 		// Read-only.
+	case "state":
+		stateJSON = l.state.Marshal()
 	case "pause":
 		if !l.state.Paused {
 			emit("clock.paused", struct{}{})
@@ -258,7 +275,7 @@ func (l *Loop) handleCommand(cmd command) error {
 			}
 		}
 	}
-	cmd.reply <- commandResult{status: l.status(), err: err}
+	cmd.reply <- commandResult{status: l.status(), state: stateJSON, err: err}
 	return nil
 }
 
