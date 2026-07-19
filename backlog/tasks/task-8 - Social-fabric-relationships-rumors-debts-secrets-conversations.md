@@ -4,7 +4,7 @@ title: 'Social fabric: relationships, rumors, debts, secrets, conversations'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 05:08'
+updated_date: '2026-07-19 05:10'
 labels:
   - spec-candidate
   - agents
@@ -27,6 +27,10 @@ Spec: specs/003-social-fabric
 - [ ] #1 Social encounters read/write relationship edges; rumors mutate and carry provenance
 - [ ] #2 Broken promises persist in the ledger and move reputation
 - [ ] #3 Conversations run multi-turn within the cap and land in both souls
+- [ ] #4 Spec phase: Foundational sim core (blocking)
+- [ ] #5 Spec phase: Secrets + genesis (US3)
+- [ ] #6 Spec phase: Conversations (US4)
+- [ ] #7 Spec phase: Polish
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -41,3 +45,9 @@ Spec: specs/003-social-fabric
 7. Tests: relation/ledger/reputation mechanics (AC#2), rumor provenance + mutation + decay (AC#1), convo cap + dual-soul memories (AC#3), determinism/replay re-proven; -race suite; live Ollama smoke
 8. Wiki, board close-out, PR (base main)
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync: Foundational sim core (blocking): 0/6 · Secrets + genesis (US3): 0/1 · Conversations (US4): 0/4 · Polish: 0/2
+<!-- SECTION:NOTES:END -->
