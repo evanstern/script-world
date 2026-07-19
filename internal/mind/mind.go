@@ -1,0 +1,231 @@
+// Package mind is the driver that gives villagers planner thoughts (TASK-7):
+// it watches the event stream through a replica, schedules planner calls
+// (30-game-minute stagger + scene-change triggers), routes them through the
+// LLM orchestrator's local tier, and injects the chosen goals back into the
+// loop as recorded commands. Model output never touches deterministic space
+// except through Loop.InjectIntent.
+package mind
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
+)
+
+// Submitter is the orchestrator surface the mind needs (test seam).
+type Submitter interface {
+	Submit(ctx context.Context, req llm.Request) (llm.Response, error)
+}
+
+// Injector is the loop surface the mind needs (test seam).
+type Injector interface {
+	InjectIntent(args sim.InjectArgs) error
+}
+
+const (
+	encounterCooldownTicks = 2 * 3600 // per pair
+	encounterRadius        = 1
+	callTimeout            = 90 * time.Second
+)
+
+type Mind struct {
+	orch     Submitter
+	loop     Injector
+	replica  *sim.State
+	m        *worldmap.Map
+	personas [sim.AgentCount]string
+	k        int
+
+	nextDue  [sim.AgentCount]int64
+	pairSeen map[[2]int]int64
+	pending  [sim.AgentCount]bool // trigger armed before nextDue
+
+	events chan []store.Event
+	done   chan struct{}
+}
+
+// New starts the driver from a state snapshot. Cadence is staggered so eight
+// agents never think in the same game-minute.
+func New(orch Submitter, loop Injector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string) (*Mind, error) {
+	replica := sim.NewState(seed, m)
+	if err := json.Unmarshal(stateJSON, replica); err != nil {
+		return nil, err
+	}
+	md := &Mind{
+		orch:     orch,
+		loop:     loop,
+		replica:  replica,
+		m:        m,
+		personas: personas,
+		k:        sim.WindowK,
+		pairSeen: map[[2]int]int64{},
+		events:   make(chan []store.Event, 256),
+		done:     make(chan struct{}),
+	}
+	for i := range md.nextDue {
+		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
+	}
+	go md.run()
+	return md, nil
+}
+
+// Observe is the loop-notify path: never blocks (drop on overflow — the
+// next batch still carries the tick forward and cadence self-heals).
+func (md *Mind) Observe(events []store.Event) {
+	select {
+	case md.events <- events:
+	default:
+	}
+}
+
+func (md *Mind) Close() { close(md.done) }
+
+func (md *Mind) run() {
+	for {
+		select {
+		case <-md.done:
+			return
+		case batch := <-md.events:
+			md.absorb(batch)
+			md.plan()
+		}
+	}
+}
+
+// absorb applies events to the replica and arms triggers.
+func (md *Mind) absorb(batch []store.Event) {
+	for _, e := range batch {
+		md.replica.Apply(e)
+		if e.Tick > md.replica.Tick {
+			md.replica.Tick = e.Tick
+		}
+		switch e.Type {
+		case "agent.woke":
+			var p sim.AgentPayload
+			if json.Unmarshal(e.Payload, &p) == nil {
+				md.arm(p.Agent)
+			}
+		case "agent.intent_done", "agent.foraged", "agent.chopped", "agent.hunted", "agent.built":
+			var p struct {
+				Agent int `json:"agent"`
+			}
+			if json.Unmarshal(e.Payload, &p) == nil {
+				md.arm(p.Agent)
+			}
+		case "sim.night_started":
+			for i := range md.replica.Agents {
+				md.arm(i)
+			}
+		case "agent.moved":
+			md.armEncounters(e)
+		}
+	}
+}
+
+func (md *Mind) arm(idx int) {
+	if idx >= 0 && idx < sim.AgentCount {
+		md.pending[idx] = true
+	}
+}
+
+// armEncounters fires when two agents first become adjacent (pair cooldown).
+func (md *Mind) armEncounters(e store.Event) {
+	var p sim.AgentMovedPayload
+	if json.Unmarshal(e.Payload, &p) != nil {
+		return
+	}
+	a := p.Agent
+	for b := range md.replica.Agents {
+		if b == a || md.replica.Agents[b].Dead {
+			continue
+		}
+		if absInt(md.replica.Agents[b].X-p.X)+absInt(md.replica.Agents[b].Y-p.Y) <= encounterRadius {
+			key := [2]int{minInt(a, b), maxInt(a, b)}
+			if e.Tick-md.pairSeen[key] >= encounterCooldownTicks {
+				md.pairSeen[key] = e.Tick
+				md.arm(a)
+				md.arm(b)
+			}
+		}
+	}
+}
+
+// plan runs due agents. Serialized (one model call at a time) — the local
+// tier is the throughput governor, and the orchestrator's queue is the
+// backpressure surface.
+func (md *Mind) plan() {
+	tick := md.replica.Tick
+	for i := range md.replica.Agents {
+		a := &md.replica.Agents[i]
+		if a.Dead || a.Asleep {
+			md.pending[i] = false
+			continue
+		}
+		if !md.pending[i] && tick < md.nextDue[i] {
+			continue
+		}
+		md.pending[i] = false
+		md.nextDue[i] = tick + sim.PlannerCadenceTicks
+
+		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+		resp, err := md.orch.Submit(ctx, llm.Request{
+			Kind:      llm.KindPlanner,
+			System:    systemPrompt(a.Name, md.personas[i]),
+			Prompt:    userPrompt(md.replica, i, md.k),
+			MaxTokens: 256,
+		})
+		cancel()
+		if err != nil {
+			log.Printf("mind: %s planner call failed: %v", a.Name, err)
+			continue // reflex grace covers; next trigger retries
+		}
+		reply, err := parseReply(resp.Text)
+		if err != nil {
+			log.Printf("mind: %s reply unusable: %v", a.Name, err)
+			continue
+		}
+		target := -1
+		if reply.Goal == "talk_to" {
+			if target = md.agentIndexByName(reply.Target); target < 0 {
+				log.Printf("mind: %s wants to talk to unknown %q", a.Name, reply.Target)
+				continue
+			}
+		}
+		if err := md.loop.InjectIntent(sim.InjectArgs{
+			Agent: i, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
+		}); err != nil {
+			log.Printf("mind: %s goal %q rejected: %v", a.Name, reply.Goal, err)
+		}
+	}
+}
+
+func (md *Mind) agentIndexByName(name string) int {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for i, n := range sim.AgentNames {
+		if strings.ToLower(n) == name {
+			return i
+		}
+	}
+	return -1
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

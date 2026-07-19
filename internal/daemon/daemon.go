@@ -18,6 +18,9 @@ import (
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/script-world/internal/mind"
+	"github.com/evanstern/script-world/internal/persona"
+	"github.com/evanstern/script-world/internal/scribe"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -60,7 +63,24 @@ func Run(dir string) error {
 	defer cancel()
 
 	srv := ipc.NewServer(w, st, cancel)
-	loop := sim.NewLoop(state, w.Map(), st, srv.Broadcast)
+
+	// Notify fan-out: the IPC broadcast, the always-on soul scribe, and
+	// (when an orchestrator exists) the mind driver. All consumers are
+	// non-blocking by contract.
+	var consumers []func([]store.Event)
+	consumers = append(consumers, srv.Broadcast)
+	scr, err := scribe.New(dir, w.Manifest.Seed, w.Map(), state.Marshal())
+	if err != nil {
+		return err
+	}
+	defer scr.Close()
+	consumers = append(consumers, scr.Observe)
+	notify := func(evs []store.Event) {
+		for _, c := range consumers {
+			c(evs)
+		}
+	}
+	loop := sim.NewLoop(state, w.Map(), st, notify)
 	srv.SetLoop(loop)
 
 	// LLM orchestrator: optional (config-gated), fully outside the sim loop —
@@ -76,6 +96,14 @@ func Run(dir string) error {
 		srv.SetLLM(orch)
 		fmt.Printf("daemon: llm orchestrator on (local %s @ %s, cloud %s, budget $%.0f/mo)\n",
 			llmCfg.Local.Model, llmCfg.Local.Endpoint, llmCfg.Cloud.Model, llmCfg.MonthlyBudgetUSD)
+		md, err := mind.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
+		if err != nil {
+			return err
+		}
+		defer md.Close()
+		consumers = append(consumers, md.Observe)
+		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
+			sim.AgentCount, sim.PlannerCadenceTicks/60)
 	}
 
 	// Stale socket from a crashed daemon: the pidfile said no one is alive.

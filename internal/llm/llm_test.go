@@ -80,6 +80,7 @@ func testConfig(localURL, cloudURL string, budget float64) Config {
 
 func newOrch(t *testing.T, cfg Config, st *store.Store) *Orchestrator {
 	t.Helper()
+	t.Setenv("SCRIPTWORLD_TEST_KEY", "test-key") // hermetic: never depend on the caller's env
 	o, err := New(cfg, st)
 	if err != nil {
 		t.Fatal(err)

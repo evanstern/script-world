@@ -32,6 +32,13 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 	case dayStartSecond:
 		emit("sim.day_started", DayPayload{Day: day})
 		night = false
+		for i := range s.Agents {
+			a := &s.Agents[i]
+			if !a.Dead && a.Needs.Warmth < coldNightBelow {
+				events = append(events, memoryEvent(nextTick, i, salColdNight,
+					"Survived a freezing night in the open."))
+			}
+		}
 	}
 
 	// Forage regrowth.
@@ -52,6 +59,17 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			emit("agent.needs_changed", NeedsPayload{
 				Agent: i, Health: n.Health, Food: n.Food, Rest: n.Rest, Warmth: n.Warmth, Morale: n.Morale,
 			})
+			// Own near-death is a formative memory, once per collapse (latch).
+			if n.Health < nearDeathBelow && !a.NearDeath && n.Health > 0 {
+				cause := "cold and hunger"
+				switch {
+				case n.Food == 0 && n.Warmth > 0:
+					cause = "hunger"
+				case n.Warmth == 0 && n.Food > 0:
+					cause = "the cold"
+				}
+				events = append(events, memoryEvent(nextTick, i, salNearDeath, "Nearly died — %s almost took me.", cause))
+			}
 			if n.Health == 0 {
 				cause := "collapse"
 				switch {
@@ -61,6 +79,16 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 					cause = "exposure"
 				}
 				emit("agent.died", DiedPayload{Agent: i, Cause: cause})
+				// Death marks every witness close enough to see it.
+				for w := range s.Agents {
+					if w == i || s.Agents[w].Dead {
+						continue
+					}
+					if abs(s.Agents[w].X-a.X)+abs(s.Agents[w].Y-a.Y) <= witnessRadius {
+						events = append(events, memoryEvent(nextTick, w, salWitnessDeath,
+							"Watched %s die of %s.", a.Name, cause))
+					}
+				}
 			}
 		}
 	}
@@ -81,9 +109,11 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 
 		if a.Intent == nil {
-			// Staggered decision cadence so agents don't all think on the
-			// same tick.
-			if (nextTick+int64(i)*7)%20 == 0 {
+			// The reflex is the fallback mind (TASK-7): it acts only on
+			// agents idle past the grace window, leaving room for planner
+			// injections; with no planner it remains the permanent
+			// degraded mode. Staggered so agents don't all think at once.
+			if nextTick-a.IdleSince >= reflexGraceTicks && (nextTick+int64(i)*7)%20 == 0 {
 				d := decideIntent(s, m, i, nextTick)
 				switch {
 				case d.directEvent == "agent.ate":
@@ -93,6 +123,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 						Agent: i, Goal: d.intent.Goal,
 						TargetX: d.intent.TargetX, TargetY: d.intent.TargetY,
 						ResX: d.intent.ResX, ResY: d.intent.ResY,
+						Source: "reflex",
 					})
 				}
 			}
@@ -140,7 +171,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	case "sleep":
 		emit("agent.slept", AgentPayload{Agent: i})
 		return events
-	case "wander", "goto_warmth":
+	case "wander", "goto_warmth", "seek":
 		emit("agent.intent_done", AgentPayload{Agent: i})
 		return events
 	}
@@ -174,14 +205,21 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	switch in.Goal {
 	case "forage":
 		emit("agent.foraged", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
+		if a.Needs.Food < 150 {
+			events = append(events, memoryEvent(nextTick, i, salStarvingForage,
+				"Found food when I was starving."))
+		}
 	case "chop":
 		emit("agent.chopped", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "hunt":
 		emit("agent.hunted", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
+		events = append(events, memoryEvent(nextTick, i, salHunt, "Hunted at the den and came back with meat."))
 	case "build_fire":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "fire", X: in.TargetX, Y: in.TargetY})
+		events = append(events, memoryEvent(nextTick, i, salFire, "Built a fire."))
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
+		events = append(events, memoryEvent(nextTick, i, salShelter, "Raised a shelter with my own hands."))
 	}
 	return events
 }
@@ -242,6 +280,9 @@ func talkEvents(s *State, nextTick int64) []store.Event {
 					Tick: nextTick, Type: "agent.talked",
 					Payload: mustPayload(TalkedPayload{A: i, B: j}),
 				})
+				events = append(events,
+					memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
+					memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name))
 				return events // one conversation per heartbeat keeps it simple
 			}
 		}

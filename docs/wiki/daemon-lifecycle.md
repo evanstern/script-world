@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Daemon lifecycle
@@ -30,10 +30,12 @@ Startup sequence:
    from [[worldmap-generation]]), then `ReplayEvents(seq > snapshot.seq)` through the
    reducer, bumping `Tick` to the highest event tick ([[snapshots]]). Recovery
    duration is measured and recorded.
-6. LLM orchestrator ([[llm-orchestrator]]): started only when `llm.json` exists in
-   the save dir (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit —
-   config-gated, fully outside the loop, so inference failures can never touch the
-   simulation.
+6. Notify fan-out + companions: the loop's notify goes to the IPC broadcast, the
+   always-on soul scribe, and — when an orchestrator exists — the mind driver
+   ([[agent-mind]]); all consumers are non-blocking by contract. The LLM
+   orchestrator ([[llm-orchestrator]]) starts only when `llm.json` exists
+   (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit — config-gated,
+   fully outside the loop, so inference failures can never touch the simulation.
 7. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
    `signal.NotifyContext(SIGTERM, SIGINT)` cancel — so the protocol `shutdown`
    command and Unix signals share one graceful path. `SetLoop` closes the

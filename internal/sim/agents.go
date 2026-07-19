@@ -4,10 +4,14 @@ package sim
 // and inventories. All values are integers on a 0..1000 scale — integer math
 // keeps decay byte-deterministic across platforms (no float rounding drift).
 
-const agentCount = 4
+// AgentCount is exported for packages that size per-agent tables.
+const AgentCount = 8
 
-// agentNames are placeholders until TASK-7 gives agents authored personas.
-var agentNames = [agentCount]string{"Ash", "Birch", "Cedar", "Rowan"}
+const agentCount = AgentCount
+
+// AgentNames is the canonical roster; internal/persona authors a nature for
+// each. Order matters (agent index = position here).
+var AgentNames = [agentCount]string{"Ash", "Birch", "Cedar", "Rowan", "Fern", "Hazel", "Oak", "Sage"}
 
 // Needs are 0..1000; 0 is lethal territory, 1000 is full.
 type Needs struct {
@@ -46,6 +50,22 @@ type Agent struct {
 	Dead     bool      `json:"dead"`
 	Intent   *Intent   `json:"intent,omitempty"`
 	LastTalk int64     `json:"last_talk"`
+	// Memories accrete via agent.memory_added events (TASK-7); soul.md is a
+	// rendered view of this list. Bounded later by TASK-9 consolidation.
+	Memories []Memory `json:"memories,omitempty"`
+	// IdleSince is the tick this agent last became idle/awake — reducer-
+	// maintained so the reflex grace is a pure function of event history.
+	IdleSince int64 `json:"idle_since"`
+	// NearDeath latches the "nearly died" memory once per health collapse.
+	NearDeath bool `json:"near_death,omitempty"`
+}
+
+// Memory is one episodic record; salience 1..10 weights the working-memory
+// window ([[research R2/R3]]).
+type Memory struct {
+	Text     string `json:"text"`
+	Salience int    `json:"salience"`
+	Tick     int64  `json:"tick"`
 }
 
 // Structure is player-visible built stuff; the map itself never contains
@@ -110,12 +130,21 @@ const (
 	shelterWoodCost = 5
 
 	// Cadences and ranges.
-	moveEveryTicks  = 5 // 12 tiles per game-minute
-	fireWarmRadius  = 2 // Manhattan
-	forageRegrowSec = 12 * 3600
-	denCooldownSec  = 6 * 3600
-	talkCooldownSec = 2 * 3600
-	talkMoraleBonus = 50
+	moveEveryTicks = 5 // 12 tiles per game-minute
+	fireWarmRadius = 2 // Manhattan
+	// TASK-7: the reflex is the fallback mind — it only acts on agents idle
+	// past this grace, leaving room for planner injections.
+	reflexGraceTicks = 120 // 2 game-minutes
+	// PlannerCadenceTicks is the mind driver's per-agent baseline.
+	PlannerCadenceTicks = 1800 // 30 game-minutes
+	witnessRadius       = 8
+	nearDeathBelow      = 200
+	nearDeathResetAt    = 400
+	coldNightBelow      = 350
+	forageRegrowSec     = 12 * 3600
+	denCooldownSec      = 6 * 3600
+	talkCooldownSec     = 2 * 3600
+	talkMoraleBonus     = 50
 )
 
 func intentDuration(goal string) int64 {
@@ -131,7 +160,7 @@ func intentDuration(goal string) int64 {
 	case "hunt":
 		return huntTicks
 	}
-	return 0 // sleep / goto_warmth / wander complete on arrival
+	return 0 // sleep / goto_warmth / wander / seek complete on arrival
 }
 
 // --- event payloads ---
@@ -144,6 +173,7 @@ type (
 		TargetY int    `json:"target_y"`
 		ResX    int    `json:"res_x"`
 		ResY    int    `json:"res_y"`
+		Source  string `json:"source,omitempty"` // "reflex" | "planner"
 	}
 	WorkStartedPayload struct {
 		Agent int   `json:"agent"`
@@ -179,5 +209,15 @@ type (
 	RegrownPayload struct {
 		X int `json:"x"`
 		Y int `json:"y"`
+	}
+	MemoryAddedPayload struct {
+		Agent    int    `json:"agent"`
+		Text     string `json:"text"`
+		Salience int    `json:"salience"`
+	}
+	ThoughtPayload struct {
+		Agent  int    `json:"agent"`
+		Text   string `json:"text"`
+		Source string `json:"source"` // "planner" (reflex acts without narrating)
 	}
 )

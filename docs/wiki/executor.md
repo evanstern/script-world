@@ -6,7 +6,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/terrain.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Executor
@@ -19,8 +19,8 @@ with no planner at all (the degraded-mode contract from the grounding session).
 
 ## How it works
 
-**Agents** (`agents.go`): four named bodies (`Ash`, `Birch`, `Cedar`, `Rowan` until
-TASK-7 personas). `Needs{Health, Food, Rest, Warmth, Morale}` are integers 0..1000 —
+**Agents** (`agents.go`): eight named bodies (`sim.AgentNames`) with authored
+personas ([[agent-mind]]). `Needs{Health, Food, Rest, Warmth, Morale}` are integers 0..1000 —
 integer math keeps decay byte-deterministic across platforms. `Inventory` carries
 wood and food. All tuning constants (decay rates, action durations, yields, costs,
 thresholds) sit at the top of `agents.go`.
@@ -47,8 +47,11 @@ game-hours (`sim.forage_regrown`), dens cool down 6 game-hours after a hunt.
 Structures (`fire`, `shelter`) exist only in state; `warmAt` is fire within Manhattan
 radius 2 or standing on a shelter.
 
-`stepEvents` stays a pure function of (pre-tick state, map, next tick); every effect
-is an event through [[sim-state-reducer]] — the determinism and replay guarantees of
+The executor also emits `agent.memory_added` events from the salience table in
+`memory.go` ([[agent-mind]]) alongside memorable happenings, and its reflex now
+fires only on agents idle past `reflexGraceTicks` (120) — the planner's injection
+window. `stepEvents` stays a pure function of (pre-tick state, map, next tick);
+every effect is an event through [[sim-state-reducer]] — the determinism and replay guarantees of
 the substrate hold unchanged over the whole layer.
 
 ## Connections

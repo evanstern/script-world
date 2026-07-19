@@ -53,7 +53,7 @@ func NewState(seed uint64, m *worldmap.Map) *State {
 			if m.Passable(x, y) && !taken[Point{X: x, Y: y}] {
 				taken[Point{X: x, Y: y}] = true
 				s.Agents[i] = Agent{
-					Name:  agentNames[i],
+					Name:  AgentNames[i],
 					X:     x,
 					Y:     y,
 					Needs: Needs{Health: 1000, Food: 600, Rest: 800, Warmth: 800, Morale: 600},
@@ -165,6 +165,19 @@ func (s *State) Apply(e store.Event) error {
 		s.Degraded = false
 		s.EffectiveRate = s.Speed.TicksPerSecond()
 
+	case "agent.memory_added":
+		var p MemoryAddedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick})
+	case "agent.thought":
+		// Chronicle material; no state effect.
+
 	case "sim.night_started":
 		s.Night = true
 	case "sim.day_started":
@@ -214,6 +227,7 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Intent = nil
+		a.IdleSince = e.Tick
 
 	case "agent.moved":
 		var p AgentMovedPayload
@@ -237,6 +251,7 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Inv.Food += forageYield
 		a.Intent = nil
+		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
 	case "agent.chopped":
 		var p HarvestPayload
@@ -249,6 +264,7 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Inv.Wood += chopWood
 		a.Intent = nil
+		a.IdleSince = e.Tick
 		s.Cleared = append(s.Cleared, Point{X: p.X, Y: p.Y})
 	case "agent.hunted":
 		var p HarvestPayload
@@ -261,6 +277,7 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Inv.Food += huntYield
 		a.Intent = nil
+		a.IdleSince = e.Tick
 		out := s.DenUses[:0]
 		for _, d := range s.DenUses {
 			if !(d.X == p.X && d.Y == p.Y) {
@@ -283,6 +300,7 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Inv.Wood = maxInt(0, a.Inv.Wood-cost)
 		a.Intent = nil
+		a.IdleSince = e.Tick
 		s.Structures = append(s.Structures, Structure{Kind: p.Kind, X: p.X, Y: p.Y})
 	case "agent.ate":
 		var p AgentPayload
@@ -319,6 +337,7 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Asleep = false
+		a.IdleSince = e.Tick
 
 	case "agent.needs_changed":
 		var p NeedsPayload
@@ -330,6 +349,11 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Needs = Needs{Health: p.Health, Food: p.Food, Rest: p.Rest, Warmth: p.Warmth, Morale: p.Morale}
+		if p.Health < nearDeathBelow {
+			a.NearDeath = true
+		} else if p.Health >= nearDeathResetAt {
+			a.NearDeath = false
+		}
 	case "agent.died":
 		var p DiedPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
