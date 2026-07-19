@@ -203,6 +203,18 @@ func (c *session) handle(req Request) {
 	switch req.Cmd {
 	case "status":
 		c.replyStatus(req.ID, "status", "")
+	case "state":
+		stateJSON, cs, err := c.srv.loop.DoState()
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		data, err := json.Marshal(StateData{State: stateJSON, LastSeq: cs.LastSeq})
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
 	case "pause":
 		c.replyStatus(req.ID, "pause", "")
 	case "resume":

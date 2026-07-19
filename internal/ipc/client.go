@@ -150,6 +150,20 @@ func (c *Client) Status(cmd string, args any) (*StatusData, error) {
 	return &sd, nil
 }
 
+// FetchState retrieves the full world state and the log position it
+// reflects (see StateData).
+func (c *Client) FetchState() (*StateData, error) {
+	data, err := c.Call("state", nil)
+	if err != nil {
+		return nil, err
+	}
+	var sd StateData
+	if err := json.Unmarshal(data, &sd); err != nil {
+		return nil, err
+	}
+	return &sd, nil
+}
+
 // Subscribe starts the event stream; read from Pushes().
 func (c *Client) Subscribe(since *int64) error {
 	_, err := c.Call("subscribe", SubscribeArgs{Since: since})
