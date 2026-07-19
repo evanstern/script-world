@@ -1,7 +1,7 @@
 ---
 id: TASK-21
 title: 'Idle musings: thought-only mind calls between planner turns'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 22:27'
 updated_date: '2026-07-19 23:15'
@@ -40,3 +40,9 @@ More idle thoughts across the game day (user request 2026-07-19). A dedicated li
 <!-- SECTION:NOTES:BEGIN -->
 Live acceptance (muse-proof, seed 9, 4x, real gemma4:12b-mlx): musings landed at ticks 15149/15798/16554 — e.g. Rowan: 'I can already hear myself arguing with Sage over the best way to keep those fires burning bright.' Pace ~1 per 2 wall-min under full planner saturation = the fairness floor working as designed (~22/agent/game-day at 4x). Live finding folded in: back-to-back ~50s local planner calls admit zero pure best-effort work, hence Request.BestEffort + museStarveWindow. Unit: TestMusingsInjectThoughts (end-to-end through real loop), TestMusingDropsAreSilent, TestMusingBestEffort (drop + starved-bypass + quiet-serve), TestParseMusing. Race-clean; full suite green; wiki re-grounded (agent-mind, llm-orchestrator, sim-loop, event-types + repins).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Musings shipped: llm KindMusing (local, best-effort Request.BestEffort admission + ErrTierBusy), mind museDue cadence (900 ticks staggered, single-flight, detached), agent.thought whitelisted through inject_social, fairness floor (museStarveWindow 2 wall-min) so tier saturation cannot silence interiority. Live-proven on real gemma at 4x — musings land at floor pace under full planner saturation. PR: https://github.com/evanstern/script-world/pull/12 (stacked on #11).
+<!-- SECTION:FINAL_SUMMARY:END -->
