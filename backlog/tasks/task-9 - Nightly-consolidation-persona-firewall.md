@@ -23,15 +23,17 @@ Spec: specs/004-nightly-consolidation
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Consolidation runs per agent per game night on the cloud tier
-- [ ] #2 Validator demonstrably rejects a temperament-drifting consolidation
-- [ ] #3 Souls visibly grow across a multi-day run
+- [x] #1 Consolidation runs per agent per game night on the cloud tier
+- [x] #2 Validator demonstrably rejects a temperament-drifting consolidation
+- [x] #3 Souls visibly grow across a multi-day run
 - [x] #4 Spec phase: Foundational sim core (blocking)
 - [x] #5 Spec phase: US1 — Sleep consolidates the day (P1)
 - [x] #6 Spec phase: US3 — The firewall holds (P2, blocking US2's live claim)
 - [x] #7 Spec phase: US2 — Souls that grow (P2)
 - [x] #8 Spec phase: Polish
 <!-- AC:END -->
+
+
 
 ## Implementation Notes
 
