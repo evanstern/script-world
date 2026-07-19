@@ -150,7 +150,24 @@ func (md *Mind) runConsolidation(job consolJob) {
 			out.Beliefs[i].ID = 0
 		}
 	}
+	// Over-long lists are enthusiasm, not corruption (live finding: 3/8
+	// rejections were cap overruns) — keep the best-first prefix instead of
+	// wasting the night. The validator's caps stay as hard guards behind us.
+	if len(out.Promote) > maxPromotes {
+		out.Promote = out.Promote[:maxPromotes]
+	}
+	if len(out.Fade) > maxFades {
+		out.Fade = out.Fade[:maxFades]
+	}
+	if len(out.Beliefs) > maxBeliefEdits {
+		out.Beliefs = out.Beliefs[:maxBeliefEdits]
+	}
 	if verr := validateConsolidation(out, job.agent, job.buffer, job.held, job.anchor, job.drift); verr != nil {
+		snippet := resp.Text
+		if len(snippet) > 180 {
+			snippet = snippet[:180]
+		}
+		log.Printf("mind: consolidation %s night %d invalid output: %q", job.name, job.night, snippet)
 		md.landMarker(job, sim.ConsolidationRejected, verr.Error(), resp.CostUSD)
 		return
 	}
@@ -252,6 +269,7 @@ func consolidateUserPrompt(job consolJob) string {
 	if job.narrative != "" {
 		fmt.Fprintf(&b, "\nYour current self-narrative:\n%s\n", job.narrative)
 	}
+	fmt.Fprintf(&b, "\nIn \"nature\", copy this line exactly, word for word: %s\n", job.anchor)
 	fmt.Fprintf(&b, `
 Reply with ONLY this JSON:
 {"nature": "<your nature, restated verbatim>",

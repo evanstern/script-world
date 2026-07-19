@@ -66,6 +66,14 @@ const (
 	maxGistLen = 300
 )
 
+var anchorSpaces = regexp.MustCompile(`\s+`)
+
+func normalizeAnchor(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimRight(s, ".!")
+	return anchorSpaces.ReplaceAllString(s, " ")
+}
+
 // validateConsolidation runs the three firewall layers against the exact
 // buffer and belief set that were sent to the model. A nil error means the
 // whole output may land.
@@ -116,7 +124,11 @@ func validateConsolidation(out consolidationOutput, agent int, buffer []sim.Memo
 	}
 
 	// --- layer 2: anchor echo ---
-	if strings.TrimSpace(out.Nature) != strings.TrimSpace(anchor) {
+	// Normalized comparison (case, whitespace runs, trailing punctuation):
+	// echo fidelity is the canary, not typography — live testing showed
+	// models add a period or capitalize while restating faithfully. A
+	// paraphrase still fails.
+	if normalizeAnchor(out.Nature) != normalizeAnchor(anchor) {
 		return fmt.Errorf("anchor_mismatch")
 	}
 

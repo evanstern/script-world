@@ -90,9 +90,9 @@ func TestValidatorAnchorEcho(t *testing.T) {
 	if err == nil || err.Error() != "anchor_mismatch" {
 		t.Fatalf("err = %v, want anchor_mismatch", err)
 	}
-	// Leading/trailing whitespace alone is tolerated.
+	// Typography alone is tolerated: case, whitespace, trailing period.
 	out = validOutput()
-	out.Nature = "  " + persona.Anchors["Ash"] + "\n"
+	out.Nature = "  Steady,  practical, slow to anger.\n"
 	if err := validateConsolidation(out, 0, validBuffer(), nil,
 		persona.Anchors["Ash"], persona.DriftMarkers["Ash"]); err != nil {
 		t.Fatalf("trimmed echo rejected: %v", err)
