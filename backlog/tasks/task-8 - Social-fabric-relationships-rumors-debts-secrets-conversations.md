@@ -54,6 +54,8 @@ spec-bridge sync: Foundational sim core (blocking): 0/6 · Secrets + genesis (US
 AC evidence: #1 TestEdgeRules + TestExecutorGiveAndDueCheck (deterministic edge rules end-to-end) + TestRumorProvenanceChain (3-hop From-chain, x4/5 decay, mutated text recorded, no telling the subject); live: talks moved edges, Bonds in soul.md. #2 TestLedgerLifecycle + due-check (open->kept, open->broken permanent, reputation 500+100k-200b, trust penalty, gossip-seed memory). #3 TestConversationRunsAndLands (cap, dual gist memories, tone edges, paraphrased rumor, atomic injection) + LIVE first landed conversation: Birch/Cedar 4 turns — authored persona clash performed ('Say something already! Your silence is driving me crazy'), gist in both souls, tones -2/-2 -> the village's first grudge (trust -24, affection -45, exact rule math). Engineering findings fixed live: chat-while-working, planner debounce, conversation priority lane + worker call cap, float tones. -race green 12 packages; replay model-free re-proven with social timelines.
 
 spec-bridge sync: Foundational sim core (blocking): 6/6 · Secrets + genesis (US3): 1/1 · Conversations (US4): 4/4 · Polish: 2/2 — status In Progress → Done
+
+PR: https://github.com/evanstern/script-world/pull/7 (base main)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
