@@ -6,6 +6,7 @@ package ipc
 import (
 	"encoding/json"
 
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/store"
 )
 
@@ -50,6 +51,15 @@ type SetSpeedArgs struct {
 	Speed string `json:"speed"`
 }
 
+// LLMCallArgs / LLMCallData carry the "llm_call" command (routing proof and
+// the transport TASK-7 minds will use).
+type LLMCallArgs struct {
+	Kind      string `json:"kind"`
+	System    string `json:"system,omitempty"`
+	Prompt    string `json:"prompt"`
+	MaxTokens int64  `json:"max_tokens,omitempty"`
+}
+
 // StateData answers the "state" command: the full canonical sim.State JSON
 // plus the log position it reflects — subscribe with since=last_seq for a
 // gapless live replica.
@@ -64,6 +74,8 @@ type StatusData struct {
 	Clock  ClockStatus  `json:"clock"`
 	Daemon DaemonStatus `json:"daemon"`
 	Log    LogStatus    `json:"log"`
+	// LLM is present only when the world has an orchestrator (llm.json).
+	LLM *llm.Status `json:"llm,omitempty"`
 }
 
 type WorldStatus struct {
