@@ -1,10 +1,10 @@
 ---
 id: TASK-9
 title: Nightly consolidation + persona firewall
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 01:13'
-updated_date: '2026-07-19 16:08'
+updated_date: '2026-07-19 21:05'
 labels:
   - agents
   - llm
@@ -30,11 +30,19 @@ Spec: specs/004-nightly-consolidation
 - [x] #5 Spec phase: US1 — Sleep consolidates the day (P1)
 - [x] #6 Spec phase: US3 — The firewall holds (P2, blocking US2's live claim)
 - [x] #7 Spec phase: US2 — Souls that grow (P2)
-- [ ] #8 Spec phase: Polish
+- [x] #8 Spec phase: Polish
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 spec-bridge sync: Foundational sim core (blocking): 4/4 · US1 — Sleep consolidates the day (P1): 4/4 · US3 — The firewall holds (P2, blocking US2's live claim): 3/3 · US2 — Souls that grow (P2): 2/2 · Polish: 0/2
+
+spec-bridge sync: Foundational sim core (blocking): 4/4 · US1 — Sleep consolidates the day (P1): 4/4 · US3 — The firewall holds (P2, blocking US2's live claim): 3/3 · US2 — Souls that grow (P2): 2/2 · Polish: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Foundational sim core (blocking): 4/4 · US1 — Sleep consolidates the day (P1): 4/4 · US3 — The firewall holds (P2, blocking US2's live claim): 3/3 · US2 — Souls that grow (P2): 2/2 · Polish: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
