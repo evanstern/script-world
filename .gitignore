@@ -1,1 +1,7 @@
 .handoff/
+
+# Go build artifacts
+/scriptworld
+dist/
+*.test
+*.out
