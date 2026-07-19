@@ -8,7 +8,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 2a1608f2cf9d525cbe451f8a40b7b355e30cd692
+verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
 ---
 
 # Event types
@@ -43,6 +43,7 @@ TUI) will read.
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
 | `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets ([[social-fabric]]) |
+| consolidation family: `agent.memory_promoted` / `agent.memory_faded` / `agent.belief_revised` / `agent.narrative_set` / `agent.consolidated` | payload structs in `internal/sim/consolidate.go`; contract in `specs/004-nightly-consolidation/contracts/` | consolidation driver (injected) | salience boost / memory removal / belief create-or-revise / narrative replace / once-per-night ledger ([[nightly-consolidation]]); all reducer-total (vanished targets no-op) |
 
 Conventions: `clock.*` are applied player/scheduler commands; `sim.*` and `agent.*`
 are world happenings (pure functions of state + seed + tick); `daemon.*` are process
@@ -60,6 +61,5 @@ types is backward-compatible with old replay code.
 
 ## Operational notes
 
-Later features add families (TASK-8 rumors/relationships, TASK-10 the gru, TASK-11
-chronicle annotations). The outcome-payload convention ([[deterministic-rng]]) is
-load-bearing — keep it.
+Later features add families (TASK-10 the gru, TASK-11 chronicle annotations). The
+outcome-payload convention ([[deterministic-rng]]) is load-bearing — keep it.
