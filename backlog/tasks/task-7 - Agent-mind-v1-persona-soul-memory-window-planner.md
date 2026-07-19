@@ -52,6 +52,8 @@ spec-bridge sync: Setup: 0/1 · Foundational (blocking): 0/6 · US2 — personas
 AC evidence: #1 TestPlannerDrivesAgents + live Ollama run (8 seeded agents, planner-sourced intents on cadence+triggers, executor acts; goal spread forage 9 / chop 2 / build_fire 2 / goto_warmth 1 in the first game-hour; Hazel's persona visibly steering her stated reasons). #2 persona mode 0444 + no post-genesis write path + shasum identical across a run AND a daemon restart; souls accrete dated salience-starred memories (Sage: 'day 1 06:19 (5★) Built a fire.') and survive restart (event-sourced). #3 TestWindowBound + TestPromptWindowBound (150-memory soul → ≤10 prompt lines) + deterministic selection incl. bucketed serendipity. Replay is model-free: TestInjectedPlannerIntent state-hash equality. -race green, 10 packages. Known gap noted: mind replica can drop batches at max speed (resync future work).
 
 spec-bridge sync: Setup: 1/1 · Foundational (blocking): 6/6 · US2 — personas & souls (files first: US1's prompts need them): 4/4 · US1 + US3 — the mind driver: 6/6 · Polish: 3/3 — status In Progress → Done
+
+PR: https://github.com/evanstern/script-world/pull/6 (base task-6-llm-orchestrator; merge PR #5 first — delete its branch on merge so #6 retargets to main)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
