@@ -40,6 +40,8 @@ Attachable TUI client: pane framework with map (default), chronicle, Metatron co
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on branch task-3-terminal-client (stacked on 001-world-daemon). scriptworld ui: Bubble Tea four-pane client — map (default, live 16x16 grid), chronicle (event feed), metatron + souls stubs. Map runs on a log-shipped replica: new 'state' protocol cmd returns canonical sim.State + last_seq, then subscribe(since) applies pushes through the daemon's own Apply reducer. Verified: go test -race ./... green (TUI model units + state-cmd coherence integration test); expect-driven PTY smoke against a live daemon — all four panes rendered (AC#2), map default with live header (AC#1), space paused the daemon, ] changed speed, q detached with world still running (AC#2). Wiki re-pinned (18 notes fresh). Note: an apparent q-hang in early smoke runs was a test-harness artifact (expect not draining the PTY between sends; app blocked on stdout) — reproduced, root-caused, not a product bug.
+
+PR: https://github.com/evanstern/script-world/pull/2 (base 001-world-daemon; retargets to main when PR #1 merges)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
