@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: be54bb42adcbd14421c20269efc79da7b6beab9f
 ---
 
 # Sim state & reducer
@@ -13,10 +13,11 @@ verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
 degraded, effective rate) plus the living world — agents with needs/intents/
 inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
-latch), structures, cleared trees, harvested forage, den cooldowns, and the social
+latch), structures, cleared trees, harvested forage, den cooldowns, the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
 variants ([[social-fabric]]; executor types in `agents.go`; memories belong to
-[[agent-mind]]). Its
+[[agent-mind]]) — and the [[gru]] (`Gru *Gru`, nil while not abroad; `omitempty`
+keeps pre-TASK-10 snapshots valid). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.
@@ -32,7 +33,8 @@ imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
 `agent.*` family ([[event-types]]) drives intents, movement, work products
 (inventory + overlays + structures), eating, sleep, talk, needs (absolute values),
-and death. Unknown types — including `daemon.*` and `world.created` — are recorded
+and death; the `gru.*` family dispatches to `applyGru` in `gru.go` ([[gru]]).
+Unknown types — including `daemon.*` and `world.created` — are recorded
 history but state no-ops, so new event types never break old replay.
 
 **Tick is deliberately not event-sourced**: quiet ticks (no events) advance the clock
