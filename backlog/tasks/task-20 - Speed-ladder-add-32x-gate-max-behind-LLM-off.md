@@ -1,10 +1,10 @@
 ---
 id: TASK-20
 title: 'Speed ladder: add 32x; gate max behind LLM-off'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 22:27'
-updated_date: '2026-07-19 22:31'
+updated_date: '2026-07-19 22:32'
 labels:
   - engine
 dependencies: []
@@ -39,3 +39,9 @@ ordinal: 16000
 <!-- SECTION:NOTES:BEGIN -->
 Live proof (speed-proof world): 'speed 32x' → running at 32.0 t/s effective; 'speed max' with llm.json → refused with the actionable 32x/llm.json error; after deleting llm.json → max accepted. Unit: clock 32x parse+interval (31250µs), ipc gate both ways, TUI ladder ends at 32x. Full suite green; e2e worlds now drop llm.json post-create (pure-sim by construction). Wiki: 6 notes re-verified.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+32x added to the clock ladder and made the top of the TUI speed steps; 'max' is now reserved for pure-sim worlds — the IPC set_speed door refuses it when llm.json is configured, with an actionable error. e2e worlds are pure-sim by construction (llm.json removed post-create). Live-proven: 32x paces at 32.0 t/s; max gate works both ways. PR: https://github.com/evanstern/script-world/pull/11
+<!-- SECTION:FINAL_SUMMARY:END -->
