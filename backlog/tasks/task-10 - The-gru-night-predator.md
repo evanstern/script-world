@@ -4,7 +4,7 @@ title: 'The gru: night predator'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 01:14'
-updated_date: '2026-07-19 21:11'
+updated_date: '2026-07-19 21:57'
 labels:
   - sim
 dependencies:
@@ -20,9 +20,9 @@ Nocturnal, sight-triggered predator that wounds (health damage feeding death-by-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The gru hunts only at night and only harms agents it can see
-- [ ] #2 Light/shelter reliably protect; wounded agents lose health, not instant death
-- [ ] #3 Gru encounters emit events usable as rumors and omens
+- [x] #1 The gru hunts only at night and only harms agents it can see
+- [x] #2 Light/shelter reliably protect; wounded agents lose health, not instant death
+- [x] #3 Gru encounters emit events usable as rumors and omens
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -40,3 +40,15 @@ Mechanics (all deterministic, outcome-payload events; stepEvents stays pure):
 
 Steps: branch task-10-gru off 001-world-daemon → gru.go (state/behavior) + reducer cases + TUI glyph → unit tests (nocturnality, protection, wound-not-execute, rumor-seed) → live proving run at max speed (grep gru.* events, tick ACs from evidence) → wiki-update (executor, event-types, sim-loop notes) → PR.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Live acceptance (world gru-proof, seed 42, max speed, 1257 game days / 42.5M events) + unit suite:
+
+AC1 nocturnal & sight-triggered: 0 gru.* events outside the 22:00–06:00 window across the whole log (gru-night-violations-all=0); emergence/withdrawal exactly at boundaries. Sight-gating: TestGruLightAndShelterProtect — an agent in firelight or on a shelter is never attacked and the gru never steps into protected tiles.
+AC2 protection & wound-not-execute: all 186 gru.attacked left victims at health 750 (1000−250 wound, absolute payload); agent.died count over 1257 days: ZERO — the gru never killed anyone. Floor (health ≥1, never a proximate death) proven by TestGruWoundsNotExecutes; cooldown proven same test.
+AC3 rumor/omen fuel: night-2 chain in the log: gru.emerged→gru.sighted→memory "Saw the gru prowling in the dark" (sal 6, omen)→gru.attacked→"tore into me" (sal 9). 50 witnessed-attack memories (subject=victim, tone −60, sal 7) seeded rumors: 10,735 social.rumor_told carrying gru text, e.g. "Saw the gru attack Fern in the dark" propagating 3→6→7→0 with confidence 80→64→44→35. TellableFor path proven by TestGruStoryFuel.
+
+Full suite green including determinism/replay/e2e. Discovered during proving (filed separately): IPC state reply exceeds maxLineBytes (1MB) once memories grow unbounded on long runs without TASK-9 consolidation — TUI/attach clients get bufio ErrTooLong.
+<!-- SECTION:NOTES:END -->
