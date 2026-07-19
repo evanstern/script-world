@@ -7,13 +7,16 @@ import (
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
+
+func testMap(seed uint64) *worldmap.Map { return worldmap.Generate(seed, 64, 64) }
 
 // driveTicks advances a state tick by tick exactly as the live loop does,
 // injecting the given commands at their scheduled ticks (tick boundaries),
 // and returns every event produced. This is the loop's semantics minus the
 // real-time scheduler — determinism must hold at this layer (SC-006).
-func driveTicks(t *testing.T, s *State, ticks int64, commands map[int64][]store.Event) []store.Event {
+func driveTicks(t *testing.T, s *State, m *worldmap.Map, ticks int64, commands map[int64][]store.Event) []store.Event {
 	t.Helper()
 	var log []store.Event
 	apply := func(evs []store.Event) {
@@ -27,7 +30,7 @@ func driveTicks(t *testing.T, s *State, ticks int64, commands map[int64][]store.
 	for s.Tick < ticks {
 		apply(commands[s.Tick]) // commands land at the boundary before the tick
 		next := s.Tick + 1
-		evs := stepEvents(s, next)
+		evs := stepEvents(s, m, next)
 		s.Tick = next
 		apply(evs)
 	}
@@ -64,9 +67,10 @@ func canonicalLog(t *testing.T, log []store.Event) []byte {
 
 func TestDeterminismSameSeedSameTimeline(t *testing.T) {
 	const seed, ticks = 7, 10_000
-	a, b := NewState(seed), NewState(seed)
-	logA := driveTicks(t, a, ticks, commandTimeline())
-	logB := driveTicks(t, b, ticks, commandTimeline())
+	m := testMap(seed)
+	a, b := NewState(seed, m), NewState(seed, m)
+	logA := driveTicks(t, a, m, ticks, commandTimeline())
+	logB := driveTicks(t, b, m, ticks, commandTimeline())
 
 	if len(logA) == 0 {
 		t.Fatal("10k ticks should produce events (minute moves, night at tick 57600? no — moves every 60)")
@@ -80,9 +84,9 @@ func TestDeterminismSameSeedSameTimeline(t *testing.T) {
 }
 
 func TestDifferentSeedsDiverge(t *testing.T) {
-	a, b := NewState(1), NewState(2)
-	logA := driveTicks(t, a, 5_000, nil)
-	logB := driveTicks(t, b, 5_000, nil)
+	a, b := NewState(1, testMap(1)), NewState(2, testMap(2))
+	logA := driveTicks(t, a, testMap(1), 5_000, nil)
+	logB := driveTicks(t, b, testMap(2), 5_000, nil)
 	if bytes.Equal(canonicalLog(t, logA), canonicalLog(t, logB)) {
 		t.Fatal("different seeds produced identical histories — RNG not seed-dependent")
 	}
@@ -94,10 +98,11 @@ func TestDifferentSeedsDiverge(t *testing.T) {
 // must land on the exact live state.
 func TestReplayRebuildsState(t *testing.T) {
 	const seed, ticks = 99, 20_000
-	live := NewState(seed)
-	log := driveTicks(t, live, ticks, commandTimeline())
+	m := testMap(seed)
+	live := NewState(seed, m)
+	log := driveTicks(t, live, m, ticks, commandTimeline())
 
-	replayed := NewState(seed)
+	replayed := NewState(seed, m)
 	for _, e := range log {
 		if err := replayed.Apply(e); err != nil {
 			t.Fatalf("replay apply %s: %v", e.Type, err)
@@ -105,7 +110,7 @@ func TestReplayRebuildsState(t *testing.T) {
 		replayed.Tick = e.Tick
 	}
 	// Re-live the quiet tail deterministically, as recovery does.
-	driveTicks(t, replayed, ticks, nil)
+	driveTicks(t, replayed, m, ticks, nil)
 
 	if live.Hash() != replayed.Hash() {
 		t.Fatalf("replayed state diverged from live state:\nlive:     %s\nreplayed: %s",
@@ -114,9 +119,9 @@ func TestReplayRebuildsState(t *testing.T) {
 }
 
 func TestDayNightCycle(t *testing.T) {
-	s := NewState(3)
+	s := NewState(3, testMap(3))
 	// Run through night start (tick 16h) and next day start (tick 24h).
-	log := driveTicks(t, s, 24*3600+60, nil)
+	log := driveTicks(t, s, testMap(3), 24*3600+60, nil)
 
 	var sawNight, sawDay, sleptDuringNight bool
 	for _, e := range log {
@@ -147,7 +152,7 @@ func TestDayNightCycle(t *testing.T) {
 }
 
 func TestApplyClockEvents(t *testing.T) {
-	s := NewState(1)
+	s := NewState(1, testMap(1))
 	if err := s.Apply(store.Event{Type: "clock.paused", Payload: json.RawMessage(`{}`)}); err != nil {
 		t.Fatal(err)
 	}

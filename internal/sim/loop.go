@@ -9,6 +9,7 @@ import (
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 // SnapshotEveryTicks is the cadence bound on recovery replay: 1 game hour.
@@ -50,6 +51,7 @@ type commandResult struct {
 // event, making the log the complete input record (determinism, R3).
 type Loop struct {
 	state    *State
+	m        *worldmap.Map // static terrain; read-only context for stepEvents
 	st       *store.Store
 	notify   func([]store.Event) // called after commit; must not block
 	commands chan command
@@ -61,12 +63,13 @@ type Loop struct {
 	measured    float64 // achieved ticks/sec over the last window
 }
 
-func NewLoop(state *State, st *store.Store, notify func([]store.Event)) *Loop {
+func NewLoop(state *State, m *worldmap.Map, st *store.Store, notify func([]store.Event)) *Loop {
 	if notify == nil {
 		notify = func([]store.Event) {}
 	}
 	return &Loop{
 		state:    state,
+		m:        m,
 		st:       st,
 		notify:   notify,
 		commands: make(chan command),
@@ -204,7 +207,7 @@ func (l *Loop) Run(ctx context.Context) error {
 // then published.
 func (l *Loop) runTick() error {
 	nextTick := l.state.Tick + 1
-	events := stepEvents(l.state, nextTick)
+	events := stepEvents(l.state, l.m, nextTick)
 	l.state.Tick = nextTick
 	for _, e := range events {
 		if err := l.state.Apply(e); err != nil {

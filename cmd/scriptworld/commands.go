@@ -215,7 +215,7 @@ func cmdStatus(args []string) error {
 		return err
 	}
 	defer st.Close()
-	state := sim.NewState(w.Manifest.Seed)
+	state := sim.NewState(w.Manifest.Seed, w.Map())
 	if snap, err := st.LatestValidSnapshot(); err == nil && snap != nil {
 		json.Unmarshal(snap.State, state)
 	}

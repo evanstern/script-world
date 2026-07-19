@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 const (
@@ -22,6 +24,11 @@ type Manifest struct {
 	CreatedAt       string `json:"created_at"`
 	FormatVersion   int    `json:"format_version"`
 	TickGameSeconds int    `json:"tick_game_seconds"`
+	// Map dimensions; zero values (older saves) default to
+	// worldmap.DefaultSize on Open. Terrain is regenerated from
+	// (Seed, MapWidth, MapHeight), never persisted.
+	MapWidth  int `json:"map_width,omitempty"`
+	MapHeight int `json:"map_height,omitempty"`
 }
 
 type World struct {
@@ -46,6 +53,8 @@ func Create(dir, name string, seed uint64) (*World, error) {
 		CreatedAt:       time.Now().UTC().Format(time.RFC3339),
 		FormatVersion:   FormatVersion,
 		TickGameSeconds: 1,
+		MapWidth:        worldmap.DefaultSize,
+		MapHeight:       worldmap.DefaultSize,
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -73,7 +82,19 @@ func Open(dir string) (*World, error) {
 	if m.TickGameSeconds != 1 {
 		return nil, fmt.Errorf("tick_game_seconds %d unsupported (must be 1)", m.TickGameSeconds)
 	}
+	if m.MapWidth <= 0 {
+		m.MapWidth = worldmap.DefaultSize
+	}
+	if m.MapHeight <= 0 {
+		m.MapHeight = worldmap.DefaultSize
+	}
 	return &World{Dir: dir, Manifest: m}, nil
+}
+
+// Map regenerates the world's terrain from the manifest — deterministic, so
+// daemon and clients derive identical maps without any wire transfer.
+func (w *World) Map() *worldmap.Map {
+	return worldmap.Generate(w.Manifest.Seed, w.Manifest.MapWidth, w.Manifest.MapHeight)
 }
 
 func (w *World) DBPath() string   { return filepath.Join(w.Dir, "world.db") }

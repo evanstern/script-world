@@ -19,7 +19,7 @@ func testModel(t *testing.T) Model {
 		t.Fatal(err)
 	}
 	m := New(w)
-	m.replica = sim.NewState(42)
+	m.replica = sim.NewState(42, w.Map())
 	m.width, m.height = 80, 30
 	return m
 }
@@ -70,15 +70,19 @@ func TestMapRendersWanderers(t *testing.T) {
 	m := testModel(t)
 	m.replica.Wanderers = []sim.Wanderer{{X: 3, Y: 4}, {X: 10, Y: 2, Asleep: true}}
 	view := m.mapView()
-	if !strings.Contains(view, "A") {
-		t.Error("awake wanderer A missing from map")
+	lines := strings.Split(view, "\n")
+	gridOnly := strings.Join(lines[:len(lines)-1], "\n") // drop the legend line
+	if !strings.Contains(gridOnly, "A") {
+		t.Error("awake wanderer A missing from map grid")
 	}
-	if !strings.Contains(view, "b") {
-		t.Error("asleep wanderer should render lowercase b")
+	if !strings.Contains(gridOnly, "b") {
+		t.Error("asleep wanderer should render lowercase b in map grid")
 	}
-	rows := strings.Count(view, "\n")
-	if rows < sim.GridSize {
-		t.Errorf("map has %d rows, want at least %d", rows, sim.GridSize)
+	if len(lines) < 15 {
+		t.Errorf("map viewport has %d lines, want a real window", len(lines))
+	}
+	if !strings.Contains(view, "~") {
+		t.Error("terrain (water) missing from rendered window")
 	}
 }
 

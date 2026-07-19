@@ -16,6 +16,7 @@ import (
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 type pane int
@@ -45,17 +46,19 @@ type Model struct {
 	lastErr   string
 
 	replica *sim.State      // world replica, event-sourced client-side
+	gameMap *worldmap.Map   // terrain, regenerated locally from the manifest
 	status  *ipc.StatusData // latest clock/daemon status (1s poll)
 	events  []store.Event   // chronicle ring, newest last
 	lastSeq int64
 
 	active        pane
 	width, height int
+	panX, panY    int // map-pane camera offset from the wanderer centroid
 	quitting      bool
 }
 
 func New(w *world.World) Model {
-	return Model{w: w}
+	return Model{w: w, gameMap: w.Map()}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -96,7 +99,7 @@ func connect(w *world.World) tea.Cmd {
 			c.Close()
 			return disconnectedMsg{err}
 		}
-		replica := sim.NewState(w.Manifest.Seed)
+		replica := sim.NewState(w.Manifest.Seed, w.Map())
 		if err := json.Unmarshal(sd.State, replica); err != nil {
 			c.Close()
 			return disconnectedMsg{fmt.Errorf("state decode: %w", err)}
@@ -230,6 +233,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.active = (m.active + 1) % paneCount
 	case "shift+tab":
 		m.active = (m.active + paneCount - 1) % paneCount
+	case "up", "down", "left", "right", "c":
+		if m.active == paneMap {
+			switch msg.String() {
+			case "up":
+				m.panY -= 4
+			case "down":
+				m.panY += 4
+			case "left":
+				m.panX -= 4
+			case "right":
+				m.panX += 4
+			case "c":
+				m.panX, m.panY = 0, 0
+			}
+		}
 	case " ":
 		if m.connected && m.status != nil {
 			cmd := "pause"

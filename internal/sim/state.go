@@ -11,6 +11,7 @@ import (
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 type Wanderer struct {
@@ -33,9 +34,10 @@ type State struct {
 	Wanderers     []Wanderer  `json:"wanderers"`
 }
 
-// NewState is genesis: day 1 06:00, default speed, wanderer positions derived
-// from the seed (no long-lived RNG stream — see rng.go).
-func NewState(seed uint64) *State {
+// NewState is genesis: day 1 06:00, default speed, wanderer positions drawn
+// deterministically from the seed onto passable terrain (no long-lived RNG
+// stream — see rng.go).
+func NewState(seed uint64, m *worldmap.Map) *State {
 	s := &State{
 		Speed:         clock.DefaultSpeed,
 		EffectiveRate: clock.DefaultSpeed.TicksPerSecond(),
@@ -43,8 +45,14 @@ func NewState(seed uint64) *State {
 		Wanderers:     make([]Wanderer, wandererCount),
 	}
 	for i := range s.Wanderers {
-		r := rngAt(seed, "genesis", 0, i)
-		s.Wanderers[i] = Wanderer{X: int(r.Uint64N(gridSize)), Y: int(r.Uint64N(gridSize))}
+		for n := int64(0); ; n++ {
+			r := rngAt(seed, "genesis", n, i)
+			x, y := int(r.Uint64N(uint64(m.W))), int(r.Uint64N(uint64(m.H)))
+			if m.Passable(x, y) {
+				s.Wanderers[i] = Wanderer{X: x, Y: y}
+				break
+			}
+		}
 	}
 	return s
 }
