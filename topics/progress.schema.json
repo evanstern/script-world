@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://learnings.local/progress.schema.json",
+  "title": "Lesson Progress Tracker",
+  "description": "Machine-readable, kanban-style progress for one topic's lesson series. Lives at topics/<topic>/progress.json. The hand-written narrative index is SERIES.md; this is the structured source of truth that gates Definition of Done. Update it at the START (status/cursor) and END (artifacts/status) of every lesson.",
+  "type": "object",
+  "required": ["topic", "title", "updated", "lifecycle", "cursor", "lessons"],
+  "additionalProperties": true,
+  "properties": {
+    "topic": { "type": "string", "description": "Topic slug, matches the folder under topics/." },
+    "title": { "type": "string" },
+    "updated": { "type": "string", "description": "ISO date (YYYY-MM-DD) this file was last updated." },
+    "mode": { "type": "string", "description": "e.g. 'build-along · delegated build (educate specs → build implements)'." },
+    "humanIndex": { "type": "string", "description": "Path to the hand-written narrative index (SERIES.md)." },
+    "build": {
+      "type": "object",
+      "description": "Where the delegated build lives, if this is a build-along topic.",
+      "properties": {
+        "location": { "type": "string" },
+        "stateDoc": { "type": "string" },
+        "owner": { "type": "string" },
+        "stack": { "type": "string" },
+        "corpus": { "type": "string" }
+      }
+    },
+    "lifecycle": {
+      "type": "array",
+      "description": "Ordered status ladder a lesson moves through.",
+      "items": { "type": "string", "enum": ["scaffolded", "taught", "spec'd", "built", "decked", "done"] }
+    },
+    "lifecycleNotes": { "type": "object", "description": "One-line meaning of each lifecycle state." },
+    "definitionOfDone": {
+      "type": "object",
+      "description": "What must exist for a lesson to be 'done'. `gates` are the rules that prevent silent drift.",
+      "properties": {
+        "always": { "type": "array", "items": { "type": "string" } },
+        "delegatedBuild": { "type": "array", "items": { "type": "string" } },
+        "decksStandardForEveryLesson": { "type": "array", "items": { "type": "string" } },
+        "gates": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "description": "Where the series actually is right now and what happens next. Read this first when resuming.",
+      "required": ["current", "currentStatus", "nextAction"],
+      "properties": {
+        "current": { "type": "string", "description": "Lesson id currently in flight." },
+        "currentStatus": { "type": "string" },
+        "nextAction": { "type": "string", "description": "The single next concrete action." },
+        "afterBuild": { "type": "string" },
+        "blockedOn": { "type": "string" }
+      }
+    },
+    "lessons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "n", "title", "status", "artifacts"],
+        "properties": {
+          "id": { "type": "string", "description": "Folder name, e.g. '103-embeddings'." },
+          "n": { "type": "integer" },
+          "title": { "type": "string" },
+          "status": { "type": "string", "enum": ["planned", "scaffolded", "taught", "spec'd", "built", "decked", "done"] },
+          "artifacts": {
+            "type": "object",
+            "description": "Existence map per artifact. Gates 'done': all true (for the lesson's mode) AND verified on disk.",
+            "properties": {
+              "checklist": { "type": "boolean" },
+              "rawNotes": { "type": "boolean" },
+              "handoff": { "type": "boolean" },
+              "postBuild": { "type": "boolean" },
+              "deck": { "type": "boolean" },
+              "guide": { "type": "boolean" }
+            }
+          },
+          "handoff": {
+            "type": "object",
+            "description": "Delegated-build EVIDENCE (durable, tracked). The SPEC and findings payloads themselves are transient in a gitignored .handoff/; these booleans are the record the DoD gate reads (see the praxisflux handoff protocol).",
+            "properties": {
+              "specd": { "type": "boolean", "description": "A SPEC was handed to the build plugin." },
+              "returned": { "type": "boolean", "description": "The build returned its findings." },
+              "foldedIn": { "type": "boolean", "description": "The return leg was folded back into the lesson (durable residue in guide/raw-notes)." }
+            }
+          },
+          "buildIncrement": { "type": "string", "description": "What the build does this lesson." },
+          "motivator": { "type": "string", "description": "Why this lesson exists / the failure it fixes." },
+          "feedsForward": { "type": "string", "description": "What it sets up for later lessons." },
+          "decisions": { "type": "array", "items": { "type": "string" }, "description": "Key design decisions made." },
+          "gotchas": { "type": "array", "items": { "type": "string" }, "description": "Live build findings / things that bit us — the highest-value meta to carry forward." },
+          "openThreads": { "type": "array", "items": { "type": "string" } },
+          "deckGuideNote": { "type": "string" }
+        }
+      }
+    },
+    "parked": { "type": "array", "items": { "type": "string" }, "description": "Future lessons / threads deliberately deferred." }
+  }
+}

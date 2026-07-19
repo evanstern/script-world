@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>script-world — three project plans</title>
+<style>
+  /* praxisflux token contract (base.html), re-skinned to script-world's terminal identity.
+     Light = green-biased paper; dark = phosphor terminal. Toggle overrides OS both ways. */
+  /* praxisflux:tokens:start */
+  :root{
+    --bg:#f1f4f0; --card:#fafcf9; --ink:#18231c; --muted:#57685c;
+    --accent:#217a44; --accent2:#0b7285; --warn:#a06b0e;
+    --line:#d9e2d8; --chip:#e9efe8;
+    --callout-bg:#edf5ee; --warn-bg:#f8f1e2; --ok-bg:#e8f4ef;
+    --c-home:#217a44; --c-rumor:#a06b0e; --c-sealed:#0b7285;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0a100c; --card:#111812; --ink:#d7e2d6; --muted:#8ba18d;
+      --accent:#4cc272; --accent2:#43b8cc; --warn:#d9a13f;
+      --line:#233024; --chip:#18211a;
+      --callout-bg:#132119; --warn-bg:#241c0c; --ok-bg:#0f231a;
+      --c-home:#4cc272; --c-rumor:#d9a13f; --c-sealed:#43b8cc;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a100c; --card:#111812; --ink:#d7e2d6; --muted:#8ba18d;
+    --accent:#4cc272; --accent2:#43b8cc; --warn:#d9a13f;
+    --line:#233024; --chip:#18211a;
+    --callout-bg:#132119; --warn-bg:#241c0c; --ok-bg:#0f231a;
+    --c-home:#4cc272; --c-rumor:#d9a13f; --c-sealed:#43b8cc;
+  }
+  :root[data-theme="light"]{
+    --bg:#f1f4f0; --card:#fafcf9; --ink:#18231c; --muted:#57685c;
+    --accent:#217a44; --accent2:#0b7285; --warn:#a06b0e;
+    --line:#d9e2d8; --chip:#e9efe8;
+    --callout-bg:#edf5ee; --warn-bg:#f8f1e2; --ok-bg:#e8f4ef;
+    --c-home:#217a44; --c-rumor:#a06b0e; --c-sealed:#0b7285;
+  }
+  /* praxisflux:tokens:end */
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-text-size-adjust:100%}
+  .wrap{max-width:880px;margin:0 auto;padding:48px 24px 96px}
+  h1,h2,h3,h4,.mono{font-family:var(--mono)}
+  h1{font-size:1.9rem;line-height:1.2;letter-spacing:-.02em;margin:.2em 0 .35em;text-wrap:balance}
+  h2{font-size:1.25rem;margin:0;letter-spacing:-.01em}
+  h3{font-size:1rem;margin:2em 0 .4em;color:var(--c,var(--accent))}
+  h4{font-size:.82rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+    margin:1.8em 0 .5em}
+  p,li{font-size:1rem;max-width:68ch}
+  li{margin:.25em 0}
+  .muted{color:var(--muted)}
+  a{color:var(--accent)}
+  strong{color:var(--ink)}
+  code{font-family:var(--mono);background:var(--chip);border:1px solid var(--line);
+    border-radius:4px;padding:1px 5px;font-size:.88em}
+
+  .eyebrow{font-family:var(--mono);font-size:.85rem;color:var(--muted);margin:0 0 .6em}
+  .eyebrow .prompt{color:var(--accent)}
+  .standfirst{font-size:1.08rem;max-width:64ch}
+
+  .pillars{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0;padding:0;list-style:none}
+  .pillars li{font-family:var(--mono);font-size:.82rem;background:var(--chip);
+    border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0}
+
+  .toc{font-family:var(--mono);font-size:.9rem;margin:28px 0 0;padding:14px 18px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px}
+  .toc a{text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .toc .dot{display:inline-block;width:.65em;height:.65em;border-radius:2px;margin-right:.5em;
+    vertical-align:baseline}
+
+  section.concept{margin-top:64px;border-top:1px solid var(--line);padding-top:36px}
+  .concept-head .kicker{font-family:var(--mono);font-size:.78rem;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--c)}
+  .status{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;
+    border:1px solid var(--line);border-radius:999px;padding:2px 9px;margin-left:10px;
+    color:var(--muted);vertical-align:middle;white-space:nowrap}
+  .status.chosen{color:var(--c);border-color:var(--c)}
+  .concept-head h2{font-size:1.5rem;margin:.15em 0 .1em}
+  .concept-head .tagline{font-size:1.05rem;color:var(--muted);margin:.1em 0 0;font-style:italic}
+  .kin{font-family:var(--mono);font-size:.82rem;color:var(--muted);margin-top:.7em}
+  .kin b{color:var(--c);font-weight:600}
+
+  .loop{font-family:var(--mono);font-size:.88rem;background:var(--chip);
+    border:1px solid var(--line);border-left:3px solid var(--c,var(--accent));
+    border-radius:0 8px 8px 0;padding:10px 16px;margin:14px 0;overflow-x:auto;white-space:nowrap}
+
+  .term{margin:20px 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    background:var(--card)}
+  .term-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:6px 14px;background:var(--chip);border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+  .term-bar .lamp{color:var(--c,var(--accent))}
+  .term pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);
+    font-size:.78rem;line-height:1.45;color:var(--ink)}
+  .placeholder-tag{font-style:italic}
+
+  .callout{border-left:3px solid var(--accent);background:var(--callout-bg);
+    border-radius:0 10px 10px 0;padding:12px 18px;margin:18px 0}
+  .callout.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+  .callout.ok{border-left-color:var(--accent2);background:var(--ok-bg)}
+  .callout p{margin:.3em 0}
+  .callout .label{font-family:var(--mono);font-size:.75rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--muted)}
+
+  pre.code{background:var(--chip);border:1px solid var(--line);border-radius:8px;
+    padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.5;
+    margin:14px 0}
+
+  table.data{border-collapse:collapse;width:100%;margin:16px 0;font-size:.92rem}
+  table.data caption{text-align:left;color:var(--muted);font-size:.85rem;margin-bottom:6px;
+    font-family:var(--mono)}
+  table.data th,table.data td{border:1px solid var(--line);padding:7px 11px;text-align:left;
+    vertical-align:top}
+  table.data thead th{background:var(--chip);font-weight:700;font-family:var(--mono);
+    font-size:.82rem}
+  table.data td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+  .table-scroll{overflow-x:auto}
+  td.ch{color:var(--c-home)} td.cr{color:var(--c-rumor)} td.cs{color:var(--c-sealed)}
+
+  .theme-toggle{position:fixed;top:14px;right:14px;z-index:50;font-family:var(--mono);
+    font-size:.85rem;color:var(--ink);background:var(--card);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;cursor:pointer}
+  .theme-toggle:hover{background:var(--chip)}
+  .theme-toggle:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media print{.theme-toggle{display:none} body{background:#fff}}
+  @media (prefers-reduced-motion: no-preference){
+    .lamp{animation:blink 2.4s step-end infinite}
+    @keyframes blink{0%,92%{opacity:1}96%{opacity:.25}100%{opacity:1}}
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark theme">◐ theme</button>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow"><span class="prompt">evan@script-world</span>:~$ cat research/project-plans.html</p>
+  <h1>Three ways to build script-world</h1>
+  <p class="standfirst">Same premise — a terminal, a procedurally generated map, 10–20
+    AI-programmable agents — but three different games, each built on a different answer to the
+    design question that decides everything else: <strong>what is a prompt?</strong>
+    A <em>conversation</em> you keep having, a <em>personality</em> you release into a society,
+    or a <em>program</em> you seal and ship. Mechanics are the point of this document; every
+    screen sketch is a placeholder.</p>
+  <p class="standfirst"><strong>Update 2026-07-18:</strong> a direction was chosen
+    (<code>decision-1</code> on the board) — Rumor Mill wins, hybridized with fixed personas,
+    growing souls, and nudge-only influence. See <a href="#direction">Chosen direction</a>;
+    the three concepts below stand as the record they were chosen from.</p>
+  <ul class="pillars">
+    <li>fixed: terminal UI</li>
+    <li>fixed: top-down procgen world</li>
+    <li>fixed: prompt-programmed agents</li>
+    <li>fixed: emergence over scripting</li>
+  </ul>
+  <nav class="toc" aria-label="Contents">
+    <div><span class="dot" style="background:var(--c-rumor)"></span><a href="#direction">Chosen direction — fixed souls</a> <span class="muted">· the hybrid we're building toward</span></div>
+    <div><span class="dot" style="background:var(--c-home)"></span><a href="#homestead">Concept A — Homestead</a> <span class="muted">· the prompt is a conversation</span></div>
+    <div><span class="dot" style="background:var(--c-rumor)"></span><a href="#rumor-mill">Concept B — Rumor Mill</a> <span class="muted">· the prompt is a personality</span></div>
+    <div><span class="dot" style="background:var(--c-sealed)"></span><a href="#sealed-orders">Concept C — Sealed Orders</a> <span class="muted">· the prompt is a program</span></div>
+    <div><span class="dot" style="background:var(--line)"></span><a href="#shared-engine">Shared engine</a> <span class="muted">· </span><a href="#comparison"><span class="muted">comparison</span></a> <span class="muted">· </span><a href="#next"><span class="muted">next step</span></a></div>
+  </nav>
+</header>
+
+<!-- ============================ CHOSEN DIRECTION ============================ -->
+<section class="concept" id="direction" style="--c:var(--c-rumor)">
+  <div class="concept-head">
+    <p class="kicker">Decision · 2026-07-18 · decision-1 on the board</p>
+    <h2>Chosen direction: Rumor Mill, fixed souls</h2>
+    <p class="tagline">Cast twenty souls. Let them live and grow. Influence them only by suggestion.</p>
+  </div>
+
+  <h3>The four rules</h3>
+  <ol>
+    <li><strong>~20 agents</strong> at world seed (up from the concept's 12).</li>
+    <li><strong>Persona + soul:</strong> each agent starts from a specific authored personality
+      prompt, paired with a dynamic meta-layer — a <code>soul.md</code> of memories,
+      relationships, beliefs. Agents live; experience accretes into the soul.</li>
+    <li><strong>Personas are fixed.</strong> Direct modification is not a player verb — the
+      original pitch's "recast" is removed.</li>
+    <li><strong>All influence is indirect:</strong> suggestions and nudges à la the rumor
+      mechanics. You can nudge; you cannot edit.</li>
+  </ol>
+
+  <h3>Persona / soul split</h3>
+  <ul>
+    <li><strong><code>persona.md</code> — immutable, authored once at seed.</strong> Temperament,
+      values, fears, voice, one secret. The character's DNA; it never enters any write path —
+      not the player's, not the simulation's.</li>
+    <li><strong><code>soul.md</code> — the agent's living record, written only by the sim.</strong>
+      Episodic memories (each with salience and decay), relationship stances, beliefs (each with
+      confidence and provenance), and a self-narrative in the agent's own voice. Player-readable
+      — reading souls is a core pleasure — never player-writable.</li>
+    <li><strong>Behavior = fixed persona interpreting the accumulated soul in the current
+      situation.</strong> The same nudge lands differently on different agents, and differently on
+      the same agent a season later. That double contingency is the game.</li>
+    <li><strong>Nightly consolidation is where growth lives.</strong> At sleep, the day's episodic
+      buffer compresses into the soul: memories promoted or faded, beliefs revised, self-narrative
+      rewritten. One LLM call per agent per night — growth is mechanically real <em>and</em>
+      cost-bounded. Constraint on the consolidator: beliefs and relationships may drift;
+      temperament may not. Souls change; natures don't.</li>
+  </ul>
+
+  <h3>The nudge — the only write channel</h3>
+  <ul>
+    <li><strong>Forms with tradeoffs:</strong> a dream (delivered at sleep — intimate, deniable),
+      an omen (a found detail in the world — public, interpretable by whoever notices), an
+      overheard remark (targets one agent, implicates none). Reach vs. deniability is the choice.</li>
+    <li><strong>A nudge is evidence, not command.</strong> It enters the target's episodic memory
+      tagged <em>provenance unknown</em>; the fixed persona decides what it means. Skeptics
+      discount, zealots amplify, schemers exploit. Resistance is characterization, not failure.</li>
+    <li><strong>Scarce by design:</strong> a nudge budget with cooldown, so each one is a
+      considered move, not a firehose. (Exact economy: open question for the Q/A.)</li>
+    <li><strong>Second-order play is the real game:</strong> the rumor graph carries influence
+      further than any single nudge — pick the right soul as the entry point and let Marta do
+      your work on Fen.</li>
+    <li><strong>The attribution loop:</strong> agents explain unexplained thoughts to themselves —
+      intuition, ghosts, gods. Shared attributions can consolidate into village culture or
+      religion: the influence channel itself generating emergent meaning.</li>
+  </ul>
+
+  <h3>What the hybrid keeps and drops</h3>
+  <div class="table-scroll">
+    <table class="data">
+      <caption>Provenance of the hybrid's mechanics</caption>
+      <thead><tr><th>From</th><th>Keeps</th><th>Drops</th></tr></thead>
+      <tbody>
+        <tr><td class="cr">Rumor Mill (B)</td><td>rumor objects, relationship graph, chronicle, whisper→nudge, norms/votes</td><td>recasting personas</td></tr>
+        <tr><td class="ch">Homestead (A)</td><td>needs/economy as social fuel, growth-through-use, journal (becomes the soul's episodic feed)</td><td>charter editing — the entire live-edit verb</td></tr>
+        <tr><td class="cs">Sealed Orders (C)</td><td>cost discipline as design (nightly consolidation, small-model retells)</td><td>runs, sealing, scoring</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>New risks this direction takes on</h3>
+  <ul>
+    <li><strong>A miscast agent can't be fixed</strong> — only influenced. The design needs a
+      valve: social pressure, exile by vote, possibly generational turnover (agents age; heirs
+      blend personas). Which valve is a Q/A topic, not a foregone conclusion.</li>
+    <li><strong>20 souls cost more than 12:</strong> consolidation is per-agent-per-night and
+      social encounters scale roughly with density. Tiered models and prompt caching graduate
+      from optimizations to requirements.</li>
+    <li><strong>Soul drift could flatten character</strong> — years of consolidation eroding what
+      made an agent themselves. The persona/temperament firewall above is the mitigation; it
+      needs testing, not trust.</li>
+  </ul>
+
+  <div class="callout ok">
+    <p class="label">Revised MVP slice</p>
+    <p>10–12 agents (20 is the target, not the proof), the persona/soul split with nightly
+      consolidation, one nudge form (the dream), rumor mutation on retell, and the chronicle.
+      Proves the one thing that matters now: <em>does a nudge, filtered through a fixed persona
+      and a lived soul, produce a legible story you feel you authored?</em></p>
+  </div>
+</section>
+
+<!-- ============================ CONCEPT A ============================ -->
+<section class="concept" id="homestead" style="--c:var(--c-home)">
+  <div class="concept-head">
+    <p class="kicker">Concept A · the live terrarium<span class="status">mechanics mine</span></p>
+    <h2>Homestead</h2>
+    <p class="tagline">The prompt is a conversation. You garden behaviors while the world runs.</p>
+    <p class="kin">kin: <b>RimWorld / Dwarf Fortress</b>, with the zones-and-menus layer replaced by talking to your dwarf</p>
+  </div>
+
+  <h3>The fantasy</h3>
+  <p>You found a settlement with five strangers and raise it by <em>raising them</em>. Every agent
+    carries a charter — a plain-language prompt you can rewrite at any moment — and the craft of the
+    game is diagnosis: watching an agent do something baffling, reading its journal to learn
+    <em>why</em>, and editing the words that made it act that way. The settlement's shape is a
+    portrait of how you write.</p>
+
+  <div class="loop">observe the sim → something goes sideways → read the agent's journal → rewrite its charter → unpause → watch the fix ripple ↺</div>
+
+  <h3>Mechanics</h3>
+  <h4>Prompt surface</h4>
+  <ul>
+    <li><strong>The charter</strong> — one persistent prompt per agent (role, priorities, standing
+      rules, personality). Editable anytime; takes effect at the agent's next decision point, not
+      retroactively — agents finish the thought they're in, which makes edits feel like persuasion
+      rather than possession.</li>
+    <li><strong>Standing rules are real triggers.</strong> Conditional lines ("if storage drops
+      below 20 meals, cook") are extracted into cheap watchers the sim evaluates every tick — the
+      LLM only wakes when a rule fires. Writing crisp conditions is learnable skill.</li>
+    <li><strong>The journal closes the loop.</strong> Each decision logs a one-line reason in the
+      agent's voice. Bad behavior is always traceable to a sentence you wrote — the game's
+      debugger.</li>
+  </ul>
+  <h4>Simulation systems</h4>
+  <ul>
+    <li><strong>Needs:</strong> hunger, rest, warmth, morale — classic colony-sim drives that
+      generate pressure the charters must handle.</li>
+    <li><strong>Resource chains:</strong> forage→farm→cook, chop→saw→build, shear→spin→clothe.
+      Chains are deliberately multi-agent so charters must reference each other ("haul whatever
+      Wren harvests").</li>
+    <li><strong>World:</strong> procgen biomes, seasons, weather; mild threats (storms, wolves,
+      fire, blight) — pressure, not war.</li>
+    <li><strong>Skills grow with use,</strong> so a charter is also a curriculum: what you tell an
+      agent to spend time on shapes who they become.</li>
+  </ul>
+  <h4>Player verbs</h4>
+  <p>Pause/speed time · edit any charter · inspect journal and needs · pin a map annotation agents
+    can read ("build the barn here") · answer an agent's question (agents may ask <em>you</em> for
+    a ruling when their charter is ambiguous — the game teaching you to write better).</p>
+  <h4>Stakes &amp; progression</h4>
+  <p>Soft-fail: agents don't die, they <em>leave</em> — a settlement that can't feed or dignify
+    people bleeds population. Progression is settlement tier (camp → hamlet → village) plus new
+    arrivals with quirky starting personalities that resist naive charters.</p>
+
+  <div class="term">
+    <div class="term-bar"><span><span class="lamp">●</span> homestead — main screen</span>
+      <span class="placeholder-tag">placeholder mock — glyphs &amp; copy illustrative only</span></div>
+    <pre>┌─ script-world · HOMESTEAD ── day 14 · spring · 07:40 ── [space] pause ────┐
+│ MAP  procgen seed 8841               │ AGENT  Wren — farmer               │
+│ ♠♠♠♠♠ ~~ ······· ░░░░ ▲▲             │ ───────────────────────────        │
+│ ♠♠♠ @W ~~ ═══ ····· ░░ ▲             │ needs  food ▓▓▓▓░  rest ▓▓░░░      │
+│ ♠♠ ····· ~~ ┌──┐ ····· ▲             │ doing  hauling wheat → granary     │
+│ ♠ ··· @B ·· │▒▒│ ·@F ··              │ said   "barn first, rain coming"   │
+│ ~~~ ····· · └──┘ ·······             │ journal (last 3)                   │
+│ ~~~~ ······ ▒▒▒▒ ····· ░░            │  · traded eggs with Bel            │
+│                                      │  · field NW flooded, replanting    │
+│ 5 agents · granary 62 · mood up      │  · asked Fen to fix the fence      │
+├──────────────────────────────────────┴────────────────────────────────────┤
+│ PROMPT (Wren) — editing…   [enter] apply   [esc] cancel                   │
+│ &gt; You are Wren. Keep the settlement fed; prefer planting over foraging.   │
+│ &gt; If storage drops below 20 meals, drop everything and cook. Be blunt.    │
+└───────────────────────────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <div class="callout ok">
+    <p class="label">MVP slice</p>
+    <p>One biome, 5 agents, hunger + wood + food chain, the charter editor, journal, and the
+      decision-point loop. No seasons, no threats, no arrivals. Proves the one thing that matters:
+      <em>does rewriting a sentence visibly change behavior within a minute?</em></p>
+  </div>
+  <div class="callout warn">
+    <p class="label">Biggest risk</p>
+    <p>Latency between edit and visible effect. If the causal chain from your words to the world is
+      slow or murky, the core verb dies. Mitigation: decision points fire immediately on charter
+      edit, and the journal cites the charter line that drove each choice.</p>
+  </div>
+</section>
+
+<!-- ============================ CONCEPT B ============================ -->
+<section class="concept" id="rumor-mill" style="--c:var(--c-rumor)">
+  <div class="concept-head">
+    <p class="kicker">Concept B · the story engine<span class="status chosen">chosen basis</span></p>
+    <h2>Rumor Mill</h2>
+    <p class="tagline">The prompt is a personality. You cast a village and read what it writes.</p>
+    <p class="kin">kin: <b>Dwarf Fortress legends mode / The Sims / Middle-earth's nemesis systems</b> — society as the simulation</p>
+  </div>
+
+  <h3>The fantasy</h3>
+  <p>You are not a mayor; you are a casting director and, occasionally, a whisper. You author
+    twelve personalities — grudges, ambitions, secrets — drop them into a procgen village, and the
+    game's output is a <em>chronicle</em>: an evolving, readable saga of alliances, feuds, votes,
+    and betrayals that nobody scripted. The economy and farming still exist, but as fuel for social
+    friction, not as the goal.</p>
+
+  <div class="loop">cast personalities → society runs → the chronicle surfaces a story thread → nudge it (whisper / recast) → read what happens ↺</div>
+
+  <h3>Mechanics</h3>
+  <h4>Prompt surface</h4>
+  <ul>
+    <li><strong>The persona</strong> — each agent's prompt is written as character, not policy:
+      values, fears, loyalties, a secret. Edits are rare and dramatic — recasting someone mid-saga
+      visibly changes them, and other agents <em>notice the change</em> ("Bel hasn't been herself").</li>
+    <li><strong>The whisper</strong> — your main verb. Plant a thought, dream, or omen into one
+      agent's memory. It's evidence, not command: the agent interprets it through its persona, and
+      may ignore, distort, or weaponize it.</li>
+  </ul>
+  <h4>Social simulation — the centerpiece</h4>
+  <ul>
+    <li><strong>Relationship graph:</strong> every pair carries trust, affection, and debt.
+      All social acts read and write these edges.</li>
+    <li><strong>Rumors are objects.</strong> A rumor has content, source, and confidence; it
+      mutates as it's retold (each hop is a cheap LLM paraphrase filtered through the teller's
+      persona). Provenance is tracked, so lies can be traced — and avenged.</li>
+    <li><strong>Promises and debts are objects too</strong> — agents remember who broke what, and
+      reputation is computed from the ledger, not vibes.</li>
+    <li><strong>Norms:</strong> agents can propose village rules; votes follow the relationship
+      graph. Passed norms become world constraints agents then obey, skirt, or defy — society
+      legislating itself.</li>
+    <li><strong>The chronicle</strong> is a generated narrative log with filters (per-agent, per-feud)
+      — the game's primary "screen," compressed from sim events by a narrator model.</li>
+  </ul>
+  <h4>Player verbs</h4>
+  <p>Whisper · recast a persona · read the chronicle · inspect the relationship graph ·
+    convene (force a village meeting on a topic) · export a finished saga as text.</p>
+  <h4>Stakes &amp; progression</h4>
+  <p>No fail state — the chronicle is the score. Optional "seasons" end with a historical summary
+    (wars averted, dynasties formed) and unlock persona archetypes. The endgame artifact is the
+    exported saga: a story you provably co-authored.</p>
+
+  <div class="term">
+    <div class="term-bar"><span><span class="lamp">●</span> rumor-mill — main screen</span>
+      <span class="placeholder-tag">placeholder mock — glyphs &amp; copy illustrative only</span></div>
+    <pre>┌─ script-world · RUMOR MILL ── year 2 · harvest festival ──────────────────┐
+│ MAP  Aldermoor (pop 12)              │ CHRONICLE (live)                   │
+│ ♠♠ ┌──┐ ··· ┌──┐ ~~                  │ · Bel tells Fen the well is        │
+│ ♠  │▒▒│ @B  │▒▒│ ~~~                 │   cursed                           │
+│ ·· └──┘ ··· └──┘ ····                │ · Fen half-believes it (trust 62)  │
+│ ·· @M ══ market ══ @F ··             │ · Marta overhears — she started    │
+│ ····· @W ····· @T ·····              │   the rumor. She keeps quiet.      │
+│                                      │ · Tomas proposes: fence the well   │
+│ RELATIONSHIPS (Bel)                  │ · VOTE 7–5 → the well is fenced    │
+│  Fen   trust ▓▓▓▓░  owes a favor     │ ───────────────────────────        │
+│  Marta trust ▓░░░░  rival            │ WHISPER → Marta                    │
+│  Tomas trust ▓▓▓░░  ally             │ &gt; you dreamt the well ran clear…   │
+├──────────────────────────────────────┴────────────────────────────────────┤
+│ [w] whisper   [p] edit personality   [c] chronicle   [g] relations        │
+└───────────────────────────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <div class="callout ok">
+    <p class="label">MVP slice</p>
+    <p>One village, 8 agents, the relationship graph, rumor objects with mutation-on-retell, the
+      whisper verb, and a chronicle log. No economy, no norms, no votes. Proves the one thing that
+      matters: <em>does a planted rumor produce a story worth retelling?</em></p>
+  </div>
+  <div class="callout warn">
+    <p class="label">Biggest risk</p>
+    <p>Soap-opera mush — LLM agents drift toward agreeable, low-stakes chatter. Mitigation:
+      conflict is mechanical, not stylistic — scarcity, secrets, and the debt ledger force
+      zero-sum situations the personas must resolve in character.</p>
+  </div>
+</section>
+
+<!-- ============================ CONCEPT C ============================ -->
+<section class="concept" id="sealed-orders" style="--c:var(--c-sealed)">
+  <div class="concept-head">
+    <p class="kicker">Concept C · the prompt roguelike<span class="status">shelved</span></p>
+    <h2>Sealed Orders</h2>
+    <p class="tagline">The prompt is a program. Write it, seal it, and watch it survive winter — or not.</p>
+    <p class="kin">kin: <b>Screeps / roguelikes / autobattlers</b> — programming game where the language is English</p>
+  </div>
+
+  <h3>The fantasy</h3>
+  <p>Before the run starts you write your tribe's orders — then they're <em>sealed</em>. For a
+    90-day procgen year of escalating scarcity, raids, and winter, you cannot intervene: you can
+    only watch, fast-forward, and take notes. Your agents live or die by how robustly you wrote.
+    Then the post-mortem shows you exactly which sentence failed, and you draft better orders for
+    the next seed. It's a roguelike where the thing that levels up is your prose.</p>
+
+  <div class="loop">draft orders → seal → 90-day run (hands off) → post-mortem replay → revise the prompt library → new seed ↺</div>
+
+  <h3>Mechanics</h3>
+  <h4>Prompt surface</h4>
+  <ul>
+    <li><strong>Orders</strong> — one prompt per agent plus one shared tribe doctrine, all locked
+      at day 0. The writing challenge is anticipation: covering situations you haven't seen, on a
+      map you've only scouted from a pre-run survey report.</li>
+    <li><strong>Attention is an in-game resource.</strong> You hold a fixed budget of LLM
+      decisions per day and allocate it across agents before sealing (the scout thinks 6×/day, the
+      keeper 2×). Between decisions agents run on cheap reflexes. Token economics becomes strategy
+      instead of a hidden cost.</li>
+    <li><strong>The post-mortem is the real screen:</strong> a scrubbable timeline of every
+      decision with its context and reasoning, diffable against previous runs — the tool that turns
+      losing into learning.</li>
+  </ul>
+  <h4>Run structure</h4>
+  <ul>
+    <li><strong>Pressure curve:</strong> procgen year with a survey phase, abundance, a raid
+      season, then winter as the boss. Scoring: survivors, granary surplus, monuments built.</li>
+    <li><strong>Permadeath per run;</strong> metaprogression is knowledge — your prompt library,
+      unlocked agent archetypes, and harder biomes. No stat inflation: a day-1 player with great
+      prose can beat a veteran's numbers.</li>
+    <li><strong>Daily seed:</strong> everyone gets the same map; scores and (optionally) winning
+      order-sets are shareable text files. Async competition falls out for free — it's a
+      prompt-golf leaderboard.</li>
+  </ul>
+  <h4>Player verbs</h4>
+  <p>Draft/revise orders (between runs) · allocate attention · fast-forward and bookmark ·
+    post-mortem scrub · manage the prompt library · share/import order-sets and seeds.</p>
+  <h4>Stakes &amp; progression</h4>
+  <p>Hard fail, low cost: a run is 20–40 minutes of watching at speed. The emotional loop is the
+    roguelike one — death is a lesson, and the lesson is always legible because every decision
+    carries its reasoning.</p>
+
+  <div class="term">
+    <div class="term-bar"><span><span class="lamp">●</span> sealed-orders — mid-run</span>
+      <span class="placeholder-tag">placeholder mock — glyphs &amp; copy illustrative only</span></div>
+    <pre>┌─ script-world · SEALED ORDERS ── run #23 · seed "gaunt-river" ────────────┐
+│ DAY 41 / 90   speed ▶▶ 8×            │ TRIBE  6 alive · 1 lost            │
+│ winter in 4 days  ░░░░▓▓▓▓▓▓         │ granary  31 meals (needs 54)  !    │
+│                                      │ firewood 12 logs  (needs 30)  !    │
+│ ♠♠ ··· ┌──┐┌──┐ ░░ ▲▲                │                                    │
+│ ♠ @K ··│▒▒││▒▒│ ░ ▲▲▲                │ ATTENTION BUDGET (locked)          │
+│ ·· @R ·└──┘└──┘ · ▲▲                 │  Kez  scout    ▓▓▓▓▓▓  6/day       │
+│ ~~ ··· @P ▒▒▒ ··· ▲                  │  Rok  builder  ▓▓▓     3/day       │
+│ ~~~ ····· ····· ░░░                  │  Pia  keeper   ▓▓      2/day       │
+│                                      │  …3 more                           │
+├──────────────────────────────────────┴────────────────────────────────────┤
+│ prompts sealed until day 90 — observe, take notes, draft the next orders  │
+└───────────────────────────────────────────────────────────────────────────┘</pre>
+  </div>
+
+  <div class="callout ok">
+    <p class="label">MVP slice</p>
+    <p>A 30-day run, 6 agents, food + firewood + one winter, sealed orders, attention budget,
+      scoring, and a minimal decision-log replay. No raids, no daily seed. Proves the one thing
+      that matters: <em>is a hands-off run tense to watch, and does the post-mortem make you
+      itch to redraft?</em></p>
+  </div>
+  <div class="callout warn">
+    <p class="label">Biggest risk</p>
+    <p>Watching without touching gets boring if runs are too long or too opaque. Mitigation:
+      aggressive time compression with auto-slowdown on drama (a fire, a death, a rule conflict),
+      and bookmarks so the run is skimmable like a replay, not endured like a stream.</p>
+  </div>
+</section>
+
+<!-- ============================ SHARED ENGINE ============================ -->
+<section class="concept" id="shared-engine" style="--c:var(--accent)">
+  <div class="concept-head">
+    <p class="kicker">Common foundation</p>
+    <h2>The shared engine</h2>
+    <p class="tagline">All three concepts sit on the same two-layer agent brain — they differ in when the top layer runs and who may edit it.</p>
+  </div>
+
+  <h3>Two-layer brain</h3>
+  <p>The sim must tick deterministically many times a second; an LLM cannot be in that loop. So the
+    body is code and the mind is called sparingly:</p>
+  <pre class="code">┌───────────────────────── PLANNER (LLM, sparse) ─────────────────────────┐
+│ in:  charter/persona/orders + journal + local world summary             │
+│ out: structured intent (goal, reason, steps, until-condition)           │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                     fires on decision points only:
+             idle · interrupted · standing rule triggered · world event
+┌──────────────────────────────▼──────────────────────────────────────────┐
+│ EXECUTOR (deterministic sim, every tick)                                │
+│ pathfinding · action steps · needs decay · resource flows · watchers    │
+└─────────────────────────────────────────────────────────────────────────┘</pre>
+  <p>A planner call returns an intent the executor can run unattended for minutes of game time:</p>
+  <pre class="code">{ "goal":  "restock the granary",
+  "why":   "storage 18 &lt; 20 — charter says cook first",
+  "steps": [["goto","field_nw"], ["harvest","wheat",12],
+            ["goto","kitchen"], ["cook","meals",12]],
+  "until": "storage &gt;= 30, or interrupted" }</pre>
+  <p>The <code>why</code> field is load-bearing in all three games: it becomes Homestead's journal,
+    Rumor Mill's chronicle fodder, and Sealed Orders' post-mortem log.</p>
+
+  <h3>Cost control levers</h3>
+  <ul>
+    <li><strong>Decision points, not polling</strong> — the LLM never runs on a timer.</li>
+    <li><strong>Tiered models</strong> — small/fast for routine intents and rumor paraphrases; a
+      larger model for milestone decisions and the narrator.</li>
+    <li><strong>Prompt caching</strong> — charters and world-static context are cache-stable
+      prefixes; only the journal tail and local summary vary per call.</li>
+    <li><strong>Sealed Orders goes further:</strong> the budget is a visible game mechanic, which
+      also makes it the cheapest and most cost-predictable concept to operate.</li>
+  </ul>
+
+  <div class="table-scroll">
+    <table class="data">
+      <caption>Planner-call cadence — design targets, not measurements (set by this plan; to be validated in the MVP spike)</caption>
+      <thead><tr><th>Concept</th><th>Planner fires on</th><th class="num">Target calls / agent / game-day</th><th>Extra LLM surfaces</th></tr></thead>
+      <tbody>
+        <tr><td class="ch">Homestead</td><td>idle, interrupt, rule trigger, charter edit</td><td class="num">8–15</td><td>agent questions to the player</td></tr>
+        <tr><td class="cr">Rumor Mill</td><td>social encounters, whispers, votes</td><td class="num">10–20</td><td>rumor paraphrase (small model), narrator/chronicle</td></tr>
+        <tr><td class="cs">Sealed Orders</td><td>player-allocated attention slots</td><td class="num">2–6 (fixed by player)</td><td>post-mortem summarizer</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Terminal stack</h3>
+  <p>Any modern TUI framework fits the two-layer design — e.g. <code>ratatui</code> (Rust),
+    <code>textual</code> (Python), or <code>ink</code> (Node). The map is a glyph grid with a
+    16-color-safe palette; panes are the primitive (map / inspector / editor / log). Choice is a
+    spec-phase decision, not a design constraint.</p>
+</section>
+
+<!-- ============================ COMPARISON ============================ -->
+<section class="concept" id="comparison" style="--c:var(--accent)">
+  <div class="concept-head">
+    <p class="kicker">Side by side</p>
+    <h2>Comparison</h2>
+  </div>
+  <div class="table-scroll">
+    <table class="data">
+      <caption>The three concepts against the axes that actually differ</caption>
+      <thead><tr><th>Axis</th><th>Homestead</th><th>Rumor Mill</th><th>Sealed Orders</th></tr></thead>
+      <tbody>
+        <tr><th>The prompt is…</th><td class="ch">a conversation</td><td class="cr">a personality</td><td class="cs">a program</td></tr>
+        <tr><th>You edit prompts…</th><td>anytime — it's the core verb</td><td>rarely — recasting is dramatic</td><td>only between runs</td></tr>
+        <tr><th>Pressure comes from</th><td>needs + resource chains</td><td>secrets, scarcity, the debt ledger</td><td>a fixed 90-day threat curve</td></tr>
+        <tr><th>Failure model</th><td>soft — agents leave</td><td>none — the chronicle is the score</td><td>hard — permadeath per run</td></tr>
+        <tr><th>Session shape</th><td>open-ended sandbox</td><td>long saga, read in sittings</td><td>20–40 min runs</td></tr>
+        <tr><th>Story delivery</th><td>you infer it from the sim</td><td>generated chronicle — story is the product</td><td>post-mortem replay</td></tr>
+        <tr><th>LLM cost profile</th><td>medium, player-driven spikes</td><td>highest (dialogue + narrator)</td><td>lowest — budget is a game mechanic</td></tr>
+        <tr><th>Hardest problem</th><td>edit→effect latency legibility</td><td>keeping conflict sharp, not mushy</td><td>spectating stays tense</td></tr>
+        <tr><th>MVP proves</th><td>a sentence edit changes behavior in a minute</td><td>a planted rumor makes a story worth retelling</td><td>a hands-off run makes you redraft</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p class="label">Pre-decision reading — superseded</p>
+    <p><strong>Homestead</strong> is the most direct realization of the README and the safest
+      first build. <strong>Sealed Orders</strong> is the most mechanically novel and by far the
+      most cost-controlled — its attention budget turns the technology's main liability into a
+      strategy layer. <strong>Rumor Mill</strong> has the highest ceiling (the chronicle is a
+      shareable artifact) and the highest tuning risk. <em>Superseded 2026-07-18: Rumor Mill won —
+      see the <a href="#direction">Chosen direction</a>, which hybridizes in Homestead's growth
+      mechanics and Sealed Orders' cost discipline.</em></p>
+  </div>
+</section>
+
+<!-- ============================ NEXT ============================ -->
+<section class="concept" id="next" style="--c:var(--accent)">
+  <div class="concept-head">
+    <p class="kicker">Where this goes</p>
+    <h2>Next step</h2>
+  </div>
+  <p>The direction is chosen (<code>decision-1</code>); the board's first task — the Socratic
+    grounding session (TASK-1) — now interrogates the <a href="#direction">fixed-souls hybrid</a>
+    rather than three open concepts, then feeds a Spec Kit spec (<code>specs/001-…</code>) linked
+    onto the Backlog board. Questions the Q/A must answer:</p>
+  <ul>
+    <li><strong>Consolidation contract:</strong> exactly what may drift in a soul (beliefs,
+      relationships, self-narrative) and what never may (temperament, values)? How is that
+      firewall enforced and tested?</li>
+    <li><strong>Nudge economy:</strong> budget, cooldown, and forms — and can agents ever
+      <em>detect</em> they're being nudged? Is the attribution loop (gods/intuition) tracked
+      mechanically or left to emergence?</li>
+    <li><strong>Cost at 20 souls:</strong> nightly consolidation + encounter dialogue + narrator —
+      what cadence and model tiering keeps an evening of play affordable?</li>
+    <li><strong>The miscast valve:</strong> when a persona is a dud, what recourse exists —
+      social pressure, exile by vote, generational turnover? (Personas stay fixed; the question
+      is what the <em>society</em> can do.)</li>
+    <li><strong>Social-act schema:</strong> does the shared engine's structured intent cover
+      conversation, or does the hybrid need a distinct schema for social acts (tell, promise,
+      accuse, propose)?</li>
+  </ul>
+  <p class="muted" style="font-family:var(--mono);font-size:.85rem;margin-top:40px">
+    source: README.md (pre-design, 2026-07-18, no commits yet) · direction:
+    backlog/decisions/decision-1 (Accepted, 2026-07-18) · all figures in this page are design
+    targets authored here, to be validated by the MVP spikes · mocks are placeholders</p>
+</section>
+
+</div>
+<script>
+  // praxisflux:theme:start
+  // Cycles auto -> light -> dark, stamping data-theme on <html> so the CSS token overrides win
+  // over the OS preference. No storage, no external calls. State rides on the button
+  // (dataset.mode) so any page can bind its own button.
+  function praxisfluxCycleTheme(btn){
+    const order=["auto","light","dark"], label={auto:"◐ auto",light:"☀ light",dark:"☾ dark"};
+    const next=order[(order.indexOf(btn.dataset.mode||"auto")+1)%order.length];
+    if(next==="auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme",next);
+    btn.dataset.mode=next; btn.textContent=label[next]; return next;
+  }
+  // praxisflux:theme:end
+  document.getElementById('themeToggle').addEventListener('click',(e)=>praxisfluxCycleTheme(e.currentTarget));
+</script>
+</body>
+</html>

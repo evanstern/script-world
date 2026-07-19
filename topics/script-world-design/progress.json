@@ -1,0 +1,51 @@
+{
+  "$schema": "https://learnings.local/progress.schema.json",
+  "topic": "script-world-design",
+  "title": "script-world design grounding",
+  "updated": "2026-07-19",
+  "mode": "socratic grounding \u00b7 design interrogation (outputs feed the PDLC board, not a delegated build)",
+  "lifecycle": [
+    "scaffolded",
+    "taught",
+    "spec'd",
+    "built",
+    "decked",
+    "done"
+  ],
+  "cursor": {
+    "current": "101-rumor-mill-grounding",
+    "currentStatus": "taught",
+    "nextAction": "Optional: build deck.html + guide.md to take the lesson to 'decked'; the PDLC outputs (assumptions doc, decision-2, TASK-2..14) are already delivered."
+  },
+  "lessons": [
+    {
+      "id": "101-rumor-mill-grounding",
+      "n": 101,
+      "title": "Socratic grounding: interrogate the Rumor Mill hybrid (decision-1 / TASK-1)",
+      "status": "taught",
+      "artifacts": {
+        "checklist": true,
+        "rawNotes": true,
+        "deck": false,
+        "guide": false,
+        "handoff": false,
+        "postBuild": false
+      },
+      "motivator": "README + decision-1 assumptions are unexamined; TASK-1 requires each confirmed/revised/rejected before any design or code.",
+      "feedsForward": "Grounded assumptions, the first-pass Backlog task list, and candidate Spec Kit specs.",
+      "openThreads": [
+        "Drama-router rule (what escalates to cloud tier) \u2014 to be specified in the Metatron spec",
+        "Deck + guide not yet built (lesson intentionally held at taught)"
+      ],
+      "decisions": [
+        "Ambient always-on world: daemon + attachable TUI; 1 game-min = 15 real-sec; pause required",
+        "Metatron: gatekeeper mediator; its charter is the only player-editable prompt (the meta-game)",
+        "Nudges: dream + omen; 1 charge/6 game hours, cap 3",
+        "All seven social systems in v1 as the conflict engine; death by neglect; no aging; the gru at night",
+        "Memory: top-K reranked window + serendipity; persona firewall = structural + validator; vector RAG parked",
+        "Stack: Go + Bubble Tea; SQLite event log + per-run flat files; Ollama/9router local-first under $100/mo; 8 agents, cold-start map"
+      ]
+    }
+  ],
+  "parked": []
+}

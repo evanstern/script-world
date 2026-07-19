@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NNN · Lesson Title</title>
+<!--
+  DECK TEMPLATE — STEP 0: THIS FILE IS YOUR STARTING POINT.
+  Copy it into the lesson folder as deck.html and replace the slides. Do NOT hand-roll a deck,
+  and do NOT start from another lesson's deck.html (those are style references only). Starting
+  anywhere else silently drifts the house style. Decks are built AFTER the build so they can
+  fold in POST_BUILD findings.
+
+  READABILITY IS THE PRIORITY (house rule). Type and diagrams are deliberately LARGE and the
+  slide padding is tight. Optimize for someone reading from across a room or skimming a PDF —
+  never for fitting more onto one slide. (These are the deck-specific rules on top of the
+  shared praxisflux pedagogy — lib/toolkit/pedagogy.md in the educate plugin: one idea per
+  screen; show, don't tell; lead with the point; split, don't shrink.)
+   - ONE idea per slide. If a slide feels crammed, SPLIT it. More slides is the correct fix,
+     never smaller type. A 20-slide deck that is effortless to read beats a 6-slide deck you
+     have to squint at.
+   - Never shrink the base font sizes below to win space. Cut words or add a slide instead.
+   - Let diagrams breathe: an SVG/figure should fill the slide width (and most of its height)
+     — put it on its own slide if it's the point.
+
+  House style (see CLAUDE.md → "Deck & guide conventions"):
+   - Single self-contained file. No CDN. Works offline; ⌘P → "Save as PDF" for a handout.
+   - 16:9 slides that MUST fit — verify nothing clips (split before you shrink). One idea per slide.
+   - Arrow keys / space to advance; progress bar + slide numbers are automatic.
+   - Gloss jargon with data-tip (see the sample slide) — a visible ? badge marks the target.
+     (The tooltip is the shared lib/toolkit/tooltip.md module; if it's ever unavailable,
+     define terms in parentheses on first use instead.)
+   - NEVER put <b>/<i> inside an SVG <text>; use <tspan>. var(--…) does NOT resolve in SVG attrs — use literal values there.
+     (Full SVG rules + skeleton: lib/toolkit/svg-diagrams.md in the educate plugin.)
+-->
+<style>
+  /* Design tokens — the shared praxisflux contract, STAMPED from lib/html/base.html between the
+     praxisflux:tokens markers (scripts/sync-shared.mjs keeps them in sync; drift fails the test
+     suite — never hand-edit inside the markers). Chrome is token-driven so the deck is
+     theme-aware: dark follows the OS AND the ◐ toggle. NOTE: hand-drawn SVG fills use literal
+     colors (var() doesn't resolve in SVG attrs) — pick colors that read on both themes, or
+     give the figure its own contrasting panel. */
+  /* praxisflux:tokens:start */
+  /* ---- design tokens (light) ---- */
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --ink:#1b2733; --muted:#5a6776;
+    --accent:#4f46e5; --accent2:#0e9488; --warn:#b4530a;
+    --line:#dde3ea; --chip:#f3f5f8;
+    --callout-bg:#f5f5ff; --warn-bg:#fff6ee; --ok-bg:#eefaf7;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  /* ---- dark tokens: follow the OS by default ... ---- */
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e141b; --card:#161d26; --ink:#e7ecf2; --muted:#9aa7b5;
+      --accent:#8b83ff; --accent2:#3ac9b8; --warn:#e8903f;
+      --line:#28323e; --chip:#1d2630;
+      --callout-bg:#1b1d38; --warn-bg:#33220f; --ok-bg:#0f2a27;
+    }
+  }
+  /* ... and the on-page toggle wins in either direction. */
+  :root[data-theme="dark"]{
+    --bg:#0e141b; --card:#161d26; --ink:#e7ecf2; --muted:#9aa7b5;
+    --accent:#8b83ff; --accent2:#3ac9b8; --warn:#e8903f;
+    --line:#28323e; --chip:#1d2630;
+    --callout-bg:#1b1d38; --warn-bg:#33220f; --ok-bg:#0f2a27;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f6f9; --card:#ffffff; --ink:#1b2733; --muted:#5a6776;
+    --accent:#4f46e5; --accent2:#0e9488; --warn:#b4530a;
+    --line:#dde3ea; --chip:#f3f5f8;
+    --callout-bg:#f5f5ff; --warn-bg:#fff6ee; --ok-bg:#eefaf7;
+  }
+  /* praxisflux:tokens:end */
+  /* deck-only tokens (outside the shared schema): the stage the 16:9 card sits on,
+     and deck-sized tooltip text (slides are read from across a room) */
+  :root{ --stage:#e7ebf1; --tip-size:19px }
+  @media (prefers-color-scheme: dark){ :root{ --stage:#0e141b } }
+  :root[data-theme="dark"]{ --stage:#0e141b }
+  :root[data-theme="light"]{ --stage:#e7ebf1 }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--stage);font-family:var(--sans);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .deck{width:min(97vw,1320px);aspect-ratio:16/9;position:relative}
+  .slide{position:absolute;inset:0;background:var(--card);border-radius:18px;
+    box-shadow:0 18px 50px rgba(20,30,50,.16);padding:40px 52px 56px;display:none;
+    flex-direction:column;overflow:hidden}
+  .slide.active{display:flex}
+  .kicker{font-size:17px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 14px}
+  h1{font-size:66px;line-height:1.05;margin:0 0 20px;letter-spacing:-.02em}
+  h2{font-size:48px;line-height:1.12;margin:0 0 22px;letter-spacing:-.01em}
+  p,li{font-size:30px;line-height:1.45;color:var(--ink)}
+  .muted{color:var(--muted)}
+  ul{margin:8px 0 0;padding-left:28px}
+  li{margin:20px 0}
+  .lead{font-size:36px;line-height:1.4;color:var(--muted);max-width:34ch}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:start}
+  .fill{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  .center{align-items:center;text-align:center;justify-content:center}
+  .chip{display:inline-block;background:var(--chip);border:1px solid var(--line);
+    border-radius:999px;padding:7px 18px;font-size:20px;font-weight:600;margin:5px 7px 5px 0}
+  code,.mono{font-family:var(--mono);background:var(--chip);border:1px solid var(--line);
+    border-radius:6px;padding:2px 9px;font-size:.92em}
+  .callout{border-left:5px solid var(--accent);background:var(--callout-bg);border-radius:0 12px 12px 0;
+    padding:20px 26px;font-size:28px;margin-top:14px}
+  .warn{border-left-color:var(--warn);background:var(--warn-bg)}
+  .ok{border-left-color:var(--accent2);background:var(--ok-bg)}
+  .accent{color:var(--accent)} .accent2{color:var(--accent2)} .warnc{color:var(--warn)}
+  /* Diagrams fill the slide — give them the room. Put a big figure on its own slide. */
+  svg{width:100%;height:auto;display:block}
+  .figure{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  .figure svg{max-height:100%}
+  .footer{position:absolute;left:52px;right:52px;bottom:16px;display:flex;
+    justify-content:space-between;align-items:center;font-size:16px;color:var(--muted)}
+  .footer .pageno{font-variant-numeric:tabular-nums}
+  .bar{position:absolute;left:0;bottom:0;height:5px;background:var(--accent);
+    border-radius:0 0 0 18px;transition:width .25s ease}
+  .nav{position:fixed;bottom:14px;right:18px;display:flex;gap:8px;z-index:10}
+  .nav button{font-family:var(--sans);font-size:17px;border:1px solid var(--line);
+    background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;color:var(--ink)}
+  .nav button:hover{background:var(--chip)}
+  .title-wrap{display:flex;flex-direction:column;justify-content:center;height:100%}
+  .small{font-size:24px}
+  /* Jargon tooltip — the shared module, STAMPED from lib/toolkit/tooltip.md between the
+     praxisflux:tooltip-css markers (scripts/sync-shared.mjs; never hand-edit inside them).
+     Any element (HTML or SVG) with a data-tip attribute gets the popover. */
+  /* praxisflux:tooltip-css:start */
+[data-tip]{cursor:help}
+.tip-pop{position:fixed;z-index:1000;max-width:min(420px,80vw);background:var(--ink);color:var(--bg);
+  font-size:var(--tip-size,1rem);line-height:1.4;padding:.65em .9em;border-radius:10px;
+  pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transform:translateY(4px);
+  transition:opacity .12s ease,transform .12s ease}
+.tip-pop.show{opacity:1;transform:translateY(0)}
+@media print{ .tip-pop{display:none} }
+  /* praxisflux:tooltip-css:end */
+  @media print{
+    body{display:block;background:#fff;overflow:visible}
+    .deck{width:100%;aspect-ratio:auto}
+    .slide{display:flex;position:relative;page-break-after:always;box-shadow:none;
+      border:1px solid var(--line);margin-bottom:18px;height:96vh}
+    .nav{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1 TITLE -->
+  <section class="slide active">
+    <div class="title-wrap">
+      <p class="kicker">Course · Lesson NNN</p>
+      <h1>Lesson Title<br>Subtitle</h1>
+      <p class="lead">One-sentence framing of what this lesson is about.</p>
+      <p class="muted small" style="margin-top:30px">context · audience · scan solo or follow along live</p>
+    </div>
+    <div class="footer"><span>Topic NNN</span><span>↦ arrow keys / space to advance</span></div>
+  </section>
+
+  <!-- 2 CONTENT (example: bullets) -->
+  <section class="slide">
+    <p class="kicker">Section kicker</p>
+    <h2>A claim worth a slide</h2>
+    <div class="fill">
+      <ul>
+        <li><b>Point one</b><br><span class="muted small">— a why-line so the bullet teaches, not just labels.</span></li>
+        <li><b>Point two</b><br><span class="muted small">— keep each slide to one idea; split if it feels crammed.</span></li>
+      </ul>
+    </div>
+    <div class="footer"><span>Topic · section</span><span></span></div>
+  </section>
+
+  <!-- 3 DIAGRAM (give the figure the whole slide; this is where big diagrams live) -->
+  <section class="slide">
+    <p class="kicker">Show, don't tell</p>
+    <h2>Put the diagram on its own slide</h2>
+    <div class="figure">
+      <svg viewBox="0 0 800 300" role="img" aria-label="example diagram">
+        <rect x="40" y="110" width="200" height="80" rx="12" fill="#eef0ff" stroke="#4f46e5" stroke-width="2"/>
+        <text x="140" y="158" text-anchor="middle" font-size="26" fill="#1b2733" font-family="sans-serif">Input</text>
+        <line x1="240" y1="150" x2="320" y2="150" stroke="#5a6776" stroke-width="3" marker-end="url(#a)"/>
+        <rect x="320" y="110" width="200" height="80" rx="12" fill="#eefaf7" stroke="#0e9488" stroke-width="2"/>
+        <text x="420" y="158" text-anchor="middle" font-size="26" fill="#1b2733" font-family="sans-serif">Process</text>
+        <line x1="520" y1="150" x2="600" y2="150" stroke="#5a6776" stroke-width="3" marker-end="url(#a)"/>
+        <rect x="600" y="110" width="160" height="80" rx="12" fill="#f5f5ff" stroke="#4f46e5" stroke-width="2"/>
+        <text x="680" y="158" text-anchor="middle" font-size="26" fill="#1b2733" font-family="sans-serif">Output</text>
+        <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#5a6776"/></marker></defs>
+      </svg>
+    </div>
+    <div class="footer"><span>Topic · diagram</span><span></span></div>
+  </section>
+
+  <!-- 4 JARGON TOOLTIP (example: ? badge + data-tip; works on HTML or SVG) -->
+  <section class="slide">
+    <p class="kicker">Glossing a term</p>
+    <h2>Hover the <span data-tip="Put the full definition here. The popover follows the cursor, stays in-bounds, works on SVG too, and is hidden when printing.">term&#160;<span style="display:inline-block;background:var(--accent2);color:#fff;border-radius:50%;width:30px;height:30px;line-height:30px;text-align:center;font-size:19px;font-weight:700">?</span></span> for a definition</h2>
+    <div class="fill">
+      <p class="lead">Any element with a <code>data-tip</code> attribute gets a styled tooltip. Mark the target with a visible <b>?</b> badge so the reader knows where to hover.</p>
+    </div>
+    <div class="footer"><span>Topic · glossary-on-hover</span><span></span></div>
+  </section>
+
+  <!-- 5 TAKEAWAYS -->
+  <section class="slide">
+    <p class="kicker">Key takeaways</p>
+    <h2>What to walk away with</h2>
+    <div class="fill">
+      <ul>
+        <li>Takeaway one.</li>
+        <li>Takeaway two.</li>
+      </ul>
+    </div>
+    <div class="footer"><span>Topic · takeaways</span><span></span></div>
+  </section>
+
+  <!-- 6 NEXT -->
+  <section class="slide center">
+    <p class="kicker">Up next</p>
+    <h1>Lesson NNN+1</h1>
+    <p class="lead">One-line teaser for the next lesson.</p>
+    <div class="footer"><span>Topic · fin</span><span></span></div>
+  </section>
+
+  <div class="bar" id="bar"></div>
+</div>
+
+<div class="nav">
+  <button onclick="praxisfluxCycleTheme(this)" id="themeBtn" aria-label="Toggle light/dark theme">◐ auto</button>
+  <button onclick="go(-1)">‹ Prev</button>
+  <button onclick="go(1)">Next ›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0;
+  const bar=document.getElementById('bar');
+  // Slide numbers: write "n / total" into each slide's footer right span (skip the title).
+  slides.forEach((s,k)=>{
+    const right=s.querySelector('.footer span:last-child');
+    if(right && k>0){ right.classList.add('pageno'); right.textContent=(k+1)+' / '+slides.length; }
+  });
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    bar.style.width=((i+1)/slides.length*100)+'%';
+  }
+  function go(d){show(i+d)}
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(1)}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(-1)}
+    else if(e.key==='Home'){show(0)} else if(e.key==='End'){show(slides.length-1)}
+  });
+  show(0);
+
+  // Theme toggle — the shared core, STAMPED from lib/html/base.html between the praxisflux:theme
+  // markers (scripts/sync-theme.mjs; never hand-edit inside them). The nav button binds it.
+  // praxisflux:theme:start
+  // Cycles auto -> light -> dark, stamping data-theme on <html> so the CSS token overrides win
+  // over the OS preference. No storage, no external calls. State rides on the button
+  // (dataset.mode) so any page can bind its own button.
+  function praxisfluxCycleTheme(btn){
+    const order=["auto","light","dark"], label={auto:"◐ auto",light:"☀ light",dark:"☾ dark"};
+    const next=order[(order.indexOf(btn.dataset.mode||"auto")+1)%order.length];
+    if(next==="auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme",next);
+    btn.dataset.mode=next; btn.textContent=label[next]; return next;
+  }
+  // praxisflux:theme:end
+
+  // Jargon tooltip — the shared module, STAMPED from lib/toolkit/tooltip.md between the
+  // praxisflux:tooltip-js markers (scripts/sync-shared.mjs; never hand-edit inside them).
+  // praxisflux:tooltip-js:start
+// One shared popover: follows the cursor on hover, toggles on click/tap (touch), clamps to
+// the viewport, and closes on tap-away. Works for HTML and SVG [data-tip] elements alike.
+(function(){
+  const pop=document.createElement('div'); pop.className='tip-pop'; document.body.appendChild(pop);
+  let shownFor=null;
+  const place=(x,y)=>{ const pad=14, r=pop.getBoundingClientRect();
+    let px=x+pad, py=y+pad;
+    if(px+r.width>innerWidth-8) px=Math.max(8,x-r.width-pad);
+    if(py+r.height>innerHeight-8) py=Math.max(8,y-r.height-pad);
+    pop.style.left=px+'px'; pop.style.top=py+'px'; };
+  const show=(t,x,y)=>{ pop.textContent=t.getAttribute('data-tip'); pop.classList.add('show'); shownFor=t; place(x,y); };
+  const hide=()=>{ pop.classList.remove('show'); shownFor=null; };
+  document.addEventListener('mouseover',e=>{ const t=e.target.closest&&e.target.closest('[data-tip]'); if(t) show(t,e.clientX,e.clientY); });
+  document.addEventListener('mousemove',e=>{ if(shownFor) place(e.clientX,e.clientY); });
+  document.addEventListener('mouseout',e=>{ const t=e.target.closest&&e.target.closest('[data-tip]'); if(t && !t.contains(e.relatedTarget)) hide(); });
+  document.addEventListener('click',e=>{ const t=e.target.closest&&e.target.closest('[data-tip]');
+    if(t){ e.stopPropagation(); (shownFor===t)?hide():show(t,e.clientX,e.clientY); } else hide(); });
+})();
+  // praxisflux:tooltip-js:end
+</script>
+</body>
+</html>
