@@ -5,15 +5,17 @@ kind: component
 sources:
   - internal/sim/policy.go
   - internal/sim/path.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # Reflex policy & pathfinding
 
 `decideIntent` is the deterministic pure function that gives idle, awake agents
-something to do. It stands in for the LLM planner until TASK-7 — and stays forever
-as the degraded-mode fallback: when no planner thoughts arrive, this keeps bodies
-alive.
+something to do — since TASK-7, only agents idle past the 120-tick grace (the
+planner's injection window). It is the permanent degraded mode: when no planner
+thoughts arrive, this keeps bodies alive. `resolveGoal` (same file) is the shared
+target resolver: planner goals from [[agent-mind]] resolve to coordinates through
+the exact same nearest-X helpers the reflex uses.
 
 ## How it works
 

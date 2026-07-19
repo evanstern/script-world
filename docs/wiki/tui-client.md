@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: aff0448e78ebec0f7724fc4c8ab02d4961e37236
 ---
 
 # TUI client
@@ -42,7 +42,8 @@ and shelters ⌂; the camera follows the living agents' centroid, arrow keys pan
 recenters), **chronicle** (raw event feed until TASK-11 narrates it), **metatron**
 (stub until TASK-12; already shows [[llm-orchestrator]] tier
 health, queues, and monthly spend when the world has one), **souls** (live agent bodies: status, current goal, five-cell
-needs gauges, inventory — persona/soul files arrive with TASK-7). Time controls: space toggles
+needs gauges, inventory, and each agent's newest memory line; the full soul.md
+files live on disk per [[agent-mind]]). Time controls: space toggles
 pause/resume based on last-known status; `[`/`]` step through `speedSteps`
 (1x → 4x → 8x → 16x → max); `q` detaches — the world keeps running.
 
