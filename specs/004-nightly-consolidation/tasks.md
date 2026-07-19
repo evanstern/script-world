@@ -42,8 +42,8 @@
 
 ## Phase 5: Polish
 
-- [ ] T014 [P] Full `go test ./... -race`; live 3-night run per quickstart Scenario 2 (+ degraded night Scenario 3 if practical); record specs/004-nightly-consolidation/quickstart-results.md
-- [ ] T015 Wiki (new consolidation note + re-pins of touched sources), board sync, PR
+- [X] T014 [P] Full `go test ./... -race`; live 3-night run per quickstart Scenario 2 (+ degraded night Scenario 3 if practical); record specs/004-nightly-consolidation/quickstart-results.md
+- [X] T015 Wiki (new consolidation note + re-pins of touched sources), board sync, PR
 
 ## Dependencies
 
