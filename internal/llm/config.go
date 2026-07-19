@@ -43,7 +43,9 @@ func DefaultConfig() Config {
 		MonthlyBudgetUSD: 100,
 		Local: LocalConfig{
 			Endpoint: "http://localhost:11434/v1",
-			Model:    "qwen3:8b",
+			// The operator's always-on local model; cogito:3b is the
+			// lighter "budget" alternative if kept perma-loaded.
+			Model: "gemma4:12b-mlx",
 		},
 		Cloud: CloudConfig{
 			Model:            "claude-opus-4-8",
