@@ -4,12 +4,14 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # Sim loop
 
-`sim.Loop` is the one goroutine that owns `State` and the write path to the store.
+`sim.Loop` is the one goroutine that owns `State` and the write path to the store,
+holding the static terrain (`worldmap.Map`, via `NewLoop(state, m, store, notify)`)
+as read-only context for tick generation.
 Everything external — pause, resume, speed changes, status reads — enters through a
 command channel and is applied at a tick boundary, with every applied command recorded
 as an event. That makes the [[event-log]] the complete input record of a run.
@@ -26,7 +28,7 @@ as an event. That makes the [[event-log]] the complete input record of a run.
 - **Max speed** (interval 0): spin ticks back-to-back with a non-blocking command
   check and a `runtime.Gosched()` every 1024 ticks.
 
-`runTick`: compute `stepEvents(state, nextTick)` (pure), advance `state.Tick`, apply
+`runTick`: compute `stepEvents(state, map, nextTick)` (pure), advance `state.Tick`, apply
 each event through the reducer, `AppendEvents` in one transaction, then `notify`
 (the [[ipc-server]] broadcast — must never block). Every `SnapshotEveryTicks = 3600`
 ticks it snapshots and prunes.

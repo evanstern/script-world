@@ -4,7 +4,7 @@ description: sim.State and Apply — the single event-driven mutation path used 
 kind: component
 sources:
   - internal/sim/state.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: 0754b5d6aaeb909ae6e1596ee62c28481aba09c4
 ---
 
 # Sim state & reducer
@@ -17,8 +17,9 @@ live execution.
 
 ## How it works
 
-`NewState(seed)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), wanderer
-positions derived from the seed via [[deterministic-rng]] — no stored RNG state.
+`NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), wanderer
+positions drawn from the seed via [[deterministic-rng]] onto passable terrain
+([[worldmap-generation]]'s `Passable`) — no stored RNG state.
 
 `Apply` switches on event type: `clock.paused`/`clock.resumed` flip `Paused`;
 `clock.speed_set` sets `Speed`; `clock.degraded`/`clock.recovered` maintain `Degraded`
