@@ -4,6 +4,13 @@ Transport: Unix domain socket `<savedir>/daemon.sock`. Framing: newline-delimite
 (one JSON object per line, UTF-8, no pretty-printing). Multiple concurrent clients
 allowed; all equal (trusted localhost operator).
 
+Line caps (TASK-19): request lines (client → daemon) are capped at 1 MiB; reply/push
+lines (daemon → client) at 64 MiB. The daemon never emits a longer line — a reply that
+would exceed the cap is replaced by an `ok:false` response whose `error` starts with
+`reply too large` (carrying the byte counts). Clients treat that prefix — and any raw
+over-long line — as fatal (`ipc.ErrReplyTooLarge`): reconnecting cannot shrink the
+payload, so they surface the error instead of retrying.
+
 ## Requests (client → daemon)
 
 ```json

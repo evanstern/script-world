@@ -6,11 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/evanstern/script-world/internal/metatron"
 )
+
+// ErrReplyTooLarge marks a daemon reply that exceeded the protocol's reply
+// cap (maxReplyBytes) — either refused by the server (replyTooLargePrefix
+// error) or, on a version-skewed daemon, an over-long line that killed the
+// scanner. Reconnecting cannot shrink the payload, so callers must fail fast
+// with the message instead of retrying (TASK-19).
+var ErrReplyTooLarge = errors.New("daemon reply exceeds the protocol reply cap")
 
 // Client is the attach side of the protocol, used by every CLI subcommand
 // (and by the TASK-3 TUI later).
@@ -60,7 +68,7 @@ func (c *Client) read() {
 		close(c.pushes)
 	}()
 	scanner := bufio.NewScanner(c.conn)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxReplyBytes)
 	for scanner.Scan() {
 		var msg wireMsg
 		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
@@ -90,7 +98,14 @@ func (c *Client) read() {
 	}
 	c.mu.Lock()
 	if err := scanner.Err(); err != nil && c.readErr == nil {
-		c.readErr = err
+		if errors.Is(err, bufio.ErrTooLong) {
+			// The server caps replies at maxReplyBytes too, so this only
+			// happens against a version-skewed daemon — still fatal, still
+			// not worth retrying.
+			c.readErr = fmt.Errorf("%w: a single reply line exceeded %d bytes (client/daemon version mismatch?)", ErrReplyTooLarge, maxReplyBytes)
+		} else {
+			c.readErr = err
+		}
 	}
 	c.mu.Unlock()
 }
@@ -134,6 +149,9 @@ func (c *Client) Call(cmd string, args any) (json.RawMessage, error) {
 		return nil, err
 	}
 	if !resp.OK {
+		if strings.HasPrefix(resp.Error, replyTooLargePrefix) {
+			return nil, fmt.Errorf("%w: %s", ErrReplyTooLarge, resp.Error)
+		}
 		return nil, errors.New(resp.Error)
 	}
 	return resp.Data, nil
