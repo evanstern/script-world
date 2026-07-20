@@ -53,6 +53,13 @@ type State struct {
 	// the default. Deliberately NOT omitempty: a spent-to-zero bank must
 	// round-trip as 0, never resurrect as the genesis value.
 	MetatronCharges int `json:"metatron_charges"`
+	// Norms and votes (TASK-13) — all event-sourced. Pre-TASK-13 snapshots
+	// unmarshal to zero values: no meeting place yet, no law, no meeting.
+	MeetingPlace   *Point       `json:"meeting_place,omitempty"`
+	Meeting        MeetingState `json:"meeting"`
+	Norms          []Norm       `json:"norms,omitempty"`
+	NextNormID     int          `json:"next_norm_id,omitempty"`
+	NextProposalID int          `json:"next_proposal_id,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -405,6 +412,11 @@ func (s *State) Apply(e store.Event) error {
 
 	case "metatron.charge_regenerated", "metatron.nudged":
 		return s.applyMetatron(e)
+
+	case "meeting.place_designated", "meeting.convened", "meeting.opened",
+		"meeting.turn_taken", "meeting.proposal_tabled", "meeting.proposal_resolved",
+		"meeting.proposal_rephrased", "meeting.closed", "norm.violated":
+		return s.applyGovernance(e)
 
 	case "agent.talked":
 		var p TalkedPayload

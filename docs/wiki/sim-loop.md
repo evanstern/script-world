@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Sim loop
@@ -53,11 +53,13 @@ state reflects, which is what makes client-side replicas gapless.
 boundary via `resolveGoal`, recorded as `agent.intent_set (source: planner)` +
 `agent.thought`. `Loop.InjectSocial` is the second door — the mind's injection
 door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]],
-narrator entries per [[chronicle]], nudges per [[metatron]] — `agent.thought` is
+narrator entries per [[chronicle]], nudges per [[metatron]], proposal rephrasing
+per [[governance]] — `agent.thought` is
 whitelisted as a reducer no-op, `chronicle.entry` appends the story ring,
-`metatron.nudged` spends a charge with a validating reducer the dry-run enforces):
+`metatron.nudged` spends a charge with a validating reducer the dry-run enforces,
+`meeting.proposal_rephrased` swaps an enacted norm's text and nothing else):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
-or nudge effects, dry-run on a state copy before applying. Model output enters
+nudge, or phrasing effects, dry-run on a state copy before applying. Model output enters
 the sim only through these two doors, as recorded input. The protocol `Status`
 carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
 

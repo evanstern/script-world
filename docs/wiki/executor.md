@@ -6,7 +6,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/terrain.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Executor
@@ -56,7 +56,15 @@ on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the
 names "the gru" as the cause when the last wound was recent. The per-minute social beat
 (`socialEvents`, [[social-fabric]]) runs the adjacency ladder — repay an open
 debt, give to a starving neighbor, or talk (chat-while-working, cooldown-bounded)
-with a verbatim rumor fallback — and the hourly due-check breaks overdue debts. `stepEvents` stays a pure function of (pre-tick state, map, next tick);
+with a verbatim rumor fallback — and the hourly due-check breaks overdue debts
+(also emitting a `norm.violated` when a repay-debts norm is in force — [[governance]]).
+`stepEvents` further runs the whole governance layer (TASK-13, `governanceEvents` in
+`governance.go`): the daily meeting lifecycle (11:30 convene with attendee intent
+pinning to `attend_meeting`, noon open, speaking-turn beats, timebox+grace close)
+and the per-minute curfew/exile violation detectors. `attend_meeting` is the one
+intent goal the executor sets itself (never planner-choosable): arrival idles at
+the meeting place until close, and stale pins clear when the meeting ends.
+`stepEvents` stays a pure function of (pre-tick state, map, next tick);
 every effect is an event through [[sim-state-reducer]] — the determinism and replay guarantees of
 the substrate hold unchanged over the whole layer.
 

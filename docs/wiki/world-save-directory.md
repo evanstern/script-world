@@ -4,7 +4,7 @@ description: One directory = one world run — manifest (world.json), path helpe
 kind: component
 sources:
   - internal/world/world.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # World save directory
@@ -33,8 +33,10 @@ so the map is never stored ([[worldmap-generation]]).
   `llm.json` (the [[llm-orchestrator]] config, written by `new`, deletable to
   disable inference), `SockPath()` → `daemon.sock`, `PidPath()` → `daemon.pid`,
   `LogPath()` → `daemon.log`, `CharterPath()` → `charter.md` (the player-editable
-  prompt) and `MetatronDir()` → `metatron/` (the angel's soul and transcript —
-  [[metatron]]).
+  prompt), `MetatronDir()` → `metatron/` (the angel's soul and transcript —
+  [[metatron]]), and `VillageCharterPath()` → `village_charter.md` (the village's
+  scribe-rendered law, deliberately distinct from Metatron's charter —
+  [[governance]], TASK-13).
 
 Runtime files (`daemon.sock`, `daemon.pid`) exist only while a daemon runs and are
 swept by [[daemon-lifecycle]] when stale. The full layout is documented in

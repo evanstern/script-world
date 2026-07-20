@@ -42,6 +42,7 @@ func New(worldDir string, seed uint64, m *worldmap.Map, stateJSON []byte) (*Scri
 		s.render(i)
 	}
 	s.renderChronicle()
+	s.renderVillageCharter()
 	go s.run()
 	return s, nil
 }
@@ -69,6 +70,7 @@ func (s *Scribe) run() {
 		case batch := <-s.events:
 			dirty := map[int]bool{}
 			chronDirty := false
+			charterDirty := false
 			for _, e := range batch {
 				s.replica.Apply(e)
 				if e.Tick > s.replica.Tick {
@@ -77,6 +79,9 @@ func (s *Scribe) run() {
 				switch e.Type {
 				case "chronicle.entry":
 					chronDirty = true
+				case "meeting.place_designated", "meeting.proposal_resolved",
+					"meeting.proposal_rephrased", "norm.violated":
+					charterDirty = true
 				case "social.relation_changed":
 					var p sim.RelationChangedPayload
 					if json.Unmarshal(e.Payload, &p) == nil {
@@ -103,6 +108,9 @@ func (s *Scribe) run() {
 			}
 			if chronDirty {
 				s.renderChronicle()
+			}
+			if charterDirty {
+				s.renderVillageCharter()
 			}
 		}
 	}
@@ -139,6 +147,67 @@ func (s *Scribe) renderChronicle() {
 		b.WriteString("\n*No entries yet — the narrator writes as days pass.*\n")
 	}
 	os.WriteFile(filepath.Join(s.worldDir, "chronicle.md"), []byte(b.String()), 0o644)
+}
+
+// renderVillageCharter writes village_charter.md from event-sourced norm
+// state (TASK-13) — the law with provenance, a regenerable view like souls
+// and the chronicle, never hand-edited and never authoritative. Distinct
+// from Metatron's player-editable charter.md.
+func (s *Scribe) renderVillageCharter() {
+	name := func(i int) string {
+		if i >= 0 && i < len(s.replica.Agents) {
+			return s.replica.Agents[i].Name
+		}
+		return "someone"
+	}
+	var b strings.Builder
+	b.WriteString("# Village charter\n\n")
+	if s.replica.MeetingPlace != nil {
+		fmt.Fprintf(&b, "Meeting place: (%d, %d). The village assembles daily at noon.\n",
+			s.replica.MeetingPlace.X, s.replica.MeetingPlace.Y)
+	}
+
+	var rules, judgments, repealed []string
+	for _, n := range s.replica.Norms {
+		provenance := fmt.Sprintf("proposed by %s, passed day %d (%s)", name(n.Proposer), n.DayPassed, n.Tally)
+		switch {
+		case !n.Active:
+			repealed = append(repealed, fmt.Sprintf("- ~~%s~~ — %s, repealed day %d", n.Text, provenance, n.DayRepealed))
+		case n.Kind == sim.NormExile:
+			judgments = append(judgments, fmt.Sprintf("- %s is exiled. — %s", name(n.Target), provenance))
+		default:
+			line := fmt.Sprintf("- %s — %s", n.Text, provenance)
+			if n.Amended {
+				line += fmt.Sprintf(", amended day %d", n.DayAmended)
+			}
+			if v := len(n.Violations); v > 0 {
+				line += fmt.Sprintf(" · %d recorded violation(s)", v)
+			}
+			rules = append(rules, line)
+		}
+	}
+	if len(rules) > 0 {
+		b.WriteString("\n## Rules in force\n\n")
+		for _, l := range rules {
+			b.WriteString(l + "\n")
+		}
+	}
+	if len(judgments) > 0 {
+		b.WriteString("\n## Standing judgments\n\n")
+		for _, l := range judgments {
+			b.WriteString(l + "\n")
+		}
+	}
+	if len(repealed) > 0 {
+		b.WriteString("\n## Repealed\n\n")
+		for _, l := range repealed {
+			b.WriteString(l + "\n")
+		}
+	}
+	if len(rules)+len(judgments)+len(repealed) == 0 {
+		b.WriteString("\n*No rules yet — the village legislates itself at the daily noon meeting.*\n")
+	}
+	os.WriteFile(filepath.Join(s.worldDir, "village_charter.md"), []byte(b.String()), 0o644)
 }
 
 // render writes one agent's soul.md from replica state.

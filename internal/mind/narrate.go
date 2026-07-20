@@ -135,6 +135,58 @@ func (md *Mind) chronicleNote(e store.Event) {
 		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "musing" {
 			line = fmt.Sprintf("%s mused: %q.", name(p.Agent), p.Text)
 		}
+	case "meeting.opened":
+		var p sim.MeetingOpenedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			if len(p.Attendees) == 0 {
+				line = "Noon came and went; nobody gathered for the village meeting."
+			} else {
+				names := make([]string, len(p.Attendees))
+				for i, a := range p.Attendees {
+					names[i] = name(a)
+				}
+				line = fmt.Sprintf("The village assembled at noon: %s.", strings.Join(names, ", "))
+			}
+		}
+	case "meeting.turn_taken":
+		var p sim.TurnTakenPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Raised != "" {
+			line = fmt.Sprintf("%s raised a grievance at the meeting: %q.", name(p.Agent), p.Raised)
+		}
+	case "meeting.proposal_tabled":
+		var p sim.ProposalPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			line = fmt.Sprintf("%s put a proposal to the assembly: %q.", name(p.Proposer), p.Text)
+		}
+	case "meeting.proposal_resolved":
+		var p sim.ProposalResolvedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			tally := fmt.Sprintf("%d-%d", len(p.Yeas), len(p.Nays))
+			switch {
+			case p.Passed && p.Kind == sim.ProposeExile:
+				line = fmt.Sprintf("The village voted %s to exile %s.", tally, name(p.Target))
+			case p.Passed:
+				line = fmt.Sprintf("The village passed %s's proposal %s: %q.", name(p.Proposer), tally, p.Text)
+			default:
+				line = fmt.Sprintf("The village voted down %s's proposal %s.", name(p.Proposer), tally)
+			}
+		}
+	case "meeting.closed":
+		var p sim.MeetingClosedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			line = "The village meeting ended and everyone went back to their day."
+		}
+	case "norm.violated":
+		var p sim.NormViolatedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			if n := sim.NormByID(md.replica, p.NormID); n != nil {
+				verb := "was seen breaking the village's law"
+				if n.Kind == sim.NormExile {
+					verb = "was seen defying their exile"
+				}
+				line = fmt.Sprintf("%s %s: %q.", name(p.Violator), verb, n.Text)
+			}
+		}
 	case "sim.night_started":
 		var p sim.DayPayload
 		if json.Unmarshal(e.Payload, &p) == nil {

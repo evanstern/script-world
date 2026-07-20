@@ -101,6 +101,10 @@ type Mind struct {
 	narrQ     chan narrJob
 	narrRetry chan narrCarry
 
+	// Governance phrasing (TASK-13): bounded queue + single-flight worker
+	// rephrasing enacted proposals in the proposer's voice.
+	meetQ chan meetingJob
+
 	events chan []store.Event
 	done   chan struct{}
 }
@@ -125,6 +129,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		consolQ:   make(chan consolJob, sim.AgentCount),
 		narrQ:     make(chan narrJob, 8),
 		narrRetry: make(chan narrCarry, 1),
+		meetQ:     make(chan meetingJob, 4),
 		events:    make(chan []store.Event, 256),
 		done:      make(chan struct{}),
 	}
@@ -138,6 +143,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 	go md.planWorker()
 	go md.consolidateWorker()
 	go md.narrateWorker()
+	go md.meetingWorker()
 	return md, nil
 }
 
@@ -195,6 +201,8 @@ func (md *Mind) absorb(batch []store.Event) {
 			md.maybeStartConversation(e)
 		case "agent.slept":
 			md.maybeConsolidate(e)
+		case "meeting.proposal_resolved":
+			md.maybePhraseProposal(e)
 		}
 		md.chronicleNote(e)
 	}
@@ -248,6 +256,9 @@ func (md *Mind) plan() {
 		if a.Dead || a.Asleep {
 			md.pending[i] = false
 			continue
+		}
+		if sim.AtMeeting(md.replica, i) {
+			continue // assembled (TASK-13): pending stays armed for after close
 		}
 		if !md.pending[i] && tick < md.nextDue[i] {
 			continue
@@ -335,7 +346,7 @@ func (md *Mind) muse() {
 	pick := -1
 	for i := range md.replica.Agents {
 		a := &md.replica.Agents[i]
-		if a.Dead || a.Asleep || tick < md.museDue[i] {
+		if a.Dead || a.Asleep || tick < md.museDue[i] || sim.AtMeeting(md.replica, i) {
 			continue
 		}
 		if pick < 0 || md.museDue[i] < md.museDue[pick] {

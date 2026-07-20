@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 34f180b7830805f1168aa572751bc7893c845898
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Overview
@@ -15,8 +15,9 @@ script-world is an ambient, always-on village simulation: a Go daemon advances t
 24/7 whether or not anyone is watching, and terminal clients attach and detach without
 affecting it. The current codebase is the **time substrate** (TASK-2 / spec
 `specs/001-world-daemon`): tick loop, clock, persistence, and client protocol. The
-village systems — agent minds, the social fabric, the chronicle, and Metatron —
-arrived in later tasks and plug into this substrate.
+village systems — agent minds, the social fabric, the chronicle, Metatron, and
+village self-governance (norms and votes, [[governance]]) — arrived in later
+tasks and plug into this substrate.
 
 ## How it works
 

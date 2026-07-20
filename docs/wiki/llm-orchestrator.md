@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # LLM orchestrator
@@ -21,9 +21,10 @@ the substrate is structurally untouchable by inference.
 ## How it works
 
 **Tiers and routing** (`llm.go`): `Kind` → tier per the grounding decisions —
-`planner` and `conversation` go **local** (free, the only viable home for ~3,800+
-calls/day); `consolidation`, `narrator`, `drama`, and `metatron` (the gatekeeper's
-console turns and digests, [[metatron]]) go **cloud**. The local tier
+`planner`, `conversation`, and `meeting` (proposal rephrasing, best-effort
+flavor — [[governance]], TASK-13) go **local** (free, the only viable home for
+~3,800+ calls/day); `consolidation`, `narrator`, `drama`, and `metatron` (the
+gatekeeper's console turns and digests, [[metatron]]) go **cloud**. The local tier
 (`providers.go`) speaks OpenAI-compatible chat-completions over raw HTTP (Ollama at
 `http://localhost:11434/v1`, default model `gemma4:12b-mlx` — the operator's
 always-on local model); the cloud tier is provider-selectable

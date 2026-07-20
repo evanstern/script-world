@@ -50,6 +50,12 @@ const (
 	// injection builder; between shelter and near-death so the divine
 	// reliably surfaces without outranking real trauma.
 	SalDream = 8
+	// Governance (TASK-13): speaking is routine, outcomes matter, watching a
+	// neighbor break the law sticks, being cast out is formative.
+	salMeetingSpoke   = 3
+	salMeetingOutcome = 5
+	salNormViolation  = 6
+	salExiled         = 9
 )
 
 // WindowK is the working-memory bound: prompts never carry more than this

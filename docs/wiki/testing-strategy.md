@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Testing strategy
@@ -50,8 +50,9 @@ pause freezes the clock, compression ratios hold (loose tolerances over short
 windows; the spec's 5% applies to 5-minute windows); C: kill -9 → lossless resume
 within 10 s, restart-while-paused wakes paused, graceful stop idempotent; E: a
 `cp -R`'d stopped world runs. `determinism_e2e_test.go` compares two same-seed
-daemons' sim histories over their common tick prefix, excluding wall-dependent
-`daemon.*`/`clock.*` bookkeeping.
+daemons' sim histories over their common tick prefix (past tick 25000, so the
+full day-1 [[governance]] meeting cycle is inside the compared window),
+excluding wall-dependent `daemon.*`/`clock.*` bookkeeping.
 
 The whole suite runs under `-race`; it caught a real race (store `lastSeq`, loop
 writer vs IPC readers — now atomic).

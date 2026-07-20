@@ -50,6 +50,10 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 	// The gru: nightly emergence, stalking, wounds, dawn withdrawal (gru.go).
 	events = append(events, gruStep(s, m, night, nextTick)...)
 
+	// Governance (TASK-13): the daily noon meeting lifecycle and the
+	// per-minute violation detectors (governance.go).
+	events = append(events, governanceEvents(s, m, nextTick)...)
+
 	// Forage regrowth.
 	for _, h := range s.Harvested {
 		if h.Regrow == nextTick {
@@ -120,6 +124,24 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			continue
 		}
 
+		// Meeting pinning (TASK-13): while the village convenes, attendees
+		// drop what they're doing and head for the meeting place. The goal
+		// is executor-set only — never planner-choosable — and stale pins
+		// clear once the meeting ends.
+		if meetingActive(s) && s.MeetingPlace != nil && attendCandidate(s, i) &&
+			(a.Intent == nil || a.Intent.Goal != "attend_meeting") {
+			emit("agent.intent_set", IntentSetPayload{
+				Agent: i, Goal: "attend_meeting",
+				TargetX: s.MeetingPlace.X, TargetY: s.MeetingPlace.Y,
+				Source: "meeting",
+			})
+			continue
+		}
+		if !meetingActive(s) && a.Intent != nil && a.Intent.Goal == "attend_meeting" {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			continue
+		}
+
 		if a.Intent == nil {
 			// The reflex is the fallback mind (TASK-7): it acts only on
 			// agents idle past the grace window, leaving room for planner
@@ -167,6 +189,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 
 	// Hourly ledger due-check: overdue open debts break, permanently.
 	if nextTick%3600 == 0 {
+		repayNorm := activeNormOfKind(s, NormRepayDebts)
 		for _, d := range s.Debts {
 			if d.Status == "open" && nextTick > d.Due {
 				events = append(events,
@@ -179,6 +202,11 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 							Reason: "promise broken"})},
 					memoryAboutEvent(nextTick, d.Creditor, d.Debtor, toneNeverPaid, salNeverPaid,
 						"%s never repaid the food I gave them.", s.Agents[d.Debtor].Name))
+				// A repay-debts norm in force makes the broken promise a
+				// witnessed crime too (TASK-13).
+				if repayNorm != nil {
+					events = append(events, violationEvents(s, repayNorm, d.Debtor, nextTick)...)
+				}
 			}
 		}
 	}
@@ -322,6 +350,10 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		return events
 	case "wander", "goto_warmth", "seek":
 		emit("agent.intent_done", AgentPayload{Agent: i})
+		return events
+	case "attend_meeting":
+		// Assembled: stand at the meeting place until it closes (the
+		// executor clears the pin once the meeting ends).
 		return events
 	}
 

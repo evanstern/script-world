@@ -71,8 +71,9 @@ serve it back to prompts — planner prompts carry a "Last conversation, with X:
 the second injection door beside `inject_intent`; the [[llm-orchestrator]]'s
 priority lane keeps dialogue turns from starving behind planner traffic;
 [[agent-mind]]'s planner prompts read bonds/debts/reputation/rumors; the scribe
-renders the Bonds section into soul.md. TASK-13 (norms/votes) builds on these
-edges; TASK-11's chronicle narrates the conversation events.
+renders the Bonds section into soul.md. [[governance]] (TASK-13) votes over these
+edges and writes violation consequences back into them; TASK-11's chronicle
+narrates the conversation events.
 
 ## Operational notes
 
