@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 8c6b309c4596e4671fbdcaf19d03d935ce85baff
+verified_against: ceafd4106848291cddc9492351461d961043390f
 ---
 
 # Daemon lifecycle
