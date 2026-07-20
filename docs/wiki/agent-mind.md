@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
+verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
 ---
 
 # Agent mind
@@ -49,8 +49,11 @@ idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floo
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
 context block (bonds, debts, reputation, loudest rumor — [[social-fabric]]), and
-the driver also runs conversations (see [[social-fabric]]). Due agents
-get one serialized planner call (`llm.KindPlanner`, persona system prefix, situation
+the driver also runs conversations (see [[social-fabric]]). Due agents are
+enqueued as immutable prompt snapshots to a single-flight-per-agent planner
+worker — a model call must never block the absorb loop, or the events channel
+overflows at high speed and edge triggers are dropped. Each job is one call
+(`llm.KindPlanner`, persona system prefix, situation
 + memory window suffix, MaxTokens 256); the first JSON object in the reply is parsed
 against the goal vocabulary and injected via `Loop.InjectIntent` — which validates,
 resolves coordinates deterministically at the tick boundary (`resolveGoal`), and

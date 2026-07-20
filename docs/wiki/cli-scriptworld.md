@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
 ---
 
 # scriptworld CLI
