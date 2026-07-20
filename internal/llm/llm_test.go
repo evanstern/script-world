@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/store"
 )
 
@@ -496,5 +497,25 @@ func TestConfigProviderValidation(t *testing.T) {
 	}
 	if _, err := LoadConfig(write(`{"model": "m", "provider": "openai_compat", "endpoint": "http://r/v1", "api_key": "k"}`)); err != nil {
 		t.Errorf("valid router config rejected: %v", err)
+	}
+}
+
+// TestKindsCompleteAndRegistered: Kinds() exposes exactly the routing table,
+// and every kind resolves to a cognition decision class — the compile-time
+// half of the daemon's FR-002 startup gate.
+func TestKindsCompleteAndRegistered(t *testing.T) {
+	ks := Kinds()
+	if len(ks) != len(routing) {
+		t.Fatalf("Kinds() returned %d, routing has %d", len(ks), len(routing))
+	}
+	names := make([]string, 0, len(ks))
+	for _, k := range ks {
+		if _, ok := routing[k]; !ok {
+			t.Errorf("Kinds() includes unrouted kind %q", k)
+		}
+		names = append(names, string(k))
+	}
+	if err := cognition.ValidateKinds(names); err != nil {
+		t.Errorf("ValidateKinds over all llm kinds: %v", err)
 	}
 }

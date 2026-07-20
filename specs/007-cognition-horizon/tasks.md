@@ -14,8 +14,8 @@
 
 **Purpose**: package scaffolding and save-dir plumbing
 
-- [ ] T001 Scaffold `internal/cognition` package: doc.go stating the doctrine (decision-4) and the purity rule (stdlib-only, no mind/sim/llm imports)
-- [ ] T002 [P] Add `CalibrationPath()` helper (→ `calibration.json`) in internal/world/world.go with test in internal/world/world_test.go
+- [x] T001 Scaffold `internal/cognition` package: doc.go stating the doctrine (decision-4) and the purity rule (stdlib-only, no mind/sim/llm imports)
+- [x] T002 [P] Add `CalibrationPath()` helper (→ `calibration.json`) in internal/world/world.go with test in internal/world/world_test.go
 
 ---
 
@@ -25,12 +25,12 @@
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete
 
-- [ ] T003 Implement DecisionClass registry in internal/cognition/registry.go per contracts/registry.md (classes, Fibonacci points, BudgetTicks, degrade, FutureDated; init-time validation: Fibonacci membership, positive budgets) with table tests in internal/cognition/registry_test.go
-- [ ] T004 [P] Implement pure `Route(class, ticksPerSecond, secondsPerPoint) Verdict` in internal/cognition/route.go (verdict carries predicted wall ms, predicted drift ticks, allow/suppress + arithmetic string) with the contract's sanity table as test cases in internal/cognition/route_test.go
-- [ ] T005 [P] Implement per-tier Estimator in internal/cognition/estimate.go (EWMA α=0.2, spike >3× excluded+counted, 20-sample window, >30% breach signal with re-arm) with spike-rejection/drift-following/bootstrap tests in internal/cognition/estimate_test.go
-- [ ] T006 [P] Implement CalibrationProfile load/save/bootstrap in internal/cognition/calibration.go per contracts/calibration.md (bootstrap 20/10 s/pt; malformed file → warning + bootstrap, never crash) with tests in internal/cognition/calibration_test.go
-- [ ] T007 Add startup completeness gate: every `llm.Kind` the orchestrator accepts must map to a registered class or daemon start fails naming the kind — wire in the daemon start path (internal/daemon) next to LLM config load, with test
-- [ ] T008 Add new event payload structs + whitelist entries in internal/sim (cog.thought, cog.outcome, cog.recalibration_recommended, agent.intent_rejected as reducer no-ops on the inject_social door; canonical JSON field order per contracts/events.md) with whitelist/no-op/dry-run tests in internal/sim/loop_test.go
+- [x] T003 Implement DecisionClass registry in internal/cognition/registry.go per contracts/registry.md (classes, Fibonacci points, BudgetTicks, degrade, FutureDated; init-time validation: Fibonacci membership, positive budgets) with table tests in internal/cognition/registry_test.go
+- [x] T004 [P] Implement pure `Route(class, ticksPerSecond, secondsPerPoint) Verdict` in internal/cognition/route.go (verdict carries predicted wall ms, predicted drift ticks, allow/suppress + arithmetic string) with the contract's sanity table as test cases in internal/cognition/route_test.go
+- [x] T005 [P] Implement per-tier Estimator in internal/cognition/estimate.go (EWMA α=0.2, spike >3× excluded+counted, 20-sample window, >30% breach signal with re-arm) with spike-rejection/drift-following/bootstrap tests in internal/cognition/estimate_test.go
+- [x] T006 [P] Implement CalibrationProfile load/save/bootstrap in internal/cognition/calibration.go per contracts/calibration.md (bootstrap 20/10 s/pt; malformed file → warning + bootstrap, never crash) with tests in internal/cognition/calibration_test.go
+- [x] T007 Add startup completeness gate: every `llm.Kind` the orchestrator accepts must map to a registered class or daemon start fails naming the kind — wire in the daemon start path (internal/daemon) next to LLM config load, with test
+- [x] T008 Add new event payload structs + whitelist entries in internal/sim (cog.thought, cog.outcome, cog.recalibration_recommended, agent.intent_rejected as reducer no-ops on the inject_social door; canonical JSON field order per contracts/events.md) with whitelist/no-op/dry-run tests in internal/sim/loop_test.go
 
 **Checkpoint**: `go test ./internal/cognition/ ./internal/world/` green; registry/router/estimator usable by all stories
 

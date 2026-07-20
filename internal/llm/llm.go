@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -55,6 +56,18 @@ var routing = map[Kind]Tier{
 	KindMetatron:      TierCloud,
 	KindMusing:        TierLocal,
 	KindMeeting:       TierLocal,
+}
+
+// Kinds returns every call kind the orchestrator accepts, sorted — the
+// cognition registry's completeness gate (FR-002) iterates this at daemon
+// start so an unregistered kind can never reach a model at runtime.
+func Kinds() []Kind {
+	out := make([]Kind, 0, len(routing))
+	for k := range routing {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 var (

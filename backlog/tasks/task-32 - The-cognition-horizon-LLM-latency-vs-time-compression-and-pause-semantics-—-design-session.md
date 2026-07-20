@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-20 20:30'
-updated_date: '2026-07-20 21:33'
+updated_date: '2026-07-20 21:44'
 labels:
   - design
 dependencies: []
@@ -28,8 +28,8 @@ Spec: specs/007-cognition-horizon
 - [x] #2 The spec states the cognition-horizon doctrine as a decision doc (sibling to decision-3): LLM authority is scoped by decision timescale vs turn latency in game time, not by capping speed
 - [x] #3 The spec defines pause semantics explicitly: what happens to in-flight planner calls and conversations when the world pauses
 - [x] #4 Staleness telemetry (snapshot tick + landing tick on every injected intent) is specified as the first deliverable so tuning is measured, not guessed
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
 - [ ] #7 Spec phase: User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP
 - [ ] #8 Spec phase: User Story 2 — Doomed thoughts are never attempted (Priority: P2)
 - [ ] #9 Spec phase: User Story 3 — Stale intents never act (Priority: P3)
@@ -52,4 +52,6 @@ Pre-session decisions (user, 2026-07-20): (1) DETERMINISTIC ROUTER — the thing
 Design session complete (2026-07-20): spec specs/007-cognition-horizon authored (5 prioritized stories: telemetry+calibration P1, deterministic router P2, landing ladder P3, future-dating+conditional plans P4, pause semantics P5; 20 FRs, 7 SCs; quality checklist all-pass). Doctrine recorded as decision-4. Pause decided: world freezes, minds catch up — in-flight thought lands at the frozen tick at zero game-tick staleness; no new cognition while paused; cancelling in-flight work rejected as wasteful. Spec linked via spec-bridge (marker + this note). Next: speckit-plan / speckit-tasks on this branch.
 
 spec-bridge sync: Setup: 0/2 · Foundational (Blocking Prerequisites): 0/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 0/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 0/3 · User Story 3 — Stale intents never act (Priority: P3): 0/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 0/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 0/2 · Polish & Cross-Cutting Concerns: 0/4
+
+spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 0/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 0/3 · User Story 3 — Stale intents never act (Priority: P3): 0/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 0/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 0/2 · Polish & Cross-Cutting Concerns: 0/4
 <!-- SECTION:NOTES:END -->

@@ -206,6 +206,10 @@ func (s *State) Apply(e store.Event) error {
 		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick, Subject: p.Subject, Tone: p.Tone})
 	case "agent.thought":
 		// Chronicle material; no state effect.
+	case "cog.thought", "cog.outcome", "cog.recalibration_recommended",
+		"agent.intent_rejected":
+		// Cognition-horizon telemetry (TASK-32): recorded observability,
+		// no state effect.
 
 	case "sim.night_started":
 		s.Night = true

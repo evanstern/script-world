@@ -144,6 +144,12 @@ var injectSocialWhitelist = map[string]bool{
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.
 	"meeting.proposal_rephrased": true,
+	// Cognition telemetry (TASK-32): recorded observability, reducer no-ops.
+	// Every thought's lifecycle lands here so no failure is ever silent
+	// (FR-015) and thought chains are walkable from the log alone (FR-020).
+	"cog.thought":                   true,
+	"cog.outcome":                   true,
+	"cog.recalibration_recommended": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
@@ -197,13 +203,13 @@ func (l *Loop) status() Status {
 		eff = 0
 	}
 	return Status{
-		Tick:          s.Tick,
-		GameTime:      clock.Format(s.Tick),
-		Paused:        s.Paused,
-		Speed:         s.Speed,
-		EffectiveRate: eff,
-		Degraded:      s.Degraded,
-		LastSeq:       l.st.LastSeq(),
+		Tick:            s.Tick,
+		GameTime:        clock.Format(s.Tick),
+		Paused:          s.Paused,
+		Speed:           s.Speed,
+		EffectiveRate:   eff,
+		Degraded:        s.Degraded,
+		LastSeq:         l.st.LastSeq(),
 		MetatronCharges: s.MetatronCharges,
 	}
 }

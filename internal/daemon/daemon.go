@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/metatron"
@@ -98,6 +99,15 @@ func Run(dir string) error {
 	if llmCfg, err := llm.LoadConfig(w.LLMConfigPath()); err != nil {
 		return err
 	} else if llmCfg != nil {
+		// Cognition-horizon gate (FR-002): every call kind must resolve to
+		// a registered decision class before a model is ever reachable.
+		kinds := make([]string, 0, 8)
+		for _, k := range llm.Kinds() {
+			kinds = append(kinds, string(k))
+		}
+		if err := cognition.ValidateKinds(kinds); err != nil {
+			return err
+		}
 		orch, err := llm.New(*llmCfg, st)
 		if err != nil {
 			return err

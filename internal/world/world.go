@@ -99,13 +99,18 @@ func (w *World) Map() *worldmap.Map {
 
 func (w *World) DBPath() string        { return filepath.Join(w.Dir, "world.db") }
 func (w *World) LLMConfigPath() string { return filepath.Join(w.Dir, "llm.json") }
-func (w *World) SockPath() string      { return filepath.Join(w.Dir, "daemon.sock") }
-func (w *World) PidPath() string       { return filepath.Join(w.Dir, "daemon.pid") }
-func (w *World) CharterPath() string   { return filepath.Join(w.Dir, "charter.md") }
+
+// CalibrationPath is the seconds-per-point profile written only by
+// `scriptworld calibrate` (specs/007-cognition-horizon); an absent file is
+// legal — pessimistic bootstrap defaults apply.
+func (w *World) CalibrationPath() string { return filepath.Join(w.Dir, "calibration.json") }
+func (w *World) SockPath() string        { return filepath.Join(w.Dir, "daemon.sock") }
+func (w *World) PidPath() string         { return filepath.Join(w.Dir, "daemon.pid") }
+func (w *World) CharterPath() string     { return filepath.Join(w.Dir, "charter.md") }
 
 // VillageCharterPath is the village's law (TASK-13) — a scribe-rendered
 // derived view of event-sourced norms, distinct from Metatron's
 // player-editable charter.md above.
 func (w *World) VillageCharterPath() string { return filepath.Join(w.Dir, "village_charter.md") }
-func (w *World) MetatronDir() string   { return filepath.Join(w.Dir, "metatron") }
-func (w *World) LogPath() string       { return filepath.Join(w.Dir, "daemon.log") }
+func (w *World) MetatronDir() string        { return filepath.Join(w.Dir, "metatron") }
+func (w *World) LogPath() string            { return filepath.Join(w.Dir, "daemon.log") }
