@@ -4,7 +4,7 @@ title: 'Conversations v1.5: multi-party capture and rich relationship fodder'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 22:27'
-updated_date: '2026-07-19 22:47'
+updated_date: '2026-07-20 00:40'
 labels:
   - sim
   - llm
@@ -38,3 +38,9 @@ Design:
 5. Observability: State.Conversations count + last gist surface via state (souls/TUI chronicle already shows the events); daemon log lines retained.
 Tests: N-party scene formation from adjacency; reducer ring + back-compat; fodder events (subject-tagged gists tellable via TellableFor); prompt callback content; full suite. Live proof on muse-proof world at 4x.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Live proof paused (2026-07-19 evening): the operator's own world (second checkout) is running against the same local gemma — two daemons contending pushed calls past the 90s timeout and tripped both circuit breakers (filed as TASK-24). Proving world convo-proof stopped to free the model; db retained in session scratchpad. Unit/integration evidence complete (scene formation, record ring + back-compat, subject-tagged fodder via real loop + TellableFor, race-clean full suite). Live acceptance re-runs when the local model is free.
+<!-- SECTION:NOTES:END -->
