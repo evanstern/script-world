@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # TUI client
@@ -28,10 +28,13 @@ replica starts gapless by construction. `listen` delivers one push per invocatio
 `Update` re-arms it. `applyEvent` skips seqs already folded into the snapshot, applies
 the rest to the replica, bumps its tick, and appends to the chronicle ring.
 
-Resilience: any error becomes `disconnectedMsg` → the header shows the failure and a
+Resilience: errors become `disconnectedMsg` → the header shows the failure and a
 2-second retry loop re-dials; a `dropped` push (subscriber overflow) tears the client
 down and reconnects from a fresh state snapshot, because the replica may have missed
-events. A 1-second poll refreshes the clock/status line (quiet ticks produce no
+events. One exception is fatal (TASK-19): `ipc.ErrReplyTooLarge` (a reply over the
+protocol's 64 MiB ceiling — reconnecting cannot shrink the state) quits instead of
+retrying, rendering the reason in the final view and exposing it via
+`Model.FatalErr()`, which `cmdUI` turns into a non-zero exit. A 1-second poll refreshes the clock/status line (quiet ticks produce no
 events, so the replica's tick alone would lag).
 
 Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — a camera

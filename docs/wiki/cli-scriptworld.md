@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # scriptworld CLI
@@ -40,6 +40,9 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
   clock line.
 - `ui <dir>` — the full-screen Bubble Tea client ([[tui-client]]): map, chronicle,
   metatron, souls panes over a live world replica; runs in the alternate screen.
+  If the TUI quits on an unrecoverable protocol error (`Model.FatalErr()`, e.g. a
+  reply over the IPC cap — TASK-19), the command returns it as a real error and
+  exits non-zero.
 - `attach <dir>` — line-mode: status header, live subscribe streamed to stdout,
   stdin commands (`pause`, `resume`, `speed <v>`, `status`, `quit`); handles
   `dropped` pushes by re-subscribing. Quit detaches; the world keeps running.

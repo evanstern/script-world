@@ -23,8 +23,22 @@ import (
 // (never blocks the sim loop) and the client re-syncs with subscribe{since}.
 const pushBufferSize = 1024
 
-// maxLineBytes bounds a single protocol line.
-const maxLineBytes = 1 << 20
+// maxRequestBytes bounds a single client→server request line. Requests are
+// small (a command plus args), so 1 MiB is generous.
+const maxRequestBytes = 1 << 20
+
+// maxReplyBytes bounds a single server→client line and is the protocol's
+// documented reply ceiling: the client sizes its read buffer to exactly this,
+// and the server never emits a longer line (writeResponse substitutes an
+// actionable error instead). Split from the old shared 1 MiB maxLineBytes
+// (TASK-19): the "state" reply carries the whole sim.State on one line and
+// outgrew 1 MiB on long runs, leaving clients stuck in a retry loop.
+const maxReplyBytes = 64 << 20
+
+// replyTooLargePrefix marks a server-substituted oversized-reply error so
+// clients can classify it as fatal (ErrReplyTooLarge) — reconnecting cannot
+// shrink the payload, so retrying is pointless.
+const replyTooLargePrefix = "reply too large"
 
 // Server hosts the UDS protocol for one world. The sim loop's lifecycle is
 // fully decoupled from every session's (FR-011).
@@ -211,7 +225,7 @@ func (c *session) serve() {
 		c.srv.dropSession(c)
 	}()
 	scanner := bufio.NewScanner(c.conn)
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxRequestBytes)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -471,18 +485,39 @@ func (c *session) push(ch chan store.Event, quit chan struct{}, cursor int64) {
 	}
 }
 
-func (c *session) writeResponse(r Response) bool { return c.writeJSON(r) }
-func (c *session) writePush(p Push) bool         { return c.writeJSON(p) }
-
-func (c *session) writeJSON(v any) bool {
-	b, err := json.Marshal(v)
+// writeResponse guarantees the wire never carries a line the client cannot
+// read: a reply over maxReplyBytes is replaced by an ok:false error (same ID,
+// replyTooLargePrefix) that tells the caller what happened and how big the
+// payload was — an actionable failure instead of a client-side scanner death.
+func (c *session) writeResponse(r Response) bool {
+	b, err := json.Marshal(r)
 	if err != nil {
 		return false
 	}
+	if len(b)+1 > maxReplyBytes {
+		sub := Response{ID: r.ID, OK: false, Error: fmt.Sprintf(
+			"%s: reply is %d bytes, over the %d-byte protocol cap — the world state has outgrown what a single attach reply can carry (nightly consolidation shrinks it over time)",
+			replyTooLargePrefix, len(b), maxReplyBytes)}
+		if b, err = json.Marshal(sub); err != nil {
+			return false
+		}
+	}
+	return c.writeLine(b)
+}
+
+func (c *session) writePush(p Push) bool {
+	b, err := json.Marshal(p)
+	if err != nil || len(b)+1 > maxReplyBytes {
+		return false // a single event can't realistically hit the cap; drop it
+	}
+	return c.writeLine(b)
+}
+
+func (c *session) writeLine(b []byte) bool {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	_, err = c.conn.Write(append(b, '\n'))
+	_, err := c.conn.Write(append(b, '\n'))
 	if err != nil && !errors.Is(err, net.ErrClosed) {
 		c.conn.Close() // dead client; reader will unwind
 	}

@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # IPC protocol
@@ -48,8 +48,16 @@ speed, effective_rate, degraded, metatron_charges — the ⚡ bank, so clients n
 state fetch), `daemon` (pid, uptime_seconds, subscribers), `log`
 (last_seq).
 
+Line caps (TASK-19): request lines are capped at 1 MiB, reply/push lines at
+64 MiB. The daemon never emits a line over the cap — a reply that would exceed
+it is substituted with an `ok:false` response whose `error` starts with
+`reply too large` (carrying the byte counts). Clients classify that prefix —
+and any raw over-long line — as `ipc.ErrReplyTooLarge`, a fatal error retrying
+cannot fix.
+
 Failure semantics: unknown cmd or bad args → `ok:false`, connection stays open;
-malformed JSON → connection closed; daemon absent → socket connect fails fast.
+malformed JSON → connection closed; daemon absent → socket connect fails fast;
+oversized reply → the substituted `reply too large` error above.
 
 ## Connections
 

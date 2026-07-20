@@ -1,8 +1,12 @@
 package ipc
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -287,6 +291,153 @@ func TestUnknownCommandKeepsConnection(t *testing.T) {
 	}
 	if _, err := c.Status("status", nil); err != nil {
 		t.Errorf("connection should survive unknown cmd: %v", err)
+	}
+}
+
+// --- TASK-19: large state replies ---
+
+// fakeDaemon speaks the wire protocol from a canned reply function, so tests
+// can shape replies the real loop cannot produce (multi-MiB states, raw
+// over-long lines). Returns the socket path to Dial.
+func fakeDaemon(t *testing.T, reply func(req Request) []byte) string {
+	t.Helper()
+	sock := t.TempDir() + "/fake.sock"
+	ln, err := listenUnix(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		scanner := bufio.NewScanner(conn)
+		scanner.Buffer(make([]byte, 0, 64*1024), maxRequestBytes)
+		for scanner.Scan() {
+			var req Request
+			if json.Unmarshal(scanner.Bytes(), &req) != nil {
+				return
+			}
+			if b := reply(req); b != nil {
+				if _, err := conn.Write(append(b, '\n')); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	return sock
+}
+
+func dialFake(t *testing.T, sock string) *Client {
+	t.Helper()
+	c, err := Dial(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	return c
+}
+
+// TestFetchStateOver1MiBSucceeds is TASK-19 AC#1's success arm: a state
+// payload past the old shared 1 MiB line cap now round-trips (the gru-proof
+// failure was exactly this — a healthy daemon whose state line the client's
+// scanner refused).
+func TestFetchStateOver1MiBSucceeds(t *testing.T) {
+	stateJSON, err := json.Marshal(map[string]string{"pad": strings.Repeat("x", 2<<20)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sock := fakeDaemon(t, func(req Request) []byte {
+		data, _ := json.Marshal(StateData{State: stateJSON, LastSeq: 7})
+		b, _ := json.Marshal(Response{ID: req.ID, OK: true, Data: data})
+		return b
+	})
+	c := dialFake(t, sock)
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatalf("state over 1 MiB must succeed: %v", err)
+	}
+	if len(sd.State) <= 1<<20 {
+		t.Fatalf("test payload only %d bytes, not over the old 1 MiB cap", len(sd.State))
+	}
+	if sd.LastSeq != 7 {
+		t.Errorf("last_seq = %d, want 7", sd.LastSeq)
+	}
+}
+
+// TestServerSubstitutesActionableErrorForOversizedReply: the daemon never
+// emits a line past maxReplyBytes — it answers with an ok:false error that
+// names the sizes, on the same request ID.
+func TestServerSubstitutesActionableErrorForOversizedReply(t *testing.T) {
+	clientEnd, serverEnd := net.Pipe()
+	defer clientEnd.Close()
+	defer serverEnd.Close()
+	sess := &session{conn: serverEnd}
+	go sess.writeResponse(Response{ID: 9, OK: true,
+		Data: json.RawMessage(`"` + strings.Repeat("x", maxReplyBytes) + `"`)})
+
+	scanner := bufio.NewScanner(clientEnd)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxReplyBytes)
+	if !scanner.Scan() {
+		t.Fatalf("no substituted reply: %v", scanner.Err())
+	}
+	var resp Response
+	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || resp.ID != 9 {
+		t.Fatalf("want ok:false on id 9, got %+v", resp)
+	}
+	if !strings.HasPrefix(resp.Error, replyTooLargePrefix) {
+		t.Errorf("error must carry the classifiable prefix %q: %q", replyTooLargePrefix, resp.Error)
+	}
+	if !strings.Contains(resp.Error, "protocol cap") {
+		t.Errorf("error should be actionable (name the cap): %q", resp.Error)
+	}
+}
+
+// TestClientClassifiesServerRefusalAsFatal: a server "reply too large" error
+// surfaces as ErrReplyTooLarge so callers know retrying is pointless.
+func TestClientClassifiesServerRefusalAsFatal(t *testing.T) {
+	sock := fakeDaemon(t, func(req Request) []byte {
+		b, _ := json.Marshal(Response{ID: req.ID, OK: false,
+			Error: replyTooLargePrefix + ": reply is 99999999 bytes, over the protocol cap"})
+		return b
+	})
+	c := dialFake(t, sock)
+	if _, err := c.FetchState(); !errors.Is(err, ErrReplyTooLarge) {
+		t.Fatalf("want ErrReplyTooLarge, got %v", err)
+	}
+}
+
+// TestOversizedRawLineFailsFastNotForever is TASK-19 AC#1's failure arm at
+// the transport: even a daemon that streams a line past the client's cap
+// (version skew) produces a prompt, classifiable error — never a hang and
+// never the old silent scanner death that fed the endless retry loop.
+func TestOversizedRawLineFailsFastNotForever(t *testing.T) {
+	line := append([]byte(`{"id":1,"ok":true,"data":"`),
+		bytes.Repeat([]byte("x"), maxReplyBytes+(1<<20))...)
+	line = append(line, '"', '}')
+	sock := fakeDaemon(t, func(req Request) []byte { return line })
+	c := dialFake(t, sock)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Call("state", nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrReplyTooLarge) {
+			t.Fatalf("want ErrReplyTooLarge, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "exceeded") {
+			t.Errorf("error should be actionable: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("client hung on an oversized reply line")
 	}
 }
 

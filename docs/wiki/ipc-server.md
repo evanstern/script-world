@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # IPC server
@@ -17,8 +17,8 @@ spam garbage, or subscribe and stall, and the loop never notices.
 ## How it works
 
 `Serve` accepts connections; each `session` runs its own reader goroutine with a
-line-scanner (1 MiB max line). Malformed JSON closes that connection; unknown
-commands return `ok:false` and keep it open. Time-control and status commands go
+line-scanner capped at `maxRequestBytes` (1 MiB — requests are small). Malformed
+JSON closes that connection; unknown commands return `ok:false` and keep it open. Time-control and status commands go
 through `Loop.Do` and reply with the full `StatusData` (built by `statusData`, which
 adds world/daemon/log sections around the loop's clock snapshot); `state` goes
 through `Loop.DoState` and replies with `StateData` — the canonical world-state JSON
@@ -45,6 +45,17 @@ replay), then consumes the live channel; any seq jump ahead of `cursor+1` trigge
 store gap-fill (`EventsSince`) before delivery. This closes the race between opening
 the live buffer and reading history — events are always delivered in seq order with
 no gaps for the life of a subscription.
+
+**Reply ceiling** (TASK-19): server→client lines are bounded by
+`maxReplyBytes` (64 MiB), split from the request cap because the `state` reply
+carries the whole world state on one line and outgrew the old shared 1 MiB
+`maxLineBytes` on long runs. `writeResponse` never emits a longer line: an
+oversized reply is replaced by an `ok:false` error on the same ID whose message
+starts with `replyTooLargePrefix` ("reply too large") and names the byte
+counts — the [[ipc-client]] classifies that prefix as fatal
+(`ErrReplyTooLarge`) instead of retrying. `writePush` drops an over-cap push
+outright (a single event cannot realistically hit the cap); both funnel into
+`writeLine` for the deadline-guarded write.
 
 **Long socket paths** (`socket.go`): `sockaddr_un` caps paths (~104 bytes on darwin).
 `listenUnix`/`dialUnix` transparently chdir into the socket's directory and use its

@@ -408,8 +408,16 @@ func cmdUI(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tea.NewProgram(tui.New(w), tea.WithAltScreen()).Run()
-	return err
+	m, err := tea.NewProgram(tui.New(w), tea.WithAltScreen()).Run()
+	if err != nil {
+		return err
+	}
+	// An unrecoverable protocol failure (e.g. reply over the cap, TASK-19)
+	// quits the TUI; surface it as a real error and a non-zero exit.
+	if fm, ok := m.(tui.Model); ok && fm.FatalErr() != "" {
+		return fmt.Errorf("%s", fm.FatalErr())
+	}
+	return nil
 }
 
 func cmdAttach(args []string) error {

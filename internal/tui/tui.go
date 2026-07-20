@@ -6,6 +6,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -48,6 +49,7 @@ type Model struct {
 	client    *ipc.Client
 	connected bool
 	lastErr   string
+	fatalErr  string // unrecoverable (e.g. reply over protocol cap): quit, don't retry
 
 	replica *sim.State      // world replica, event-sourced client-side
 	gameMap *worldmap.Map   // terrain, regenerated locally from the manifest
@@ -79,6 +81,10 @@ type Model struct {
 func New(w *world.World) Model {
 	return Model{w: w, gameMap: w.Map(), chronAgent: -1}
 }
+
+// FatalErr reports the unrecoverable error that made the TUI quit, if any —
+// the ui command surfaces it as a real exit error after Run returns.
+func (m Model) FatalErr() string { return m.fatalErr }
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(connect(m.w), pollTick())
@@ -231,6 +237,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.client != nil {
 			m.client.Close()
 			m.client = nil
+		}
+		if errors.Is(msg.err, ipc.ErrReplyTooLarge) {
+			// Reconnecting cannot shrink the state — retrying forever would
+			// be the TASK-19 bug. Fail fast with the actionable message.
+			m.fatalErr = msg.err.Error()
+			m.quitting = true
+			return m, tea.Quit
 		}
 		m.lastErr = msg.err.Error()
 		return m, retryLater()

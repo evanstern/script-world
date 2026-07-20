@@ -4,7 +4,7 @@ description: Attach-side protocol client — dial with fast failure, request/res
 kind: component
 sources:
   - internal/ipc/client.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # IPC client
@@ -24,10 +24,22 @@ One reader goroutine decodes `wireMsg` lines and demuxes:
   registers a buffered reply channel keyed by a monotonically increasing id);
 - messages with `push` go to the `pushes` channel (buffer 1024), read via `Pushes()`.
 
+The reader's scanner is sized to the protocol's reply ceiling (`maxReplyBytes`,
+64 MiB — TASK-19), matching the bound the server enforces, so multi-MiB `state`
+replies round-trip.
+
 `Call(cmd, args)` marshals, writes one line (10 s write deadline), and blocks on its
 reply channel; `ok:false` responses surface as errors. On connection death the reader
 closes all pending channels and `pushes`, so both callers and push consumers unwind
 deterministically.
+
+**Fatal-reply classification** (TASK-19): the exported sentinel
+`ErrReplyTooLarge` marks failures reconnecting cannot fix. `Call` wraps
+server-refused oversized replies in it (recognized by the `replyTooLargePrefix`
+on the error string), and the read loop maps a raw `bufio.ErrTooLong` (only
+possible against a version-skewed daemon) into the same sentinel with an
+actionable message. Callers check `errors.Is(err, ipc.ErrReplyTooLarge)` to
+fail fast instead of retrying — the [[tui-client]] quits on it.
 
 Conveniences: `Status(cmd, args)` unmarshals the shared `StatusData` shape;
 `FetchState()` unmarshals the `state` command's `StateData` (full world state + the
