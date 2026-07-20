@@ -60,6 +60,11 @@ type Agent struct {
 	IdleSince int64 `json:"idle_since"`
 	// NearDeath latches the "nearly died" memory once per health collapse.
 	NearDeath bool `json:"near_death,omitempty"`
+	// Generation counts high-salience interrupts (TASK-32, FR-014): bumped
+	// by the reducer on memories at/above GenerationBumpSalience. In-flight
+	// thoughts snapshotted under an older generation are superseded at
+	// landing. omitempty keeps pre-TASK-32 snapshots byte-stable.
+	Generation int64 `json:"generation,omitempty"`
 	// Nightly consolidation (TASK-9). Night/mark values of 0 mean "never" —
 	// NightIndex is 1-based — so pre-TASK-9 snapshots stay correct.
 	Beliefs               []Belief `json:"beliefs,omitempty"`

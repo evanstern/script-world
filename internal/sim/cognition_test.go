@@ -1,8 +1,11 @@
 package sim
 
 import (
+	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/evanstern/script-world/internal/store"
 )
@@ -54,5 +57,225 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 	}
 	if string(s.Marshal()) != string(before) {
 		t.Error("telemetry event mutated state")
+	}
+}
+
+// --- US3: the landing ladder ---
+
+// ladderHarness: a paused loop at a preset tick — staleness is fully
+// controlled, no ticks flow, InjectIntent works while paused (FR-018).
+type ladderHarness struct {
+	st   *store.Store
+	loop *Loop
+}
+
+func newLadderHarness(t *testing.T, mutate func(*State)) *ladderHarness {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "world.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := testMap(42)
+	s := NewState(42, m)
+	s.Paused = true
+	s.Tick = 10000
+	if mutate != nil {
+		mutate(s)
+	}
+	loop := NewLoop(s, m, st, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- loop.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("loop did not stop")
+		}
+		st.Close()
+	})
+	return &ladderHarness{st: st, loop: loop}
+}
+
+func (h *ladderHarness) lastOutcome(t *testing.T) (CogOutcomePayload, bool) {
+	t.Helper()
+	evs, err := h.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].Type == "cog.outcome" {
+			var p CogOutcomePayload
+			if err := json.Unmarshal(evs[i].Payload, &p); err != nil {
+				t.Fatal(err)
+			}
+			return p, true
+		}
+	}
+	return CogOutcomePayload{}, false
+}
+
+func meteredArgs(agent int, goal string) InjectArgs {
+	return InjectArgs{
+		Agent: agent, Goal: goal, TargetAgent: -1,
+		Class: "planner", JobID: "planner-test", SnapshotTick: 10000,
+		PredictedWallMs: 51000, ActualWallMs: 51000,
+	}
+}
+
+func TestLadderRejectsStale(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	args := meteredArgs(0, "wander")
+	args.SnapshotTick = 8000 // staleness 2000 > planner budget 1200
+	if err := h.loop.InjectIntent(args); err == nil {
+		t.Fatal("stale intent executed")
+	}
+	p, ok := h.lastOutcome(t)
+	if !ok || p.Outcome != OutcomeRejectedStale {
+		t.Fatalf("outcome = %+v", p)
+	}
+	if p.StalenessTicks != 2000 || p.Kind != RejectKindWorldChange {
+		t.Errorf("staleness %d kind %q", p.StalenessTicks, p.Kind)
+	}
+}
+
+func TestLadderClassifiesPredictionMiss(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	args := meteredArgs(0, "wander")
+	args.SnapshotTick = 8000
+	args.ActualWallMs = 4 * args.PredictedWallMs // spiked call
+	h.loop.InjectIntent(args)
+	p, _ := h.lastOutcome(t)
+	if p.Kind != RejectKindPredictionMiss {
+		t.Errorf("kind = %q, want prediction-miss", p.Kind)
+	}
+}
+
+func TestLadderRejectsSuperseded(t *testing.T) {
+	h := newLadderHarness(t, func(s *State) { s.Agents[0].Generation = 3 })
+	args := meteredArgs(0, "wander")
+	args.Generation = 2 // thought predates the emergency
+	if err := h.loop.InjectIntent(args); err == nil {
+		t.Fatal("superseded intent executed")
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeSuperseded {
+		t.Errorf("outcome = %+v", p)
+	}
+}
+
+func TestLadderRejectsGuardAndRecordsUnavailable(t *testing.T) {
+	h := newLadderHarness(t, func(s *State) {
+		s.Agents[1].Dead = true
+		s.Agents[0].X, s.Agents[0].Y = 10, 10
+	})
+	args := meteredArgs(0, "talk_to")
+	args.TargetAgent = 1
+	args.Guards = []Guard{{Type: GuardTargetAlive, Target: 1}}
+	if err := h.loop.InjectIntent(args); err == nil {
+		t.Fatal("guard-failed intent executed")
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeRejectedGuard {
+		t.Errorf("outcome = %+v", p)
+	}
+
+	// Dead ACTOR: recorded rejected-unavailable, not silence.
+	args2 := meteredArgs(1, "wander")
+	if err := h.loop.InjectIntent(args2); err == nil {
+		t.Fatal("dead agent acted")
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeUnavailable {
+		t.Errorf("outcome = %+v", p)
+	}
+}
+
+func TestLadderLandsAndAdapts(t *testing.T) {
+	h := newLadderHarness(t, func(s *State) {
+		s.Agents[0].X, s.Agents[0].Y = 10, 10
+		s.Agents[1].X, s.Agents[1].Y = 12, 10
+	})
+	// Fresh, in-budget, guards hold, target moved since snapshot → adapted.
+	args := meteredArgs(0, "talk_to")
+	args.TargetAgent = 1
+	args.Guards = []Guard{
+		{Type: GuardTargetAlive, Target: 1},
+		{Type: GuardTargetPresent, Target: 1, X: 14, Y: 10}, // snapshot position
+	}
+	if err := h.loop.InjectIntent(args); err != nil {
+		t.Fatalf("healthy landing rejected: %v", err)
+	}
+	p, _ := h.lastOutcome(t)
+	if p.Outcome != OutcomeAdapted {
+		t.Errorf("outcome = %q, want adapted (target moved, repair via resolveGoal)", p.Outcome)
+	}
+
+	// Same landing with the target exactly where the snapshot said: landed.
+	args.JobID = "planner-test-2"
+	args.Guards[1].X, args.Guards[1].Y = 12, 10
+	if err := h.loop.InjectIntent(args); err != nil {
+		t.Fatalf("landing rejected: %v", err)
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeLanded {
+		t.Errorf("outcome = %q, want landed", p.Outcome)
+	}
+}
+
+func TestLadderUnmeteredCallersKeepOldContract(t *testing.T) {
+	h := newLadderHarness(t, func(s *State) { s.Agents[0].Dead = true })
+	if err := h.loop.InjectIntent(InjectArgs{Agent: 0, Goal: "wander", TargetAgent: -1}); err == nil {
+		t.Fatal("dead agent acted")
+	}
+	if _, found := h.lastOutcome(t); found {
+		t.Error("unmetered caller produced telemetry")
+	}
+}
+
+func TestGenerationBumpsOnHighSalience(t *testing.T) {
+	s := NewState(42, testMap(42))
+	add := func(sal int) {
+		b, _ := json.Marshal(MemoryAddedPayload{Agent: 0, Text: "x", Salience: sal, Subject: -1})
+		if err := s.Apply(store.Event{Type: "agent.memory_added", Tick: 1, Payload: b}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(8) // dream-level: no interrupt
+	if s.Agents[0].Generation != 0 {
+		t.Errorf("salience 8 bumped generation")
+	}
+	add(9)  // near-death
+	add(10) // witnessed death
+	if s.Agents[0].Generation != 2 {
+		t.Errorf("generation = %d, want 2", s.Agents[0].Generation)
+	}
+}
+
+func TestGuardEvalTable(t *testing.T) {
+	s := NewState(42, testMap(42))
+	s.Tick = 5000
+	s.Agents[0].X, s.Agents[0].Y = 10, 10
+	s.Agents[1].X, s.Agents[1].Y = 11, 10
+	s.Agents[2].Dead = true
+	s.Agents[3].X, s.Agents[3].Y = 60, 60
+	s.Agents[0].Generation = 2
+	cases := []struct {
+		g    Guard
+		hold bool
+	}{
+		{Guard{Type: GuardTargetAlive, Target: 1}, true},
+		{Guard{Type: GuardTargetAlive, Target: 2}, false},
+		{Guard{Type: GuardTargetPresent, Target: 1}, true},
+		{Guard{Type: GuardTargetPresent, Target: 3}, false}, // beyond presentRadius
+		{Guard{Type: GuardNotSuperseded, Generation: 2}, true},
+		{Guard{Type: GuardNotSuperseded, Generation: 1}, false},
+		{Guard{Type: GuardAfterTick, Tick: 4000}, true},
+		{Guard{Type: GuardAfterTick, Tick: 6000}, false},
+		{Guard{Type: GuardBeforeTick, Tick: 6000}, true},
+		{Guard{Type: GuardBeforeTick, Tick: 4000}, false},
+		{Guard{Type: "bogus"}, false},
+	}
+	for _, c := range cases {
+		if hold, why := c.g.Eval(s, 0); hold != c.hold {
+			t.Errorf("Eval(%+v) = %v (%s), want %v", c.g, hold, why, c.hold)
+		}
 	}
 }

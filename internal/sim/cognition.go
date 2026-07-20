@@ -29,6 +29,16 @@ const (
 	RejectKindWorldChange    = "world-change"
 )
 
+// GenerationBumpSalience: an agent.memory_added at or above this salience
+// bumps Agent.Generation (FR-014). The salience table defines "emergency":
+// near-death 9, witnessed death 10, exile 9 — dreams (8) do not interrupt.
+const GenerationBumpSalience = 9
+
+// PredictionMissFactor: a landing whose actual wall time exceeded its
+// prediction by this factor is classified prediction-miss, not world-change
+// — infra noise that must stay out of budget-tuning heuristics (FR-013).
+const PredictionMissFactor = 3
+
 // CogThoughtPayload — cog.thought: a model call passed the router and was
 // enqueued. trigger_seq is the event-log seq of the stimulus that armed the
 // trigger (0 = pure cadence): the causality edge stimulus → thought.

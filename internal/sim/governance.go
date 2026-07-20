@@ -80,18 +80,18 @@ func DayIndex(tick int64) int64 { return tick/86400 + 1 }
 // Norm is one village law. Repealed norms stay on the list (Active=false) —
 // like the debt ledger, the law's history never forgets.
 type Norm struct {
-	ID       int    `json:"id"`
-	Kind     string `json:"kind"`
-	Target   int    `json:"target"` // exile: the judged villager; -1 otherwise
-	Param    int    `json:"param,omitempty"`
-	Text     string `json:"text"`
-	Proposer int    `json:"proposer"`
-	DayPassed int64 `json:"day_passed"`
-	Tally    string `json:"tally"`
-	Active   bool   `json:"active"`
-	DayRepealed int64 `json:"day_repealed,omitempty"`
-	Amended     bool  `json:"amended,omitempty"`
-	DayAmended  int64 `json:"day_amended,omitempty"`
+	ID          int    `json:"id"`
+	Kind        string `json:"kind"`
+	Target      int    `json:"target"` // exile: the judged villager; -1 otherwise
+	Param       int    `json:"param,omitempty"`
+	Text        string `json:"text"`
+	Proposer    int    `json:"proposer"`
+	DayPassed   int64  `json:"day_passed"`
+	Tally       string `json:"tally"`
+	Active      bool   `json:"active"`
+	DayRepealed int64  `json:"day_repealed,omitempty"`
+	Amended     bool   `json:"amended,omitempty"`
+	DayAmended  int64  `json:"day_amended,omitempty"`
 	// Violations is a bounded ring — fodder for amend/repeal proposals and
 	// the once-per-window violation latches.
 	Violations []NormViolation `json:"violations,omitempty"`
@@ -591,7 +591,7 @@ func proposalFor(s *State, proposer int, nextTick int64) *ProposalPayload {
 			if d.Status == "broken" && d.Creditor == proposer {
 				return &ProposalPayload{Kind: ProposeRepayDebts, Target: -1,
 					Proposer: proposer,
-					Text: "Debts must be repaid — a promise is a promise."}
+					Text:     "Debts must be repaid — a promise is a promise."}
 			}
 		}
 	}
@@ -609,7 +609,7 @@ func proposalFor(s *State, proposer int, nextTick int64) *ProposalPayload {
 		}
 		return &ProposalPayload{Kind: ProposeRepeal, NormID: n.ID, Target: -1,
 			Proposer: proposer,
-			Text: fmt.Sprintf("Strike the rule down — it serves nobody: %s", n.Text)}
+			Text:     fmt.Sprintf("Strike the rule down — it serves nobody: %s", n.Text)}
 	}
 	// 4) Exile: the valve of last resort.
 	for t := range s.Agents {

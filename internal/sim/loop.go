@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/worldmap"
 )
@@ -43,6 +44,17 @@ type InjectArgs struct {
 	Goal        string
 	TargetAgent int // for seek/talk_to; -1 otherwise
 	Reason      string
+	// Cognition-horizon landing metadata (TASK-32). Class empty means an
+	// unmetered caller (tests, tooling): the ladder's staleness, generation,
+	// and guard checks are skipped and no telemetry is emitted — the
+	// pre-TASK-32 contract.
+	Class           string
+	JobID           string
+	SnapshotTick    int64
+	Generation      int64
+	PredictedWallMs int64
+	ActualWallMs    int64
+	Guards          []Guard
 }
 
 type command struct {
@@ -382,17 +394,78 @@ func (l *Loop) handleCommand(cmd command) error {
 			break
 		}
 		a := &l.state.Agents[in.Agent]
+		// The landing ladder (TASK-32, FR-010..FR-013): enforcement happens
+		// against the world as it is NOW. Every metered rejection is
+		// recorded atomically with the verdict — the rejection events land
+		// even though err is set (silent failure is gone, FR-015).
+		staleness := l.state.Tick - in.SnapshotTick
+		if staleness < 0 {
+			staleness = 0
+		}
+		reject := func(outcome, reason string) {
+			err = fmt.Errorf("%s: %s", outcome, reason)
+			if in.Class == "" {
+				return
+			}
+			kind := RejectKindWorldChange
+			if in.PredictedWallMs > 0 && in.ActualWallMs > PredictionMissFactor*in.PredictedWallMs {
+				kind = RejectKindPredictionMiss
+			}
+			emit("agent.intent_rejected", IntentRejectedPayload{
+				Agent: in.Agent, Goal: in.Goal, Reason: reason, StalenessTicks: staleness,
+			})
+			emit("cog.outcome", CogOutcomePayload{
+				Job: in.JobID, Class: in.Class, Agent: in.Agent,
+				Outcome: outcome, SnapshotTick: in.SnapshotTick,
+				LandingTick: l.state.Tick, StalenessTicks: staleness,
+				PredictedWallMs: in.PredictedWallMs, ActualWallMs: in.ActualWallMs,
+				Kind: kind, Reason: reason,
+			})
+		}
 		if a.Dead {
-			err = fmt.Errorf("%s is dead", a.Name)
+			reject(OutcomeUnavailable, a.Name+" is dead")
 			break
 		}
 		if a.Asleep {
-			err = fmt.Errorf("%s is asleep", a.Name)
+			reject(OutcomeUnavailable, a.Name+" is asleep")
 			break
+		}
+		adapted := false
+		if in.Class != "" {
+			if in.Generation != a.Generation {
+				reject(OutcomeSuperseded, fmt.Sprintf("generation %d, thought was %d", a.Generation, in.Generation))
+				break
+			}
+			if dc, ok := cognition.ClassFor(in.Class); ok && staleness > dc.BudgetTicks {
+				reject(OutcomeRejectedStale, fmt.Sprintf("staleness %d > budget %d", staleness, dc.BudgetTicks))
+				break
+			}
+			failed := false
+			for _, g := range in.Guards {
+				ok, why := g.Eval(l.state, in.Agent)
+				if !ok {
+					reject(OutcomeRejectedGuard, why)
+					failed = true
+					break
+				}
+				// The adapt rung: a target_present guard that holds but
+				// whose target moved means resolveGoal repaired the intent.
+				if g.Type == GuardTargetPresent && (g.X != 0 || g.Y != 0) {
+					t := &l.state.Agents[g.Target]
+					if t.X != g.X || t.Y != g.Y {
+						adapted = true
+					}
+				}
+			}
+			if failed {
+				break
+			}
 		}
 		intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
 		if rerr != nil {
-			err = rerr
+			// resolveGoal is the repair path; failing here means no
+			// deterministic adaptation exists — a world change.
+			reject(OutcomeRejectedGuard, rerr.Error())
 			break
 		}
 		if in.Reason != "" {
@@ -408,11 +481,26 @@ func (l *Loop) handleCommand(cmd command) error {
 				Source: "planner",
 			})
 		}
+		if in.Class != "" {
+			outcome := OutcomeLanded
+			if adapted {
+				outcome = OutcomeAdapted
+			}
+			emit("cog.outcome", CogOutcomePayload{
+				Job: in.JobID, Class: in.Class, Agent: in.Agent,
+				Outcome: outcome, SnapshotTick: in.SnapshotTick,
+				LandingTick: l.state.Tick, StalenessTicks: staleness,
+				PredictedWallMs: in.PredictedWallMs, ActualWallMs: in.ActualWallMs,
+			})
+		}
 	default:
 		err = fmt.Errorf("unknown command %q", cmd.name)
 	}
 
-	if err == nil {
+	// Events land whenever they were emitted — a rejected inject_intent sets
+	// err AND emits its rejection record (the only command that pairs the
+	// two); every other error path emits nothing.
+	{
 		for _, e := range events {
 			if aerr := l.state.Apply(e); aerr != nil {
 				return aerr

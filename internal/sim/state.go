@@ -204,6 +204,14 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick, Subject: p.Subject, Tone: p.Tone})
+		// Cognition horizon (TASK-32): a high-salience stimulus bumps the
+		// agent's generation — in-flight thoughts snapshotted under the old
+		// generation are superseded at landing (FR-014). The salience table
+		// is the definition of "high": near-death (9), witnessed death (10),
+		// exile (9); dreams (8) deliberately do not interrupt thought.
+		if p.Salience >= GenerationBumpSalience {
+			a.Generation++
+		}
 	case "agent.thought":
 		// Chronicle material; no state effect.
 	case "cog.thought", "cog.outcome", "cog.recalibration_recommended",

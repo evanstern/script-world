@@ -73,11 +73,11 @@
 
 **Independent Test**: quickstart §4 audit — zero executed intents with staleness over budget (SC-001); inject artificial latency and observe recorded rejections while reflex covers
 
-- [ ] T018 [US3] Add `Agent.Generation` to sim State with reducer bump on the high-salience set (agent attacked, witnesses a death, emergency on own/adjacent tile) in internal/sim/state.go + internal/sim/memory.go, with reducer tests
-- [ ] T019 [P] [US3] Implement Guard type + deterministic evaluation over State (target_alive, target_present, not_superseded, after_tick, before_tick) in internal/sim/guard.go with table tests in internal/sim/guard_test.go
-- [ ] T020 [US3] Extend inject_intent args (SnapshotTick, Generation, Class, JobID, PredictedWallMs, Guards) and implement the landing ladder in internal/sim/loop.go per contracts/events.md order (unavailable → superseded → stale → guards-with-adapt-via-resolveGoal → accept), emitting agent.intent_rejected + cog.outcome in the same atomic batch, with a test per rung in internal/sim/loop_test.go
-- [ ] T021 [US3] Learn rung: classify rejections prediction-miss (actual > 3× predicted) vs world-change in the loop's outcome payloads, and bump the rejected agent's re-plan (nextDue → now, debounce floor honored) in internal/mind/mind.go, with tests
-- [ ] T022 [US3] e2e latency injection in e2e/: mock provider with configurable delay ⇒ stale rejections recorded with reasons, reflex floor covers, SC-001 audit query returns zero over-budget executions
+- [x] T018 [US3] Add `Agent.Generation` to sim State with reducer bump on the high-salience set (agent attacked, witnesses a death, emergency on own/adjacent tile) in internal/sim/state.go + internal/sim/memory.go, with reducer tests
+- [x] T019 [P] [US3] Implement Guard type + deterministic evaluation over State (target_alive, target_present, not_superseded, after_tick, before_tick) in internal/sim/guard.go with table tests in internal/sim/guard_test.go
+- [x] T020 [US3] Extend inject_intent args (SnapshotTick, Generation, Class, JobID, PredictedWallMs, Guards) and implement the landing ladder in internal/sim/loop.go per contracts/events.md order (unavailable → superseded → stale → guards-with-adapt-via-resolveGoal → accept), emitting agent.intent_rejected + cog.outcome in the same atomic batch, with a test per rung in internal/sim/loop_test.go
+- [x] T021 [US3] Learn rung: classify rejections prediction-miss (actual > 3× predicted) vs world-change in the loop's outcome payloads, and bump the rejected agent's re-plan (nextDue → now, debounce floor honored) in internal/mind/mind.go, with tests
+- [x] T022 [US3] e2e latency injection in e2e/: mock provider with configurable delay ⇒ stale rejections recorded with reasons, reflex floor covers, SC-001 audit query returns zero over-budget executions
 
 **Checkpoint**: wrong predictions are harmless; every landing verdict is recorded
 

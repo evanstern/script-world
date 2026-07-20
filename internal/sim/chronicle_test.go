@@ -26,7 +26,7 @@ func TestChronicleRing(t *testing.T) {
 
 	e := chronicleEvent(t, 1000, ChronicleEntryPayload{
 		Day: 1, FromTick: 0, ToTick: 960,
-		Text: "Ash built the first fire while Sage watched the treeline.",
+		Text:   "Ash built the first fire while Sage watched the treeline.",
 		Thread: "cold-start", Agents: []int{0, 7},
 	})
 	if err := s.Apply(e); err != nil {

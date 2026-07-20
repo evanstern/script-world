@@ -208,6 +208,16 @@ func (md *Mind) runConversation(cc convoCtx) {
 			"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds()))
 		return
 	}
+	// Landing enforcement for scenes (FR-010): a completed scene that
+	// overran its staleness budget — the router admitted it, the tier was
+	// slower than predicted — must not act. All-or-nothing, recorded.
+	if st := md.tick.Load() - cc.conv; cc.meta.class.BudgetTicks > 0 && st > cc.meta.class.BudgetTicks {
+		log.Printf("mind: conversation %d stale at landing (%d ticks)", cc.conv, st)
+		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeRejectedStale,
+			fmt.Sprintf("scene staleness %d > budget %d", st, cc.meta.class.BudgetTicks),
+			time.Since(sceneStart).Milliseconds()))
+		return
+	}
 	// Tones arrive per participant; missing tail entries read neutral.
 	tones := make([]int, n)
 	copy(tones, out.Tones)

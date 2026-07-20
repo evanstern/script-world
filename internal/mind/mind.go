@@ -111,6 +111,11 @@ type Mind struct {
 	// rephrasing enacted proposals in the proposer's voice.
 	meetQ chan meetingJob
 
+	// rearm carries landing-rejection re-plan requests from the plan worker
+	// back to the absorb goroutine (which owns pending); the debounce floor
+	// still applies, so a rejected agent re-thinks promptly, never hotly.
+	rearm chan int
+
 	events chan []store.Event
 	done   chan struct{}
 }
@@ -136,6 +141,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		narrQ:     make(chan narrJob, 8),
 		narrRetry: make(chan narrCarry, 1),
 		meetQ:     make(chan meetingJob, 4),
+		rearm:     make(chan int, sim.AgentCount),
 		events:    make(chan []store.Event, 256),
 		done:      make(chan struct{}),
 	}
@@ -173,6 +179,11 @@ func (md *Mind) run() {
 			md.absorb(batch)
 			md.plan()
 			md.muse()
+		case idx := <-md.rearm:
+			// A landing rejection: the agent noticed the plan failed and
+			// re-thinks at the next open debounce window.
+			md.arm(idx, 0)
+			md.plan()
 		}
 	}
 }
@@ -255,6 +266,14 @@ type planJob struct {
 	system string
 	prompt string
 	meta   thoughtMeta
+	// world is the snapshot view guards are built from once the reply names
+	// a target — the assumptions the prompt showed the model (FR-011).
+	world [sim.AgentCount]agentSnap
+}
+
+type agentSnap struct {
+	x, y int
+	dead bool
 }
 
 // plan enqueues due agents for the planner worker. It never blocks and never
@@ -297,6 +316,11 @@ func (md *Mind) plan() {
 			system: systemPrompt(a.Name, md.personas[i]),
 			prompt: userPrompt(md.replica, i, md.k),
 			meta:   md.newMeta("planner", i, tick, md.pendingSeq[i], llm.KindPlanner),
+		}
+		job.meta.generation = a.Generation
+		for j := range md.replica.Agents {
+			b := &md.replica.Agents[j]
+			job.world[j] = agentSnap{x: b.X, y: b.Y, dead: b.Dead}
 		}
 		md.planInFlight[i].Store(true)
 		select {
@@ -349,6 +373,7 @@ func (md *Mind) runPlan(job planJob) {
 		return
 	}
 	target := -1
+	var guards []sim.Guard
 	if reply.Goal == "talk_to" {
 		if target = md.agentIndexByName(reply.Target); target < 0 {
 			log.Printf("mind: %s wants to talk to unknown %q", job.name, reply.Target)
@@ -356,15 +381,31 @@ func (md *Mind) runPlan(job planJob) {
 				"unknown target "+reply.Target, resp.Millis))
 			return
 		}
+		// The assumptions this thought was formed under (FR-011): the
+		// target was alive and present in the prompt's worldview.
+		guards = append(guards,
+			sim.Guard{Type: sim.GuardTargetAlive, Target: target},
+			sim.Guard{Type: sim.GuardTargetPresent, Target: target,
+				X: job.world[target].x, Y: job.world[target].y},
+		)
 	}
+	// The loop owns the landing verdict and its telemetry from here
+	// (FR-010..FR-013): exactly one outcome per thought, emitted atomically
+	// with the verdict. The mind only reacts — a rejection re-arms a prompt
+	// re-plan (the agent noticed the plan failed), floored by the debounce.
 	if err := md.loop.InjectIntent(sim.InjectArgs{
 		Agent: job.agent, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
+		Class: job.meta.class.Class, JobID: job.meta.job,
+		SnapshotTick: job.meta.snapshotTick, Generation: job.meta.generation,
+		PredictedWallMs: job.meta.predictedWallMs, ActualWallMs: resp.Millis,
+		Guards: guards,
 	}); err != nil {
 		log.Printf("mind: %s goal %q rejected: %v", job.name, reply.Goal, err)
-		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnavailable, err.Error(), resp.Millis))
-		return
+		select {
+		case md.rearm <- job.agent:
+		default:
+		}
 	}
-	md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeLanded, "", resp.Millis))
 }
 
 // muse fires at most one best-effort interior thought per batch (TASK-21):
