@@ -40,8 +40,11 @@ high speeds suppress more classes (fail toward reflex, never toward stale action
 ## Live estimator (in-memory, per tier)
 
 - Sample source: the orchestrator worker's measured call duration ÷ the job's
-  points, fed on every completed call (successes and provider-side failures that
-  returned; caller-abandoned jobs don't sample).
+  points, fed on every **successful** call. Failures don't sample — a fast
+  failure (refused, 4xx, circuit) is not a latency observation of completed
+  thought, and the estimator's spike rejection only guards the high side, so
+  low garbage would drag the estimate down unchecked. Caller-abandoned jobs
+  never reach the provider and don't sample either.
 - Update: EWMA, α = 0.2, seeded from the profile (or bootstrap).
 - Spike rule: sample > 3× current estimate → excluded from EWMA, `spikeCount++`,
   enters the 20-sample rolling window as a spike.

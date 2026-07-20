@@ -120,6 +120,40 @@ func TestConversationRunsAndLands(t *testing.T) {
 	if rumorText != "Cedar can't be trusted to keep his word, you know." {
 		t.Errorf("rumor should carry the paraphrase, got %q", rumorText)
 	}
+
+	// TASK-32 US1: the scene is one 13-point thought — its cog.thought and a
+	// single landed cog.outcome (batched with the scene) share the job id.
+	var sceneJob string
+	var sceneOutcomes int
+	for _, e := range all {
+		switch e.Type {
+		case "cog.thought":
+			var p sim.CogThoughtPayload
+			if json.Unmarshal(e.Payload, &p) == nil && p.Class == "conversation" {
+				sceneJob = p.Job
+				if p.Points != 13 {
+					t.Errorf("scene points = %d, want 13", p.Points)
+				}
+			}
+		case "cog.outcome":
+			var p sim.CogOutcomePayload
+			if json.Unmarshal(e.Payload, &p) == nil && p.Class == "conversation" {
+				sceneOutcomes++
+				if p.Outcome != sim.OutcomeLanded {
+					t.Errorf("scene outcome = %q, want landed", p.Outcome)
+				}
+				if e.Tick != convs[0].Tick {
+					t.Error("scene outcome not batched with the scene")
+				}
+			}
+		}
+	}
+	if sceneJob == "" {
+		t.Error("no conversation cog.thought recorded")
+	}
+	if sceneOutcomes != 1 {
+		t.Errorf("scene outcomes = %d, want exactly 1", sceneOutcomes)
+	}
 }
 
 // TestSceneConversation (TASK-22): a third awake villager within the join

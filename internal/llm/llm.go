@@ -16,6 +16,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/evanstern/script-world/internal/cognition"
 )
 
 // Kind classifies a call; routing to a tier follows the grounding decisions.
@@ -140,6 +142,17 @@ type tier struct {
 	health *tierHealth
 	queue  chan job
 	prio   chan job // interactive work (conversations) jumps the line
+	// est is the live seconds-per-point estimate for this tier (TASK-32):
+	// the worker is the one place every call's true duration is observed,
+	// so it feeds the estimator; the mind reads it to route.
+	est *cognition.Estimator
+}
+
+// TierFor exposes a kind's tier — the mind needs it to read the right
+// estimator when routing.
+func TierFor(kind Kind) (Tier, bool) {
+	t, ok := routing[kind]
+	return t, ok
 }
 
 // Orchestrator routes, queues, meters, and degrades. One per daemon.
@@ -149,6 +162,12 @@ type Orchestrator struct {
 	tiers     map[Tier]*tier
 	done      chan struct{}
 	closeOnce sync.Once
+
+	// recalibrate is invoked (in its own goroutine) when a tier's estimator
+	// first breaches the spike-rate threshold — the mind turns it into a
+	// cog.recalibration_recommended telemetry event.
+	recalMu     sync.Mutex
+	recalibrate func(tier Tier, estimate, spikeRate float64)
 }
 
 func New(cfg Config, st MeterStore) (*Orchestrator, error) {
@@ -162,9 +181,11 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
+				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
+				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
 			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap)},
+				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
+				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
 		},
 	}
 	for _, t := range o.tiers {
@@ -174,6 +195,33 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 }
 
 func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
+
+// SeedCalibration re-seeds both tiers' estimators from a calibration
+// profile (nil = keep bootstrap defaults). Called once at daemon start,
+// before traffic.
+func (o *Orchestrator) SeedCalibration(p *cognition.Profile) {
+	for name, t := range o.tiers {
+		t.est = cognition.NewEstimator(cognition.SeedFor(p, string(name)))
+	}
+}
+
+// SecondsPerPoint is the live estimate for a tier — the router's bridge
+// from Fibonacci points to this deployment's wall clock.
+func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
+	if t, ok := o.tiers[tierName]; ok {
+		return t.est.Estimate()
+	}
+	return cognition.SeedFor(nil, string(tierName))
+}
+
+// SetRecalibrateHook installs the drift-signal consumer (the mind). The
+// hook runs in its own goroutine and must be idempotent per breach episode
+// — the estimator already fires once per breach.
+func (o *Orchestrator) SetRecalibrateHook(fn func(tier Tier, estimate, spikeRate float64)) {
+	o.recalMu.Lock()
+	o.recalibrate = fn
+	o.recalMu.Unlock()
+}
 
 // Submit routes a request to its tier and blocks until the result (or the
 // caller's ctx expires). Admission control is immediate: budget ceiling,
@@ -271,6 +319,22 @@ func (o *Orchestrator) worker(t *tier) {
 				InputTokens:  inTok,
 				OutputTokens: outTok,
 				Millis:       time.Since(start).Milliseconds(),
+			}
+			// Cognition-horizon sampling (TASK-32): completed calls feed the
+			// tier's seconds-per-point estimate, normalized by the kind's
+			// registered point cost. Successes only — a fast failure is not
+			// a latency observation of completed thought, and the estimator's
+			// spike rejection only guards the high side.
+			if dc, ok := cognition.ClassForKind(string(j.req.Kind)); ok && dc.Points > 0 {
+				if t.est.Sample(float64(resp.Millis) / 1000 / float64(dc.Points)) {
+					est, rate, _, _ := t.est.Stats()
+					o.recalMu.Lock()
+					hook := o.recalibrate
+					o.recalMu.Unlock()
+					if hook != nil {
+						go hook(t.name, est, rate)
+					}
+				}
 			}
 			if t.name == TierCloud {
 				resp.Model = o.cfg.Cloud.Model
