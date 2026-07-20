@@ -146,13 +146,23 @@ func ViolationCount(n *Norm, agent int) int {
 	return c
 }
 
-func normByID(s *State, id int) *Norm {
+// NormByID looks a norm up by id (nil when unknown) — shared with the mind's
+// narrator/phrasing driver and the scribe's charter render.
+func NormByID(s *State, id int) *Norm {
 	for i := range s.Norms {
 		if s.Norms[i].ID == id {
 			return &s.Norms[i]
 		}
 	}
 	return nil
+}
+
+func normByID(s *State, id int) *Norm { return NormByID(s, id) }
+
+// AtMeeting reports whether an agent is (or is being) convened — the mind
+// suppresses planner/musing traffic for attendees while the assembly runs.
+func AtMeeting(s *State, agent int) bool {
+	return meetingActive(s) && agent >= 0 && agent < len(s.Agents) && attendCandidate(s, agent)
 }
 
 func activeNormOfKind(s *State, kind string) *Norm {

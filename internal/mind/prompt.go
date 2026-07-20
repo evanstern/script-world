@@ -90,6 +90,12 @@ func userPrompt(s *sim.State, idx int, k int) string {
 		b.WriteString(social)
 	}
 
+	// Village law (TASK-13): the rules in force are standing knowledge —
+	// obeying, skirting, or defying them is an informed, in-persona choice.
+	if law := villageLaw(s, idx); law != "" {
+		b.WriteString(law)
+	}
+
 	window := sim.SelectMemories(&a, s.Seed, idx, s.Tick, k)
 	if len(window) > 0 {
 		b.WriteString("\nYou remember:\n")
@@ -163,6 +169,45 @@ func socialContext(s *sim.State, idx int) string {
 	}
 	if best.Confidence > 0 {
 		fmt.Fprintf(&b, "You have heard: %q\n", best.Text)
+	}
+	return b.String()
+}
+
+// villageLaw renders the norms in force, standing judgments, and (while the
+// village convenes) the meeting call. Empty for a lawless village.
+func villageLaw(s *sim.State, idx int) string {
+	var b strings.Builder
+	var rules []string
+	var judgments []string
+	for _, n := range s.Norms {
+		if !n.Active {
+			continue
+		}
+		if n.Kind == sim.NormExile {
+			if n.Target == idx {
+				judgments = append(judgments, fmt.Sprintf("You are exiled from the village (day %d) — the village shuns you.", n.DayPassed))
+			} else if n.Target >= 0 && n.Target < len(s.Agents) {
+				judgments = append(judgments, fmt.Sprintf("%s is exiled from the village (day %d).", s.Agents[n.Target].Name, n.DayPassed))
+			}
+			continue
+		}
+		proposer := "someone"
+		if n.Proposer >= 0 && n.Proposer < len(s.Agents) {
+			proposer = s.Agents[n.Proposer].Name
+		}
+		rules = append(rules, fmt.Sprintf("- %s (passed day %d, %s's proposal, %s)", n.Text, n.DayPassed, proposer, n.Tally))
+	}
+	if len(rules) > 0 {
+		b.WriteString("Village law (decided at the daily noon meeting):\n")
+		b.WriteString(strings.Join(rules, "\n"))
+		b.WriteString("\n")
+	}
+	for _, j := range judgments {
+		b.WriteString(j)
+		b.WriteString("\n")
+	}
+	if sim.AtMeeting(s, idx) {
+		b.WriteString("The village is gathering at the meeting place for the noon assembly — you can raise grievances and vote there.\n")
 	}
 	return b.String()
 }

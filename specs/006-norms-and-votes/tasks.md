@@ -47,9 +47,9 @@ convene → open (attendance) → turns → close, then normal behavior resumes
 - [x] T008 [P] [US1] Meeting-place derivation in internal/sim/governance.go: pure fn of (state, map) — first fire's tile, else first shelter's, else map-center-nearest passable
 - [x] T009 [US1] Executor beats in internal/sim/executor.go: convene at `meetingConveneSecond` (once-per-day guard vs `LastMeetingDay`, ≥2 living villagers; emit place_designated first time + convened), open at `meetingOpenSecond` with attendance snapshot (living ∧ awake ∧ within `meetingRadius` ∧ not exiled), turn beat every `meetingTurnTicks` (turn_taken with grievance `raised` note + low-salience speaker memory), close on agenda-done / timebox / grace cap per contracts/meeting-lifecycle.md
 - [x] T010 [US1] Attendee pinning in internal/sim/executor.go: during convening/open, pin awake living non-exiled villagers to `Intent{Goal:"attend_meeting"}` toward the place (source "meeting") on the staggered beat; arrived agents idle; pinning stops at close; no `resolveGoal` case (never planner-choosable)
-- [ ] T011 [P] [US1] Planner suppression in internal/mind/mind.go: absorb sees `meeting.convened` → skip planner scheduling for attendees until `meeting.closed` (asleep-agent precedent); test in internal/mind/mind_test.go
+- [x] T011 [P] [US1] Planner suppression in internal/mind/mind.go: absorb sees `meeting.convened` → skip planner scheduling for attendees until `meeting.closed` (asleep-agent precedent); test in internal/mind/mind_test.go
 - [x] T012 [US1] Sim tests in internal/sim/governance_test.go: full-day `driveTicks` lifecycle (convene→open→turns in seating order→close before 3600+900), exactly one meeting per day, place persists across days and structure churn, asleep villagers miss attendance, empty attendance opens-then-closes, agents converge (positions at open within radius)
-- [ ] T013 [US1] Chronicle cases in internal/mind/narrate.go: `meeting.opened` (attendance named), `meeting.turn_taken` (grievances), `meeting.closed`; `ChronicleEntryPayload.Agents` populated (TASK-17 convention); test in internal/mind/narrate_test.go
+- [x] T013 [US1] Chronicle cases in internal/mind/narrate.go: `meeting.opened` (attendance named), `meeting.turn_taken` (grievances), `meeting.closed`; `ChronicleEntryPayload.Agents` populated (TASK-17 convention); test in internal/mind/narrate_test.go
 
 **Checkpoint**: MVP — the village visibly gathers at noon, speaks, and disperses, model-free
 
@@ -67,9 +67,9 @@ meeting; recorded votes match the vote function; replay reproduces everything mo
 - [x] T015 [US2] Vote function in internal/sim/governance.go per contracts/meeting-lifecycle.md (base / amend-repeal self-interest / exile inversion; proposer always yea; yea iff score ≥ 0; strict majority of eligible; ties fail) and same-beat `meeting.proposal_resolved` emission with denormalized payload + yeas/nays
 - [x] T016 [US2] Outcome companions in internal/sim/executor.go: one toned, subject-tagged `agent.memory_added` per attendee about the proposer (gossip-seed shape) in the resolution beat
 - [x] T017 [US2] Whitelist `meeting.proposal_rephrased` in `injectSocialWhitelist` in internal/sim/loop.go; dry-run rejections (unknown norm, empty/oversized text) via the reducer arm; test in internal/sim/governance_test.go
-- [ ] T018 [US2] Meeting phrasing driver in internal/mind/meeting.go: observe `meeting.proposal_tabled` (absorb-side bounded queue, single-flight), one best-effort `KindMeeting` call phrasing the template in the proposer's voice, inject `meeting.proposal_rephrased`; any failure → skip (template stands); tests with mocked Submitter in internal/mind/meeting_test.go (skip-on-ErrTierDown, cap enforcement, no call when queue empty)
+- [x] T018 [US2] Meeting phrasing driver in internal/mind/meeting.go: observe `meeting.proposal_tabled` (absorb-side bounded queue, single-flight), one best-effort `KindMeeting` call phrasing the template in the proposer's voice, inject `meeting.proposal_rephrased`; any failure → skip (template stands); tests with mocked Submitter in internal/mind/meeting_test.go (skip-on-ErrTierDown, cap enforcement, no call when queue empty)
 - [x] T019 [US2] Vote-table tests in internal/sim/governance_test.go: authored Relation fixtures → exact yea/nay sets, tally strings, tie-fails, duplicate-of-active never tables, pairwise aligned/opposed edge deltas land, degraded-mode day (no driver) passes a rule with template text (SC-007)
-- [ ] T020 [P] [US2] Chronicle cases in internal/mind/narrate.go: `meeting.proposal_tabled` (proposer + text), `meeting.proposal_resolved` (outcome + tally, voters named); test in internal/mind/narrate_test.go
+- [x] T020 [P] [US2] Chronicle cases in internal/mind/narrate.go: `meeting.proposal_tabled` (proposer + text), `meeting.proposal_resolved` (outcome + tally, voters named); test in internal/mind/narrate_test.go
 
 **Checkpoint**: the village legislates itself — proposal → vote → law, replayable
 
@@ -84,8 +84,8 @@ changes it; log-only reconstruction and restart survival
 the file tracks each change; replay yields identical charter
 
 - [x] T021 [US3] Amend/repeal fodder rule in internal/sim/governance.go: proposer with ≥ `repealViolationCount` entries in an active norm's ring → amend (curfew only, `Param += 7200`, `Amended` guard, affection ≥ 0 toward norm's proposer) else repeal; wire into the turn-beat tabling order (rule 3)
-- [ ] T022 [US3] Charter render in internal/scribe/scribe.go: dirty-mark on `meeting.*`/`norm.*` event types, `renderVillageCharter()` (rules in force with proposer/day/tally/amendment note, standing judgments, repealed struck-through) to `world.VillageCharterPath()`, render-on-start; golden-file test in internal/scribe/scribe_test.go
-- [ ] T023 [US3] Persistence tests: replay a governed log → identical `State.Norms` and identical charter bytes; snapshot round-trip mid-meeting; amend/repeal reducer semantics (in-place param/text update, `DayRepealed`, no-op on missing/inactive) in internal/sim/governance_test.go + internal/scribe/scribe_test.go
+- [x] T022 [US3] Charter render in internal/scribe/scribe.go: dirty-mark on `meeting.*`/`norm.*` event types, `renderVillageCharter()` (rules in force with proposer/day/tally/amendment note, standing judgments, repealed struck-through) to `world.VillageCharterPath()`, render-on-start; golden-file test in internal/scribe/scribe_test.go
+- [x] T023 [US3] Persistence tests: replay a governed log → identical `State.Norms` and identical charter bytes; snapshot round-trip mid-meeting; amend/repeal reducer semantics (in-place param/text update, `DayRepealed`, no-op on missing/inactive) in internal/sim/governance_test.go + internal/scribe/scribe_test.go
 
 **Checkpoint**: the law is durable, amendable, and reconstructible from the log alone
 
@@ -99,11 +99,11 @@ penalties, and rumor fodder; unwitnessed breaches cost nothing
 **Independent test**: pass a curfew, drive a night wanderer past a witness → violation
 event, witness memory, edges move, rumor spreads; same breach unwitnessed → nothing
 
-- [ ] T024 [US4] "Village law" prompt section in internal/mind/prompt.go: active norms one line each with provenance, standing exile judgments, convening-time meeting line; empty when lawless; test in internal/mind/prompt_test.go (reflex policy stays norm-blind — no `decideIntent` change)
+- [x] T024 [US4] "Village law" prompt section in internal/mind/prompt.go: active norms one line each with provenance, standing exile judgments, convening-time meeting line; empty when lawless; test in internal/mind/prompt_test.go (reflex policy stays norm-blind — no `decideIntent` change)
 - [x] T025 [US4] Curfew detector in internal/sim/executor.go on the per-game-minute beat: night ∧ awake ∧ uncovered ∧ past `Param` ∧ ≥1 witness in `witnessRadius` → `norm.violated` + per-witness toned subject-tagged memories (companion events); once-per-agent-per-night latch (near-death-latch pattern)
 - [x] T026 [US4] Repay-debts piggyback in internal/sim/executor.go: `promise_broken` emitted while a repay norm is active → same-beat `norm.violated` for the debtor with witnesses-within-radius (may be empty → no violation event)
 - [x] T027 [US4] Violation tests in internal/sim/governance_test.go: witnessed → ring append + witness memories + edge penalties; unwitnessed → zero events (SC-006 asymmetry); latches hold across the night; violation memories are `TellableFor`-eligible (rumor-seed shape asserted)
-- [ ] T028 [P] [US4] Chronicle case `norm.violated` (violator + witnesses named) in internal/mind/narrate.go; test in internal/mind/narrate_test.go
+- [x] T028 [P] [US4] Chronicle case `norm.violated` (violator + witnesses named) in internal/mind/narrate.go; test in internal/mind/narrate_test.go
 
 **Checkpoint**: law has teeth the village can feel — and gossip about
 
@@ -120,7 +120,7 @@ passes, enters charter; exile stops being convened; proximity violation fires
 - [x] T029 [US5] Exile fodder rule (rule 4) in internal/sim/governance.go: mean (trust+affection) from living others < `exileHostilityGate` ∧ proposer hostile ∧ no active exile of target; target excluded from eligible voters (never in yeas/nays); reducer no-op on dead target
 - [x] T030 [US5] Exile effects in internal/sim/executor.go: exiled villagers never pinned/convened, excluded from attendance snapshots; proximity detector (within `exileShunRadius` of meeting place or any structure ∧ witness ∧ once-per-game-hour latch) → `norm.violated`
 - [x] T031 [US5] Exile tests in internal/sim/governance_test.go: vote exclusion arithmetic (eligible = attendees − 1), passed exile in charter render + prompt judgment line, shun detector + latch, exile repealable (the village forgives → pinning resumes), exile of dead villager moot
-- [ ] T032 [P] [US5] Chronicle case for exile resolution (gravity-appropriate line, target named) in internal/mind/narrate.go; test in internal/mind/narrate_test.go
+- [x] T032 [P] [US5] Chronicle case for exile resolution (gravity-appropriate line, target named) in internal/mind/narrate.go; test in internal/mind/narrate_test.go
 
 **Checkpoint**: the miscast valve of last resort exists — socially enforced, reversible
 
@@ -128,7 +128,7 @@ passes, enters charter; exile stops being convened; proximity violation fires
 
 ## Phase 8: Polish & cross-cutting
 
-- [ ] T033 Determinism e2e in e2e/determinism_e2e_test.go: extend the scenario to a governed run (meetings, votes, violations, rephrased text) → byte-identical replay hash (SC-005)
+- [x] T033 Determinism e2e in e2e/determinism_e2e_test.go: extend the scenario to a governed run (meetings, votes, violations, rephrased text) → byte-identical replay hash (SC-005)
 - [ ] T034 Quickstart §4 live acceptance on a real world (32x across ≥2 noons, then model-off crossing): record evidence per AC in specs/006-norms-and-votes/quickstart-results.md
 - [ ] T035 [P] README.md: add norms/votes to the feature list; docs touch for `village_charter.md` in the save-dir layout
 - [ ] T036 Wiki re-ground after merge-ready: new docs/wiki note for governance + re-verify notes whose sources changed (executor, social-fabric, agent-mind, chronicle, event-types) via /grounding-wiki:wiki-update

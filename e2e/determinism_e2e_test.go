@@ -27,7 +27,9 @@ func TestDeterminism_FullBinary(t *testing.T) {
 		os.Remove(filepath.Join(dir, "llm.json")) // pure-sim: max needs no LLM (TASK-20)
 		run(t, "start", dir)
 		run(t, "speed", dir, "max")
-		waitTick(t, dir, 20000)
+		// Past tick 24500: the day-1 governance cycle (convene 19800, open
+		// 21600, turns, close) is inside the compared window (TASK-13).
+		waitTick(t, dir, 25000)
 		run(t, "stop", dir)
 
 		st, err := store.Open(filepath.Join(dir, "world.db"))
