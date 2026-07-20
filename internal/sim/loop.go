@@ -140,6 +140,10 @@ var injectSocialWhitelist = map[string]bool{
 	// Metatron nudges (TASK-12): the spend + record; the dry-run enforces
 	// charges/form/target/text validity before anything lands.
 	"metatron.nudged": true,
+	// Governance flavor (TASK-13): the ONLY injectable governance type —
+	// re-texts an enacted norm in the proposer's voice; outcomes stay
+	// executor-deterministic. The dry-run enforces norm existence + text cap.
+	"meeting.proposal_rephrased": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at

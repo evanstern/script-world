@@ -32,6 +32,9 @@ const (
 	// KindMusing is best-effort interiority (TASK-21): admitted only when
 	// the local tier is otherwise quiet, dropped without retry when not.
 	KindMusing Kind = "musing"
+	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
+	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
+	KindMeeting Kind = "meeting"
 )
 
 type Tier string
@@ -51,6 +54,7 @@ var routing = map[Kind]Tier{
 	KindDrama:         TierCloud,
 	KindMetatron:      TierCloud,
 	KindMusing:        TierLocal,
+	KindMeeting:       TierLocal,
 }
 
 var (
