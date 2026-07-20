@@ -296,6 +296,73 @@ func TestQueueBackpressure(t *testing.T) {
 	}
 }
 
+// TestMusingBestEffort (TASK-21): musings route local and succeed on a quiet
+// tier, but are refused immediately (ErrTierBusy) the moment anything is
+// waiting — they may never displace real cognition.
+func TestMusingBestEffort(t *testing.T) {
+	release := make(chan struct{})
+	first := true
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if first {
+			first = false
+			<-release // the worker parks on the first call only
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "a quiet thought"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	defer slow.Close()
+
+	o := newOrch(t, testConfig(slow.URL, "http://unused.invalid", 100), testStore(t))
+
+	// Park the worker, then queue one planner call so the queue is non-empty.
+	go o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "parked"})
+	go o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "queued"})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if o.StatusSnapshot().Local.Queue >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
+		t.Fatalf("busy tier must drop best-effort musings: got %v", err)
+	}
+	// A starved musing (fairness floor) drops BestEffort and queues like
+	// any other call — admission must not refuse it.
+	done := make(chan error, 1)
+	go func() {
+		_, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "starved musing"})
+		done <- err
+	}()
+
+	// Drain everything; a musing on a quiet tier goes through, locally.
+	close(release)
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if o.StatusSnapshot().Local.Queue == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("starved (non-best-effort) musing must be served: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("starved musing never completed")
+	}
+	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	if err != nil {
+		t.Fatalf("quiet tier must serve best-effort musings: %v", err)
+	}
+	if resp.Tier != TierLocal || resp.Text != "a quiet thought" {
+		t.Errorf("musing response: %+v", resp)
+	}
+}
+
 func TestConfigRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "llm.json")
 	if cfg, err := LoadConfig(path); err != nil || cfg != nil {

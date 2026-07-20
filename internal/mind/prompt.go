@@ -28,6 +28,19 @@ Goals: %s.
 	return b.String()
 }
 
+// musingSystemPrompt frames the same situation window as pure interiority
+// (TASK-21): one plain sentence, no goal vocabulary, no JSON.
+func musingSystemPrompt(name, personaText string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "You are %s, a villager in a small settlement.\n\n", name)
+	if personaText != "" {
+		b.WriteString(personaText)
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "Reply with ONE short sentence: an idle thought passing through %s's mind right now — first person, present tense, in your own voice. No JSON, no quotes, no explanation.\n", name)
+	return b.String()
+}
+
 // userPrompt renders the situation + memory window. The window is the ONLY
 // memory content that ever reaches a prompt (AC#3).
 func userPrompt(s *sim.State, idx int, k int) string {

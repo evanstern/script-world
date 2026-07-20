@@ -21,6 +21,25 @@ var validGoals = map[string]bool{
 	"goto_warmth": true, "talk_to": true,
 }
 
+// parseMusing accepts one plain line of interiority (TASK-21): first line,
+// quotes and whitespace stripped, rune-capped. Empty or JSON-shaped replies
+// are model failures, not thoughts.
+func parseMusing(text string) (string, error) {
+	t := strings.TrimSpace(text)
+	if i := strings.IndexByte(t, '\n'); i >= 0 {
+		t = strings.TrimSpace(t[:i])
+	}
+	t = strings.Trim(t, "\"' ")
+	if t == "" || strings.HasPrefix(t, "{") {
+		return "", fmt.Errorf("unusable musing %q", text)
+	}
+	const museMaxRunes = 200
+	if r := []rune(t); len(r) > museMaxRunes {
+		t = string(r[:museMaxRunes])
+	}
+	return t, nil
+}
+
 // firstJSON extracts the first balanced JSON object from model output.
 func firstJSON(text string) (string, error) {
 	start := strings.IndexByte(text, '{')

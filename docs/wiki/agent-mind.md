@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
+verified_against: ceafd4106848291cddc9492351461d961043390f
 ---
 
 # Agent mind
@@ -61,6 +61,19 @@ records `agent.intent_set (source: planner)` + `agent.thought`. Failures of any 
 (dead model, budget, garbage output, impossible goal) emit nothing; the reflex grace
 (120 ticks idle) is the floor under every gap, and remains the permanent degraded
 mode.
+
+**Musings** (TASK-21): between planner calls each agent has a 15-game-minute
+best-effort musing cadence (staggered half a slot off the planner stagger).
+A musing is one `llm.KindMusing` call (same situation + memory window, a
+plain-sentence system frame, MaxTokens 48) whose reply lands as a single
+`agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
+interiority with zero goal effect. Single-flight and detached from the absorb
+loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy` on `BestEffort`
+requests) or unusable replies drop the musing silently. One exception, the
+fairness floor: a musing starved past `museStarveWindow` (2 wall-minutes)
+drops the `BestEffort` flag and rides the normal queue — a saturated tier
+(live finding: back-to-back ~50s planner calls admit zero best-effort work)
+costs at most one 48-token call per window instead of total silence.
 
 ## Connections
 
