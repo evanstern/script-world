@@ -13,10 +13,12 @@ verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
 degraded, effective rate) plus the living world — agents with needs/intents/
 inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
-latch), structures, cleared trees, harvested forage, den cooldowns, and the social
+latch), structures, cleared trees, harvested forage, den cooldowns, the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
-variants, and the bounded conversation-record ring ([[social-fabric]]; executor
-types in `agents.go`; memories belong to
+variants and the bounded conversation-record ring ([[social-fabric]]) — and the
+consolidated inner life: per-agent beliefs, self-narrative, and the
+once-per-night consolidation ledger
+([[nightly-consolidation]]; executor types in `agents.go`; memories belong to
 [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to

@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 2a1608f2cf9d525cbe451f8a40b7b355e30cd692
+verified_against: 8c6b309c4596e4671fbdcaf19d03d935ce85baff
 ---
 
 # Daemon lifecycle
@@ -46,7 +46,9 @@ Startup sequence:
 
 Shutdown: ctx cancellation (signal or `shutdown` cmd) returns from `Run` after the
 loop's final snapshot; `daemon.stopped` is appended; deferred cleanup closes the
-server (removing the socket), the store, and the pidfile. SIGKILL skips all of this —
+server (removing the socket), the store, and the pidfile — the pidfile only if it
+is still ours (a slow shutdown can overlap a successor daemon that has already
+claimed it; the CLI's stop wait is 30 s to match). SIGKILL skips all of this —
 that is the crash path recovery is tested against.
 
 `IsRunning(dir)` (used by CLI `start`/`stop`) reads the pidfile and probes liveness

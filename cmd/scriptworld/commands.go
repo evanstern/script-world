@@ -222,7 +222,7 @@ func cmdStop(args []string) error {
 		// Socket dead but pid alive: fall back to SIGTERM (same graceful path).
 		syscall.Kill(pid, syscall.SIGTERM)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if running, _ := daemon.IsRunning(dir); !running {
 			fmt.Println("daemon stopped")
@@ -230,7 +230,7 @@ func cmdStop(args []string) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return fmt.Errorf("daemon (pid %d) did not stop within 10s", pid)
+	return fmt.Errorf("daemon (pid %d) did not stop within 30s", pid)
 }
 
 func cmdStatus(args []string) error {

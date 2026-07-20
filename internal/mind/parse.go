@@ -170,3 +170,18 @@ func parseReply(text string) (planReply, error) {
 	}
 	return r, nil
 }
+
+// parseConsolidation extracts the nightly consolidation output (TASK-9).
+// Parse failures are consolidation rejections ("unparseable"), never
+// partial landings.
+func parseConsolidation(text string) (consolidationOutput, error) {
+	raw, err := firstJSON(text)
+	if err != nil {
+		return consolidationOutput{}, err
+	}
+	var out consolidationOutput
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return consolidationOutput{}, err
+	}
+	return out, nil
+}

@@ -60,6 +60,13 @@ type Agent struct {
 	IdleSince int64 `json:"idle_since"`
 	// NearDeath latches the "nearly died" memory once per health collapse.
 	NearDeath bool `json:"near_death,omitempty"`
+	// Nightly consolidation (TASK-9). Night/mark values of 0 mean "never" —
+	// NightIndex is 1-based — so pre-TASK-9 snapshots stay correct.
+	Beliefs               []Belief `json:"beliefs,omitempty"`
+	Narrative             string   `json:"narrative,omitempty"`
+	LastConsolidatedNight int64    `json:"last_consolidated_night,omitempty"`
+	ConsolidatedUpTo      int64    `json:"consolidated_up_to,omitempty"`
+	LastConsolidateMark   int64    `json:"last_consolidate_mark,omitempty"`
 }
 
 // Memory is one episodic record; salience 1..10 weights the working-memory
