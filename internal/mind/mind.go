@@ -276,7 +276,11 @@ func (md *Mind) muse() {
 	name := md.replica.Agents[pick].Name
 	system := musingSystemPrompt(name, md.personas[pick])
 	prompt := userPrompt(md.replica, pick, md.k)
-	starved := time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
+	// The fairness floor stands down while a conversation runs — a scene
+	// is already the tier's most expensive tenant, and a queued musing
+	// behind it only starves planners further.
+	starved := !md.convoBusy.Load() &&
+		time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
 	go func() {
 		defer md.museBusy.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)
