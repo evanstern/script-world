@@ -129,8 +129,8 @@ passes, enters charter; exile stops being convened; proximity violation fires
 ## Phase 8: Polish & cross-cutting
 
 - [x] T033 Determinism e2e in e2e/determinism_e2e_test.go: extend the scenario to a governed run (meetings, votes, violations, rephrased text) → byte-identical replay hash (SC-005)
-- [ ] T034 Quickstart §4 live acceptance on a real world (32x across ≥2 noons, then model-off crossing): record evidence per AC in specs/006-norms-and-votes/quickstart-results.md
-- [ ] T035 [P] README.md: add norms/votes to the feature list; docs touch for `village_charter.md` in the save-dir layout
+- [x] T034 Quickstart §4 live acceptance on a real world (32x across ≥2 noons, then model-off crossing): record evidence per AC in specs/006-norms-and-votes/quickstart-results.md
+- [x] T035 [P] README.md: add norms/votes to the feature list; docs touch for `village_charter.md` in the save-dir layout
 - [ ] T036 Wiki re-ground after merge-ready: new docs/wiki note for governance + re-verify notes whose sources changed (executor, social-fabric, agent-mind, chronicle, event-types) via /grounding-wiki:wiki-update
 
 ---

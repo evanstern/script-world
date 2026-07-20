@@ -37,9 +37,13 @@ deterministic tick loop (1 tick = 1 game second), an append-only SQLite event lo
 with snapshots, per-world save directories, and a Unix-socket client protocol —
 carrying eight villagers with needs, LLM planner minds, conversations, rumors and
 debts, nightly memory consolidation, the nocturnal gru, a cloud-narrated chronicle
-(the catch-up mechanism), and **Metatron** (TASK-12): the player's sole influence
+(the catch-up mechanism), **Metatron** (TASK-12): the player's sole influence
 channel, conversing in the TUI console, mediating dreams and omens on a regenerating
-charge economy, governed by `charter.md` — the game's only player-editable prompt.
+charge economy, governed by `charter.md` — the game's only player-editable prompt —
+and **norms and votes** (TASK-13): the village legislates itself at a daily noon
+meeting, proposals and votes resolving deterministically off the relationship graph,
+with the agreed law living in `village_charter.md` and witnessed violations feeding
+memories, grudges, and gossip.
 
 ```sh
 go build ./cmd/scriptworld
