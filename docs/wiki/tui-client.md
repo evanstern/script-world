@@ -37,8 +37,9 @@ events, so the replica's tick alone would lag).
 Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — a camera
 window over the generated terrain from `Model.gameMap` (regenerated locally via
 `world.Map()`, [[worldmap-generation]]): water/trees/forage/dens glyphs with the
-replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲
-and shelters ⌂; the camera follows the living agents' centroid, arrow keys pan, `c`
+replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲,
+shelters ⌂, and the [[gru]] as a red G while it is abroad; the camera follows the
+living agents' centroid, arrow keys pan, `c`
 recenters), **chronicle** (raw event feed until TASK-11 narrates it), **metatron**
 (stub until TASK-12; already shows [[llm-orchestrator]] tier
 health, queues, and monthly spend when the world has one), **souls** (live agent bodies: status, current goal, five-cell

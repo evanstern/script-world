@@ -81,7 +81,10 @@ func (s *Scribe) run() {
 					for i := range s.replica.Agents {
 						dirty[i] = true
 					}
-				case "agent.memory_added", "agent.died":
+				case "agent.memory_added", "agent.died",
+					"agent.memory_promoted", "agent.memory_faded",
+					"agent.belief_revised", "agent.narrative_set",
+					"agent.consolidated":
 					var p struct {
 						Agent int `json:"agent"`
 					}
@@ -110,11 +113,33 @@ func (s *Scribe) render(idx int) {
 		status = "Dead"
 	}
 	fmt.Fprintf(&b, "*Born day 1. %s. %d memories.*\n\n", status, len(a.Memories))
+
+	// Who I am becoming: the consolidated self-narrative (TASK-9), the
+	// player's first read.
+	if a.Narrative != "" {
+		fmt.Fprintf(&b, "## Who I am becoming\n\n%s\n\n", a.Narrative)
+	}
+
 	if len(a.Memories) == 0 {
 		b.WriteString("*No memories yet.*\n")
 	}
 	for _, m := range a.Memories {
 		fmt.Fprintf(&b, "- **%s** (%d★) %s\n", clock.Format(m.Tick), m.Salience, m.Text)
+	}
+
+	// Beliefs: durable convictions with confidence and provenance (TASK-9).
+	if len(a.Beliefs) > 0 {
+		b.WriteString("\n## Beliefs\n\n")
+		for _, bl := range a.Beliefs {
+			src := ""
+			switch {
+			case bl.Provenance == sim.ProvenanceTold && bl.Source >= 0 && bl.Source < len(s.replica.Agents):
+				src = fmt.Sprintf("told by %s", s.replica.Agents[bl.Source].Name)
+			default:
+				src = bl.Provenance
+			}
+			fmt.Fprintf(&b, "- %s *(%d%% sure — %s, %s)*\n", bl.Statement, bl.Confidence, src, clock.Format(bl.Tick))
+		}
 	}
 
 	// Bonds: the social fabric as this soul feels it.
