@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
+verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
 ---
 
 # Social fabric
@@ -42,7 +42,8 @@ tick-0 events; only the conversation driver may pass one — owner→listener tr
 any rumor.
 
 **Conversations** (`mind/convo.go`, scenes in TASK-22): on the executor's
-`agent.talked` beat, the driver (slot = 1, immutable snapshot, 6-min deadline)
+`agent.talked` beat, the driver (slot = 1, immutable snapshot, 10-min deadline —
+sized for a full scene at honest local pace)
 forms a **scene**: the founding pair plus any awake villager within
 `sceneJoinRadius` (2) of the founding speaker, up to `sceneCap` (4). Round-robin
 turns, `ConvoTurnsPerSide` (2) each; the snapshot carries each participant's

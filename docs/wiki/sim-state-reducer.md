@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 36ab690d59475f07ecf4b8f4adffb1735252744f
+verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
 ---
 
 # Sim state & reducer
