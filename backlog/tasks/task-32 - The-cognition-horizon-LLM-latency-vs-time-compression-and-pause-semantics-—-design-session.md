@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-20 20:30'
-updated_date: '2026-07-20 21:15'
+updated_date: '2026-07-20 21:33'
 labels:
   - design
 dependencies: []
@@ -28,6 +28,14 @@ Spec: specs/007-cognition-horizon
 - [x] #2 The spec states the cognition-horizon doctrine as a decision doc (sibling to decision-3): LLM authority is scoped by decision timescale vs turn latency in game time, not by capping speed
 - [x] #3 The spec defines pause semantics explicitly: what happens to in-flight planner calls and conversations when the world pauses
 - [x] #4 Staleness telemetry (snapshot tick + landing tick on every injected intent) is specified as the first deliverable so tuning is measured, not guessed
+- [ ] #5 Spec phase: Setup
+- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #7 Spec phase: User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP
+- [ ] #8 Spec phase: User Story 2 — Doomed thoughts are never attempted (Priority: P2)
+- [ ] #9 Spec phase: User Story 3 — Stale intents never act (Priority: P3)
+- [ ] #10 Spec phase: User Story 4 — Thoughts aim at the world they will land in (Priority: P4)
+- [ ] #11 Spec phase: User Story 5 — Pause has defined cognition semantics (Priority: P5)
+- [ ] #12 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,4 +50,6 @@ Spec: specs/007-cognition-horizon
 Pre-session decisions (user, 2026-07-20): (1) DETERMINISTIC ROUTER — the thing that decides whether a decision goes to the LLM must never be an LLM. Mechanism: intentional event-type categorization; every event/decision type carries a static complexity score on the Fibonacci scale (1,2,3,5,8,...) expressing thought cost ordinally, NOT wall-seconds — host/model-independent. A setup+calibration stage benchmarks the configured host+LLM on a uniform reference workload to derive seconds-per-point for this deployment; the scale is universal, the calibration is local. (2) STALENESS STAMP is predictive, not just forensic: 'start at T, round-trip predicted at N points ≈ Δ seconds, so plan for T+Δ and consume that context' — merges with future-dating. Open question the spec MUST answer: what happens when the prediction is drastically wrong, systemically (drift) or one-shot (network lag spike)? Drift must be accounted for regardless — proposal: calibration is not one-time; telemetry continuously re-estimates seconds-per-point with a robust/spike-rejecting estimator (EWMA over a window, outliers excluded and counted separately); sustained spike rate is itself drift signal -> recalibrate. Prediction is used for ROUTING and PROMPT future-dating only; landing-time validation is the ENFORCEMENT, so a wrong prediction can never cause a wrong action, only a wasted or adapted thought. (3) GUARD REJECTION must have a defined outcome, never a silent void: adapt -> reject+record -> learn. Adapt: cheap deterministic repair when the intent's spirit survives (re-resolve moved target within budget). Reject: fall to reflex as today BUT emit agent.intent_rejected{reason, staleness, predicted_vs_actual} — silent failure ends where telemetry doctrine begins. Learn: rejection events are classified (prediction wrong = infra signal, kept out of heuristics as spikes; world changed via high-salience interrupt = supersede working as intended); persistent guard-failure rate on a decision class means its points or budget are mistuned — surfaced for human retune, never auto-widened. (4) FUTURE-GATING accepted contingent on a real 'act at time T' mechanism existing; today intents execute at landing with no hold-until. Proposal: conditional plans subsume it — a timed guard (when tick >= T / when at location) is just one guard type in the guarded-plan vocabulary. (5) CONDITIONAL PLANS accepted. (6) ADAPTIVE THROTTLING split out to its own task (TASK-33). (7) TELEMETRY accepted; future extension noted — thought-chain graphs linking stimulus event -> thought -> intent -> executor events. Schema decision NOW, cheap now hard to retrofit: new telemetry events carry causality/correlation ids (trigger event id on prompts, snapshot+landing ticks on intents) so chains are linkable later.
 
 Design session complete (2026-07-20): spec specs/007-cognition-horizon authored (5 prioritized stories: telemetry+calibration P1, deterministic router P2, landing ladder P3, future-dating+conditional plans P4, pause semantics P5; 20 FRs, 7 SCs; quality checklist all-pass). Doctrine recorded as decision-4. Pause decided: world freezes, minds catch up — in-flight thought lands at the frozen tick at zero game-tick staleness; no new cognition while paused; cancelling in-flight work rejected as wasteful. Spec linked via spec-bridge (marker + this note). Next: speckit-plan / speckit-tasks on this branch.
+
+spec-bridge sync: Setup: 0/2 · Foundational (Blocking Prerequisites): 0/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 0/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 0/3 · User Story 3 — Stale intents never act (Priority: P3): 0/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 0/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 0/2 · Polish & Cross-Cutting Concerns: 0/4
 <!-- SECTION:NOTES:END -->
