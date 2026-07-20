@@ -19,6 +19,13 @@ import (
 func setupConsol(t *testing.T, model Submitter) (*harness, *Mind) {
 	t.Helper()
 	h := newHarness(t, "") // harness's own mock is unused; we build our own mind
+	// Pause the world: consolidation is command-driven (inject_social works
+	// while paused), and a running executor pollutes the store with its own
+	// memories — at max speed the world reaches night 1 (the gru!) within
+	// the assertion windows.
+	if _, err := h.loop.Do("pause", ""); err != nil {
+		t.Fatal(err)
+	}
 	m := h.m
 	state := sim.NewState(42, m)
 	state.Agents[0].Memories = []sim.Memory{
