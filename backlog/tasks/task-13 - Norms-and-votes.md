@@ -1,10 +1,10 @@
 ---
 id: TASK-13
 title: Norms and votes
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 01:14'
-updated_date: '2026-07-20 19:20'
+updated_date: '2026-07-20 19:50'
 labels:
   - social
 dependencies:
@@ -24,21 +24,19 @@ Spec: specs/006-norms-and-votes
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An agent can propose a norm; votes resolve via relationships; passed norms constrain behavior
-- [ ] #2 A coordination mechanism convenes the villagers: they break from their routines and gather at a meeting place so votes happen together, not scattered
-- [ ] #3 A charter persists the rules the village has agreed to; rules can be amended or removed via vote, and the charter reflects the change
-- [ ] #4 A village meeting runs once per game-day at noon: each villager gets a chance to speak (raise issues, propose/amend/remove rules), timeboxed to ~1 game-hour with grace to let an in-flight conversation finish
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (blocking prerequisites)
-- [ ] #7 Spec phase: User Story 1 — The village convenes at noon (P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — Propose, vote, pass (P1)
-- [ ] #9 Spec phase: User Story 3 — The charter remembers (P2)
-- [ ] #10 Spec phase: User Story 4 — Norms bind (and get broken) (P2)
-- [ ] #11 Spec phase: User Story 5 — Exile is on the table (P3)
-- [ ] #12 Spec phase: Polish & cross-cutting
+- [x] #1 An agent can propose a norm; votes resolve via relationships; passed norms constrain behavior
+- [x] #2 A coordination mechanism convenes the villagers: they break from their routines and gather at a meeting place so votes happen together, not scattered
+- [x] #3 A charter persists the rules the village has agreed to; rules can be amended or removed via vote, and the charter reflects the change
+- [x] #4 A village meeting runs once per game-day at noon: each villager gets a chance to speak (raise issues, propose/amend/remove rules), timeboxed to ~1 game-hour with grace to let an in-flight conversation finish
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (blocking prerequisites)
+- [x] #7 Spec phase: User Story 1 — The village convenes at noon (P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — Propose, vote, pass (P1)
+- [x] #9 Spec phase: User Story 3 — The charter remembers (P2)
+- [x] #10 Spec phase: User Story 4 — Norms bind (and get broken) (P2)
+- [x] #11 Spec phase: User Story 5 — Exile is on the table (P3)
+- [x] #12 Spec phase: Polish & cross-cutting
 <!-- AC:END -->
-
-
 
 ## Implementation Plan
 
@@ -50,3 +48,15 @@ Spec: specs/006-norms-and-votes
 5. Implement on branch task-13-norms-and-votes (one PR)
 6. wiki-update re-ground; spec-bridge:sync; PR
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync: Setup: 2/2 · Foundational (blocking prerequisites): 5/5 · User Story 1 — The village convenes at noon (P1) 🎯 MVP: 6/6 · User Story 2 — Propose, vote, pass (P1): 7/7 · User Story 3 — The charter remembers (P2): 3/3 · User Story 4 — Norms bind (and get broken) (P2): 5/5 · User Story 5 — Exile is on the table (P3): 4/4 · Polish & cross-cutting: 4/4 — status In Progress → Done
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 2/2 · Foundational (blocking prerequisites): 5/5 · User Story 1 — The village convenes at noon (P1) 🎯 MVP: 6/6 · User Story 2 — Propose, vote, pass (P1): 7/7 · User Story 3 — The charter remembers (P2): 3/3 · User Story 4 — Norms bind (and get broken) (P2): 5/5 · User Story 5 — Exile is on the table (P3): 4/4 · Polish & cross-cutting: 4/4). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
