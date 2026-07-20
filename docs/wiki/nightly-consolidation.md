@@ -7,7 +7,7 @@ sources:
   - internal/mind/consolidate.go
   - internal/mind/validate.go
   - internal/persona/personas.go
-verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
+verified_against: 8c6b309c4596e4671fbdcaf19d03d935ce85baff
 ---
 
 # Nightly consolidation + persona firewall
@@ -39,9 +39,14 @@ JSON object — `nature` (anchor echo), `gist`, `promote`/`fade` refs, `beliefs`
 `narrative`.
 
 **The firewall validator** (`internal/mind/validate.go`), deterministic and
-mechanical — no second model call, so rejection is a testable 100% guarantee:
-1. structure — refs must resolve in the sent buffer, caps (≤5 promotes, ≤8 fades,
-   ≤4 belief edits, narrative ≤1200 chars), bounds, known belief IDs;
+mechanical — no second model call, so rejection is a testable 100% guarantee.
+Before judging, mechanical slack is absorbed rather than punished (night-177
+telemetry: most rejections were bookkeeping, not drift): unknown belief IDs are
+coerced to "new" (ID bookkeeping is ours, not the model's) and over-long lists
+are truncated to their best-first prefix. Then:
+1. structure — refs must resolve in the sent buffer (deduplicated, mapped back
+   to durable tick+hash identity), caps as hard guards behind the pre-trim
+   (≤5 promotes, ≤8 fades, ≤4 belief edits, narrative ≤1200 chars), bounds;
 2. anchor echo — `nature` must equal `persona.Anchors[name]` byte-for-byte
    (paraphrase is the cheap canary for drift);
 3. drift lexicon — authored `persona.DriftMarkers[name]` words (word-boundary,

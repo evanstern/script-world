@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 5d47761ff2fd609c0a019036f67a6c7c314e9661
+verified_against: 8c6b309c4596e4671fbdcaf19d03d935ce85baff
 ---
 
 # Agent mind
