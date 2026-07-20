@@ -3,10 +3,10 @@ id: TASK-32
 title: >-
   The cognition horizon: LLM latency vs time compression, and pause semantics —
   design session
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-20 20:30'
-updated_date: '2026-07-20 22:31'
+updated_date: '2026-07-20 23:00'
 labels:
   - design
 dependencies: []
@@ -35,7 +35,7 @@ Spec: specs/007-cognition-horizon
 - [x] #9 Spec phase: User Story 3 — Stale intents never act (Priority: P3)
 - [x] #10 Spec phase: User Story 4 — Thoughts aim at the world they will land in (Priority: P4)
 - [x] #11 Spec phase: User Story 5 — Pause has defined cognition semantics (Priority: P5)
-- [ ] #12 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #12 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -62,4 +62,12 @@ spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · Us
 spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 3/3 · User Story 3 — Stale intents never act (Priority: P3): 5/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 0/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 0/2 · Polish & Cross-Cutting Concerns: 0/4
 
 spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 3/3 · User Story 3 — Stale intents never act (Priority: P3): 5/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 4/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 2/2 · Polish & Cross-Cutting Concerns: 0/4
+
+spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 3/3 · User Story 3 — Stale intents never act (Priority: P3): 5/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 4/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 2/2 · Polish & Cross-Cutting Concerns: 4/4 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Staleness is measured, never guessed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 — Doomed thoughts are never attempted (Priority: P2): 3/3 · User Story 3 — Stale intents never act (Priority: P3): 5/5 · User Story 4 — Thoughts aim at the world they will land in (Priority: P4): 4/4 · User Story 5 — Pause has defined cognition semantics (Priority: P5): 2/2 · Polish & Cross-Cutting Concerns: 4/4). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

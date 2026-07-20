@@ -91,7 +91,7 @@ Prompts stop pretending thought is instant. A prompt snapshot tells the model wh
 **Acceptance Scenarios**:
 
 1. **Given** a paused world with a planner call in flight, **When** the call completes, **Then** the intent lands at the frozen tick with staleness 0 game ticks, guards still validated.
-2. **Given** a paused world, **When** wall time passes, **Then** no new planner, musing, or conversation jobs start.
+2. **Given** a paused world with no landings arriving, **When** wall time passes, **Then** no new planner, musing, or conversation jobs start; a landing batch may settle one debounce-bounded catch-up round at zero staleness, after which the mind quiesces until resume.
 3. **Given** a conversation founded before the pause, **When** it completes during the pause, **Then** the full scene lands atomically at the frozen tick.
 4. **Given** a resume after a long pause, **When** ticks flow again, **Then** cognition cadence self-heals with no burst compensating for the paused interval.
 
@@ -144,7 +144,7 @@ Prompts stop pretending thought is instant. A prompt snapshot tells the model wh
 
 **Pause**
 
-- **FR-018**: Pause semantics are: no new cognition starts while paused; in-flight thoughts and conversations complete and land at the frozen tick; staleness measured in game ticks is therefore zero across a pause; landing enforcement (guards, supersede) still applies; resume MUST NOT trigger a compensating burst of cognition.
+- **FR-018**: Pause semantics are: no *tick-driven* cognition schedules while paused (cadence and triggers are frozen with the clock); in-flight thoughts and conversations complete and land at the frozen tick; a landing batch MAY wake one debounce-bounded round of catch-up thought — snapshotted at the frozen tick, therefore at zero staleness — after which the mind quiesces (the debounce is game-time and cannot reopen while frozen); landing enforcement (guards, supersede) still applies to everything; resume MUST NOT trigger a compensating burst. *(Refined 2026-07-20 from the live validation run: the catch-up round is the doctrine's own "minds catch up" made literal — pause is the one state where thought fidelity is perfect, so thought settled there is the best thought the system ever produces.)*
 
 **Determinism and telemetry**
 

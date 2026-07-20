@@ -268,8 +268,11 @@ func TestPauseInFlightThoughtLandsAtFrozenTick(t *testing.T) {
 	}
 }
 
-// TestPauseStartsNoNewThoughts: scheduling is tick-driven — while paused, no
-// new planner/musing jobs start no matter how much wall time passes.
+// TestPauseStartsNoNewThoughts: scheduling is tick-driven — once a paused
+// world quiesces, no new planner/musing jobs start no matter how much wall
+// time passes. (A landing batch arriving mid-pause may first settle one
+// debounce-bounded catch-up round at zero staleness — FR-018 as refined by
+// the live validation run; this test drains before measuring.)
 func TestPauseStartsNoNewThoughts(t *testing.T) {
 	h := newHarnessAt(t, `{"goal":"wander","reason":"stretching"}`, "16x")
 	h.model.mu.Lock()

@@ -180,9 +180,10 @@ var injectSocialWhitelist = map[string]bool{
 //
 // Deliberately pause-open, like InjectIntent (FR-018): a conversation
 // founded before a pause completes on the wall clock and lands its whole
-// scene at the frozen tick. No new cognition starts while paused — the
-// mind's scheduling is tick-driven and ticks stop — so pause is the one
-// state where thought fidelity is perfect.
+// scene at the frozen tick. Tick-driven scheduling freezes with the clock;
+// a landing batch may wake one debounce-bounded round of catch-up thought
+// at zero staleness before the mind quiesces (live finding, 2026-07-20) —
+// pause is the one state where thought fidelity is perfect.
 func (l *Loop) InjectSocial(events []store.Event) error {
 	cmd := command{name: "inject_social", social: events, reply: make(chan commandResult, 1)}
 	select {

@@ -113,10 +113,10 @@
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T029 [P] README: cognition-horizon section (doctrine, calibrate usage, reading cog.* telemetry)
-- [ ] T030 Replay byte-equality e2e on a cognition-enabled run (SC-003) in e2e/
-- [ ] T031 Run quickstart.md end-to-end against a live local model and record results in the spec dir (quickstart-results.md)
-- [ ] T032 Full-suite gate: `go vet ./... && go test ./...` green; SC-002 audit query over the quickstart run shows zero silent drops
+- [x] T029 [P] README: cognition-horizon section (doctrine, calibrate usage, reading cog.* telemetry)
+- [x] T030 Replay byte-equality e2e on a cognition-enabled run (SC-003) in e2e/
+- [x] T031 Run quickstart.md end-to-end against a live local model and record results in the spec dir (quickstart-results.md)
+- [x] T032 Full-suite gate: `go vet ./... && go test ./...` green; SC-002 audit query over the quickstart run shows zero silent drops
 
 ---
 

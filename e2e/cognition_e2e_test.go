@@ -13,11 +13,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/world"
 )
 
 // mockOpenAI answers every chat completion instantly with a fixed reply.
@@ -233,4 +235,108 @@ func TestCognitionStaleRejectionUnderLatency(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestCognitionReplayByteIdentical (SC-003): on a cognition-enabled run,
+// deriving state by replaying the full event log from genesis is
+// byte-identical to the snapshot+tail derivation the daemon itself uses —
+// cog.* telemetry, plans, guards, and rejections are all recorded input,
+// never recomputed.
+func TestCognitionReplayByteIdentical(t *testing.T) {
+	srv := mockOpenAI(t, `{"goal":"forage","reason":"stores are low"}`)
+	defer srv.Close()
+
+	dir := filepath.Join(t.TempDir(), "w")
+	run(t, "new", dir, "--name", "replay", "--seed", "21")
+	llmCfg := fmt.Sprintf(`{
+  "monthly_budget_usd": 1,
+  "local": {"endpoint": %q, "model": "mock"},
+  "cloud": {"provider": "openai_compat", "endpoint": %q, "model": "mock",
+            "input_usd_per_mtok": 0, "output_usd_per_mtok": 0, "api_key": "x"}
+}`, srv.URL, srv.URL)
+	if err := os.WriteFile(filepath.Join(dir, "llm.json"), []byte(llmCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(t, "start", dir)
+	run(t, "speed", dir, "16x")
+
+	// Accumulate cognition traffic, then a pause (forces a snapshot) and stop.
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		st, err := store.Open(filepath.Join(dir, "world.db"))
+		if err != nil {
+			continue
+		}
+		n := 0
+		st.ReplayEvents(0, func(e store.Event) error {
+			if e.Type == "cog.outcome" {
+				n++
+			}
+			return nil
+		})
+		st.Close()
+		if n >= 3 {
+			break
+		}
+	}
+	run(t, "pause", dir)
+	run(t, "stop", dir)
+
+	st, err := store.Open(filepath.Join(dir, "world.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.CheckContiguity(); err != nil {
+		t.Fatalf("holed log: %v", err)
+	}
+	w, err := world.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := w.Map()
+
+	// Derivation A: genesis → full replay.
+	full := sim.NewState(w.Manifest.Seed, m)
+	sawCog := false
+	if err := st.ReplayEvents(0, func(e store.Event) error {
+		if strings.HasPrefix(e.Type, "cog.") {
+			sawCog = true
+		}
+		full.Tick = maxI64(full.Tick, e.Tick)
+		return full.Apply(e)
+	}); err != nil {
+		t.Fatalf("full replay: %v", err)
+	}
+	if !sawCog {
+		t.Fatal("run recorded no cognition telemetry — nothing proven")
+	}
+
+	// Derivation B: latest snapshot + tail (the daemon's own recovery path).
+	snap, err := st.LatestValidSnapshot()
+	if err != nil || snap == nil {
+		t.Fatalf("no snapshot: %v", err)
+	}
+	fromSnap := sim.NewState(w.Manifest.Seed, m)
+	if err := json.Unmarshal(snap.State, fromSnap); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReplayEvents(snap.Seq, func(e store.Event) error {
+		fromSnap.Tick = maxI64(fromSnap.Tick, e.Tick)
+		return fromSnap.Apply(e)
+	}); err != nil {
+		t.Fatalf("tail replay: %v", err)
+	}
+
+	if string(full.Marshal()) != string(fromSnap.Marshal()) {
+		t.Error("SC-003 violated: full replay != snapshot+tail on a cognition-enabled run")
+	}
+}
+
+func maxI64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
