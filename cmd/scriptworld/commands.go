@@ -145,6 +145,63 @@ func cmdLLM(args []string) error {
 	return nil
 }
 
+// cmdMetatron is the console one-shot (TASK-12): with a message, one
+// mediated turn; without, the model-free status peek.
+func cmdMetatron(args []string) error {
+	fs := flag.NewFlagSet("metatron", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 {
+		return fmt.Errorf("usage: scriptworld metatron <dir> [message...]")
+	}
+	dir := fs.Arg(0)
+	w, err := world.Open(dir)
+	if err != nil {
+		return err
+	}
+	c, err := ipc.Dial(w.SockPath())
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	if fs.NArg() == 1 {
+		st, err := c.MetatronStatus()
+		if err != nil {
+			return err
+		}
+		charter := "custom charter in effect"
+		if st.CharterDefault {
+			charter = "default charter"
+		}
+		fmt.Printf("charges %s (%d/%d) · %s · charter.md at %s\n",
+			chargeGlyphs(st.Charges), st.Charges, sim.MetatronChargeCap, charter, w.CharterPath())
+		if strings.TrimSpace(st.SoulTail) != "" {
+			fmt.Printf("\n--- recent notes ---\n%s\n", strings.TrimSpace(st.SoulTail))
+		}
+		return nil
+	}
+
+	r, err := c.MetatronChat(strings.Join(fs.Args()[1:], " "))
+	if err != nil {
+		return err
+	}
+	for _, m := range r.Moments {
+		fmt.Printf("! %s\n", m)
+	}
+	fmt.Printf("\n%s\n", r.Reply)
+	if r.Nudge != nil {
+		fmt.Printf("\n⚡ %s → %s: %q\n", r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text)
+	}
+	fmt.Printf("\n[charges %s %d/%d]\n", chargeGlyphs(r.Charges), r.Charges, sim.MetatronChargeCap)
+	return nil
+}
+
+func chargeGlyphs(n int) string {
+	return strings.Repeat("⚡", n) + strings.Repeat("·", sim.MetatronChargeCap-n)
+}
+
 func cmdDaemon(args []string) error {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	dir, err := dirArg(fs, args)

@@ -41,6 +41,12 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Metatron charge regeneration (TASK-12): absolute 6-game-hour
+	// boundaries, pure function of (state, tick).
+	if nextTick%chargeRegenTicks == 0 && s.MetatronCharges < MetatronChargeCap {
+		emit("metatron.charge_regenerated", ChargeRegeneratedPayload{})
+	}
+
 	// The gru: nightly emergence, stalking, wounds, dawn withdrawal (gru.go).
 	events = append(events, gruStep(s, m, night, nextTick)...)
 

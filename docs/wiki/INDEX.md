@@ -42,6 +42,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[social-fabric]] — relationships, rumors, debts, secrets, conversations
 - [[nightly-consolidation]] — sleep-triggered soul digestion behind the persona firewall
 - [[chronicle]] — the narrated story feed: cloud narrator, snapshot-carried catch-up ring
+- [[metatron]] — the gatekeeper angel: console, dream/omen mediation, charges, the editable charter
 
 ## Lifecycle & quality
 

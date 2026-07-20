@@ -32,6 +32,9 @@ type Status struct {
 	EffectiveRate float64     `json:"effective_rate"`
 	Degraded      bool        `json:"degraded"`
 	LastSeq       int64       `json:"last_seq"`
+	// MetatronCharges surfaces the nudge bank (TASK-12) so clients can
+	// display ⚡ without a state fetch.
+	MetatronCharges int `json:"metatron_charges"`
 }
 
 // InjectArgs carries a planner decision into deterministic space.
@@ -134,6 +137,9 @@ var injectSocialWhitelist = map[string]bool{
 	"agent.thought": true,
 	// The chronicle (TASK-11): the narrator's story entries.
 	"chronicle.entry": true,
+	// Metatron nudges (TASK-12): the spend + record; the dry-run enforces
+	// charges/form/target/text validity before anything lands.
+	"metatron.nudged": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
@@ -194,6 +200,7 @@ func (l *Loop) status() Status {
 		EffectiveRate: eff,
 		Degraded:      s.Degraded,
 		LastSeq:       l.st.LastSeq(),
+		MetatronCharges: s.MetatronCharges,
 	}
 }
 

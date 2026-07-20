@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # TUI client
@@ -45,8 +45,11 @@ snapshot-carried `State.Chronicle` ring ([[chronicle]]) — day-stamped entries 
 thread slugs and cast; `a` cycles an agent filter, `t` cycles a thread filter
 across slugs seen in the ring, `r` toggles the raw event feed, which is also the
 automatic fallback while a world has no narrated entries), **metatron**
-(stub until TASK-12; already shows [[llm-orchestrator]] tier
-health, queues, and monthly spend when the world has one), **souls** (live agent bodies: status, current goal, five-cell
+(TASK-12: the console — session transcript + input line over `metatron_chat`;
+while active the console owns the keyboard (every printable key types, Enter
+sends with an in-flight spinner, Esc returns to the map), the header shows the
+⚡ charge bank (from status) and charter provenance (fetched on pane entry),
+and tier health + spend remain at the foot — [[metatron]]), **souls** (live agent bodies: status, current goal, five-cell
 needs gauges, inventory, and each agent's newest memory line; the full soul.md
 files live on disk per [[agent-mind]]). Time controls: space toggles
 pause/resume based on last-known status; `[`/`]` step through `speedSteps`

@@ -13,6 +13,7 @@ import (
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/script-world/internal/metatron"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -32,6 +33,7 @@ type Server struct {
 	st       *store.Store
 	loop     *sim.Loop
 	llm      *llm.Orchestrator // nil when the world has no llm.json
+	metatron Angel             // nil when the world has no llm.json
 	shutdown func()            // requests daemon shutdown (graceful)
 	started  time.Time
 
@@ -54,6 +56,15 @@ func NewServer(w *world.World, st *store.Store, shutdown func()) *Server {
 
 // SetLLM attaches the optional orchestrator (before Serve).
 func (s *Server) SetLLM(o *llm.Orchestrator) { s.llm = o }
+
+// Angel is the Metatron surface the server needs (TASK-12; test seam).
+type Angel interface {
+	Turn(ctx context.Context, text string) (metatron.TurnResult, error)
+	Status() metatron.Status
+}
+
+// SetMetatron attaches the optional angel (before Serve).
+func (s *Server) SetMetatron(a Angel) { s.metatron = a }
 
 // SetLoop wires the sim loop in after construction (loop and server
 // reference each other: the loop notifies the server, the server commands
@@ -150,12 +161,13 @@ func (s *Server) statusData(cs sim.Status) StatusData {
 			FormatVersion: s.w.Manifest.FormatVersion,
 		},
 		Clock: ClockStatus{
-			Tick:          cs.Tick,
-			GameTime:      cs.GameTime,
-			Paused:        cs.Paused,
-			Speed:         string(cs.Speed),
-			EffectiveRate: cs.EffectiveRate,
-			Degraded:      cs.Degraded,
+			Tick:            cs.Tick,
+			GameTime:        cs.GameTime,
+			Paused:          cs.Paused,
+			Speed:           string(cs.Speed),
+			EffectiveRate:   cs.EffectiveRate,
+			Degraded:        cs.Degraded,
+			MetatronCharges: cs.MetatronCharges,
 		},
 		Daemon: DaemonStatus{
 			Pid:           os.Getpid(),
@@ -278,6 +290,38 @@ func (c *session) handle(req Request) {
 			return
 		}
 		data, err := json.Marshal(resp)
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
+	case "metatron_chat":
+		if c.srv.metatron == nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "metatron is not present in this world (no llm config)"})
+			return
+		}
+		var args MetatronChatArgs
+		if req.Args == nil || json.Unmarshal(req.Args, &args) != nil || args.Text == "" {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "malformed args (need text)"})
+			return
+		}
+		result, err := c.srv.metatron.Turn(context.Background(), args.Text)
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		data, err := json.Marshal(result)
+		if err != nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
+			return
+		}
+		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
+	case "metatron_status":
+		if c.srv.metatron == nil {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "metatron is not present in this world (no llm config)"})
+			return
+		}
+		data, err := json.Marshal(c.srv.metatron.Status())
 		if err != nil {
 			c.writeResponse(Response{ID: req.ID, OK: false, Error: err.Error()})
 			return
