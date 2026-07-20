@@ -8,7 +8,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 5e2f6fd479c04127bb3a9db44bdae93946345893
+verified_against: 36ab690d59475f07ecf4b8f4adffb1735252744f
 ---
 
 # Event types

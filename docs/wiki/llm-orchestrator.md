@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 5d47761ff2fd609c0a019036f67a6c7c314e9661
+verified_against: 36ab690d59475f07ecf4b8f4adffb1735252744f
 ---
 
 # LLM orchestrator
@@ -57,7 +57,12 @@ happens at admission, and the local tier is unaffected.
 
 **Degraded mode** (`health.go`): a per-tier circuit breaker — 3 consecutive failures
 open it (15 s backoff doubling to 5 min), an open circuit refuses instantly, one
-half-open probe tests recovery, success resets. A killed model degrades the AI layer;
+half-open probe tests recovery, success resets. Busy is not down (TASK-22 live
+finding): the worker skips queued jobs whose caller already gave up (no model
+call, no health strike) and never counts a failure when the caller's own ctx
+died mid-call — only genuine provider failures and the worker cap strike the
+breaker, so planners timing out behind a long conversation can no longer
+self-inflict an outage. A killed model degrades the AI layer;
 the daemon and loop never notice.
 
 **Config** (`config.go`): `llm.json` in the save directory, written with defaults by
