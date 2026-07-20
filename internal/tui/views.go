@@ -27,6 +27,9 @@ var (
 
 func (m Model) View() string {
 	if m.quitting {
+		if m.fatalErr != "" {
+			return styleErr.Render("detached: "+m.fatalErr) + "\n"
+		}
 		return "detached (the world keeps running)\n"
 	}
 	var b strings.Builder

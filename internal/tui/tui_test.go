@@ -2,12 +2,14 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/metatron"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
@@ -155,6 +157,39 @@ func TestQuitDetaches(t *testing.T) {
 	}
 	if v := mdl.(Model).View(); !strings.Contains(v, "keeps running") {
 		t.Errorf("quit view should reassure the world keeps running: %q", v)
+	}
+}
+
+// TestReplyTooLargeQuitsInsteadOfRetrying is TASK-19 AC#1 at the TUI: a
+// reply over the protocol cap used to feed the 2s retry loop forever; now it
+// is fatal — quit, with the actionable reason in the final view (and in
+// cmdUI's exit error via FatalErr).
+func TestReplyTooLargeQuitsInsteadOfRetrying(t *testing.T) {
+	m := testModel(t)
+	mdl, cmd := m.Update(disconnectedMsg{err: fmt.Errorf("state: %w", ipc.ErrReplyTooLarge)})
+	mm := mdl.(Model)
+	if !mm.quitting || mm.FatalErr() == "" {
+		t.Fatalf("oversized reply must be fatal: quitting=%v fatal=%q", mm.quitting, mm.FatalErr())
+	}
+	if cmd == nil {
+		t.Fatal("fatal disconnect must produce tea.Quit, not a retry")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("want tea.QuitMsg, got %T", cmd())
+	}
+	if v := mm.View(); !strings.Contains(v, "reply cap") {
+		t.Errorf("final view should carry the reason: %q", v)
+	}
+
+	// Transient failures keep the old behavior: not fatal, schedule a retry.
+	m2 := testModel(t)
+	mdl2, cmd2 := m2.Update(disconnectedMsg{err: errors.New("daemon not running")})
+	mm2 := mdl2.(Model)
+	if mm2.quitting || mm2.FatalErr() != "" {
+		t.Fatal("transient disconnect must not be fatal")
+	}
+	if cmd2 == nil {
+		t.Fatal("transient disconnect should schedule a retry")
 	}
 }
 
