@@ -245,6 +245,13 @@ func (md *Mind) closeChapter(day int64, label string, toTick int64) {
 			threads = append(threads, t)
 		}
 	}
+	// Router gate (FR-007): a day-scale budget passes at every watchable
+	// speed; a suppression (future faster speeds) drops the chapter into
+	// the retry carry like any other narrator failure.
+	if v := md.routeVerdict("chronicle", llm.KindNarrator); !v.Allow {
+		md.emitSuppressed("chronicle", -1, toTick, v)
+		return
+	}
 	job := narrJob{day: day, label: label, fromTick: fromTick, toTick: toTick,
 		lines: lines, threads: threads}
 	select {

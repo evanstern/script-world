@@ -59,6 +59,13 @@ func (md *Mind) maybeStartConversation(e store.Event) {
 	if json.Unmarshal(e.Payload, &p) != nil {
 		return
 	}
+	// Router gate (FR-007): a scene is the tier's most expensive thought
+	// (13 points) — if it can't land inside its budget at this speed, the
+	// encounter stays a primitive talk and the suppression is recorded.
+	if v := md.routeVerdict("conversation", llm.KindConversation); !v.Allow {
+		md.emitSuppressed("conversation", p.A, e.Tick, v)
+		return
+	}
 	if !md.convoBusy.CompareAndSwap(false, true) {
 		return // one at a time; this encounter stays a primitive talk
 	}

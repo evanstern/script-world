@@ -2,9 +2,11 @@ package mind
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 )
@@ -106,5 +108,48 @@ func TestMusingTelemetryLandsAtomically(t *testing.T) {
 	}
 	if !foundThought {
 		t.Error("landed musing outcome not batched with its agent.thought")
+	}
+}
+
+// TestPlannerSuppressedAtHighSpeed (US2): at 32x under bootstrap calibration
+// (20 s/pt), a planner thought's predicted drift (1920 ticks) exceeds its
+// budget (1200) — no model call is made, the reflex floor covers, and the
+// suppression is recorded with its arithmetic. Musings (1 point, 640 ticks
+// vs 3600) still think.
+func TestPlannerSuppressedAtHighSpeed(t *testing.T) {
+	h := newHarnessAt(t, `{"goal":"forage","reason":"hungry"}`, "32x")
+	h.model.mu.Lock()
+	h.model.musingReply = "The wind is turning."
+	h.model.mu.Unlock()
+
+	suppressed := h.waitEvents(t, 30*time.Second, func(e store.Event) bool {
+		if e.Type != "cog.outcome" {
+			return false
+		}
+		var p sim.CogOutcomePayload
+		return json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "planner" && p.Outcome == sim.OutcomeSuppressed
+	})
+	if len(suppressed) == 0 {
+		t.Fatal("no planner suppression recorded at 32x")
+	}
+	var p sim.CogOutcomePayload
+	json.Unmarshal(suppressed[0].Payload, &p)
+	if !strings.Contains(p.Reason, "> budget") {
+		t.Errorf("suppression reason lacks arithmetic: %q", p.Reason)
+	}
+	h.model.mu.Lock()
+	for _, k := range h.model.kinds {
+		if k == llm.KindPlanner {
+			t.Error("a planner model call was made despite suppression")
+		}
+	}
+	h.model.mu.Unlock()
+
+	musings := h.waitEvents(t, 30*time.Second, func(e store.Event) bool {
+		return e.Type == "agent.thought" && strings.Contains(string(e.Payload), "musing")
+	})
+	if len(musings) == 0 {
+		t.Error("musings should survive 32x (1 point rides under its budget)")
 	}
 }

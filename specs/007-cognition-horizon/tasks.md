@@ -59,9 +59,9 @@
 
 **Independent Test**: quickstart §4 — same world at 1x routes planners to the model; at 32x (slow local profile) planner jobs are `suppressed` with arithmetic in `reason`, musings still land
 
-- [ ] T015 [US2] Consult Route before planner and musing enqueue in internal/mind/mind.go (speed from replica state, estimate from orchestrator handle); suppressed → degrade (skip; reflex floor covers) + `cog.outcome{suppressed}` with arithmetic; tests: 32x suppresses planner, 1x routes, musing allowed at 32x, in internal/mind/mind_test.go
-- [ ] T016 [P] [US2] Consult Route at conversation founding (internal/mind/convo.go), meeting rephrase (internal/mind/meeting.go), and consolidation/chronicle handoffs (internal/mind/consolidate.go, internal/mind/narrate.go) with per-class degrade actions and suppressed telemetry, with tests
-- [ ] T017 [US2] Router determinism + regression tests: identical inputs → identical verdicts across repeated calls; SC-006 guard asserting the 1x verdict set matches today's routed kinds, in internal/cognition/route_test.go
+- [x] T015 [US2] Consult Route before planner and musing enqueue in internal/mind/mind.go (speed from replica state, estimate from orchestrator handle); suppressed → degrade (skip; reflex floor covers) + `cog.outcome{suppressed}` with arithmetic; tests: 32x suppresses planner, 1x routes, musing allowed at 32x, in internal/mind/mind_test.go
+- [x] T016 [P] [US2] Consult Route at conversation founding (internal/mind/convo.go), meeting rephrase (internal/mind/meeting.go), and consolidation/chronicle handoffs (internal/mind/consolidate.go, internal/mind/narrate.go) with per-class degrade actions and suppressed telemetry, with tests
+- [x] T017 [US2] Router determinism + regression tests: identical inputs → identical verdicts across repeated calls; SC-006 guard asserting the 1x verdict set matches today's routed kinds, in internal/cognition/route_test.go
 
 **Checkpoint**: at high speed no doomed calls are attempted; event log shows suppressions with arithmetic
 

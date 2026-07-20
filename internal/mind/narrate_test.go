@@ -194,10 +194,10 @@ func TestParseNarration(t *testing.T) {
 
 func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
-		"The Gru!":       "the-gru",
-		"  food  chain ": "food-chain",
-		"":               "village",
-		"???":            "village",
+		"The Gru!":                           "the-gru",
+		"  food  chain ":                     "food-chain",
+		"":                                   "village",
+		"???":                                "village",
 		"a-very-long-thread-name-beyond-cap": "a-very-long-thread-name",
 	} {
 		if got := slugify(in); got != want {

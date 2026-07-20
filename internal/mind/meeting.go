@@ -53,6 +53,12 @@ func (md *Mind) maybePhraseProposal(e store.Event) {
 	if p.Proposer < 0 || p.Proposer >= len(md.replica.Agents) {
 		return
 	}
+	// Router gate (FR-007): the degrade action is the template itself —
+	// enacted law never waits on a model.
+	if v := md.routeVerdict("meeting", llm.KindMeeting); !v.Allow {
+		md.emitSuppressed("meeting", p.Proposer, e.Tick, v)
+		return
+	}
 	job := meetingJob{
 		proposalID: p.ProposalID,
 		normID:     n.ID,

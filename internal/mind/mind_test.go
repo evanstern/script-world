@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
@@ -73,6 +74,12 @@ type harness struct {
 }
 
 func newHarness(t *testing.T, reply string) *harness {
+	return newHarnessAt(t, reply, "max")
+}
+
+// newHarnessAt runs the loop at a real speed — routing tests need a finite
+// ticks-per-second (max bypasses the router; production refuses max+LLM).
+func newHarnessAt(t *testing.T, reply string, speed clock.Speed) *harness {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "world.db"))
 	if err != nil {
@@ -80,7 +87,7 @@ func newHarness(t *testing.T, reply string) *harness {
 	}
 	m := worldmap.Generate(42, 64, 64)
 	state := sim.NewState(42, m)
-	state.Speed = "max"
+	state.Speed = speed
 
 	model := &mockModel{reply: reply}
 	h := &harness{st: st, model: model, m: m, done: make(chan error, 1)}

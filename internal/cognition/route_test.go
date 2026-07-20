@@ -64,3 +64,20 @@ func TestRouteUncappedSuppresses(t *testing.T) {
 		t.Error("uncapped speed must suppress")
 	}
 }
+
+// TestNoLowSpeedRegression (SC-006): at 1x and the default 4x, every
+// registered class routes to the model under both the pessimistic bootstrap
+// (20 s/pt) and the measured local baseline (~17 s/pt) — the horizon changes
+// nothing at watchable-low speeds.
+func TestNoLowSpeedRegression(t *testing.T) {
+	for name := range registry {
+		dc, _ := ClassFor(name)
+		for _, spp := range []float64{BootstrapLocalSecPerPt, 17.0} {
+			for _, speed := range []float64{1, 4} {
+				if v := Route(dc, speed, spp); !v.Allow {
+					t.Errorf("class %s suppressed at %gx / %g s/pt (%s)", name, speed, spp, v.Arithmetic)
+				}
+			}
+		}
+	}
+}

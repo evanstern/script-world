@@ -123,14 +123,14 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		return nil, err
 	}
 	md := &Mind{
-		orch:     orch,
-		loop:     loop,
-		social:   social,
-		replica:  replica,
-		m:        m,
-		personas: personas,
-		k:        sim.WindowK,
-		pairSeen: map[[2]int]int64{},
+		orch:      orch,
+		loop:      loop,
+		social:    social,
+		replica:   replica,
+		m:         m,
+		personas:  personas,
+		k:         sim.WindowK,
+		pairSeen:  map[[2]int]int64{},
 		planQ:     make(chan planJob, sim.AgentCount),
 		consolQ:   make(chan consolJob, sim.AgentCount),
 		narrQ:     make(chan narrJob, 8),
@@ -280,6 +280,17 @@ func (md *Mind) plan() {
 		if md.planInFlight[i].Load() {
 			continue // one plan in flight per agent; pending stays armed
 		}
+		// The cognition horizon (FR-007/FR-008): a planner thought whose
+		// predicted drift exceeds its staleness budget at this speed is
+		// never attempted — the reflex floor is the degrade action, and the
+		// suppression is recorded with its arithmetic.
+		if v := md.routeVerdict("planner", llm.KindPlanner); !v.Allow {
+			md.emitSuppressed("planner", i, tick, v)
+			md.pending[i] = false
+			md.pendingSeq[i] = 0
+			md.nextDue[i] = tick + sim.PlannerCadenceTicks
+			continue
+		}
 		job := planJob{
 			agent:  i,
 			name:   a.Name,
@@ -382,6 +393,13 @@ func (md *Mind) muse() {
 	}
 	// Re-arm before the call: a dropped musing is silence, not a debt.
 	md.museDue[pick] = tick + museCadenceTicks
+	// Router gate (FR-007): musings survive far higher speeds than planners
+	// (1 point vs 3), but the horizon still applies.
+	if v := md.routeVerdict("musing", llm.KindMusing); !v.Allow {
+		md.emitSuppressed("musing", pick, tick, v)
+		md.museBusy.Store(false)
+		return
+	}
 	name := md.replica.Agents[pick].Name
 	system := musingSystemPrompt(name, md.personas[pick])
 	prompt := userPrompt(md.replica, pick, md.k)

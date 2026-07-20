@@ -50,6 +50,38 @@ func (md *Mind) newMeta(class string, agent int, snapshotTick, triggerSeq int64,
 	return m
 }
 
+// routeVerdict consults the deterministic router (FR-007) for a class at
+// the replica's current speed. Absorb-goroutine only (reads the replica).
+// Uncapped speed returns allow: production refuses max speed with an LLM
+// configured at the door, so that branch exists only for pure-sim test
+// harnesses — the pure Route() itself suppresses at uncapped.
+func (md *Mind) routeVerdict(class string, kind llm.Kind) cognition.Verdict {
+	dc, ok := cognition.ClassFor(class)
+	if !ok {
+		return cognition.Verdict{Allow: true, Class: class}
+	}
+	tps := md.replica.Speed.TicksPerSecond()
+	if tps <= 0 {
+		return cognition.Verdict{Allow: true, Class: class, Points: dc.Points, BudgetTicks: dc.BudgetTicks}
+	}
+	return cognition.Route(dc, tps, md.secondsPerPoint(kind))
+}
+
+// emitSuppressed records a router suppression: the single terminal record of
+// a thought that was never attempted (no matching cog.thought). Fired from
+// the absorb goroutine, so the injection detaches — telemetry must never
+// block the absorb loop.
+func (md *Mind) emitSuppressed(class string, agent int, snapshotTick int64, v cognition.Verdict) {
+	b, _ := json.Marshal(sim.CogOutcomePayload{
+		Job:   fmt.Sprintf("%s-%d-%d", class, agent, snapshotTick),
+		Class: class, Agent: agent,
+		Outcome: sim.OutcomeSuppressed, SnapshotTick: snapshotTick,
+		PredictedWallMs: v.PredictedWallMs, Reason: v.Arithmetic,
+	})
+	e := store.Event{Type: "cog.outcome", Payload: b}
+	go md.emitCog(e)
+}
+
 // estimating is the optional orchestrator surface for live
 // seconds-per-point; test fakes without it fall back to bootstrap seeds.
 type estimating interface {
