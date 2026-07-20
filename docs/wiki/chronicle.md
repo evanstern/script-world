@@ -6,7 +6,7 @@ sources:
   - internal/sim/chronicle.go
   - internal/mind/narrate.go
   - internal/scribe/scribe.go
-verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Chronicle
@@ -33,8 +33,10 @@ deliver narrated history with no extra protocol — that IS the catch-up.
 [[agent-mind]] Mind): `chronicleNote` (absorb goroutine, replica already
 current) turns notable events into pre-named factual log lines — deaths,
 builds, [[gru]] emergence/sightings/attacks, conversations with gist+topics,
-rumors told, gifts, broken promises, musings — each stamped with in-world
-time. `sim.night_started` closes the day chapter, `sim.day_started` closes
+rumors told, gifts, broken promises, musings, and (TASK-13) the whole
+[[governance]] arc: assemblies with attendance named, grievances raised,
+proposals tabled/passed/voted down with tallies, exiles, and witnessed norm
+violations — each stamped with in-world time. `sim.night_started` closes the day chapter, `sim.day_started` closes
 the night chapter; a chapter with no lines spends no call. The chapter job
 snapshots the lines plus up to 8 recent thread slugs (offered for reuse) to a
 single-flight worker: one `llm.KindNarrator` call ([[llm-orchestrator]] cloud

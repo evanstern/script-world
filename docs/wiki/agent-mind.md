@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
 ---
 
 # Agent mind
@@ -43,8 +43,9 @@ renders `agents/<name>/soul.md` (dated, starred memories, death freezes the head
 since TASK-9 also a "Who I am becoming" narrative section and a Beliefs section
 with confidence + provenance) on memory/death/consolidation events; since TASK-11
 it also renders `chronicle.md` from the narrated story ring on `chronicle.entry`
-events ([[chronicle]]). The files are regenerable views — the event log remains
-the only truth, so souls survive restarts and travel with the save dir.
+events ([[chronicle]]), and since TASK-13 `village_charter.md` from the norm state
+on governance events ([[governance]]). The files are regenerable views — the event
+log remains the only truth, so souls survive restarts and travel with the save dir.
 
 **The mind driver** (`internal/mind`): a replica fed by the loop's notify fan-out;
 per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, completion
@@ -52,8 +53,13 @@ idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floo
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
 context block (bonds, debts, reputation, loudest rumor, and the
-last-conversation callback from the record ring — [[social-fabric]], TASK-22), and
-the driver also runs conversations (see [[social-fabric]]). Due agents are
+last-conversation callback from the record ring — [[social-fabric]], TASK-22) and,
+since TASK-13, a "Village law" block (`villageLaw` in prompt.go: active norms with
+provenance, exile judgments — second-person for the exile — and the assembly call
+while convening; [[governance]]). The driver also runs conversations (see
+[[social-fabric]]). Villagers convened to the noon meeting are planner- and
+musing-suppressed (`sim.AtMeeting`) until close, their pending triggers left
+armed. Due agents are
 enqueued as immutable prompt snapshots to a single-flight-per-agent planner
 worker — a model call must never block the absorb loop, or the events channel
 overflows at high speed and edge triggers are dropped. Each job is one call
@@ -89,7 +95,10 @@ souls pane shows each agent's newest memory. [[nightly-consolidation]] digests e
 day's memories into the soul at sleep; TASK-8 turned the talk primitive into real
 conversations. The mind also hosts the [[chronicle]] narrator (TASK-11): absorb
 collects notable events as named log lines and day/night boundaries hand chapters
-to a single-flight cloud worker.
+to a single-flight cloud worker — and the [[governance]] phrasing driver (TASK-13,
+`meeting.go`): enacted proposals get one best-effort `llm.KindMeeting` call
+rephrasing the template text in the proposer's voice, injected as
+`meeting.proposal_rephrased`; every failure leaves the template standing.
 
 ## Operational notes
 
