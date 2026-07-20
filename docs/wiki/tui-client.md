@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
+verified_against: 6c5a24af718a3491eeec68652086f91259b4d275
 ---
 
 # TUI client
@@ -37,8 +37,9 @@ events, so the replica's tick alone would lag).
 Panes (`pane` enum; keys 1–4, tab/shift+tab cycle): **map** (default — a camera
 window over the generated terrain from `Model.gameMap` (regenerated locally via
 `world.Map()`, [[worldmap-generation]]): water/trees/forage/dens glyphs with the
-replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲
-and shelters ⌂; the camera follows the living agents' centroid, arrow keys pan, `c`
+replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲,
+shelters ⌂, and the [[gru]] as a red G while it is abroad; the camera follows the
+living agents' centroid, arrow keys pan, `c`
 recenters), **chronicle** (raw event feed until TASK-11 narrates it), **metatron**
 (stub until TASK-12; already shows [[llm-orchestrator]] tier
 health, queues, and monthly spend when the world has one), **souls** (live agent bodies: status, current goal, five-cell

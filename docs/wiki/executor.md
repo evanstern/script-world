@@ -6,7 +6,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/terrain.go
-verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
+verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
 ---
 
 # Executor
@@ -49,7 +49,9 @@ radius 2 or standing on a shelter.
 
 The executor also emits `agent.memory_added` events from the salience table in
 `memory.go` ([[agent-mind]]) alongside memorable happenings; its reflex fires only
-on agents idle past `reflexGraceTicks` (120). The per-minute social beat
+on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the
+[[gru]]'s whole turn (`gruStep`) each tick, and the heartbeat's near-death memory
+names "the gru" as the cause when the last wound was recent. The per-minute social beat
 (`socialEvents`, [[social-fabric]]) runs the adjacency ladder — repay an open
 debt, give to a starving neighbor, or talk (chat-while-working, cooldown-bounded)
 with a verbatim rumor fallback — and the hourly due-check breaks overdue debts. `stepEvents` stays a pure function of (pre-tick state, map, next tick);
@@ -59,8 +61,9 @@ the substrate hold unchanged over the whole layer.
 ## Connections
 
 [[reflex-policy]] decides what idle agents do; [[sim-loop]] drives the tick;
-[[event-types]] catalogs the event families; [[tui-client]] renders bodies, needs
-gauges, and structures. TASK-7 replaces goal *selection*, never execution.
+[[event-types]] catalogs the event families; the [[gru]] preys on the bodies at
+night; [[tui-client]] renders bodies, needs gauges, and structures. TASK-7
+replaces goal *selection*, never execution.
 
 ## Operational notes
 

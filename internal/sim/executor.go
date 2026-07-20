@@ -41,6 +41,9 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// The gru: nightly emergence, stalking, wounds, dawn withdrawal (gru.go).
+	events = append(events, gruStep(s, m, night, nextTick)...)
+
 	// Forage regrowth.
 	for _, h := range s.Harvested {
 		if h.Regrow == nextTick {
@@ -67,6 +70,9 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 					cause = "hunger"
 				case n.Warmth == 0 && n.Food > 0:
 					cause = "the cold"
+				}
+				if s.Gru != nil && s.Gru.LastVictim == i && nextTick-s.Gru.LastAttack <= 3600 {
+					cause = "the gru"
 				}
 				events = append(events, memoryEvent(nextTick, i, salNearDeath, "Nearly died — %s almost took me.", cause))
 			}
