@@ -66,6 +66,37 @@ var Texts = map[string]string{
 `,
 }
 
+// Anchors: one authored temperament line per persona — the immutable core
+// the nightly consolidator must restate verbatim (TASK-9 firewall, layer 2).
+// Deliberately identical to the Temperament line in Texts.
+var Anchors = map[string]string{
+	"Ash":   "steady, practical, slow to anger",
+	"Birch": "curious, restless, quick to laugh",
+	"Cedar": "quiet, watchful, deliberate",
+	"Rowan": "warm, impulsive, brave past the point of sense",
+	"Fern":  "gentle, anxious, sharper than she lets on",
+	"Hazel": "shrewd, charming, allergic to hard labor",
+	"Oak":   "gruff, proud, softer than his bark",
+	"Sage":  "dry, precise, quietly kind",
+}
+
+// DriftMarkers: per-persona trait words that contradict the nature (TASK-9
+// firewall, layer 3). A consolidation whose narrative or self-belief claims
+// one of these has drifted — the whole night is rejected. Word-boundary,
+// case-insensitive matching; authored, deliberately small and blunt: this
+// layer catches STATED drift, the anchor echo catches wandering, and subtle
+// drift detection is parked for a model-judged validator.
+var DriftMarkers = map[string][]string{
+	"Ash":   {"reckless", "hot-tempered", "cruel", "idle"},
+	"Birch": {"incurious", "dour", "humorless", "apathetic"},
+	"Cedar": {"loud", "careless", "impulsive", "boastful"},
+	"Rowan": {"cold-hearted", "cowardly", "calculating", "timid"},
+	"Fern":  {"cruel", "vicious", "callous", "ruthless"},
+	"Hazel": {"selfless", "naive", "gullible", "tireless"},
+	"Oak":   {"meek", "servile", "indifferent", "spineless"},
+	"Sage":  {"sloppy", "careless", "cruel", "forgetful"},
+}
+
 // Secrets: one authored secret per persona, seeded at genesis as a
 // still-private self-rumor (TASK-8). Strongly negative tone — these are the
 // fabric's buried charges.
