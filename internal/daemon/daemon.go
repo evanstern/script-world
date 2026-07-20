@@ -38,7 +38,16 @@ func Run(dir string) error {
 	if err := acquirePidfile(w); err != nil {
 		return err
 	}
-	defer os.Remove(w.PidPath())
+	// Remove the pidfile ONLY if it is still ours: a slow shutdown can
+	// overlap a successor daemon that has already claimed the file, and
+	// deleting its pid would orphan it (live-found: stop then reported "not
+	// running" while the successor still held the database).
+	defer func() {
+		if data, err := os.ReadFile(w.PidPath()); err == nil &&
+			strings.TrimSpace(string(data)) == strconv.Itoa(os.Getpid()) {
+			os.Remove(w.PidPath())
+		}
+	}()
 
 	st, err := store.Open(w.DBPath())
 	if err != nil {

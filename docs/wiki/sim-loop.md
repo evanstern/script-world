@@ -51,10 +51,10 @@ state reflects, which is what makes client-side replicas gapless.
 `Loop.InjectIntent` (the `inject_intent` command) is the door for planner output
 ([[agent-mind]]): validated, resolved to coordinates deterministically at the
 boundary via `resolveGoal`, recorded as `agent.intent_set (source: planner)` +
-`agent.thought`. `Loop.InjectSocial` is the second door ([[social-fabric]],
-musings per [[agent-mind]] — `agent.thought` is whitelisted as a reducer
-no-op): an
-atomic, whitelisted batch of conversation effects, dry-run on a state copy before
+`agent.thought`. `Loop.InjectSocial` is the second door — the mind's injection
+door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]] —
+`agent.thought` is whitelisted as a reducer no-op): an atomic, whitelisted batch
+of conversation, consolidation, or musing effects, dry-run on a state copy before
 applying. Model output enters the sim only through these two doors, as recorded
 input.
 
