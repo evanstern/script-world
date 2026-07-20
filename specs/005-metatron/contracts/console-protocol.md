@@ -48,10 +48,11 @@ charge bank. Exit non-zero on protocol failure. With no message argument: prints
 - Transcript viewport (session turns; `metatron/transcript.md` holds durable history)
   + input line; charges shown as `⚡⚡⚡`/`⚡⚡·` in the pane header; tier health + spend
   retained from the current pane.
-- Key contract while pane 3 is active: printable keys → input; Enter → send (input
-  disabled while a turn is in flight, spinner shown); Esc → return to map pane; pane
-  footer documents this. Global keys (`1-4`, `tab`, space, `[`/`]`, `q`) apply only
-  while the input is empty, so typing is never hijacked.
+- Key contract while pane 3 is active: EVERY printable key types into the input
+  (including `q`, digits, space — a message may start with any character); Enter →
+  send (input disabled while a turn is in flight, spinner shown); Esc → return to the
+  map pane (from which all global keys work); ctrl+c still quits. The pane footer
+  documents this.
 
 ## Turn semantics (all surfaces)
 

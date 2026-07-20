@@ -25,11 +25,12 @@ New namespaced family `metatron.*`; payload structs live in `internal/sim/metatr
   - `text`: Metatron's rendering, ≤ 400 chars; the only villager-bound text
 - **Emitted by**: injection only (`InjectSocial`), as the head of one atomic batch per
   landed nudge
-- **Reducer**: `MetatronCharges = max(0, MetatronCharges−1)`; total (no error paths —
-  validation happens at the door)
-- **Injectable**: YES — whitelisted. Dry-run rejection cases (whole batch aborts):
-  charges = 0; unknown form; dream with targets ≠ 1; any dead/unknown target index;
-  empty or over-cap text.
+- **Reducer**: validates then decrements — errors on: charges = 0; unknown form; dream
+  with targets ≠ 1; omen with no targets; any dead/unknown target index; empty or
+  over-cap text. Replay-safe because the `InjectSocial` dry-run runs this reducer on a
+  state copy first: an event only gets recorded if it applies cleanly at its position,
+  and replay re-applies it at that same position.
+- **Injectable**: YES — whitelisted; the dry-run rejection aborts the whole batch.
 
 ## Batch shape (per landed nudge)
 

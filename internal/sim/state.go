@@ -48,6 +48,11 @@ type State struct {
 	// The chronicle (TASK-11) — narrated story entries, bounded ring. Riding
 	// State means every attaching client gets catch-up history in the snapshot.
 	Chronicle []ChronicleEntry `json:"chronicle,omitempty"`
+	// Metatron's charge bank (TASK-12) — event-sourced: executor regen,
+	// injected spends. Genesis 1; pre-TASK-12 snapshots (field absent) gain
+	// the default. Deliberately NOT omitempty: a spent-to-zero bank must
+	// round-trip as 0, never resurrect as the genesis value.
+	MetatronCharges int `json:"metatron_charges"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -56,10 +61,11 @@ type State struct {
 // wood, and a fire before the first night (the cold-start drama).
 func NewState(seed uint64, m *worldmap.Map) *State {
 	s := &State{
-		Speed:         clock.DefaultSpeed,
-		EffectiveRate: clock.DefaultSpeed.TicksPerSecond(),
-		Seed:          seed,
-		Agents:        make([]Agent, agentCount),
+		Speed:           clock.DefaultSpeed,
+		EffectiveRate:   clock.DefaultSpeed.TicksPerSecond(),
+		Seed:            seed,
+		Agents:          make([]Agent, agentCount),
+		MetatronCharges: MetatronGenesisCharges,
 	}
 	taken := map[Point]bool{}
 	for i := range s.Agents {
@@ -396,6 +402,9 @@ func (s *State) Apply(e store.Event) error {
 
 	case "chronicle.entry":
 		return s.applyChronicle(e)
+
+	case "metatron.charge_regenerated", "metatron.nudged":
+		return s.applyMetatron(e)
 
 	case "agent.talked":
 		var p TalkedPayload

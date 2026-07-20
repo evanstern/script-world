@@ -8,6 +8,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/evanstern/script-world/internal/metatron"
 )
 
 // Client is the attach side of the protocol, used by every CLI subcommand
@@ -174,3 +176,30 @@ func (c *Client) Subscribe(since *int64) error {
 func (c *Client) Pushes() <-chan Push { return c.pushes }
 
 func (c *Client) Close() error { return c.conn.Close() }
+
+// MetatronChat runs one console turn (TASK-12). The call blocks for the
+// duration of the angel's cloud round-trip.
+func (c *Client) MetatronChat(text string) (*metatron.TurnResult, error) {
+	data, err := c.Call("metatron_chat", MetatronChatArgs{Text: text})
+	if err != nil {
+		return nil, err
+	}
+	var r metatron.TurnResult
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// MetatronStatus is the model-free peek: charges, charter provenance, notes.
+func (c *Client) MetatronStatus() (*metatron.Status, error) {
+	data, err := c.Call("metatron_status", nil)
+	if err != nil {
+		return nil, err
+	}
+	var s metatron.Status
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}

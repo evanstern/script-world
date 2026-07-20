@@ -7,12 +7,14 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/ipc"
+	"github.com/evanstern/script-world/internal/metatron"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -63,6 +65,15 @@ type Model struct {
 	chronAgent  int // -1 = all
 	chronThread string
 	chronRaw    bool
+
+	// Metatron console (TASK-12): session transcript + input line. While
+	// pane 3 is active, printable keys type into the input; globals apply
+	// only on an empty input (the contract in console-protocol.md).
+	consoleLines   []string // rendered transcript, newest last
+	consoleInput   string
+	consoleBusy    bool // one turn in flight; input disabled
+	consoleErr     string
+	consoleCharter string // "default charter" | "custom charter" | ""
 }
 
 func New(w *world.World) Model {
@@ -87,6 +98,24 @@ type disconnectedMsg struct{ err error }
 type pushMsg struct{ push ipc.Push }
 
 type statusMsg struct{ status *ipc.StatusData }
+
+type consoleReplyMsg struct {
+	result *metatron.TurnResult
+	err    error
+}
+
+type consoleStatusMsg struct{ status *metatron.Status }
+
+// fetchConsoleStatus grabs the model-free peek when the pane is entered.
+func fetchConsoleStatus(c *ipc.Client) tea.Cmd {
+	return func() tea.Msg {
+		st, err := c.MetatronStatus()
+		if err != nil {
+			return consoleStatusMsg{}
+		}
+		return consoleStatusMsg{status: st}
+	}
+}
 
 type pollMsg struct{}
 
@@ -155,6 +184,14 @@ func fetchStatus(c *ipc.Client) tea.Cmd {
 	}
 }
 
+// sendConsole runs one Metatron turn off the UI goroutine.
+func sendConsole(c *ipc.Client, text string) tea.Cmd {
+	return func() tea.Msg {
+		r, err := c.MetatronChat(text)
+		return consoleReplyMsg{result: r, err: err}
+	}
+}
+
 func timeControl(c *ipc.Client, cmd string, args any) tea.Cmd {
 	return func() tea.Msg {
 		st, err := c.Status(cmd, args)
@@ -211,6 +248,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.status
 		return m, nil
 
+	case consoleStatusMsg:
+		if msg.status == nil {
+			m.consoleCharter = ""
+		} else if msg.status.CharterDefault {
+			m.consoleCharter = "default charter"
+		} else {
+			m.consoleCharter = "custom charter"
+		}
+		return m, nil
+
+	case consoleReplyMsg:
+		m.consoleBusy = false
+		if msg.err != nil {
+			m.consoleErr = msg.err.Error()
+			return m, nil
+		}
+		r := msg.result
+		for _, mo := range r.Moments {
+			m.consoleLines = append(m.consoleLines, "! "+mo)
+		}
+		m.consoleLines = append(m.consoleLines, "metatron: "+r.Reply)
+		if r.Nudge != nil {
+			m.consoleLines = append(m.consoleLines, fmt.Sprintf("⚡ %s → %s: %q",
+				r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text))
+		}
+		if len(m.consoleLines) > 200 {
+			m.consoleLines = m.consoleLines[len(m.consoleLines)-200:]
+		}
+		return m, nil
+
 	case pollMsg:
 		cmds := []tea.Cmd{pollTick()}
 		if m.connected && m.client != nil {
@@ -222,6 +289,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// The metatron console owns the keyboard while active (TASK-12):
+	// every printable key types; Enter sends; Esc returns to the map.
+	if m.active == paneMetatron && msg.String() != "ctrl+c" {
+		return m.handleConsoleKey(msg)
+	}
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
@@ -235,12 +307,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.active = paneChronicle
 	case "3":
 		m.active = paneMetatron
+		return m.enteredPane()
 	case "4":
 		m.active = paneSouls
 	case "tab":
 		m.active = (m.active + 1) % paneCount
+		return m.enteredPane()
 	case "shift+tab":
 		m.active = (m.active + paneCount - 1) % paneCount
+		return m.enteredPane()
 	case "a", "t", "r":
 		if m.active == paneChronicle {
 			switch msg.String() {
@@ -295,6 +370,45 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if speedSteps[idx] != cur {
 				return m, timeControl(m.client, "set_speed", ipc.SetSpeedArgs{Speed: string(speedSteps[idx])})
 			}
+		}
+	}
+	return m, nil
+}
+
+// enteredPane fires pane-entry side effects (the console's charter peek).
+func (m Model) enteredPane() (tea.Model, tea.Cmd) {
+	if m.active == paneMetatron && m.connected && m.client != nil {
+		return m, fetchConsoleStatus(m.client)
+	}
+	return m, nil
+}
+
+// handleConsoleKey is the metatron pane's input mode.
+func (m Model) handleConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.active = paneMap
+	case tea.KeyEnter:
+		text := strings.TrimSpace(m.consoleInput)
+		if m.consoleBusy || text == "" || !m.connected || m.client == nil {
+			return m, nil
+		}
+		m.consoleLines = append(m.consoleLines, "> "+text)
+		m.consoleInput = ""
+		m.consoleBusy = true
+		m.consoleErr = ""
+		return m, sendConsole(m.client, text)
+	case tea.KeyBackspace:
+		if r := []rune(m.consoleInput); len(r) > 0 {
+			m.consoleInput = string(r[:len(r)-1])
+		}
+	case tea.KeySpace:
+		if !m.consoleBusy {
+			m.consoleInput += " "
+		}
+	case tea.KeyRunes:
+		if !m.consoleBusy {
+			m.consoleInput += string(msg.Runes)
 		}
 	}
 	return m, nil

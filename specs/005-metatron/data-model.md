@@ -6,7 +6,7 @@
 
 | Field | Type | Notes |
 |---|---|---|
-| `MetatronCharges` | `int` (`json:"metatron_charges,omitempty"`) | banked nudge charges, 0..3; genesis = 1 |
+| `MetatronCharges` | `int` (`json:"metatron_charges"`, never omitempty — a spent-to-zero bank must round-trip as 0) | banked nudge charges, 0..3; genesis = 1 |
 
 **Validation / invariants**
 - Never < 0, never > 3 (reducer clamps; `InjectSocial` dry-run rejects a spend at 0).

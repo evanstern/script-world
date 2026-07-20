@@ -107,6 +107,7 @@ func TestRouting(t *testing.T) {
 		{KindConsolidation, TierCloud},
 		{KindNarrator, TierCloud},
 		{KindDrama, TierCloud},
+		{KindMetatron, TierCloud},
 	}
 	for _, c := range cases {
 		resp, err := o.Submit(context.Background(), Request{Kind: c.kind, Prompt: "hello"})
@@ -117,8 +118,8 @@ func TestRouting(t *testing.T) {
 			t.Errorf("%s routed to %s, want %s", c.kind, resp.Tier, c.tier)
 		}
 	}
-	if localHits.Load() != 2 || cloudHits.Load() != 3 {
-		t.Errorf("hits: local=%d cloud=%d, want 2/3", localHits.Load(), cloudHits.Load())
+	if localHits.Load() != 2 || cloudHits.Load() != 4 {
+		t.Errorf("hits: local=%d cloud=%d, want 2/4", localHits.Load(), cloudHits.Load())
 	}
 
 	// Cost math: local is free; cloud bills at configured prices.

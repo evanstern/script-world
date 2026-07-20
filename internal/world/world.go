@@ -101,4 +101,6 @@ func (w *World) DBPath() string        { return filepath.Join(w.Dir, "world.db")
 func (w *World) LLMConfigPath() string { return filepath.Join(w.Dir, "llm.json") }
 func (w *World) SockPath() string      { return filepath.Join(w.Dir, "daemon.sock") }
 func (w *World) PidPath() string       { return filepath.Join(w.Dir, "daemon.pid") }
+func (w *World) CharterPath() string   { return filepath.Join(w.Dir, "charter.md") }
+func (w *World) MetatronDir() string   { return filepath.Join(w.Dir, "metatron") }
 func (w *World) LogPath() string       { return filepath.Join(w.Dir, "daemon.log") }

@@ -2,11 +2,13 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/evanstern/script-world/internal/metatron"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
@@ -25,8 +27,15 @@ func testModel(t *testing.T) Model {
 }
 
 func key(s string) tea.KeyMsg {
-	if s == "tab" {
+	switch s {
+	case "tab":
 		return tea.KeyMsg{Type: tea.KeyTab}
+	case "esc":
+		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
@@ -36,18 +45,20 @@ func TestPaneNavigation(t *testing.T) {
 	if m.active != paneMap {
 		t.Fatal("default pane must be the map (AC#1)")
 	}
+	// The metatron console owns the keyboard while active (TASK-12): pane
+	// keys type into the input there; Esc is the way out.
 	cases := []struct {
 		key  string
 		want pane
 	}{
 		{"2", paneChronicle},
 		{"3", paneMetatron},
+		{"esc", paneMap},
 		{"4", paneSouls},
 		{"1", paneMap},
 		{"tab", paneChronicle},
 		{"tab", paneMetatron},
-		{"tab", paneSouls},
-		{"tab", paneMap}, // wraps
+		{"esc", paneMap},
 	}
 	var mdl tea.Model = m
 	for _, c := range cases {
@@ -256,5 +267,66 @@ func TestWrapText(t *testing.T) {
 	}
 	if got := wrapText("", 10); got != nil {
 		t.Errorf("empty wrap: %v", got)
+	}
+}
+
+// TestConsoleTyping (TASK-12): in the metatron pane every printable key
+// types (globals never hijack a message), backspace edits, Esc exits, and
+// Enter without a connection sends nothing.
+func TestConsoleTyping(t *testing.T) {
+	m := testModel(t)
+	m.active = paneMetatron
+	var mdl tea.Model = m
+	for _, k := range []string{"q", "u", "i", "c", "k", " ", "1"} {
+		mdl, _ = mdl.(Model).Update(key(k))
+	}
+	mm := mdl.(Model)
+	if mm.quitting || mm.active != paneMetatron {
+		t.Fatal("global keys hijacked console typing")
+	}
+	if mm.consoleInput != "quick 1" {
+		t.Fatalf("input = %q, want %q", mm.consoleInput, "quick 1")
+	}
+	mdl, _ = mm.Update(key("backspace"))
+	if got := mdl.(Model).consoleInput; got != "quick " {
+		t.Fatalf("backspace: %q", got)
+	}
+	// Enter with no connection: nothing sent, input kept.
+	mdl, cmd := mdl.(Model).Update(key("enter"))
+	if cmd != nil || mdl.(Model).consoleInput != "quick " {
+		t.Fatal("disconnected enter should be a no-op")
+	}
+	mdl, _ = mdl.(Model).Update(key("esc"))
+	if mdl.(Model).active != paneMap {
+		t.Fatal("esc must return to the map pane")
+	}
+}
+
+// TestConsoleReply: a turn's reply, nudge, and moments land in the
+// transcript and the busy flag clears; errors render honestly.
+func TestConsoleReply(t *testing.T) {
+	m := testModel(t)
+	m.active = paneMetatron
+	m.consoleBusy = true
+	var mdl tea.Model = m
+	mdl, _ = mdl.(Model).Update(consoleReplyMsg{result: &metatron.TurnResult{
+		Reply:   "It is done.",
+		Nudge:   &metatron.Nudge{Form: "dream", Targets: []string{"Fern"}, Text: "a river of light"},
+		Moments: []string{"day 3 — Ash died"},
+		Charges: 0,
+	}})
+	mm := mdl.(Model)
+	if mm.consoleBusy {
+		t.Fatal("busy flag not cleared")
+	}
+	view := mm.metatronView()
+	for _, want := range []string{"It is done.", "dream", "Fern", "Ash died"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("console view missing %q", want)
+		}
+	}
+	mdl, _ = mm.Update(consoleReplyMsg{err: fmt.Errorf("tier is down")})
+	if v := mdl.(Model).metatronView(); !strings.Contains(v, "unreachable") {
+		t.Errorf("error not rendered honestly: %q", v)
 	}
 }
