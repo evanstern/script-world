@@ -26,6 +26,9 @@ const (
 	KindConsolidation Kind = "consolidation"
 	KindNarrator      Kind = "narrator"
 	KindDrama         Kind = "drama"
+	// KindMetatron is the gatekeeper angel (TASK-12): console turns,
+	// nudge judgment, and digests — premium cognition, tiny volume.
+	KindMetatron Kind = "metatron"
 	// KindMusing is best-effort interiority (TASK-21): admitted only when
 	// the local tier is otherwise quiet, dropped without retry when not.
 	KindMusing Kind = "musing"
@@ -46,6 +49,7 @@ var routing = map[Kind]Tier{
 	KindConsolidation: TierCloud,
 	KindNarrator:      TierCloud,
 	KindDrama:         TierCloud,
+	KindMetatron:      TierCloud,
 	KindMusing:        TierLocal,
 }
 

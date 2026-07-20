@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # Daemon lifecycle
@@ -32,7 +32,9 @@ Startup sequence:
    duration is measured and recorded.
 6. Notify fan-out + companions: the loop's notify goes to the IPC broadcast, the
    always-on soul scribe, and — when an orchestrator exists — the mind driver
-   ([[agent-mind]]); all consumers are non-blocking by contract. The LLM
+   ([[agent-mind]]) and the Metatron component ([[metatron]], attached to the
+   server via `SetMetatron` for the console); all consumers are non-blocking by
+   contract. The LLM
    orchestrator ([[llm-orchestrator]]) starts only when `llm.json` exists
    (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit — config-gated,
    fully outside the loop, so inference failures can never touch the simulation.

@@ -21,6 +21,7 @@ Usage:
   scriptworld pause <dir>                          pause game time
   scriptworld resume <dir>                         resume game time
   scriptworld speed <dir> <1x|4x|8x|16x|32x|max>       set game speed
+  scriptworld metatron <dir> [message...]          converse with the angel (no message: status peek)
   scriptworld llm <dir> <kind> <prompt...>         one-shot LLM call via the daemon
                                                    (kinds: planner, conversation, musing,
                                                     consolidation, narrator, drama)
@@ -58,6 +59,8 @@ func main() {
 		err = cmdSpeed(args)
 	case "llm":
 		err = cmdLLM(args)
+	case "metatron":
+		err = cmdMetatron(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # IPC server
@@ -25,7 +25,10 @@ through `Loop.DoState` and replies with `StateData` — the canonical world-stat
 plus the `last_seq` it reflects. `llm_call` submits to the optional
 [[llm-orchestrator]] (`SetLLM`; 2-minute timeout per call) — a slow or dead model
 blocks only the calling session, never the loop; `statusDataFull` appends the
-orchestrator's snapshot to status responses. `set_speed` enforces the speed
+orchestrator's snapshot to status responses. `metatron_chat`/`metatron_status`
+dispatch to the optional angel through the `Angel` interface (`SetMetatron`,
+[[metatron]]) — same posture: a long console turn occupies only its session, and
+worlds without an LLM config answer with a clean "not present" error. `set_speed` enforces the speed
 policy (TASK-20): `max` is refused with an actionable error whenever the world
 has an LLM configured (`llm != nil`) — uncapped ticking is for pure-sim worlds;
 the watchable ceiling is 32x ([[game-clock]]).

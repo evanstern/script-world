@@ -46,6 +46,10 @@ const (
 	salColdNight      = 5
 	salNearDeath      = 9
 	salWitnessDeath   = 10
+	// SalDream: Metatron's dreams/omens (TASK-12) — exported for the
+	// injection builder; between shelter and near-death so the divine
+	// reliably surfaces without outranking real trauma.
+	SalDream = 8
 )
 
 // WindowK is the working-memory bound: prompts never carry more than this

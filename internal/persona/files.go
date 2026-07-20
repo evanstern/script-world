@@ -46,6 +46,14 @@ func Genesis(worldDir string) error {
 			return err
 		}
 	}
+	// Metatron's charter (TASK-12): seeded once, then the file belongs to
+	// the player — genesis never overwrites an existing charter.
+	charterPath := filepath.Join(worldDir, "charter.md")
+	if _, err := os.Stat(charterPath); os.IsNotExist(err) {
+		if err := os.WriteFile(charterPath, []byte(DefaultCharter), 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

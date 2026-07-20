@@ -60,6 +60,13 @@ type LLMCallArgs struct {
 	MaxTokens int64  `json:"max_tokens,omitempty"`
 }
 
+// MetatronChatArgs carries one console turn (TASK-12); the response Data is
+// a metatron.TurnResult. "metatron_status" takes no args and answers a
+// metatron.Status (the model-free peek).
+type MetatronChatArgs struct {
+	Text string `json:"text"`
+}
+
 // StateData answers the "state" command: the full canonical sim.State JSON
 // plus the log position it reflects — subscribe with since=last_seq for a
 // gapless live replica.
@@ -91,6 +98,9 @@ type ClockStatus struct {
 	Speed         string  `json:"speed"`
 	EffectiveRate float64 `json:"effective_rate"`
 	Degraded      bool    `json:"degraded"`
+	// MetatronCharges is the nudge bank (TASK-12) — surfaced here so
+	// clients render ⚡ without a state fetch.
+	MetatronCharges int `json:"metatron_charges"`
 }
 
 type DaemonStatus struct {

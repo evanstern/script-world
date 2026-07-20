@@ -30,11 +30,16 @@ world**: a daemon simulates the village 24/7; the terminal UI is an attachable c
 all player influence flows through **Metatron**, an editable intermediary agent. The
 board lives in `backlog/`; specs in `specs/`.
 
-### What runs today: the world daemon (TASK-2)
+### What runs today
 
-The time substrate is real: a Go daemon with a deterministic tick loop (1 tick =
-1 game second), an append-only SQLite event log with snapshots, per-world save
-directories, and a Unix-socket client protocol.
+The time substrate (TASK-2) and the village on top of it: a Go daemon with a
+deterministic tick loop (1 tick = 1 game second), an append-only SQLite event log
+with snapshots, per-world save directories, and a Unix-socket client protocol —
+carrying eight villagers with needs, LLM planner minds, conversations, rumors and
+debts, nightly memory consolidation, the nocturnal gru, a cloud-narrated chronicle
+(the catch-up mechanism), and **Metatron** (TASK-12): the player's sole influence
+channel, conversing in the TUI console, mediating dreams and omens on a regenerating
+charge economy, governed by `charter.md` — the game's only player-editable prompt.
 
 ```sh
 go build ./cmd/scriptworld
@@ -46,10 +51,11 @@ scriptworld attach ~/worlds/demo          # watch events live; pause/resume/spee
 scriptworld pause ~/worlds/demo           # pause is a player verb (detaching is not)
 scriptworld speed ~/worlds/demo max       # real-time up to as-fast-as-affordable
 scriptworld tail ~/worlds/demo --follow   # stream the event log
+scriptworld ui ~/worlds/demo              # full-screen TUI: map, chronicle, metatron, souls
+scriptworld metatron ~/worlds/demo "who thrives, who struggles?"   # converse with your angel
 scriptworld stop ~/worlds/demo            # graceful stop; kill -9 also resumes lossless
 ```
 
-Default speed is 4x: 1 game minute per 15 real seconds. Two placeholder wanderers
-generate events until the real village systems land (TASK-4+). `go test -race ./...`
-covers determinism (same seed → byte-identical history), crash recovery, and the
-client protocol.
+Default speed is 4x: 1 game minute per 15 real seconds; the watchable ladder tops at
+32x. `go test -race ./...` covers determinism (same seed → byte-identical history),
+crash recovery, the client protocol, and the model-output firewalls.

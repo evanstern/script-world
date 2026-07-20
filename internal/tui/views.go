@@ -389,16 +389,57 @@ func eventRow(e store.Event) string {
 		clock.Format(e.Tick), e.Type, styleDim.Render(string(e.Payload)))
 }
 
+// metatronView is the console (TASK-12): transcript + input line, the ⚡
+// bank in the header, tier health at the foot.
 func (m Model) metatronView() string {
-	lines := []string{
-		"METATRON CONSOLE",
-		"",
-		"The angel has not yet been summoned.",
-		"",
-		styleDim.Render("Conversation with Metatron — judging your intents, shaping"),
-		styleDim.Render("dreams and omens — arrives with TASK-12. Its charter will be"),
-		styleDim.Render("the only player-editable prompt in the game."),
+	width := m.width - 6
+	if width < 30 {
+		width = 30
 	}
+	charges := 0
+	if m.status != nil {
+		charges = m.status.Clock.MetatronCharges
+	}
+	header := fmt.Sprintf("METATRON CONSOLE · charges %s%s",
+		strings.Repeat("⚡", charges), strings.Repeat("·", clampInt(sim.MetatronChargeCap-charges, 0, sim.MetatronChargeCap)))
+	if m.consoleCharter != "" {
+		header += styleDim.Render(" · " + m.consoleCharter + " (charter.md)")
+	}
+
+	var lines []string
+	if len(m.consoleLines) == 0 {
+		lines = append(lines, styleDim.Render("The angel awaits. Type, then Enter. (Its charter — charter.md in the"),
+			styleDim.Render("save directory — is the one prompt in this game that is yours to edit.)"))
+	}
+	for _, l := range m.consoleLines {
+		style := styleDim
+		if strings.HasPrefix(l, "metatron:") {
+			style = lipgloss.NewStyle()
+		} else if strings.HasPrefix(l, "⚡") || strings.HasPrefix(l, "!") {
+			style = styleAgent
+		}
+		for _, w := range wrapText(l, width) {
+			lines = append(lines, style.Render(w))
+		}
+	}
+	if m.consoleErr != "" {
+		lines = append(lines, styleErr.Render("the angel is unreachable: "+m.consoleErr))
+	}
+
+	rows := m.height - 14
+	if rows < 4 {
+		rows = 4
+	}
+	if len(lines) > rows {
+		lines = lines[len(lines)-rows:]
+	}
+
+	input := "> " + m.consoleInput + "█"
+	if m.consoleBusy {
+		input = styleDim.Render("> … the angel considers …")
+	}
+
+	body := header + "\n\n" + strings.Join(lines, "\n") + "\n\n" + input
 	if m.status != nil && m.status.LLM != nil {
 		l := m.status.LLM
 		up := func(b bool) string {
@@ -407,18 +448,15 @@ func (m Model) metatronView() string {
 			}
 			return styleErr.Render("down")
 		}
-		lines = append(lines, "",
-			"THE ANGEL'S VOICE (llm orchestrator)",
-			fmt.Sprintf("  local  %-14s %s · queue %d", l.Local.Model, up(l.Local.Up), l.Local.Queue),
-			fmt.Sprintf("  cloud  %-14s %s · queue %d", l.Cloud.Model, up(l.Cloud.Up), l.Cloud.Queue),
-			fmt.Sprintf("  spend  $%.2f of $%.0f (%s)", l.Spent, l.Budget, l.Month),
-		)
+		body += "\n" + styleDim.Render(fmt.Sprintf("cloud %s %s · spend $%.2f of $%.0f", l.Cloud.Model, up(l.Cloud.Up), l.Spent, l.Budget))
 		if l.Spent >= l.Budget {
-			lines = append(lines, styleErr.Render("  budget exhausted — cloud calls refused"))
+			body += "\n" + styleErr.Render("budget exhausted — the angel's voice is stilled")
 		}
 	}
-	return styleBox.Render(strings.Join(lines, "\n"))
+	body += "\n" + styleDim.Render("Enter send · Esc map pane")
+	return styleBox.Render(body)
 }
+
 
 func (m Model) soulsView() string {
 	var b strings.Builder

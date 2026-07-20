@@ -5,7 +5,7 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # scriptworld CLI
@@ -20,8 +20,9 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
 2 for usage errors.
 
 - `new <dir> [--name] [--seed]` — `world.Create` + store + genesis `world.created`
-  event, writes the default `llm.json`, seeds the eight personas
-  (`persona.Genesis`, the one-and-only persona write — [[agent-mind]]), and
+  event, writes the default `llm.json`, seeds the eight personas and Metatron's
+  charter (`persona.Genesis`, the one-and-only persona write — [[agent-mind]],
+  [[metatron]]), and
   appends the tick-0 secret events ([[social-fabric]]). Random default seed (crypto-random,
   right-shifted 12 bits to stay comfortably printable).
 - `daemon <dir>` — the foreground primitive: `daemon.Run` directly.
@@ -44,6 +45,10 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
   `dropped` pushes by re-subscribing. Quit detaches; the world keeps running.
 - `tail <dir> [--since SEQ] [--follow]` — history from the store (default last 20),
   works with no daemon; `--follow` additionally subscribes live and requires one.
+- `metatron <dir> [message...]` — the console one-shot ([[metatron]], TASK-12): with
+  a message, one mediated turn (prints surfaced moments, the reply, any landed
+  `⚡ dream/omen` line, and the charge bank); without, a model-free status peek
+  (charges, charter provenance, recent soul notes).
 - `llm <dir> <kind> <prompt...> [--system] [--max-tokens]` — one-shot model call via
   the daemon's `llm_call` command, printing tier, model, tokens, cost, and latency
   ([[llm-orchestrator]]). `new` also writes the default `llm.json` config.

@@ -18,6 +18,7 @@ import (
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/script-world/internal/metatron"
 	"github.com/evanstern/script-world/internal/mind"
 	"github.com/evanstern/script-world/internal/persona"
 	"github.com/evanstern/script-world/internal/scribe"
@@ -117,6 +118,14 @@ func Run(dir string) error {
 		consumers = append(consumers, md.Observe)
 		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
 			sim.AgentCount, sim.PlannerCadenceTicks/60)
+		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir)
+		if err != nil {
+			return err
+		}
+		defer mt.Close()
+		consumers = append(consumers, mt.Observe)
+		srv.SetMetatron(mt)
+		fmt.Printf("daemon: metatron on (charges %d/%d)\n", state.MetatronCharges, sim.MetatronChargeCap)
 	}
 
 	// Stale socket from a crashed daemon: the pidfile said no one is alive.
