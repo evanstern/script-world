@@ -164,8 +164,10 @@ func (md *Mind) snapshotConvo(tick int64, a, b int) convoCtx {
 
 // convoDeadline bounds a whole conversation's wall time: on a busy local
 // tier the calls queue behind planner traffic, and a starved conversation
-// must release the slot rather than hold it for minutes.
-const convoDeadline = 6 * time.Minute
+// must release the slot rather than hold it forever. Sized for a full
+// scene at honest local pace: up to sceneCap×ConvoTurnsPerSide utterances
+// plus the outcome call at ~40–60s each.
+const convoDeadline = 10 * time.Minute
 
 func (md *Mind) runConversation(cc convoCtx) {
 	ctx, cancel := context.WithTimeout(context.Background(), convoDeadline)
