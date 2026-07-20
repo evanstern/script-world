@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: 6c5a24af718a3491eeec68652086f91259b4d275
+verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
 ---
 
 # TUI client
@@ -40,7 +40,11 @@ window over the generated terrain from `Model.gameMap` (regenerated locally via
 replica's agents on top (by initial, lowercase asleep, † dead) plus built fires ▲,
 shelters ⌂, and the [[gru]] as a red G while it is abroad; the camera follows the
 living agents' centroid, arrow keys pan, `c`
-recenters), **chronicle** (raw event feed until TASK-11 narrates it), **metatron**
+recenters), **chronicle** (TASK-11: the narrated story from the replica's
+snapshot-carried `State.Chronicle` ring ([[chronicle]]) — day-stamped entries with
+thread slugs and cast; `a` cycles an agent filter, `t` cycles a thread filter
+across slugs seen in the ring, `r` toggles the raw event feed, which is also the
+automatic fallback while a world has no narrated entries), **metatron**
 (stub until TASK-12; already shows [[llm-orchestrator]] tier
 health, queues, and monthly spend when the world has one), **souls** (live agent bodies: status, current goal, five-cell
 needs gauges, inventory, and each agent's newest memory line; the full soul.md
@@ -52,8 +56,9 @@ TASK-20); `q` detaches — the world keeps running.
 ## Connections
 
 [[ipc-client]] is the transport; [[ipc-protocol]]'s `state` command exists for this
-replica pattern; [[sim-state-reducer]] supplies the shared `Apply`; [[event-types]]
-is what the chronicle shows; [[cli-scriptworld]] mounts it as the `ui` subcommand.
+replica pattern; [[sim-state-reducer]] supplies the shared `Apply`; [[chronicle]]
+fills the story pane and [[event-types]] the raw feed; [[cli-scriptworld]] mounts
+it as the `ui` subcommand.
 
 ## Operational notes
 

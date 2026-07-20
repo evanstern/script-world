@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
+verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
 ---
 
 # Agent mind
@@ -39,9 +39,10 @@ reverse-chronologically. K = `WindowK` (10). Prompts never see the whole soul.
 **Souls** (`internal/scribe`): an always-on daemon component with its own replica
 renders `agents/<name>/soul.md` (dated, starred memories, death freezes the header;
 since TASK-9 also a "Who I am becoming" narrative section and a Beliefs section
-with confidence + provenance) on memory/death/consolidation events. The file is a
-regenerable view — the event log remains the only truth, so souls survive restarts
-and travel with the save dir.
+with confidence + provenance) on memory/death/consolidation events; since TASK-11
+it also renders `chronicle.md` from the narrated story ring on `chronicle.entry`
+events ([[chronicle]]). The files are regenerable views — the event log remains
+the only truth, so souls survive restarts and travel with the save dir.
 
 **The mind driver** (`internal/mind`): a replica fed by the loop's notify fan-out;
 per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, completion
@@ -84,7 +85,9 @@ costs at most one 48-token call per window instead of total silence.
 deterministic space; [[event-types]] catalogs the new events; the [[tui-client]]
 souls pane shows each agent's newest memory. [[nightly-consolidation]] digests each
 day's memories into the soul at sleep; TASK-8 turned the talk primitive into real
-conversations.
+conversations. The mind also hosts the [[chronicle]] narrator (TASK-11): absorb
+collects notable events as named log lines and day/night boundaries hand chapters
+to a single-flight cloud worker.
 
 ## Operational notes
 

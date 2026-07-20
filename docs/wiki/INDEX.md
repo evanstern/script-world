@@ -41,6 +41,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[agent-mind]] — personas, souls, memory window, and the planner driver
 - [[social-fabric]] — relationships, rumors, debts, secrets, conversations
 - [[nightly-consolidation]] — sleep-triggered soul digestion behind the persona firewall
+- [[chronicle]] — the narrated story feed: cloud narrator, snapshot-carried catch-up ring
 
 ## Lifecycle & quality
 
