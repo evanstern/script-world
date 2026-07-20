@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseSpeed(t *testing.T) {
-	for _, valid := range []string{"1x", "4x", "8x", "16x", "max"} {
+	for _, valid := range []string{"1x", "4x", "8x", "16x", "32x", "max"} {
 		if _, err := ParseSpeed(valid); err != nil {
 			t.Errorf("ParseSpeed(%q): unexpected error %v", valid, err)
 		}
@@ -27,6 +27,7 @@ func TestInterval(t *testing.T) {
 		{Speed4x, 250 * time.Millisecond},
 		{Speed8x, 125 * time.Millisecond},
 		{Speed16x, 62500 * time.Microsecond},
+		{Speed32x, 31250 * time.Microsecond},
 		{SpeedMax, 0},
 	}
 	for _, c := range cases {

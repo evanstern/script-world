@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
 ---
 
 # Testing strategy
@@ -42,7 +42,9 @@ built from it applies subsequent pushes cleanly — the [[tui-client]] pattern);
 endpoint leaves the loop ticking (the package's own suite covers routing, metering,
 ceiling refusal, and circuit recovery against httptest mock providers).
 
-**E2E** (`e2e/`): `TestMain` builds the binary once; scenarios mirror
+**E2E** (`e2e/`): `TestMain` builds the binary once; worlds drop `llm.json`
+right after `new` so they are pure-sim — a precondition for `speed max` under
+the TASK-20 policy. Scenarios mirror
 `specs/001-world-daemon/quickstart.md` — A: always-on + detach-is-not-pause; B:
 pause freezes the clock, compression ratios hold (loose tolerances over short
 windows; the spec's 5% applies to 5-minute windows); C: kill -9 → lossless resume

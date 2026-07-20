@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ func TestDeterminism_FullBinary(t *testing.T) {
 	for i := range histories {
 		dir := filepath.Join(t.TempDir(), "w")
 		run(t, "new", dir, "--seed", "777")
+		os.Remove(filepath.Join(dir, "llm.json")) // pure-sim: max needs no LLM (TASK-20)
 		run(t, "start", dir)
 		run(t, "speed", dir, "max")
 		waitTick(t, dir, 20000)

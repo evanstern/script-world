@@ -28,6 +28,11 @@ const (
 	Speed4x  Speed = "4x"
 	Speed8x  Speed = "8x"
 	Speed16x Speed = "16x"
+	// Speed32x is the top of the watchable ladder: the fastest pace LLM
+	// minds can be expected to keep up with (TASK-20).
+	Speed32x Speed = "32x"
+	// SpeedMax is reserved for pure-sim worlds (headless proving runs);
+	// worlds with an LLM configured refuse it at the set_speed door.
 	SpeedMax Speed = "max"
 
 	// DefaultSpeed is 4x: 1 game minute per 15 real seconds.
@@ -39,13 +44,14 @@ var speeds = map[Speed]float64{
 	Speed4x:  4,
 	Speed8x:  8,
 	Speed16x: 16,
+	Speed32x: 32,
 	SpeedMax: 0, // sentinel: uncapped
 }
 
 func ParseSpeed(s string) (Speed, error) {
 	sp := Speed(s)
 	if _, ok := speeds[sp]; !ok {
-		return "", fmt.Errorf("invalid speed %q (want 1x, 4x, 8x, 16x, or max)", s)
+		return "", fmt.Errorf("invalid speed %q (want 1x, 4x, 8x, 16x, 32x, or max)", s)
 	}
 	return sp, nil
 }

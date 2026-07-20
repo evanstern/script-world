@@ -1,10 +1,10 @@
 ---
 name: game-clock
-description: Game time math — 1 tick = 1 game second, epoch day 1 06:00, Speed type mapping game time to real time (1x/4x/8x/16x/max)
+description: Game time math — 1 tick = 1 game second, epoch day 1 06:00, Speed type mapping game time to real time (1x/4x/8x/16x/32x/max)
 kind: component
 sources:
   - internal/clock/clock.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
 ---
 
 # Game clock
@@ -18,10 +18,12 @@ Constants: `TickGameSeconds = 1` (fixed for format_version 1, recorded in the wo
 manifest so it can never silently change under an existing run); `EpochSecondOfDay =
 6*3600` — tick 0 is **day 1, 06:00**. Days are 1-based.
 
-`Speed` is a string type with exactly five values: `Speed1x`, `Speed4x` (the
-`DefaultSpeed`: 1 game minute per 15 real seconds), `Speed8x`, `Speed16x`, `SpeedMax`.
+`Speed` is a string type with exactly six values: `Speed1x`, `Speed4x` (the
+`DefaultSpeed`: 1 game minute per 15 real seconds), `Speed8x`, `Speed16x`,
+`Speed32x` (the top of the watchable ladder, TASK-20), `SpeedMax`.
 The numeric meaning is game-seconds per real-second; `SpeedMax` maps to 0 as an
-"uncapped" sentinel. `ParseSpeed` rejects anything else — validation happens both in
+"uncapped" sentinel, reserved for pure-sim worlds — [[ipc-server]] refuses it
+when an LLM is configured. `ParseSpeed` rejects anything else — validation happens both in
 the CLI and in the loop's `set_speed` handling.
 
 Key functions:
@@ -47,4 +49,4 @@ day/night boundary detection; [[cli-scriptworld]] prints `Format` output.
 A game day is 86,400 ticks; at default 4x that is 6 real hours per game day. Night
 (22:00–06:00) is 8 game hours. The clock has no notion of pause or degradation — those
 are loop/state concerns; this package would be unchanged by any speed-policy rework
-that keeps the five speed values.
+that keeps the six speed values.

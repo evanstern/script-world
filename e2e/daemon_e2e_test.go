@@ -84,6 +84,9 @@ func newWorld(t *testing.T, seed string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "w")
 	run(t, "new", dir, "--seed", seed)
+	// Pure-sim world: with llm.json present the daemon would refuse speed
+	// max (TASK-20), and these tests lean on uncapped ticking.
+	os.Remove(filepath.Join(dir, "llm.json"))
 	run(t, "start", dir)
 	t.Cleanup(func() { stopHard(dir) })
 	return dir

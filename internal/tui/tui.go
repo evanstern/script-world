@@ -32,7 +32,9 @@ const (
 var paneNames = [paneCount]string{"map", "chronicle", "metatron", "souls"}
 
 // speedSteps is the [ / ] cycling order.
-var speedSteps = []clock.Speed{clock.Speed1x, clock.Speed4x, clock.Speed8x, clock.Speed16x, clock.SpeedMax}
+// max is deliberately absent: the watchable ladder tops out at 32x (TASK-20);
+// uncapped ticking is for headless pure-sim runs only.
+var speedSteps = []clock.Speed{clock.Speed1x, clock.Speed4x, clock.Speed8x, clock.Speed16x, clock.Speed32x}
 
 const chronicleCap = 500
 

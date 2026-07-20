@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
 ---
 
 # IPC server
@@ -25,7 +25,10 @@ through `Loop.DoState` and replies with `StateData` — the canonical world-stat
 plus the `last_seq` it reflects. `llm_call` submits to the optional
 [[llm-orchestrator]] (`SetLLM`; 2-minute timeout per call) — a slow or dead model
 blocks only the calling session, never the loop; `statusDataFull` appends the
-orchestrator's snapshot to status responses.
+orchestrator's snapshot to status responses. `set_speed` enforces the speed
+policy (TASK-20): `max` is refused with an actionable error whenever the world
+has an LLM configured (`llm != nil`) — uncapped ticking is for pure-sim worlds;
+the watchable ceiling is 32x ([[game-clock]]).
 
 **Broadcast path**: the loop's notify callback is `Server.Broadcast`, which offers
 committed events to each session under a non-blocking send into a

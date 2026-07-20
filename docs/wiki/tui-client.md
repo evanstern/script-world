@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/tui/tui.go
   - internal/tui/views.go
-verified_against: be54bb42adcbd14421c20269efc79da7b6beab9f
+verified_against: 6c5a24af718a3491eeec68652086f91259b4d275
 ---
 
 # TUI client
@@ -46,7 +46,8 @@ health, queues, and monthly spend when the world has one), **souls** (live agent
 needs gauges, inventory, and each agent's newest memory line; the full soul.md
 files live on disk per [[agent-mind]]). Time controls: space toggles
 pause/resume based on last-known status; `[`/`]` step through `speedSteps`
-(1x → 4x → 8x → 16x → max); `q` detaches — the world keeps running.
+(1x → 4x → 8x → 16x → 32x — max is deliberately off the watchable ladder,
+TASK-20); `q` detaches — the world keeps running.
 
 ## Connections
 
