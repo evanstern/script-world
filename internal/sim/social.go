@@ -147,8 +147,57 @@ type (
 		B     int    `json:"b"`
 		Gist  string `json:"gist"`
 		Turns int    `json:"turns"`
+		// TASK-22: scenes may hold more than a pair; empty means [A, B]
+		// (pre-TASK-22 payloads replay unchanged).
+		Participants []int    `json:"participants,omitempty"`
+		Topics       []string `json:"topics,omitempty"`
+		Tones        []int    `json:"tones,omitempty"` // per participant, -2..2
 	}
 )
+
+// ConvoRecord is the durable trace of one conversation (TASK-22) — the
+// artifact future prompts read back ("last time you spoke…"). Kept as a
+// bounded ring on State so relationship fodder survives beyond the moment.
+type ConvoRecord struct {
+	Conv         int64    `json:"conv"`
+	Tick         int64    `json:"tick"`
+	Participants []int    `json:"participants"`
+	Gist         string   `json:"gist"`
+	Topics       []string `json:"topics,omitempty"`
+	Tones        []int    `json:"tones,omitempty"`
+}
+
+// convoRecordCap bounds State.Conversations; older records fall off. The
+// event log keeps everything — the ring is the working set prompts can see.
+const convoRecordCap = 64
+
+// LastConversationBetween returns the newest record naming both agents.
+func LastConversationBetween(s *State, a, b int) (ConvoRecord, bool) {
+	for i := len(s.Conversations) - 1; i >= 0; i-- {
+		r := s.Conversations[i]
+		var hasA, hasB bool
+		for _, p := range r.Participants {
+			hasA = hasA || p == a
+			hasB = hasB || p == b
+		}
+		if hasA && hasB {
+			return r, true
+		}
+	}
+	return ConvoRecord{}, false
+}
+
+// LastConversationInvolving returns the newest record naming the agent.
+func LastConversationInvolving(s *State, a int) (ConvoRecord, bool) {
+	for i := len(s.Conversations) - 1; i >= 0; i-- {
+		for _, p := range s.Conversations[i].Participants {
+			if p == a {
+				return s.Conversations[i], true
+			}
+		}
+	}
+	return ConvoRecord{}, false
+}
 
 // --- reducer cases (called from State.Apply) ---
 
@@ -272,8 +321,26 @@ func (s *State) applySocial(e store.Event) error {
 			RumorID: s.NextRumorID, Text: p.Text, Confidence: 100, From: -1, Tick: e.Tick,
 		})
 
-	case "social.conversation_turn", "social.conversation":
+	case "social.conversation_turn":
 		// Chronicle material; no state effect.
+
+	case "social.conversation":
+		// TASK-22: conversations leave a durable, bounded record.
+		var p ConversationPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		parts := p.Participants
+		if len(parts) == 0 {
+			parts = []int{p.A, p.B} // pre-TASK-22 payloads
+		}
+		s.Conversations = append(s.Conversations, ConvoRecord{
+			Conv: p.Conv, Tick: e.Tick, Participants: parts,
+			Gist: p.Gist, Topics: p.Topics, Tones: p.Tones,
+		})
+		if len(s.Conversations) > convoRecordCap {
+			s.Conversations = append(s.Conversations[:0], s.Conversations[len(s.Conversations)-convoRecordCap:]...)
+		}
 	}
 	return nil
 }

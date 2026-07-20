@@ -26,6 +26,9 @@ const (
 	KindConsolidation Kind = "consolidation"
 	KindNarrator      Kind = "narrator"
 	KindDrama         Kind = "drama"
+	// KindMusing is best-effort interiority (TASK-21): admitted only when
+	// the local tier is otherwise quiet, dropped without retry when not.
+	KindMusing Kind = "musing"
 )
 
 type Tier string
@@ -43,6 +46,7 @@ var routing = map[Kind]Tier{
 	KindConsolidation: TierCloud,
 	KindNarrator:      TierCloud,
 	KindDrama:         TierCloud,
+	KindMusing:        TierLocal,
 }
 
 var (
@@ -50,6 +54,7 @@ var (
 	ErrBudgetExhausted = errors.New("monthly cloud budget exhausted; call refused (raise monthly_budget_usd in llm.json or wait for the month to roll over)")
 	ErrTierDown        = errors.New("tier is down (circuit open); the world keeps running degraded")
 	ErrQueueFull       = errors.New("tier queue full; back off and retry")
+	ErrTierBusy        = errors.New("tier busy; best-effort call dropped")
 	ErrClosed          = errors.New("orchestrator closed")
 )
 
@@ -58,6 +63,11 @@ type Request struct {
 	System    string `json:"system,omitempty"`
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
+	// BestEffort requests drop-when-busy admission: the call is refused
+	// with ErrTierBusy whenever its tier has work waiting. Callers that
+	// may not displace real cognition (musings) set this; their fairness
+	// floor is the caller's business, not the orchestrator's.
+	BestEffort bool `json:"best_effort,omitempty"`
 }
 
 type Response struct {
@@ -165,6 +175,11 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// Conversations are interactive — a turn mid-dialogue must not wait
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
+	// Best-effort work (musings) is the opposite extreme: admitted only
+	// when nothing else is waiting, refused instantly otherwise.
+	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0) {
+		return Response{}, ErrTierBusy
+	}
 	q := t.queue
 	if req.Kind == KindConversation {
 		q = t.prio
@@ -202,6 +217,16 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 		}
 		func() {
+			// A job whose caller already gave up (its ctx expired in the
+			// queue) is starvation, not model failure: skip it without
+			// touching the model or the circuit. Otherwise every planner
+			// that times out behind a long conversation both wastes a
+			// generation and strikes the breaker — a busy-but-healthy
+			// model gets declared down.
+			if j.ctx.Err() != nil {
+				j.reply <- result{err: j.ctx.Err()}
+				return
+			}
 			start := time.Now()
 			// Worker-side hard cap: no single call may wedge the tier,
 			// regardless of the caller's context or transport behavior.
@@ -209,7 +234,12 @@ func (o *Orchestrator) worker(t *tier) {
 			text, inTok, outTok, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
-				t.health.fail()
+				// The circuit counts the model's failures, never the
+				// caller's impatience: if the caller's own ctx died
+				// mid-call, the model may be merely slow.
+				if j.ctx.Err() == nil {
+					t.health.fail()
+				}
 				j.reply <- result{err: fmt.Errorf("%s tier: %w", t.name, err)}
 				return
 			}

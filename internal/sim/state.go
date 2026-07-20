@@ -43,6 +43,11 @@ type State struct {
 	// The gru (TASK-10) — nil while it is not abroad; omitempty keeps
 	// pre-TASK-10 snapshots valid.
 	Gru *Gru `json:"gru,omitempty"`
+	// Conversation records (TASK-22) — bounded ring, event-sourced.
+	Conversations []ConvoRecord `json:"conversations,omitempty"`
+	// The chronicle (TASK-11) — narrated story entries, bounded ring. Riding
+	// State means every attaching client gets catch-up history in the snapshot.
+	Chronicle []ChronicleEntry `json:"chronicle,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -388,6 +393,9 @@ func (s *State) Apply(e store.Event) error {
 
 	case "gru.emerged", "gru.moved", "gru.sighted", "gru.attacked", "gru.withdrew":
 		return s.applyGru(e)
+
+	case "chronicle.entry":
+		return s.applyChronicle(e)
 
 	case "agent.talked":
 		var p TalkedPayload

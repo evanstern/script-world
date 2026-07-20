@@ -21,6 +21,25 @@ var validGoals = map[string]bool{
 	"goto_warmth": true, "talk_to": true,
 }
 
+// parseMusing accepts one plain line of interiority (TASK-21): first line,
+// quotes and whitespace stripped, rune-capped. Empty or JSON-shaped replies
+// are model failures, not thoughts.
+func parseMusing(text string) (string, error) {
+	t := strings.TrimSpace(text)
+	if i := strings.IndexByte(t, '\n'); i >= 0 {
+		t = strings.TrimSpace(t[:i])
+	}
+	t = strings.Trim(t, "\"' ")
+	if t == "" || strings.HasPrefix(t, "{") {
+		return "", fmt.Errorf("unusable musing %q", text)
+	}
+	const museMaxRunes = 200
+	if r := []rune(t); len(r) > museMaxRunes {
+		t = string(r[:museMaxRunes])
+	}
+	return t, nil
+}
+
 // firstJSON extracts the first balanced JSON object from model output.
 func firstJSON(text string) (string, error) {
 	start := strings.IndexByte(text, '{')
@@ -90,7 +109,24 @@ func parseOutcome(text string) (convoOutcome, error) {
 		}
 		return r
 	}
-	o.ToneA, o.ToneB = clamp(o.RawToneA), clamp(o.RawToneB)
+	// Per-participant tones (TASK-22); the pre-TASK-22 pair shape
+	// (tone_a/tone_b) still parses so older prompts and models degrade
+	// gracefully.
+	if len(o.RawTones) > 0 {
+		for _, v := range o.RawTones {
+			o.Tones = append(o.Tones, clamp(v))
+		}
+	} else {
+		o.Tones = []int{clamp(o.RawToneA), clamp(o.RawToneB)}
+	}
+	if len(o.Topics) > 3 {
+		o.Topics = o.Topics[:3]
+	}
+	for i, t := range o.Topics {
+		if len(t) > 40 {
+			o.Topics[i] = t[:40]
+		}
+	}
 	if strings.EqualFold(strings.TrimSpace(o.Retold), "null") {
 		o.Retold = ""
 	}

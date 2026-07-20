@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
+verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
 ---
 
 # Sim state & reducer
@@ -15,11 +15,14 @@ degraded, effective rate) plus the living world — agents with needs/intents/
 inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
 latch), structures, cleared trees, harvested forage, den cooldowns, the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
-variants ([[social-fabric]]) — the consolidated inner life: per-agent beliefs,
-self-narrative, and the once-per-night consolidation ledger
-([[nightly-consolidation]]) — and the [[gru]] (`Gru *Gru`, nil while not abroad;
-`omitempty` keeps pre-TASK-10 snapshots valid) (executor types in `agents.go`;
-memories belong to [[agent-mind]]). Its
+variants and the bounded conversation-record ring ([[social-fabric]]) — the
+consolidated inner life: per-agent beliefs, self-narrative, and the
+once-per-night consolidation ledger ([[nightly-consolidation]]) — the
+[[gru]] (`Gru *Gru`, nil while not abroad; `omitempty` keeps pre-TASK-10
+snapshots valid) — and the narrated story: the bounded `State.Chronicle`
+ring ([[chronicle]], TASK-11), which rides snapshots so attaching clients
+get catch-up history for free (executor types in `agents.go`; memories
+belong to [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.

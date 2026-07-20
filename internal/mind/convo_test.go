@@ -122,6 +122,110 @@ func TestConversationRunsAndLands(t *testing.T) {
 	}
 }
 
+// TestSceneConversation (TASK-22): a third awake villager within the join
+// radius enters the scene; the outcome lands per-participant fodder —
+// subject-tagged toned gist memories (gossip seeds), a full mesh of tone
+// edges, topics, and a durable record in state.
+func TestSceneConversation(t *testing.T) {
+	h := newHarness(t, "")
+	m := h.m
+	state := sim.NewState(42, m)
+	// Cluster 0/1/2; park everyone else far away and asleep so the scene
+	// is exactly three.
+	for i := range state.Agents {
+		state.Agents[i].X, state.Agents[i].Y = 50, 50+i
+		state.Agents[i].Asleep = true
+	}
+	for i, pos := range [][2]int{{10, 10}, {10, 11}, {11, 10}} {
+		state.Agents[i].X, state.Agents[i].Y = pos[0], pos[1]
+		state.Agents[i].Asleep = false
+	}
+
+	// 3 participants × ConvoTurnsPerSide utterances, then the outcome.
+	var replies []string
+	for i := 0; i < 3*sim.ConvoTurnsPerSide; i++ {
+		replies = append(replies, `{"say": "Aye."}`)
+	}
+	replies = append(replies,
+		`{"gist": "argued about who tends the fire", "topics": ["fire", "chores"], "tones": [2, 0, -1], "retold": null}`)
+	model := &scriptedModel{replies: replies}
+
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(md.Close)
+
+	md.maybeStartConversation(store.Event{
+		Tick: 100, Type: "agent.talked",
+		Payload: mustJSON(t, sim.TalkedPayload{A: 0, B: 1}),
+	})
+
+	convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	if len(convs) == 0 {
+		t.Fatal("scene conversation never landed")
+	}
+	var cp sim.ConversationPayload
+	json.Unmarshal(convs[0].Payload, &cp)
+	if len(cp.Participants) != 3 || cp.Turns != 3*sim.ConvoTurnsPerSide {
+		t.Fatalf("scene shape: participants=%v turns=%d", cp.Participants, cp.Turns)
+	}
+	if len(cp.Topics) != 2 || cp.Topics[0] != "fire" || len(cp.Tones) != 3 || cp.Tones[2] != -1 {
+		t.Errorf("topics/tones: %v %v", cp.Topics, cp.Tones)
+	}
+
+	all, _ := h.st.EventsSince(0, 0)
+	var gistMems, toneEdges int
+	var sawSubjectTagged bool
+	for _, e := range all {
+		switch e.Type {
+		case "agent.memory_added":
+			var p sim.MemoryAddedPayload
+			json.Unmarshal(e.Payload, &p)
+			// Filter on the gist text: the live loop's executor emits its
+			// own "Talked with X." talk memories during the wait window.
+			if strings.Contains(p.Text, "argued about who tends the fire") {
+				gistMems++
+				if p.Agent == 0 && p.Subject == 1 && p.Tone == 2*30 {
+					sawSubjectTagged = true // agent 0's tone (+2) about counterpart 1
+				}
+			}
+		case "social.relation_changed":
+			if strings.Contains(string(e.Payload), "conversation: fire") {
+				toneEdges++
+			}
+		}
+	}
+	if gistMems != 6 {
+		t.Errorf("gist memories = %d, want 6 (3 participants × 2 counterparts)", gistMems)
+	}
+	if toneEdges != 6 {
+		t.Errorf("tone edges = %d, want full mesh of 6 with topic reason", toneEdges)
+	}
+	if !sawSubjectTagged {
+		t.Error("gist memory must be subject-tagged and toned (gossip seed)")
+	}
+
+	// The record ring and the gossip seed are live state: rebuild state
+	// from the loop and check both.
+	stateJSON, _, err := h.loop.DoState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := sim.NewState(42, m)
+	if err := json.Unmarshal(stateJSON, live); err != nil {
+		t.Fatal(err)
+	}
+	if rec, ok := sim.LastConversationBetween(live, 0, 2); !ok || rec.Gist == "" {
+		t.Fatalf("no durable record between 0 and 2: %v %v", rec, ok)
+	}
+	if tell, ok := sim.TellableFor(live, 0, 3); !ok || (tell.Subject != 1 && tell.Subject != 2) {
+		t.Errorf("scene gist must be servable gossip about a counterpart: %+v ok=%v", tell, ok)
+	}
+}
+
 // TestConversationFailureInjectsNothing: a garbage utterance mid-dialogue
 // abandons the whole conversation (the primitive talk stands alone).
 func TestConversationFailureInjectsNothing(t *testing.T) {

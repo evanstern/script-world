@@ -28,6 +28,19 @@ Goals: %s.
 	return b.String()
 }
 
+// musingSystemPrompt frames the same situation window as pure interiority
+// (TASK-21): one plain sentence, no goal vocabulary, no JSON.
+func musingSystemPrompt(name, personaText string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "You are %s, a villager in a small settlement.\n\n", name)
+	if personaText != "" {
+		b.WriteString(personaText)
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "Reply with ONE short sentence: an idle thought passing through %s's mind right now — first person, present tense, in your own voice. No JSON, no quotes, no explanation.\n", name)
+	return b.String()
+}
+
 // userPrompt renders the situation + memory window. The window is the ONLY
 // memory content that ever reaches a prompt (AC#3).
 func userPrompt(s *sim.State, idx int, k int) string {
@@ -111,6 +124,19 @@ func socialContext(s *sim.State, idx int) string {
 	}
 	if len(bonds) > 0 {
 		fmt.Fprintf(&b, "People: %s.\n", strings.Join(bonds, "; "))
+	}
+	// Last-conversation callback (TASK-22): the durable record ring gives
+	// prompts continuity across encounters.
+	if r, ok := sim.LastConversationInvolving(s, idx); ok {
+		var others []string
+		for _, p := range r.Participants {
+			if p != idx && p >= 0 && p < len(s.Agents) {
+				others = append(others, s.Agents[p].Name)
+			}
+		}
+		if len(others) > 0 && r.Gist != "" {
+			fmt.Fprintf(&b, "Last conversation, with %s: %s\n", strings.Join(others, " and "), r.Gist)
+		}
 	}
 	for _, d := range s.Debts {
 		if d.Status != "open" {

@@ -57,10 +57,16 @@ type Model struct {
 	width, height int
 	panX, panY    int // map-pane camera offset from the wanderer centroid
 	quitting      bool
+
+	// Chronicle pane filters (TASK-11): narrated entries filtered by agent
+	// and thread; chronRaw falls back to the raw event feed.
+	chronAgent  int // -1 = all
+	chronThread string
+	chronRaw    bool
 }
 
 func New(w *world.World) Model {
-	return Model{w: w, gameMap: w.Map()}
+	return Model{w: w, gameMap: w.Map(), chronAgent: -1}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -235,6 +241,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.active = (m.active + 1) % paneCount
 	case "shift+tab":
 		m.active = (m.active + paneCount - 1) % paneCount
+	case "a", "t", "r":
+		if m.active == paneChronicle {
+			switch msg.String() {
+			case "a": // all → each villager → all
+				m.chronAgent++
+				if m.replica == nil || m.chronAgent >= len(m.replica.Agents) {
+					m.chronAgent = -1
+				}
+			case "t": // all → each thread seen in the ring → all
+				m.chronThread = nextThread(m.replica, m.chronThread)
+			case "r":
+				m.chronRaw = !m.chronRaw
+			}
+		}
 	case "up", "down", "left", "right", "c":
 		if m.active == paneMap {
 			switch msg.String() {

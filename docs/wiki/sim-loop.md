@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
+verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
 ---
 
 # Sim loop
@@ -52,9 +52,12 @@ state reflects, which is what makes client-side replicas gapless.
 ([[agent-mind]]): validated, resolved to coordinates deterministically at the
 boundary via `resolveGoal`, recorded as `agent.intent_set (source: planner)` +
 `agent.thought`. `Loop.InjectSocial` is the second door — the mind's injection
-door ([[social-fabric]], [[nightly-consolidation]]): an atomic, whitelisted batch
-of conversation or consolidation effects, dry-run on a state copy before applying.
-Model output enters the sim only through these two doors, as recorded input.
+door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]],
+narrator entries per [[chronicle]] — `agent.thought` is whitelisted as a reducer
+no-op, `chronicle.entry` appends the story ring): an atomic, whitelisted batch
+of conversation, consolidation, musing, or chronicle effects, dry-run on a state
+copy before applying. Model output enters the sim only through these two doors,
+as recorded input.
 
 ## Connections
 

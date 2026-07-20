@@ -22,7 +22,7 @@ Usage:
   scriptworld resume <dir>                         resume game time
   scriptworld speed <dir> <1x|4x|8x|16x|32x|max>       set game speed
   scriptworld llm <dir> <kind> <prompt...>         one-shot LLM call via the daemon
-                                                   (kinds: planner, conversation,
+                                                   (kinds: planner, conversation, musing,
                                                     consolidation, narrator, drama)
 `
 

@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 2a1608f2cf9d525cbe451f8a40b7b355e30cd692
+verified_against: 36ab690d59475f07ecf4b8f4adffb1735252744f
 ---
 
 # LLM orchestrator
@@ -36,7 +36,12 @@ default.
 
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
 queue the worker drains first — dialogue turns are interactive, while planner
-thoughts tolerate staleness (the reflex grace covers them). A worker-side hard cap
+thoughts tolerate staleness (the reflex grace covers them). The opposite
+extreme is caller-flagged: `Request.BestEffort` calls (musings,
+`KindMusing`, local) are refused with `ErrTierBusy` the moment either
+local queue has work waiting — flavor yields to real cognition. The flag
+belongs to the caller so the mind can drop it as a fairness floor when a
+musing has been starved too long (TASK-21, [[agent-mind]]). A worker-side hard cap
 (`workerCallCap`, 2 min) bounds any single provider call so a hung transport can
 never wedge a tier. **Submit** is synchronous with immediate admission control, each failure mode a
 distinct error: `ErrBudgetExhausted` (cloud ceiling reached — checked BEFORE any
@@ -52,7 +57,12 @@ happens at admission, and the local tier is unaffected.
 
 **Degraded mode** (`health.go`): a per-tier circuit breaker — 3 consecutive failures
 open it (15 s backoff doubling to 5 min), an open circuit refuses instantly, one
-half-open probe tests recovery, success resets. A killed model degrades the AI layer;
+half-open probe tests recovery, success resets. Busy is not down (TASK-22 live
+finding): the worker skips queued jobs whose caller already gave up (no model
+call, no health strike) and never counts a failure when the caller's own ctx
+died mid-call — only genuine provider failures and the worker cap strike the
+breaker, so planners timing out behind a long conversation can no longer
+self-inflict an outage. A killed model degrades the AI layer;
 the daemon and loop never notice.
 
 **Config** (`config.go`): `llm.json` in the save directory, written with defaults by
