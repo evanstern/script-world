@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # Sim state & reducer
@@ -21,8 +21,10 @@ once-per-night consolidation ledger ([[nightly-consolidation]]) — the
 [[gru]] (`Gru *Gru`, nil while not abroad; `omitempty` keeps pre-TASK-10
 snapshots valid) — and the narrated story: the bounded `State.Chronicle`
 ring ([[chronicle]], TASK-11), which rides snapshots so attaching clients
-get catch-up history for free (executor types in `agents.go`; memories
-belong to [[agent-mind]]). Its
+get catch-up history for free — and Metatron's charge bank
+(`MetatronCharges`, genesis 1, deliberately not `omitempty` so a
+spent-to-zero bank round-trips as 0; [[metatron]], TASK-12) (executor types
+in `agents.go`; memories belong to [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.

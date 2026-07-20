@@ -4,7 +4,7 @@ description: Attach-side protocol client — dial with fast failure, request/res
 kind: component
 sources:
   - internal/ipc/client.go
-verified_against: f4786fdb378059d04d20f2b8c8bced549d7a9922
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # IPC client
@@ -33,7 +33,8 @@ Conveniences: `Status(cmd, args)` unmarshals the shared `StatusData` shape;
 `FetchState()` unmarshals the `state` command's `StateData` (full world state + the
 log position it reflects); `Subscribe(since *int64)` issues the subscribe command —
 read events from `Pushes()` and handle the `"dropped"` push by re-subscribing from
-its `last_seq`.
+its `last_seq`; `MetatronChat(text)` / `MetatronStatus()` carry the console pair
+([[metatron]]) — `MetatronChat` blocks for the angel's cloud round-trip.
 
 ## Connections
 

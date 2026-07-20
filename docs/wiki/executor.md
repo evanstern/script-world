@@ -6,7 +6,7 @@ sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/terrain.go
-verified_against: e9bfdcd6425327ca8e71f188f12c29526802f6b5
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # Executor
@@ -48,7 +48,9 @@ Structures (`fire`, `shelter`) exist only in state; `warmAt` is fire within Manh
 radius 2 or standing on a shelter.
 
 The executor also emits `agent.memory_added` events from the salience table in
-`memory.go` ([[agent-mind]]) alongside memorable happenings; its reflex fires only
+`memory.go` ([[agent-mind]]) alongside memorable happenings, and regenerates
+Metatron's nudge charges (`metatron.charge_regenerated` at absolute 6-game-hour
+tick boundaries while below the cap — [[metatron]]); its reflex fires only
 on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the
 [[gru]]'s whole turn (`gruStep`) each tick, and the heartbeat's near-death memory
 names "the gru" as the cause when the last wound was recent. The per-minute social beat

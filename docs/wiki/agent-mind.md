@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 61c88505a1942129ad053f9dc16bff327a60152a
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # Agent mind
@@ -27,7 +27,9 @@ events vs files (truth vs view), and mind vs loop (I/O vs determinism).
 write path exists anywhere (the structural half of the persona firewall; the
 validation half is [[nightly-consolidation]]'s validator, fed by the authored
 `persona.Anchors` and `persona.DriftMarkers`). `Load` reads them as the mind's
-stable prompt prefixes.
+stable prompt prefixes. Genesis also seeds Metatron's `charter.md` (the ONE
+player-editable prompt, never overwritten once present — [[metatron]]), and the
+salience table gains `SalDream` (8) for nudge memories.
 
 **Memories** (`internal/sim/memory.go`): the executor emits `agent.memory_added`
 events from a fixed salience table (talk 3★ … death witnessed 10★); the reducer

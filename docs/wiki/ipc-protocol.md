@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
 ---
 
 # IPC protocol
@@ -35,12 +35,17 @@ one loop iteration; subscribe with `since: last_seq` for a gapless live replica)
 `unsubscribe`, `pause`, `resume`, `set_speed` (`SetSpeedArgs{speed}`), `llm_call`
 (`LLMCallArgs{kind, system, prompt, max_tokens}` → an `llm.Response` with tier,
 model, tokens, cost, latency — errors when the world has no orchestrator), and
-`shutdown`. `StatusData` gains an optional `llm` section (tier health, queue depths,
+`shutdown`, and the Metatron console pair (TASK-12, [[metatron]]): `metatron_chat`
+(`MetatronChatArgs{text}` → a `metatron.TurnResult` with reply, optional landed
+nudge, charge bank, surfaced moments — a long call, one cloud round-trip) and
+`metatron_status` (no args → the model-free `metatron.Status` peek). `StatusData`
+gains an optional `llm` section (tier health, queue depths,
 monthly spend vs budget) when the orchestrator is enabled.
 
 `StatusData` is the shared response shape for status/pause/resume/set_speed, with four
 sections: `world` (name, seed, format_version), `clock` (tick, game_time, paused,
-speed, effective_rate, degraded), `daemon` (pid, uptime_seconds, subscribers), `log`
+speed, effective_rate, degraded, metatron_charges — the ⚡ bank, so clients need no
+state fetch), `daemon` (pid, uptime_seconds, subscribers), `log`
 (last_seq).
 
 Failure semantics: unknown cmd or bad args → `ok:false`, connection stays open;
