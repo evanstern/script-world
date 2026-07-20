@@ -296,6 +296,54 @@ func TestQueueBackpressure(t *testing.T) {
 	}
 }
 
+// TestCallerTimeoutIsNotModelFailure (TASK-22 live finding): callers whose
+// contexts expire while queued or mid-call are starvation, not model
+// failure — they must neither strike the circuit breaker nor reach the
+// model once dead. A busy tier serving a long conversation must not get
+// declared down by impatient planners.
+func TestCallerTimeoutIsNotModelFailure(t *testing.T) {
+	release := make(chan struct{})
+	first := true
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if first {
+			first = false
+			<-release // park the worker on the first call (the "conversation")
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	defer slow.Close()
+
+	o := newOrch(t, testConfig(slow.URL, "http://unused.invalid", 100), testStore(t))
+
+	// One long call occupies the worker; several short-deadline callers
+	// pile up behind it and give up — more than failuresToOpen of them.
+	longDone := make(chan struct{})
+	go func() {
+		o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "long"})
+		close(longDone)
+	}()
+	time.Sleep(50 * time.Millisecond) // let the long call reach the worker
+	for i := 0; i < failuresToOpen+2; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		if _, err := o.Submit(ctx, Request{Kind: KindPlanner, Prompt: "impatient"}); err == nil {
+			t.Fatal("impatient caller should have timed out")
+		}
+		cancel()
+	}
+	close(release)
+	<-longDone
+
+	if !o.StatusSnapshot().Local.Up {
+		t.Fatal("caller timeouts opened the circuit — starvation counted as model failure")
+	}
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "after"}); err != nil {
+		t.Fatalf("healthy tier must serve the next caller: %v", err)
+	}
+}
+
 // TestMusingBestEffort (TASK-21): musings route local and succeed on a quiet
 // tier, but are refused immediately (ErrTierBusy) the moment anything is
 // waiting — they may never displace real cognition.

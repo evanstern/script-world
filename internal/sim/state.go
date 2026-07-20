@@ -43,6 +43,8 @@ type State struct {
 	// The gru (TASK-10) — nil while it is not abroad; omitempty keeps
 	// pre-TASK-10 snapshots valid.
 	Gru *Gru `json:"gru,omitempty"`
+	// Conversation records (TASK-22) — bounded ring, event-sourced.
+	Conversations []ConvoRecord `json:"conversations,omitempty"`
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed

@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: ceafd4106848291cddc9492351461d961043390f
+verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
 ---
 
 # Agent mind
@@ -48,7 +48,8 @@ per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, compl
 idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floored
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
-context block (bonds, debts, reputation, loudest rumor — [[social-fabric]]), and
+context block (bonds, debts, reputation, loudest rumor, and the
+last-conversation callback from the record ring — [[social-fabric]], TASK-22), and
 the driver also runs conversations (see [[social-fabric]]). Due agents are
 enqueued as immutable prompt snapshots to a single-flight-per-agent planner
 worker — a model call must never block the absorb loop, or the events channel

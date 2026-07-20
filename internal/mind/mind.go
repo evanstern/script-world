@@ -33,7 +33,12 @@ type Injector interface {
 const (
 	encounterCooldownTicks = 2 * 3600 // per pair
 	encounterRadius        = 1
-	callTimeout            = 90 * time.Second
+	// callTimeout must exceed the local model's honest completion time or
+	// the tier's throughput is zero: live measurement (gemma 12B, day-1
+	// prompts) put planner completions just past the old 90s, so every
+	// call burned its full window and produced nothing. Planners tolerate
+	// staleness — a late plan beats no plan (the reflex floor covers gaps).
+	callTimeout = 180 * time.Second
 	// planDebounceTicks floors the gap between one agent's planner calls:
 	// completion triggers re-arm on every finished act, and without a floor
 	// the trigger→plan→act→complete→trigger loop saturates the local tier
@@ -334,7 +339,11 @@ func (md *Mind) muse() {
 	name := md.replica.Agents[pick].Name
 	system := musingSystemPrompt(name, md.personas[pick])
 	prompt := userPrompt(md.replica, pick, md.k)
-	starved := time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
+	// The fairness floor stands down while a conversation runs — a scene
+	// is already the tier's most expensive tenant, and a queued musing
+	// behind it only starves planners further.
+	starved := !md.convoBusy.Load() &&
+		time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
 	go func() {
 		defer md.museBusy.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)

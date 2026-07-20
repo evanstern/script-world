@@ -217,6 +217,16 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 		}
 		func() {
+			// A job whose caller already gave up (its ctx expired in the
+			// queue) is starvation, not model failure: skip it without
+			// touching the model or the circuit. Otherwise every planner
+			// that times out behind a long conversation both wastes a
+			// generation and strikes the breaker — a busy-but-healthy
+			// model gets declared down.
+			if j.ctx.Err() != nil {
+				j.reply <- result{err: j.ctx.Err()}
+				return
+			}
 			start := time.Now()
 			// Worker-side hard cap: no single call may wedge the tier,
 			// regardless of the caller's context or transport behavior.
@@ -224,7 +234,12 @@ func (o *Orchestrator) worker(t *tier) {
 			text, inTok, outTok, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
-				t.health.fail()
+				// The circuit counts the model's failures, never the
+				// caller's impatience: if the caller's own ctx died
+				// mid-call, the model may be merely slow.
+				if j.ctx.Err() == nil {
+					t.health.fail()
+				}
 				j.reply <- result{err: fmt.Errorf("%s tier: %w", t.name, err)}
 				return
 			}
