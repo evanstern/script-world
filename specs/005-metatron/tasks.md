@@ -105,10 +105,10 @@ increment. One branch, one PR (task-12-metatron).
 ## Phase 7: Polish & cross-cutting
 
 - [x] T030 Full suite `go test ./... -race` green; fix any interaction fallout (mind/scribe/TUI consumers unaffected by the new consumer)
-- [ ] T031 Quickstart validation run: execute quickstart.md §1–§5 against a fresh world with mock-free cloud (9router or Anthropic); record outcomes in specs/005-metatron/quickstart-results.md
-- [ ] T032 Live acceptance (quickstart §6) on ~/worlds/chronicle-proof with the upgraded binary: converse about real history, land one dream against a live storyline, verify villager interpretation surfaces (soul.md/chronicle), verify charge ledger in the live log; record in quickstart-results.md
-- [ ] T033 Wiki re-ground per PDLC: new docs/wiki/metatron.md note; re-verify touched notes (event-types, sim-state-reducer, sim-loop, executor, llm-orchestrator, tui-client, ipc-protocol, cli-scriptworld, agent-mind); freshness gate green
-- [ ] T034 README/help touch: `scriptworld metatron` in the usage block (cmd/scriptworld) and README.md feature list
+- [x] T031 Quickstart validation run: execute quickstart.md §1–§5 against a fresh world with mock-free cloud (9router or Anthropic); record outcomes in specs/005-metatron/quickstart-results.md
+- [x] T032 Live acceptance (quickstart §6) on ~/worlds/chronicle-proof with the upgraded binary: converse about real history, land one dream against a live storyline, verify villager interpretation surfaces (soul.md/chronicle), verify charge ledger in the live log; record in quickstart-results.md
+- [x] T033 Wiki re-ground per PDLC: new docs/wiki/metatron.md note; re-verify touched notes (event-types, sim-state-reducer, sim-loop, executor, llm-orchestrator, tui-client, ipc-protocol, cli-scriptworld, agent-mind); freshness gate green
+- [x] T034 README/help touch: `scriptworld metatron` in the usage block (cmd/scriptworld) and README.md feature list
 
 ---
 
