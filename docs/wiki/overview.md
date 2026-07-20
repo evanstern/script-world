@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 34f180b7830805f1168aa572751bc7893c845898
 ---
 
 # Overview
