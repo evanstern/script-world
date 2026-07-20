@@ -25,6 +25,7 @@ type mockModel struct {
 	calls       atomic.Int64
 	reply       string
 	musingReply string
+	narrReply   string // narrator calls; empty = tier down (carry path)
 	err         error
 	prompts     []string
 	kinds       []llm.Kind
@@ -40,6 +41,12 @@ func (m *mockModel) Submit(_ context.Context, req llm.Request) (llm.Response, er
 		reply = m.musingReply
 		if reply == "" {
 			err = llm.ErrTierBusy
+		}
+	}
+	if req.Kind == llm.KindNarrator {
+		reply = m.narrReply
+		if reply == "" {
+			err = llm.ErrTierDown
 		}
 	}
 	m.mu.Unlock()

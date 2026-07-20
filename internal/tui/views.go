@@ -241,12 +241,72 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-// chronicleView is the raw event feed until TASK-11 narrates it.
+// chronicleView (TASK-11) renders the narrated story from the replica's
+// chronicle ring — snapshot-carried, so an attaching client reads days of
+// history immediately (the catch-up mechanism). 'a'/'t' filter by agent and
+// thread; 'r' (or a world with no narrated entries yet) shows the raw feed.
 func (m Model) chronicleView() string {
-	if len(m.events) == 0 {
-		return styleDim.Render("no events yet this session — the chronicle fills as the world moves")
+	narrated := m.replica != nil && len(m.replica.Chronicle) > 0
+	if m.chronRaw || !narrated {
+		return m.rawFeedView(narrated)
 	}
-	rows := m.height - 8
+
+	agentName := "all"
+	if m.chronAgent >= 0 && m.chronAgent < len(m.replica.Agents) {
+		agentName = m.replica.Agents[m.chronAgent].Name
+	}
+	thread := m.chronThread
+	if thread == "" {
+		thread = "all"
+	}
+	header := styleDim.Render(fmt.Sprintf(
+		"agent %s · thread %s · a/t filter, r raw feed", agentName, thread))
+
+	width := m.width - 4
+	if width < 30 {
+		width = 30
+	}
+	var lines []string
+	for _, c := range m.replica.Chronicle {
+		if m.chronAgent >= 0 && !c.Mentions(m.chronAgent) {
+			continue
+		}
+		if m.chronThread != "" && c.Thread != m.chronThread {
+			continue
+		}
+		stamp := fmt.Sprintf("day %d", c.Day)
+		if c.Thread != "" {
+			stamp += " · " + c.Thread
+		}
+		lines = append(lines, styleDim.Render(stamp)+" "+chronNames(m.replica, c))
+		lines = append(lines, wrapText(c.Text, width)...)
+		lines = append(lines, "")
+	}
+	if len(lines) == 0 {
+		return header + "\n\n" + styleDim.Render("no entries match these filters yet")
+	}
+	rows := m.height - 9
+	if rows < 5 {
+		rows = 5
+	}
+	if len(lines) > rows {
+		lines = lines[len(lines)-rows:]
+	}
+	return header + "\n\n" + strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+// rawFeedView is the unfiltered event stream — the pre-narrator chronicle,
+// kept as the fallback for worlds without a narrator and as the 'r' toggle.
+func (m Model) rawFeedView(narrated bool) string {
+	hint := "raw feed · no narrated entries yet — the narrator writes at day and night boundaries"
+	if narrated {
+		hint = "raw feed · r narrated view"
+	}
+	if len(m.events) == 0 {
+		return styleDim.Render(hint) + "\n\n" +
+			styleDim.Render("no events yet this session — the chronicle fills as the world moves")
+	}
+	rows := m.height - 10
 	if rows < 5 {
 		rows = 5
 	}
@@ -255,10 +315,72 @@ func (m Model) chronicleView() string {
 		start = 0
 	}
 	var b strings.Builder
+	b.WriteString(styleDim.Render(hint) + "\n\n")
 	for _, e := range m.events[start:] {
 		b.WriteString(eventRow(e) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// chronNames renders an entry's cast, styled like agents elsewhere.
+func chronNames(s *sim.State, c sim.ChronicleEntry) string {
+	var names []string
+	for _, a := range c.Agents {
+		if a >= 0 && a < len(s.Agents) {
+			names = append(names, s.Agents[a].Name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return styleAgent.Render(strings.Join(names, ", "))
+}
+
+// nextThread cycles "" → each distinct thread in ring order → "".
+func nextThread(s *sim.State, cur string) string {
+	if s == nil {
+		return ""
+	}
+	var threads []string
+	seen := map[string]bool{}
+	for _, c := range s.Chronicle {
+		if c.Thread != "" && !seen[c.Thread] {
+			seen[c.Thread] = true
+			threads = append(threads, c.Thread)
+		}
+	}
+	if len(threads) == 0 {
+		return ""
+	}
+	if cur == "" {
+		return threads[0]
+	}
+	for i, t := range threads {
+		if t == cur && i+1 < len(threads) {
+			return threads[i+1]
+		}
+	}
+	return ""
+}
+
+// wrapText greedy-wraps prose to the given width.
+func wrapText(text string, width int) []string {
+	var lines []string
+	var cur strings.Builder
+	for _, w := range strings.Fields(text) {
+		if cur.Len() > 0 && cur.Len()+1+len(w) > width {
+			lines = append(lines, cur.String())
+			cur.Reset()
+		}
+		if cur.Len() > 0 {
+			cur.WriteByte(' ')
+		}
+		cur.WriteString(w)
+	}
+	if cur.Len() > 0 {
+		lines = append(lines, cur.String())
+	}
+	return lines
 }
 
 func eventRow(e store.Event) string {

@@ -93,6 +93,14 @@ type Mind struct {
 	museBusy   atomic.Bool  // one musing in flight at a time
 	lastMuseOK atomic.Int64 // wall unix-nano of the last landed musing
 
+	// Chronicle narrator (TASK-11): absorb-owned chapter buffer + FIFO queue
+	// to the single-flight cloud worker; narrRetry (cap 1) carries a failed
+	// chapter's lines into the next one.
+	narrLines []string
+	narrFrom  int64
+	narrQ     chan narrJob
+	narrRetry chan narrCarry
+
 	events chan []store.Event
 	done   chan struct{}
 }
@@ -113,10 +121,12 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		personas: personas,
 		k:        sim.WindowK,
 		pairSeen: map[[2]int]int64{},
-		planQ:    make(chan planJob, sim.AgentCount),
-		consolQ:  make(chan consolJob, sim.AgentCount),
-		events:   make(chan []store.Event, 256),
-		done:     make(chan struct{}),
+		planQ:     make(chan planJob, sim.AgentCount),
+		consolQ:   make(chan consolJob, sim.AgentCount),
+		narrQ:     make(chan narrJob, 8),
+		narrRetry: make(chan narrCarry, 1),
+		events:    make(chan []store.Event, 256),
+		done:      make(chan struct{}),
 	}
 	for i := range md.nextDue {
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
@@ -127,6 +137,7 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 	go md.run()
 	go md.planWorker()
 	go md.consolidateWorker()
+	go md.narrateWorker()
 	return md, nil
 }
 
@@ -185,6 +196,7 @@ func (md *Mind) absorb(batch []store.Event) {
 		case "agent.slept":
 			md.maybeConsolidate(e)
 		}
+		md.chronicleNote(e)
 	}
 }
 

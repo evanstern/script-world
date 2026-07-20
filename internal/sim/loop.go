@@ -132,6 +132,8 @@ var injectSocialWhitelist = map[string]bool{
 	// Musings (TASK-21): interiority with no state effect — recorded
 	// chronicle material only.
 	"agent.thought": true,
+	// The chronicle (TASK-11): the narrator's story entries.
+	"chronicle.entry": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at

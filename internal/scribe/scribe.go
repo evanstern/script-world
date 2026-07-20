@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/evanstern/script-world/internal/clock"
@@ -40,6 +41,7 @@ func New(worldDir string, seed uint64, m *worldmap.Map, stateJSON []byte) (*Scri
 	for i := range s.replica.Agents {
 		s.render(i)
 	}
+	s.renderChronicle()
 	go s.run()
 	return s, nil
 }
@@ -66,12 +68,15 @@ func (s *Scribe) run() {
 			return
 		case batch := <-s.events:
 			dirty := map[int]bool{}
+			chronDirty := false
 			for _, e := range batch {
 				s.replica.Apply(e)
 				if e.Tick > s.replica.Tick {
 					s.replica.Tick = e.Tick
 				}
 				switch e.Type {
+				case "chronicle.entry":
+					chronDirty = true
 				case "social.relation_changed":
 					var p sim.RelationChangedPayload
 					if json.Unmarshal(e.Payload, &p) == nil {
@@ -96,8 +101,44 @@ func (s *Scribe) run() {
 			for idx := range dirty {
 				s.render(idx)
 			}
+			if chronDirty {
+				s.renderChronicle()
+			}
 		}
 	}
+}
+
+// renderChronicle writes chronicle.md from the narrated ring — the offline
+// catch-up artifact (TASK-11): days away are readable without attaching.
+func (s *Scribe) renderChronicle() {
+	var b strings.Builder
+	b.WriteString("# The chronicle\n")
+	var day int64
+	for _, c := range s.replica.Chronicle {
+		if c.Day != day {
+			day = c.Day
+			fmt.Fprintf(&b, "\n## Day %d\n\n", day)
+		}
+		line := "- "
+		if c.Thread != "" {
+			line += fmt.Sprintf("**[%s]** ", c.Thread)
+		}
+		line += c.Text
+		var names []string
+		for _, a := range c.Agents {
+			if a >= 0 && a < len(s.replica.Agents) {
+				names = append(names, s.replica.Agents[a].Name)
+			}
+		}
+		if len(names) > 0 {
+			line += fmt.Sprintf(" *(%s)*", strings.Join(names, ", "))
+		}
+		b.WriteString(line + "\n")
+	}
+	if len(s.replica.Chronicle) == 0 {
+		b.WriteString("\n*No entries yet — the narrator writes as days pass.*\n")
+	}
+	os.WriteFile(filepath.Join(s.worldDir, "chronicle.md"), []byte(b.String()), 0o644)
 }
 
 // render writes one agent's soul.md from replica state.

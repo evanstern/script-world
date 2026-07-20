@@ -155,3 +155,106 @@ func TestDisconnectedHeaderShowsRetry(t *testing.T) {
 		t.Errorf("header should show disconnected state: %q", v)
 	}
 }
+
+// chronEntry appends a narrated entry to the test replica's ring.
+func chronEntry(m *Model, day int64, text, thread string, agents ...int) {
+	m.replica.Chronicle = append(m.replica.Chronicle, sim.ChronicleEntry{
+		Tick: day * 86400, Day: day, FromTick: (day - 1) * 86400, ToTick: day * 86400,
+		Text: text, Thread: thread, Agents: agents,
+	})
+}
+
+// TestChronicleNarratedView is TASK-11 AC#1/#2 at the pane: narrated entries
+// render, and the a/t keys filter by agent and thread.
+func TestChronicleNarratedView(t *testing.T) {
+	m := testModel(t)
+	m.active = paneChronicle
+	chronEntry(&m, 1, "Ash lit the first fire.", "cold-start", 0)
+	chronEntry(&m, 2, "The gru circled Sage in the dark.", "gru", 7)
+
+	view := m.chronicleView()
+	if !strings.Contains(view, "Ash lit the first fire.") || !strings.Contains(view, "gru circled Sage") {
+		t.Fatalf("narrated entries missing: %q", view)
+	}
+
+	// 'a' cycles to agent 0 (Ash): only entries mentioning Ash remain.
+	var mdl tea.Model = m
+	mdl, _ = mdl.(Model).Update(key("a"))
+	view = mdl.(Model).chronicleView()
+	if !strings.Contains(view, "first fire") || strings.Contains(view, "gru circled") {
+		t.Errorf("agent filter leaked: %q", view)
+	}
+
+	// Back to all, then 't' cycles to the first thread (cold-start).
+	for i := 0; i < len(m.replica.Agents); i++ {
+		mdl, _ = mdl.(Model).Update(key("a"))
+	}
+	mdl, _ = mdl.(Model).Update(key("t"))
+	mm := mdl.(Model)
+	if mm.chronAgent != -1 || mm.chronThread != "cold-start" {
+		t.Fatalf("filter state: agent=%d thread=%q", mm.chronAgent, mm.chronThread)
+	}
+	view = mm.chronicleView()
+	if !strings.Contains(view, "first fire") || strings.Contains(view, "gru circled") {
+		t.Errorf("thread filter leaked: %q", view)
+	}
+
+	// 't' again reaches "gru", once more wraps to all.
+	mdl, _ = mm.Update(key("t"))
+	if mdl.(Model).chronThread != "gru" {
+		t.Errorf("thread cycle: %q", mdl.(Model).chronThread)
+	}
+	mdl, _ = mdl.(Model).Update(key("t"))
+	if mdl.(Model).chronThread != "" {
+		t.Errorf("thread cycle should wrap to all: %q", mdl.(Model).chronThread)
+	}
+}
+
+// TestChronicleRawFallback: no narrated entries -> raw feed automatically;
+// 'r' toggles back to raw even when narration exists.
+func TestChronicleRawFallback(t *testing.T) {
+	m := testModel(t)
+	m.active = paneChronicle
+	m.applyEvent(store.Event{Seq: 1, Tick: 60, Type: "agent.moved",
+		Payload: json.RawMessage(`{"agent":0,"x":7,"y":8}`)})
+
+	view := m.chronicleView()
+	if !strings.Contains(view, "agent.moved") || !strings.Contains(view, "raw feed") {
+		t.Fatalf("empty ring must fall back to the raw feed: %q", view)
+	}
+
+	chronEntry(&m, 1, "Ash lit the first fire.", "cold-start", 0)
+	if view := m.chronicleView(); strings.Contains(view, "agent.moved") {
+		t.Fatalf("narrated view should replace raw once entries exist: %q", view)
+	}
+	var mdl tea.Model = m
+	mdl, _ = mdl.(Model).Update(key("r"))
+	if view := mdl.(Model).chronicleView(); !strings.Contains(view, "agent.moved") {
+		t.Errorf("'r' should show the raw feed: %q", view)
+	}
+}
+
+// TestChronicleKeysScopedToPane: a/t/r do nothing outside the chronicle pane.
+func TestChronicleKeysScopedToPane(t *testing.T) {
+	m := testModel(t)
+	m.active = paneMap
+	chronEntry(&m, 1, "x", "cold-start", 0)
+	var mdl tea.Model = m
+	mdl, _ = mdl.(Model).Update(key("a"))
+	mdl, _ = mdl.(Model).Update(key("t"))
+	mdl, _ = mdl.(Model).Update(key("r"))
+	mm := mdl.(Model)
+	if mm.chronAgent != -1 || mm.chronThread != "" || mm.chronRaw {
+		t.Errorf("filters changed outside the pane: %+v", mm)
+	}
+}
+
+func TestWrapText(t *testing.T) {
+	lines := wrapText("one two three four five", 9)
+	if len(lines) != 3 || lines[0] != "one two" {
+		t.Errorf("wrap: %v", lines)
+	}
+	if got := wrapText("", 10); got != nil {
+		t.Errorf("empty wrap: %v", got)
+	}
+}
