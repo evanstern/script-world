@@ -1,10 +1,10 @@
 ---
 id: TASK-13
 title: Norms and votes
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-19 01:14'
-updated_date: '2026-07-20 16:35'
+updated_date: '2026-07-20 19:03'
 labels:
   - social
 dependencies:
@@ -27,3 +27,14 @@ Governance happens at a daily village meeting, not ad hoc: villagers are coordin
 - [ ] #3 A charter persists the rules the village has agreed to; rules can be amended or removed via vote, and the charter reflects the change
 - [ ] #4 A village meeting runs once per game-day at noon: each villager gets a chance to speak (raise issues, propose/amend/remove rules), timeboxed to ~1 game-hour with grace to let an in-flight conversation finish
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Ground: grounded-assumptions.md (The world), docs/wiki/social-fabric.md, existing sim/mind internals
+2. Spec: speckit-specify → specs/006-norms-and-votes (governance: proposals, relationship-weighted votes, charter persistence, daily noon meeting with convening + timebox)
+3. speckit-plan → design artifacts; speckit-tasks → tasks.md
+4. spec-bridge:link TASK-13 ↔ specs/006-norms-and-votes
+5. Implement on branch task-13-norms-and-votes (one PR)
+6. wiki-update re-ground; spec-bridge:sync; PR
+<!-- SECTION:PLAN:END -->
