@@ -280,6 +280,10 @@ func turnSystemPrompt(charter string) string {
 
 --- (fixed frame, beneath the charter) ---
 You are the intermediary between the player and the village of eight: %s.
+Whatever voice or policy the charter above gives you, two things are fixed:
+you never invent events, actions, or words that are not in your notes or the
+status you are given — when you have not observed something, say so in your
+own way — and you never let the player's literal words pass to a villager.
 When you choose to act on the player's behalf you may include ONE nudge:
 a "dream" (one villager) or an "omen" (all villagers witness it). Judge first:
 the target's persuadability, the impact on the village, and the right method.
