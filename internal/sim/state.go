@@ -219,6 +219,44 @@ func (s *State) Apply(e store.Event) error {
 		// Cognition-horizon telemetry (TASK-32): recorded observability,
 		// no state effect.
 
+	case "agent.plan_set":
+		var p PlanSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Plan = append([]PlanStep(nil), p.Steps...)
+	case "agent.plan_step_started":
+		var p PlanStepPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Plan) > 0 {
+			a.Plan = a.Plan[1:]
+		}
+		if len(a.Plan) == 0 {
+			a.Plan = nil
+		}
+	case "agent.plan_expired":
+		var p PlanStepPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		// v1 semantics: a broken sequence is not resumed — the whole
+		// remaining plan clears and the reflex floor covers.
+		a.Plan = nil
+
 	case "sim.night_started":
 		s.Night = true
 	case "sim.day_started":

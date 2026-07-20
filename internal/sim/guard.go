@@ -41,6 +41,13 @@ const presentRadius = 16
 // Eval checks one guard against current state for the acting agent.
 // Returns (holds, reason) — reason is recorded on rejection.
 func (g Guard) Eval(s *State, agent int) (bool, string) {
+	return g.EvalAt(s, agent, s.Tick)
+}
+
+// EvalAt evaluates against an explicit tick: the executor computes a tick's
+// events BEFORE the state tick advances, so timed guards must compare
+// against the tick being generated, not the one already applied.
+func (g Guard) EvalAt(s *State, agent int, tick int64) (bool, string) {
 	switch g.Type {
 	case GuardTargetAlive:
 		if g.Target < 0 || g.Target >= len(s.Agents) {
@@ -73,12 +80,12 @@ func (g Guard) Eval(s *State, agent int) (bool, string) {
 		}
 		return true, ""
 	case GuardAfterTick:
-		if s.Tick >= g.Tick {
+		if tick >= g.Tick {
 			return true, ""
 		}
 		return false, fmt.Sprintf("before tick %d", g.Tick)
 	case GuardBeforeTick:
-		if s.Tick < g.Tick {
+		if tick < g.Tick {
 			return true, ""
 		}
 		return false, fmt.Sprintf("past tick %d", g.Tick)

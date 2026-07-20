@@ -279,3 +279,101 @@ func TestGuardEvalTable(t *testing.T) {
 		}
 	}
 }
+
+// --- US4: guarded conditional plans ---
+
+func TestPlanActsAtTickT(t *testing.T) {
+	m := testMap(42)
+	s := NewState(42, m)
+	s.Tick = 1000
+	s.Agents[0].Plan = []PlanStep{{
+		Job: "planner-0-1000", Goal: "wander",
+		When:  &Guard{Type: GuardAfterTick, Tick: 1500},
+		Until: 3000,
+	}}
+	// Holding: before T the head step emits nothing, tick after tick.
+	for tick := int64(1001); tick < 1500; tick += 100 {
+		if evs := planStepEvents(s, m, 0, tick); len(evs) != 0 {
+			t.Fatalf("plan fired early at tick %d: %v", tick, evs[0].Type)
+		}
+	}
+	// At T: started + intent, deterministically, no model anywhere.
+	evs := planStepEvents(s, m, 0, 1500)
+	if len(evs) != 2 || evs[0].Type != "agent.plan_step_started" || evs[1].Type != "agent.intent_set" {
+		t.Fatalf("at T: %v", evs)
+	}
+	var ip IntentSetPayload
+	json.Unmarshal(evs[1].Payload, &ip)
+	if ip.Source != "plan" {
+		t.Errorf("intent source = %q, want plan", ip.Source)
+	}
+	// Reducer pops the head.
+	for _, e := range evs {
+		if err := s.Apply(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(s.Agents[0].Plan) != 0 {
+		t.Errorf("plan not consumed: %+v", s.Agents[0].Plan)
+	}
+}
+
+func TestPlanExpiryClearsWholePlan(t *testing.T) {
+	m := testMap(42)
+	s := NewState(42, m)
+	s.Tick = 5000
+	s.Agents[0].Plan = []PlanStep{
+		{Job: "j", Goal: "wander", Until: 4000}, // window already closed
+		{Job: "j", Goal: "forage", Until: 9000},
+	}
+	evs := planStepEvents(s, m, 0, 5000)
+	if len(evs) != 1 || evs[0].Type != "agent.plan_expired" {
+		t.Fatalf("expiry events: %v", evs)
+	}
+	if err := s.Apply(evs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if s.Agents[0].Plan != nil {
+		t.Errorf("expiry must clear the whole plan, got %+v", s.Agents[0].Plan)
+	}
+}
+
+func TestLadderValidatesPlans(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	args := meteredArgs(0, "")
+	args.Plan = []PlanStep{
+		{Goal: "wander"}, {Goal: "forage"}, {Goal: "sleep"}, {Goal: "eat"},
+	}
+	if err := h.loop.InjectIntent(args); err == nil {
+		t.Fatal("over-cap plan accepted")
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeRejectedGuard {
+		t.Errorf("outcome = %+v", p)
+	}
+
+	args.JobID = "planner-test-2"
+	args.Plan = []PlanStep{{Goal: "fly"}}
+	if err := h.loop.InjectIntent(args); err == nil {
+		t.Fatal("unknown plan goal accepted")
+	}
+
+	args.JobID = "planner-test-3"
+	args.Plan = []PlanStep{{Goal: "wander"}, {Goal: "forage", When: &Guard{Type: GuardAfterTick, Tick: 10500}}}
+	if err := h.loop.InjectIntent(args); err != nil {
+		t.Fatalf("valid plan rejected: %v", err)
+	}
+	if p, _ := h.lastOutcome(t); p.Outcome != OutcomeLanded {
+		t.Errorf("outcome = %+v", p)
+	}
+	// The default window was stamped at the door.
+	evs, _ := h.st.EventsSince(0, 0)
+	for _, e := range evs {
+		if e.Type == "agent.plan_set" {
+			var p PlanSetPayload
+			json.Unmarshal(e.Payload, &p)
+			if len(p.Steps) != 2 || p.Steps[0].Until != 10000+PlanDefaultWindowTicks {
+				t.Errorf("plan_set steps: %+v", p.Steps)
+			}
+		}
+	}
+}

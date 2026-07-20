@@ -322,6 +322,11 @@ func (md *Mind) plan() {
 			b := &md.replica.Agents[j]
 			job.world[j] = agentSnap{x: b.X, y: b.Y, dead: b.Dead}
 		}
+		// Future-dating (FR-016): the prompt says when the decision lands,
+		// using the router's own prediction — prompt and gate never disagree.
+		if job.meta.class.FutureDated {
+			job.prompt = futureDated(tick, job.meta.predictedLandTick) + job.prompt
+		}
 		md.planInFlight[i].Store(true)
 		select {
 		case md.planQ <- job:
@@ -372,6 +377,10 @@ func (md *Mind) runPlan(job planJob) {
 		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable, "parse: "+err.Error(), resp.Millis))
 		return
 	}
+	if len(reply.Plan) > 0 {
+		md.injectPlan(job, reply, resp.Millis)
+		return
+	}
 	target := -1
 	var guards []sim.Guard
 	if reply.Goal == "talk_to" {
@@ -401,6 +410,47 @@ func (md *Mind) runPlan(job planJob) {
 		Guards: guards,
 	}); err != nil {
 		log.Printf("mind: %s goal %q rejected: %v", job.name, reply.Goal, err)
+		select {
+		case md.rearm <- job.agent:
+		default:
+		}
+	}
+}
+
+// injectPlan lands a guarded conditional plan (US4): after_min becomes an
+// after_tick guard anchored at the snapshot, for_min bounds each step's
+// window; the loop's ladder and step validation apply as for any landing.
+func (md *Mind) injectPlan(job planJob, reply planReply, actualMs int64) {
+	steps := make([]sim.PlanStep, 0, len(reply.Plan))
+	for _, sr := range reply.Plan {
+		target := -1
+		if sr.Goal == "talk_to" {
+			if target = md.agentIndexByName(sr.Target); target < 0 {
+				log.Printf("mind: %s plan step targets unknown %q", job.name, sr.Target)
+				md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable,
+					"plan: unknown target "+sr.Target, actualMs))
+				return
+			}
+		}
+		st := sim.PlanStep{Job: job.meta.job, Goal: sr.Goal, Target: target}
+		start := job.meta.snapshotTick
+		if sr.AfterMin > 0 {
+			start += int64(sr.AfterMin * 60)
+			st.When = &sim.Guard{Type: sim.GuardAfterTick, Tick: start}
+		}
+		if sr.ForMin > 0 {
+			st.Until = start + int64(sr.ForMin*60)
+		}
+		steps = append(steps, st)
+	}
+	if err := md.loop.InjectIntent(sim.InjectArgs{
+		Agent: job.agent, TargetAgent: -1, Reason: reply.Reason,
+		Class: job.meta.class.Class, JobID: job.meta.job,
+		SnapshotTick: job.meta.snapshotTick, Generation: job.meta.generation,
+		PredictedWallMs: job.meta.predictedWallMs, ActualWallMs: actualMs,
+		Plan: steps,
+	}); err != nil {
+		log.Printf("mind: %s plan rejected: %v", job.name, err)
 		select {
 		case md.rearm <- job.agent:
 		default:

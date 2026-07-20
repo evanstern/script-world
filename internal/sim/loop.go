@@ -55,6 +55,9 @@ type InjectArgs struct {
 	PredictedWallMs int64
 	ActualWallMs    int64
 	Guards          []Guard
+	// Plan is a guarded conditional plan (US4) — mutually exclusive with
+	// Goal; the same ladder applies, then agent.plan_set records the steps.
+	Plan []PlanStep
 }
 
 type command struct {
@@ -114,6 +117,13 @@ func (l *Loop) Do(name string, speed clock.Speed) (Status, error) {
 // goal is validated and resolved deterministically, then recorded as
 // agent.intent_set (source planner) + agent.thought. Model output enters the
 // sim ONLY through here — as recorded input.
+//
+// Deliberately pause-open (FR-018, decision-4): pause means "the world
+// freezes and the minds catch up" — an in-flight thought completes on the
+// wall clock and lands at the frozen tick, where its game-tick staleness is
+// zero by construction. Cancelling completed thought was considered and
+// rejected: it would discard work that is, by tick arithmetic, perfectly
+// fresh.
 func (l *Loop) InjectIntent(args InjectArgs) error {
 	cmd := command{name: "inject_intent", inject: &args, reply: make(chan commandResult, 1)}
 	select {
@@ -167,6 +177,12 @@ var injectSocialWhitelist = map[string]bool{
 // InjectSocial applies a batch of whitelisted social events atomically at
 // the next tick boundary (all-or-nothing): ticks are re-stamped, payloads
 // dry-run on a state copy first, then applied and recorded.
+//
+// Deliberately pause-open, like InjectIntent (FR-018): a conversation
+// founded before a pause completes on the wall clock and lands its whole
+// scene at the frozen tick. No new cognition starts while paused — the
+// mind's scheduling is tick-driven and ticks stop — so pause is the one
+// state where thought fidelity is perfect.
 func (l *Loop) InjectSocial(events []store.Event) error {
 	cmd := command{name: "inject_social", social: events, reply: make(chan commandResult, 1)}
 	select {
@@ -461,25 +477,50 @@ func (l *Loop) handleCommand(cmd command) error {
 				break
 			}
 		}
-		intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
-		if rerr != nil {
-			// resolveGoal is the repair path; failing here means no
-			// deterministic adaptation exists — a world change.
-			reject(OutcomeRejectedGuard, rerr.Error())
-			break
-		}
-		if in.Reason != "" {
-			emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
-		}
-		if direct == "agent.ate" {
-			emit("agent.ate", AgentPayload{Agent: in.Agent})
-		} else if intent != nil {
-			emit("agent.intent_set", IntentSetPayload{
-				Agent: in.Agent, Goal: intent.Goal,
-				TargetX: intent.TargetX, TargetY: intent.TargetY,
-				ResX: intent.ResX, ResY: intent.ResY,
-				Source: "planner",
-			})
+		if len(in.Plan) > 0 {
+			// A guarded conditional plan (US4): validate at the door, then
+			// record the steps — the executor evaluates guards per tick.
+			if len(in.Plan) > PlanStepCap {
+				reject(OutcomeRejectedGuard, fmt.Sprintf("plan has %d steps (cap %d)", len(in.Plan), PlanStepCap))
+				break
+			}
+			for si := range in.Plan {
+				if !planGoals[in.Plan[si].Goal] {
+					reject(OutcomeRejectedGuard, fmt.Sprintf("plan step %d: unknown goal %q", si, in.Plan[si].Goal))
+					break
+				}
+				if in.Plan[si].Until == 0 {
+					in.Plan[si].Until = l.state.Tick + PlanDefaultWindowTicks
+				}
+			}
+			if err != nil {
+				break
+			}
+			if in.Reason != "" {
+				emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+			}
+			emit("agent.plan_set", PlanSetPayload{Agent: in.Agent, Job: in.JobID, Steps: in.Plan})
+		} else {
+			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
+			if rerr != nil {
+				// resolveGoal is the repair path; failing here means no
+				// deterministic adaptation exists — a world change.
+				reject(OutcomeRejectedGuard, rerr.Error())
+				break
+			}
+			if in.Reason != "" {
+				emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+			}
+			if direct == "agent.ate" {
+				emit("agent.ate", AgentPayload{Agent: in.Agent})
+			} else if intent != nil {
+				emit("agent.intent_set", IntentSetPayload{
+					Agent: in.Agent, Goal: intent.Goal,
+					TargetX: intent.TargetX, TargetY: intent.TargetY,
+					ResX: intent.ResX, ResY: intent.ResY,
+					Source: "planner",
+				})
+			}
 		}
 		if in.Class != "" {
 			outcome := OutcomeLanded

@@ -30,10 +30,19 @@ type mockModel struct {
 	err         error
 	prompts     []string
 	kinds       []llm.Kind
+	// planGate, when set, blocks planner calls until closed — the in-flight
+	// thought for pause-semantics tests (TASK-32 US5).
+	planGate chan struct{}
 }
 
 func (m *mockModel) Submit(_ context.Context, req llm.Request) (llm.Response, error) {
 	m.calls.Add(1)
+	m.mu.Lock()
+	gate := m.planGate
+	m.mu.Unlock()
+	if gate != nil && req.Kind == llm.KindPlanner {
+		<-gate
+	}
 	m.mu.Lock()
 	m.prompts = append(m.prompts, req.Prompt)
 	m.kinds = append(m.kinds, req.Kind)

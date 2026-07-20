@@ -89,10 +89,10 @@
 
 **Independent Test**: prompt snapshots carry the landing estimate; a scripted stub returning a timed-guard plan executes at tick T with no model call at firing time
 
-- [ ] T023 [P] [US4] Future-dating line in planner situation block ("It is now …; your decision will take effect around …") for FutureDated classes only, in internal/mind/prompt.go with test in internal/mind/mind_test.go
-- [ ] T024 [P] [US4] Guarded-plan vocabulary in internal/mind/parse.go (optional `plan` array ≤3 steps of {goal, when?, until?} from the closed guard vocabulary; reject >3 steps or unknown guards as unusable) with parse tests
-- [ ] T025 [US4] PlanStep state + `agent.plan_set` reducer + executor per-tick head-step guard evaluation with `agent.plan_step_started`/`agent.plan_expired` and the 2-game-hour default window, in internal/sim/state.go + internal/sim/agents.go, with executor tests
-- [ ] T026 [US4] Wire plan-form replies through InjectIntent (Plan args, mutually exclusive with Goal; dry-run enforces step cap) in internal/mind/mind.go + internal/sim/loop.go, and add a scripted-stub e2e proving act-at-tick-T in e2e/
+- [x] T023 [P] [US4] Future-dating line in planner situation block ("It is now …; your decision will take effect around …") for FutureDated classes only, in internal/mind/prompt.go with test in internal/mind/mind_test.go
+- [x] T024 [P] [US4] Guarded-plan vocabulary in internal/mind/parse.go (optional `plan` array ≤3 steps of {goal, when?, until?} from the closed guard vocabulary; reject >3 steps or unknown guards as unusable) with parse tests
+- [x] T025 [US4] PlanStep state + `agent.plan_set` reducer + executor per-tick head-step guard evaluation with `agent.plan_step_started`/`agent.plan_expired` and the 2-game-hour default window, in internal/sim/state.go + internal/sim/agents.go, with executor tests
+- [x] T026 [US4] Wire plan-form replies through InjectIntent (Plan args, mutually exclusive with Goal; dry-run enforces step cap) in internal/mind/mind.go + internal/sim/loop.go, and add a scripted-stub e2e proving act-at-tick-T in e2e/
 
 **Checkpoint**: conditional plans execute deterministically; expiry is recorded
 
@@ -104,8 +104,8 @@
 
 **Independent Test**: quickstart §5 — pause with in-flight thought and conversation; both land at the frozen tick at staleness 0; no new jobs; resume without burst
 
-- [ ] T027 [US5] Pause-semantics regression tests: in-flight planner result lands at frozen tick with staleness_ticks 0 and guards still checked; no new planner/musing/conversation jobs while paused; founded conversation lands atomically at the frozen tick, in internal/mind/mind_test.go + internal/sim/loop_test.go
-- [ ] T028 [US5] Resume-no-burst test (cadence self-heals, no compensating flood after a long pause) and doctrine comments at the two injection doors in internal/sim/loop.go stating pause-open is deliberate (FR-018)
+- [x] T027 [US5] Pause-semantics regression tests: in-flight planner result lands at frozen tick with staleness_ticks 0 and guards still checked; no new planner/musing/conversation jobs while paused; founded conversation lands atomically at the frozen tick, in internal/mind/mind_test.go + internal/sim/loop_test.go
+- [x] T028 [US5] Resume-no-burst test (cadence self-heals, no compensating flood after a long pause) and doctrine comments at the two injection doors in internal/sim/loop.go stating pause-open is deliberate (FR-018)
 
 **Checkpoint**: FR-018 is executable doctrine
 

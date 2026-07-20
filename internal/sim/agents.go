@@ -65,6 +65,9 @@ type Agent struct {
 	// thoughts snapshotted under an older generation are superseded at
 	// landing. omitempty keeps pre-TASK-32 snapshots byte-stable.
 	Generation int64 `json:"generation,omitempty"`
+	// Plan is the pending guarded steps of a conditional plan (TASK-32
+	// US4): the executor evaluates the head step each idle tick.
+	Plan []PlanStep `json:"plan,omitempty"`
 	// Nightly consolidation (TASK-9). Night/mark values of 0 mean "never" —
 	// NightIndex is 1-based — so pre-TASK-9 snapshots stay correct.
 	Beliefs               []Belief `json:"beliefs,omitempty"`

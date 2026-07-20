@@ -67,7 +67,7 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 			Agent: idx, Job: st.Job, Step: st.Goal, Reason: "window closed"})}
 	}
 	if st.When != nil {
-		if ok, _ := st.When.Eval(s, idx); !ok {
+		if ok, _ := st.When.EvalAt(s, idx, tick); !ok {
 			return nil // holding — deterministically re-checked next tick
 		}
 	}
