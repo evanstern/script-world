@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
 ---
 
 # Testing strategy
@@ -40,7 +40,13 @@ coherence contract holds (no push predates the snapshot's `last_seq`, and a repl
 built from it applies subsequent pushes cleanly — the [[tui-client]] pattern); and
 `llm_call` routes through a live [[llm-orchestrator]] while a killed inference
 endpoint leaves the loop ticking (the package's own suite covers routing, metering,
-ceiling refusal, and circuit recovery against httptest mock providers).
+ceiling refusal, and circuit recovery against httptest mock providers). Large-reply
+behavior (TASK-19) is proven against a `fakeDaemon` wire harness that speaks the
+protocol from canned replies: a >1 MiB `state` payload round-trips; a reply over
+the 64 MiB cap is substituted server-side with an actionable `reply too large`
+error (via `net.Pipe` against `session.writeResponse`); and both the substituted
+error and a raw over-long line surface promptly as `ErrReplyTooLarge` — never a
+hang or silent scanner death.
 
 **E2E** (`e2e/`): `TestMain` builds the binary once; worlds drop `llm.json`
 right after `new` so they are pure-sim — a precondition for `speed max` under
