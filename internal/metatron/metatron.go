@@ -63,6 +63,7 @@ type Metatron struct {
 	clockAt int64
 	alive   map[int]bool
 	moments []string // queued, surfaced oldest-first at the next turn
+	story   []string // recent chronicle entries (TASK-11), prompt grounding
 
 	// digest collection (US4) — absorb-owned.
 	digLines []string
@@ -152,6 +153,21 @@ func (mt *Metatron) mirrorState() {
 	for i := range mt.replica.Agents {
 		mt.alive[i] = !mt.replica.Agents[i].Dead
 	}
+	// The narrated chronicle (TASK-11) is the village's own story — the
+	// angel reads its tail so conversation is grounded even before its
+	// soul has accreted (fresh reigns, upgraded worlds).
+	mt.story = mt.story[:0]
+	ring := mt.replica.Chronicle
+	for i := maxOf(0, len(ring)-8); i < len(ring); i++ {
+		mt.story = append(mt.story, fmt.Sprintf("day %d [%s] %s", ring[i].Day, ring[i].Thread, ring[i].Text))
+	}
+}
+
+func maxOf(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // appendFile appends a block to one of Metatron's files (soul/transcript).

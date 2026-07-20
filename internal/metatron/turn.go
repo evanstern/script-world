@@ -76,13 +76,14 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		alive[k] = v
 	}
 	moments := append([]string(nil), mt.moments...)
+	story := append([]string(nil), mt.story...)
 	mt.stateMu.Unlock()
 
 	callCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	resp, err := mt.orch.Submit(callCtx, llm.Request{
 		Kind:      llm.KindMetatron,
 		System:    turnSystemPrompt(charter),
-		Prompt:    turnUserPrompt(tick, charges, alive, moments, mt.soulTail(), mt.transcriptTail(), playerText),
+		Prompt:    turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
 		MaxTokens: turnMaxTokens,
 	})
 	cancel()
@@ -297,7 +298,7 @@ Reply with ONLY this JSON:
 		charter, strings.Join(sim.AgentNames[:], ", "))
 }
 
-func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments []string, soulTail, transcriptTail, playerText string) string {
+func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story []string, soulTail, transcriptTail, playerText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "World clock: %s. Charges banked: %d of %d.\n", clock.Format(tick), charges, sim.MetatronChargeCap)
 	var dead []string
@@ -313,6 +314,12 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments []strin
 		b.WriteString("\nMoments you have not yet reported (lead with these):\n")
 		for _, m := range moments {
 			b.WriteString("- " + m + "\n")
+		}
+	}
+	if len(story) > 0 {
+		b.WriteString("\nThe village chronicle (recent entries):\n")
+		for _, s := range story {
+			b.WriteString("- " + s + "\n")
 		}
 	}
 	if soulTail != "" {
