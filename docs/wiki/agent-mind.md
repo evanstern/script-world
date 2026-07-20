@@ -10,7 +10,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 7565ba91c8c8503e4580ae0fc16d0bbf14f122a2
+verified_against: 8ff316fc6e85ea9031f59b8787f083a66635d18c
 ---
 
 # Agent mind
@@ -24,8 +24,10 @@ events vs files (truth vs view), and mind vs loop (I/O vs determinism).
 
 **Personas** (`internal/persona`): eight authored natures, written exactly once by
 `scriptworld new` at mode 0444 into `agents/<name>/persona.md` — no post-genesis
-write path exists anywhere (the structural half of the persona firewall; TASK-9 adds
-content validation). `Load` reads them as the mind's stable prompt prefixes.
+write path exists anywhere (the structural half of the persona firewall; the
+validation half is [[nightly-consolidation]]'s validator, fed by the authored
+`persona.Anchors` and `persona.DriftMarkers`). `Load` reads them as the mind's
+stable prompt prefixes.
 
 **Memories** (`internal/sim/memory.go`): the executor emits `agent.memory_added`
 events from a fixed salience table (talk 3★ … death witnessed 10★); the reducer
@@ -35,9 +37,11 @@ picks from the oldest half (bucketed to the planner cadence), presented
 reverse-chronologically. K = `WindowK` (10). Prompts never see the whole soul.
 
 **Souls** (`internal/scribe`): an always-on daemon component with its own replica
-renders `agents/<name>/soul.md` (dated, starred memories, death freezes the header)
-on memory/death events. The file is a regenerable view — the event log remains the
-only truth, so souls survive restarts and travel with the save dir.
+renders `agents/<name>/soul.md` (dated, starred memories, death freezes the header;
+since TASK-9 also a "Who I am becoming" narrative section and a Beliefs section
+with confidence + provenance) on memory/death/consolidation events. The file is a
+regenerable view — the event log remains the only truth, so souls survive restarts
+and travel with the save dir.
 
 **The mind driver** (`internal/mind`): a replica fed by the loop's notify fan-out;
 per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, completion
@@ -61,8 +65,9 @@ mode.
 `resolveGoal` and provides the fallback; [[llm-orchestrator]] carries the calls
 (local tier); [[sim-loop]]'s `inject_intent` command is the only door into
 deterministic space; [[event-types]] catalogs the new events; the [[tui-client]]
-souls pane shows each agent's newest memory. TASK-9 consolidates souls nightly;
-TASK-8 turns the talk primitive into real conversations.
+souls pane shows each agent's newest memory. [[nightly-consolidation]] digests each
+day's memories into the soul at sleep; TASK-8 turned the talk primitive into real
+conversations.
 
 ## Operational notes
 

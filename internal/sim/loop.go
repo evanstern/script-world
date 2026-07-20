@@ -117,12 +117,21 @@ func (l *Loop) InjectIntent(args InjectArgs) error {
 // injectSocialWhitelist fences what the mind may write into deterministic
 // space: conversation content, its social effects, and gist memories — never
 // sim-mutating types like deaths or moves.
+// injectSocialWhitelist is the mind's injection door: every event type a
+// model-driven driver (conversations, TASK-9 consolidation) may land. The
+// whitelist IS the isolation — everything else about the world is
+// unreachable from model output.
 var injectSocialWhitelist = map[string]bool{
 	"social.relation_changed":  true,
 	"social.rumor_told":        true,
 	"social.conversation_turn": true,
 	"social.conversation":      true,
 	"agent.memory_added":       true,
+	"agent.memory_promoted":    true,
+	"agent.memory_faded":       true,
+	"agent.belief_revised":     true,
+	"agent.narrative_set":      true,
+	"agent.consolidated":       true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
