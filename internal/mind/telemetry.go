@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"unicode/utf8"
 
 	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/llm"
@@ -107,6 +108,14 @@ func cogThoughtEvent(m thoughtMeta) store.Event {
 }
 
 func (md *Mind) cogOutcomeEvent(m thoughtMeta, outcome, reason string, actualWallMs int64) store.Event {
+	return md.cogSceneOutcome(m, outcome, reason, actualWallMs, "", false)
+}
+
+// cogSceneOutcome is the conversation-scene variant (TASK-42): it carries the
+// optional raw failed-reply text (parse failures only, bounded) and the
+// retried flag (scene consumed ≥1 retry). The base cogOutcomeEvent delegates
+// here with the extras zeroed, so every other call site is byte-identical.
+func (md *Mind) cogSceneOutcome(m thoughtMeta, outcome, reason string, actualWallMs int64, raw string, retried bool) store.Event {
 	landing := md.tick.Load()
 	staleness := landing - m.snapshotTick
 	if staleness < 0 {
@@ -117,9 +126,32 @@ func (md *Mind) cogOutcomeEvent(m thoughtMeta, outcome, reason string, actualWal
 		Outcome: outcome, SnapshotTick: m.snapshotTick,
 		LandingTick: landing, StalenessTicks: staleness,
 		PredictedWallMs: m.predictedWallMs, ActualWallMs: actualWallMs,
-		Reason: reason,
+		Reason:  reason,
+		Raw:     truncateRaw(raw),
+		Retried: retried,
 	})
 	return store.Event{Type: "cog.outcome", Payload: b}
+}
+
+const (
+	// rawReplyCap bounds a persisted failed reply (TASK-42): a 224-token reply
+	// fits comfortably, and the marker keeps the durable record lean while
+	// signalling the cut. The whole field (content + marker) stays ≤ cap.
+	rawReplyCap    = 2048
+	rawTruncMarker = "…[truncated]"
+)
+
+// truncateRaw bounds a raw model reply for persistence, cutting on a rune
+// boundary so the stored text stays valid UTF-8 (data-model.md).
+func truncateRaw(s string) string {
+	if len(s) <= rawReplyCap {
+		return s
+	}
+	cut := rawReplyCap - len(rawTruncMarker)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + rawTruncMarker
 }
 
 // emitCog lands telemetry through the social door; a rejected batch is
