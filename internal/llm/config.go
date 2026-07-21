@@ -25,6 +25,13 @@ type LocalConfig struct {
 	Endpoint string `json:"endpoint"` // e.g. http://localhost:11434/v1
 	Model    string `json:"model"`
 	APIKey   string `json:"api_key,omitempty"` // local routers only
+	// ReasoningEffort controls hidden chain-of-thought on thinking-default
+	// models (e.g. gemma4 on Ollama). Absent (nil) defaults to "none":
+	// interiority prose never needs hidden reasoning, and local latency is
+	// the cap on sim speed, so thinking is off unless asked for. Explicit ""
+	// sends nothing (escape hatch for backends that reject the field). Any
+	// other value is sent verbatim.
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 }
 
 // Cloud provider values. Empty means ProviderAnthropic.
@@ -46,6 +53,11 @@ type CloudConfig struct {
 	// Endpoint overrides the API base URL (required for openai_compat;
 	// tests/proxies for anthropic); empty = the Anthropic default.
 	Endpoint string `json:"endpoint,omitempty"`
+	// ReasoningEffort only applies when Provider is openai_compat (the
+	// Anthropic SDK path is untouched). Absent or "" sends nothing — cloud
+	// models are chosen for quality, not latency, so there is no default
+	// reasoning posture to impose. Any other value is sent verbatim.
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 }
 
 // key resolves the credential: an inline local-router key wins, else the
@@ -58,6 +70,16 @@ func (c CloudConfig) key() string {
 		return os.Getenv(c.APIKeyEnv)
 	}
 	return ""
+}
+
+// resolveReasoningEffort applies the nil/"" convention shared by both
+// tiers' ReasoningEffort fields: nil takes the tier's default, "" (or any
+// other explicit value) is returned verbatim.
+func resolveReasoningEffort(v *string, def string) string {
+	if v == nil {
+		return def
+	}
+	return *v
 }
 
 // DefaultConfig matches the grounding decisions: local Ollama for the

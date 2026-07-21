@@ -28,14 +28,18 @@ type openaiCompat struct {
 	model    string
 	apiKey   string
 	client   *http.Client
+	// reasoningEffort is already resolved (see resolveReasoningEffort);
+	// empty means omit the field from the request body entirely.
+	reasoningEffort string
 }
 
-func newOpenAICompat(endpoint, model, apiKey string) *openaiCompat {
+func newOpenAICompat(endpoint, model, apiKey, reasoningEffort string) *openaiCompat {
 	return &openaiCompat{
-		endpoint: strings.TrimRight(endpoint, "/"),
-		model:    model,
-		apiKey:   apiKey,
-		client:   &http.Client{Timeout: 120 * time.Second},
+		endpoint:        strings.TrimRight(endpoint, "/"),
+		model:           model,
+		apiKey:          apiKey,
+		client:          &http.Client{Timeout: 120 * time.Second},
+		reasoningEffort: reasoningEffort,
 	}
 }
 
@@ -50,13 +54,20 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 	}
 	msgs = append(msgs, msg{Role: "user", Content: req.Prompt})
 
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"model":    o.model,
 		"messages": msgs,
 		// Some routers (9router) stream by default; this decoder wants one
 		// JSON object, so pin it.
 		"stream": false,
-	})
+	}
+	if req.MaxTokens > 0 {
+		payload["max_tokens"] = req.MaxTokens
+	}
+	if o.reasoningEffort != "" {
+		payload["reasoning_effort"] = o.reasoningEffort
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -121,7 +132,8 @@ func newAnthropicCaller(cfg CloudConfig) *anthropicCaller {
 // newCloudCaller picks the cloud tier's transport from the config.
 func newCloudCaller(cfg CloudConfig) caller {
 	if cfg.Provider == ProviderOpenAICompat {
-		return newOpenAICompat(cfg.Endpoint, cfg.Model, cfg.key())
+		return newOpenAICompat(cfg.Endpoint, cfg.Model, cfg.key(),
+			resolveReasoningEffort(cfg.ReasoningEffort, ""))
 	}
 	return newAnthropicCaller(cfg)
 }

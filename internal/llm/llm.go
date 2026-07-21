@@ -180,7 +180,8 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		meter: meter,
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
-			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey),
+			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
+				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none")),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
 				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
 			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
