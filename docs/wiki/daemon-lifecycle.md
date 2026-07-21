@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 4f045f24b04312ec55e1cb9b8ed348946e5a0f3f
+verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
 ---
 
 # Daemon lifecycle
@@ -20,7 +20,10 @@ Startup sequence:
 1. `world.Open` — manifest validation ([[world-save-directory]]).
 2. `acquirePidfile` — one daemon per world: an existing pidfile with a live process
    (checked via `kill(pid, 0)`, EPERM counts as alive) is a hard error; a stale one
-   (crash leftover) is swept along with the stale socket.
+   (crash leftover) is swept along with the stale socket. Then `registerWorld`
+   (TASK-43): a best-effort upsert into the advisory known-worlds registry
+   ([[instance-manager]]) when the dir lives outside the worlds home — failures are
+   logged and never block boot, and worlds inside the home are skipped (scan-owned).
 3. `store.Open` + `validateMeta` — first run stamps `seed`/`format_version` into
    store meta; later runs must match the manifest exactly, catching save directories
    corrupted or spliced from two runs.

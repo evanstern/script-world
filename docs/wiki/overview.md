@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
 ---
 
 # Overview
@@ -51,10 +51,17 @@ cmd/scriptworld → daemon → ipc → sim → store
 the minds, the LLM layer, and the daemon import it (decision-class registry,
 deterministic router, latency calibration); it imports none of them. The
 `scriptworld calibrate` subcommand benchmarks the host+model to a seconds-per-point
-profile for that layer.
+profile for that layer. `internal/worlds` ([[instance-manager]]) sits beside the
+client tools — imported by `cmd/scriptworld` and (for boot registration) by
+`internal/daemon` — providing the worlds home, name resolution, and the `ps` probe.
 
 Each world run is one save directory and at most one daemon process; multiple worlds
-mean multiple daemons. There is no global state anywhere.
+mean multiple daemons. The world directory is the sole source of truth; the only
+machine-level state is the instance manager's ([[instance-manager]], TASK-43) —
+a default worlds home (`~/.scriptworld/worlds`, where `new <name>` creates) and an
+advisory known-worlds pointer cache — both strictly optional: every command still
+takes a plain path, and a world runs and copies with no manager state present.
+`scriptworld ps` enumerates every running world machine-wide from live evidence.
 
 ## Connections
 
@@ -62,7 +69,8 @@ mean multiple daemons. There is no global state anywhere.
 the [[llm-orchestrator]] is the (strictly quarantined) voice of the models, and
 [[cognition]] decides deterministically when that voice may speak at all;
 [[event-log]] and [[snapshots]] its memory; [[ipc-server]], [[tui-client]], and
-[[cli-scriptworld]] its face. [[daemon-lifecycle]] ties them into a process.
+[[cli-scriptworld]] its face. [[daemon-lifecycle]] ties them into a process;
+[[instance-manager]] keeps many such processes legible (`ps`, names, worlds home).
 
 ## Operational notes
 
