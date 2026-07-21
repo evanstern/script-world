@@ -102,10 +102,10 @@ func startConvo(t *testing.T, h *harness, md *Mind) {
 	})
 }
 
-// TestOutcomeRetryLandsWhole (T007a / US1 / SC-001): a malformed first summary
+// TestConvoOutcomeRetryLandsWhole (T007a / US1 / SC-001): a malformed first summary
 // reply is re-requested once; on success the scene lands whole with
 // retried:true, and the failed reply rode a non-terminal retried marker.
-func TestOutcomeRetryLandsWhole(t *testing.T) {
+func TestConvoOutcomeRetryLandsWhole(t *testing.T) {
 	badSummary := "the model rambles without json"
 	replies := append(validSays(),
 		badSummary,
@@ -148,10 +148,10 @@ func TestOutcomeRetryLandsWhole(t *testing.T) {
 	}
 }
 
-// TestOutcomeDoubleFailureAbandons (T007b / US1): two consecutive malformed
+// TestConvoOutcomeDoubleFailureAbandons (T007b / US1): two consecutive malformed
 // summaries abandon the scene with no partial state; the terminal unusable
 // carries the RETRY's raw reply.
-func TestOutcomeDoubleFailureAbandons(t *testing.T) {
+func TestConvoOutcomeDoubleFailureAbandons(t *testing.T) {
 	replies := append(validSays(), "garbage one", "garbage two")
 	model := &scriptedModel{replies: replies}
 	h, md := setupConvo(t, model)
@@ -180,9 +180,9 @@ func TestOutcomeDoubleFailureAbandons(t *testing.T) {
 	}
 }
 
-// TestOutcomeTransportErrorNoRetry (T007c / US1 / FR-007): a transport error
+// TestConvoOutcomeTransportErrorNoRetry (T007c / US1 / FR-007): a transport error
 // at the summary site abandons immediately — no retry, no raw.
-func TestOutcomeTransportErrorNoRetry(t *testing.T) {
+func TestConvoOutcomeTransportErrorNoRetry(t *testing.T) {
 	model := &countingModel{replies: validSays()} // no summary reply → outcome errors
 	h, md := setupConvo(t, model)
 	startConvo(t, h, md)
@@ -210,10 +210,10 @@ func TestOutcomeTransportErrorNoRetry(t *testing.T) {
 	}
 }
 
-// TestUtteranceRetryCompletes (T009a / US2 / SC-002): one bad utterance is
+// TestConvoUtteranceRetryCompletes (T009a / US2 / SC-002): one bad utterance is
 // retried on the same speaker; the scene completes with alternation intact and
 // lands retried:true.
-func TestUtteranceRetryCompletes(t *testing.T) {
+func TestConvoUtteranceRetryCompletes(t *testing.T) {
 	replies := []string{"garbage", `{"say": "Cold morning."}`}
 	for i := 1; i < 2*sim.ConvoTurnsPerSide; i++ {
 		replies = append(replies, `{"say": "Aye."}`)
@@ -257,9 +257,9 @@ func TestUtteranceRetryCompletes(t *testing.T) {
 	}
 }
 
-// TestUtteranceDoubleFailureAbandons (T009b / US2): two consecutive bad
+// TestConvoUtteranceDoubleFailureAbandons (T009b / US2): two consecutive bad
 // utterances abandon with nothing injected.
-func TestUtteranceDoubleFailureAbandons(t *testing.T) {
+func TestConvoUtteranceDoubleFailureAbandons(t *testing.T) {
 	model := &scriptedModel{replies: []string{"garbage", "still garbage"}}
 	h, md := setupConvo(t, model)
 	startConvo(t, h, md)
@@ -281,10 +281,10 @@ func TestUtteranceDoubleFailureAbandons(t *testing.T) {
 	}
 }
 
-// TestUtteranceRetryOnFinalTurn (T009c / US2 edge case): a bad reply on the
+// TestConvoUtteranceRetryOnFinalTurn (T009c / US2 edge case): a bad reply on the
 // scene's last utterance recovers and the outcome step still receives a
 // well-formed, full-length transcript.
-func TestUtteranceRetryOnFinalTurn(t *testing.T) {
+func TestConvoUtteranceRetryOnFinalTurn(t *testing.T) {
 	var replies []string
 	for i := 0; i < 2*sim.ConvoTurnsPerSide-1; i++ {
 		replies = append(replies, `{"say": "Aye."}`)
@@ -312,10 +312,10 @@ func TestUtteranceRetryOnFinalTurn(t *testing.T) {
 	}
 }
 
-// TestRawReplyRecoverableFromStore (T011 / US3 / SC-003): a parse failure's
+// TestConvoRawReplyRecoverableFromStore (T011 / US3 / SC-003): a parse failure's
 // verbatim reply is recoverable from the persisted event log and attributable
 // to the conversation job id.
-func TestRawReplyRecoverableFromStore(t *testing.T) {
+func TestConvoRawReplyRecoverableFromStore(t *testing.T) {
 	badSummary := `{"gist": broken and unquoted but too weird, "extra": nonsense here too`
 	replies := append(validSays(), badSummary,
 		`{"gist": "recovered", "topics": ["fire"], "tones": [1, 1], "retold": null}`)
@@ -348,9 +348,9 @@ func TestRawReplyRecoverableFromStore(t *testing.T) {
 	}
 }
 
-// TestGoldenHappyPath (T017 / SC-004 / FR-009): an all-valid scene emits the
+// TestConvoGoldenHappyPath (T017 / SC-004 / FR-009): an all-valid scene emits the
 // pre-change batch — no raw, no retried fields, no extra Submit calls.
-func TestGoldenHappyPath(t *testing.T) {
+func TestConvoGoldenHappyPath(t *testing.T) {
 	model := &scriptedModel{replies: convoScript(
 		`{"gist": "planned firewood", "topics": ["fire"], "tones": [1, 1], "retold": null}`)}
 	h, md := setupConvo(t, model)

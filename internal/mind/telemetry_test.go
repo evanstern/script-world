@@ -12,10 +12,10 @@ import (
 	"github.com/evanstern/script-world/internal/store"
 )
 
-// TestTruncateRaw (TASK-42 T004): oversized raw replies are cut on a rune
+// TestConvoRawTruncation (TASK-42 T004): oversized raw replies are cut on a rune
 // boundary with a marker, stay ≤ cap, and remain valid UTF-8; small replies
 // pass through untouched.
-func TestTruncateRaw(t *testing.T) {
+func TestConvoRawTruncation(t *testing.T) {
 	if got := truncateRaw("short reply"); got != "short reply" {
 		t.Errorf("small reply mutated: %q", got)
 	}
