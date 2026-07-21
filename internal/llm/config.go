@@ -25,6 +25,12 @@ type LocalConfig struct {
 	Endpoint string `json:"endpoint"` // e.g. http://localhost:11434/v1
 	Model    string `json:"model"`
 	APIKey   string `json:"api_key,omitempty"` // local routers only
+	// Parallel is the requested local-tier concurrency: the number of
+	// worker goroutines (in-flight calls) against the local model. Absent
+	// or 0 means 1 — behavior indistinguishable from pre-feature builds.
+	// Normalized (and clamped) by Workers(); never an error, so a world
+	// can never fail to boot over this field.
+	Parallel int `json:"parallel,omitempty"`
 	// ReasoningEffort controls hidden chain-of-thought on thinking-default
 	// models (e.g. gemma4 on Ollama). Absent (nil) defaults to "none":
 	// interiority prose never needs hidden reasoning, and local latency is
@@ -32,6 +38,34 @@ type LocalConfig struct {
 	// sends nothing (escape hatch for backends that reject the field). Any
 	// other value is sent verbatim.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+}
+
+// maxLocalWorkers caps local-tier concurrency. queueCap is 32; more than
+// 16 in-flight calls would let concurrency exceed half the queue and mostly
+// measures server-side queueing, not parallelism. 16 leaves an order of
+// magnitude of headroom over the measured sweet spot (4) while bounding
+// pathological configs (parallel: 10000).
+const maxLocalWorkers = 16
+
+// Workers normalizes Parallel into an effective worker count and an optional
+// operator-facing warning. The knob never errors (FR-007): out-of-range
+// values are clamped, not rejected.
+//
+//	absent / 0 → 1, no warning (byte-for-byte compat default)
+//	1–16       → as given, no warning
+//	< 0        → 1, warning
+//	> 16       → 16, warning
+func (c LocalConfig) Workers() (n int, warn string) {
+	switch {
+	case c.Parallel == 0:
+		return 1, ""
+	case c.Parallel < 0:
+		return 1, fmt.Sprintf("llm.json local.parallel %d out of range (min 1) — using 1", c.Parallel)
+	case c.Parallel > maxLocalWorkers:
+		return maxLocalWorkers, fmt.Sprintf("llm.json local.parallel %d out of range (max %d) — clamped to %d", c.Parallel, maxLocalWorkers, maxLocalWorkers)
+	default:
+		return c.Parallel, ""
+	}
 }
 
 // Cloud provider values. Empty means ProviderAnthropic.

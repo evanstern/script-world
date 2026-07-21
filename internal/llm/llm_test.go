@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -429,6 +431,83 @@ func TestConfigRoundTrip(t *testing.T) {
 	if cfg.MonthlyBudgetUSD != 100 || cfg.Cloud.Model != "claude-opus-4-8" ||
 		cfg.Cloud.APIKeyEnv != "ANTHROPIC_API_KEY" || cfg.Local.Endpoint == "" {
 		t.Errorf("default config wrong: %+v", cfg)
+	}
+}
+
+// TestLocalWorkersNormalization (FR-001/FR-007): the parallel knob normalizes
+// to an effective worker count and warns exactly on out-of-range values —
+// absent/0 is the silent compat default (1); the cap is 16; nothing errors.
+func TestLocalWorkersNormalization(t *testing.T) {
+	cases := []struct {
+		parallel int
+		wantN    int
+		wantWarn bool
+	}{
+		{0, 1, false},   // absent / explicit 0 → 1, silent (compat)
+		{1, 1, false},   // floor, verbatim
+		{4, 4, false},   // measured sweet spot, verbatim
+		{16, 16, false}, // cap, verbatim, no warning
+		{-2, 1, true},   // negative → 1 with warning
+		{64, 16, true},  // above cap → 16 with warning
+		{17, 16, true},  // one past the cap → clamped with warning
+	}
+	for _, c := range cases {
+		n, warn := LocalConfig{Parallel: c.parallel}.Workers()
+		if n != c.wantN {
+			t.Errorf("Workers(parallel=%d) n=%d, want %d", c.parallel, n, c.wantN)
+		}
+		if (warn != "") != c.wantWarn {
+			t.Errorf("Workers(parallel=%d) warn=%q, wantWarn=%v", c.parallel, warn, c.wantWarn)
+		}
+	}
+	// Absent field on a struct with no Parallel set is byte-identical to 0.
+	if n, warn := (LocalConfig{}).Workers(); n != 1 || warn != "" {
+		t.Errorf("absent parallel → (%d,%q), want (1,\"\")", n, warn)
+	}
+}
+
+// TestConfigParallelRoundTrip (FR-007): llm.json loads with parallel present
+// or absent — any integer value, including out-of-range, never fails to load;
+// WriteDefault omits the field entirely (default 1).
+func TestConfigParallelRoundTrip(t *testing.T) {
+	load := func(local string) *Config {
+		p := filepath.Join(t.TempDir(), "llm.json")
+		data := `{"monthly_budget_usd": 100, "local": ` + local + `, "cloud": {"model": "m"}}`
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := LoadConfig(p)
+		if err != nil {
+			t.Fatalf("LoadConfig(%s): %v", local, err)
+		}
+		return cfg
+	}
+	// Present, in range.
+	if cfg := load(`{"endpoint": "http://x", "model": "m", "parallel": 4}`); cfg.Local.Parallel != 4 {
+		t.Errorf("parallel not loaded: %d", cfg.Local.Parallel)
+	}
+	// Absent → zero value → Workers() default 1.
+	if cfg := load(`{"endpoint": "http://x", "model": "m"}`); cfg.Local.Parallel != 0 {
+		t.Errorf("absent parallel should be 0, got %d", cfg.Local.Parallel)
+	}
+	// Out-of-range values LOAD fine (clamping is Workers()'s job, not load's).
+	for _, v := range []int{-2, 64, 100000} {
+		cfg := load(`{"endpoint": "http://x", "model": "m", "parallel": ` + strconv.Itoa(v) + `}`)
+		if cfg.Local.Parallel != v {
+			t.Errorf("parallel %d not preserved on load: %d", v, cfg.Local.Parallel)
+		}
+	}
+	// WriteDefault omits the field: the default config has no parallelism knob.
+	p := filepath.Join(t.TempDir(), "llm.json")
+	if err := WriteDefault(p); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "parallel") {
+		t.Errorf("WriteDefault must omit parallel, got:\n%s", raw)
 	}
 }
 

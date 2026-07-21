@@ -26,7 +26,7 @@ boot-surface touch in `internal/daemon/daemon.go`. Work happens in worktree
 
 **Purpose**: confirm a green baseline so every later diff is attributable.
 
-- [ ] T001 Baseline: `go build ./... && go test ./internal/llm/ ./internal/cognition/ -race -count=1` green in the worktree before any change
+- [x] T001 Baseline: `go build ./... && go test ./internal/llm/ ./internal/cognition/ -race -count=1` green in the worktree before any change
 
 ---
 
@@ -34,8 +34,8 @@ boot-surface touch in `internal/daemon/daemon.go`. Work happens in worktree
 
 **Purpose**: the config knob + normalization helper every story reads.
 
-- [ ] T002 Add `Parallel int` (`json:"parallel,omitempty"`) to `LocalConfig` and implement `Workers() (n int, warn string)` normalization (absent/0→1 silent; 1–16 verbatim; <0→1 warn; >16→16 warn) in internal/llm/config.go per data-model.md; `DefaultConfig`/`WriteDefault` omit the field
-- [ ] T003 Unit tests for `Workers()` normalization table (0, absent, 1, 4, 16, -2, 64) and llm.json round-trip with `parallel` present/absent in internal/llm/llm_test.go — confirm `LoadConfig` never errors on any integer value (FR-007)
+- [x] T002 Add `Parallel int` (`json:"parallel,omitempty"`) to `LocalConfig` and implement `Workers() (n int, warn string)` normalization (absent/0→1 silent; 1–16 verbatim; <0→1 warn; >16→16 warn) in internal/llm/config.go per data-model.md; `DefaultConfig`/`WriteDefault` omit the field
+- [x] T003 Unit tests for `Workers()` normalization table (0, absent, 1, 4, 16, -2, 64) and llm.json round-trip with `parallel` present/absent in internal/llm/llm_test.go — confirm `LoadConfig` never errors on any integer value (FR-007)
 
 **Checkpoint**: config surface complete; `go test ./internal/llm/` green.
 
