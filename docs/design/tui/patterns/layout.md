@@ -10,13 +10,15 @@ width ≥ 112 cols  →  widescreen composite (pages/home.md)
 width <  112 cols →  narrow fallback: today's single-pane UI, unchanged
 ```
 
-112 is the point where the dock has shrunk to its 36-col floor (see "Column budget"
-below) against a map holding its 73-col target — below that, the composite has
-nothing left to give up and the narrow fallback takes over. (Implementation note,
-TASK-34: an earlier draft of this line quoted a 64-col map + a fixed 44-col dock at
-the breakpoint; that arithmetic assumed the dock stays at its max width down to 112,
-which contradicts "shrink dock before map" below. The Column budget section is
-authoritative — the dock is what gives up columns between 118 and 112, not the map.)
+112 is the narrowest width where an even 50/50 split (see "Column budget" below)
+still leaves both the map and the dock genuinely usable — below it, halving the
+terminal would starve both regions rather than either one, so the narrow single-pane
+fallback takes over instead of shrinking further. (Implementation note, TASK-34: two
+earlier drafts of this section described a fixed-44-col dock with the map holding a
+73-col target as the terminal narrowed toward the breakpoint; a planning decision
+during implementation replaced that with a straight 50/50 split — see "Column budget".
+The breakpoint value itself (112) did not need to change: at 112 the split gives
+map=56 / dock=55, both still comfortably usable.)
 Resizing across the breakpoint swaps layouts live without losing state. Height has no
 breakpoint: rows get scarce → panels shed their lowest-priority rows (map legend
 first).
@@ -25,10 +27,16 @@ first).
 
 ```
 totalCols
-├─ dock:      44 cols fixed  (min 36 — shrink dock before map below 118 cols)
-├─ gutter:    1 col
-└─ map:       remainder      (viewport tiles = (mapCols − borders) / 2)
+├─ gutter: 1 col
+├─ dock:   (totalCols − gutter) / 2            (floors down on an odd split)
+└─ map:    totalCols − gutter − dock           (takes the odd leftover column;
+                                                 viewport tiles = (mapCols − 4) / 2 —
+                                                 2 cols border + 2 cols padding)
 ```
+
+Map and dock split the terminal 50/50 — a planning decision (TASK-34) superseding an
+earlier fixed-44-col dock. The map takes the extra column when `totalCols − gutter` is
+odd, so it is never smaller than the dock.
 
 ## Row budget (widescreen)
 
@@ -69,3 +77,13 @@ Map glyph colors are unchanged (existing terrain/agent styles, night dimming).
 - Every panel is handed its exact `(width, height)` and must render to it; no panel
   measures the terminal itself. This is the contract that makes dock-tab vs. solo
   "same component, two widths" work.
+- Implementation note (TASK-34, B1): rendering to *exactly* the handed height is a
+  hard requirement, not an aspiration — Bubble Tea scrolls a taller-than-terminal
+  `View()` up, which pushes the header off the top of the screen. Two lipgloss facts
+  make this easy to violate by accident: `Style.Height()` only *pads* short content,
+  it never truncates tall content, so one overlong content line silently grows a
+  panel instead of erroring; and a style's own `Padding(0,1)` eats 2 columns out of
+  whatever `Width()` was set to, before any text renders, so the truly safe content
+  width is `Width − 2`, not `Width`. Every panel body in `views.go` clips each
+  content line to that true width before handing it to a bordered/padded box
+  (`clipContent`) rather than relying on lipgloss's own wrapping to stay in bounds.

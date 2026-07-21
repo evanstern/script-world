@@ -47,7 +47,14 @@ right-aligned. The focused state documents its own escape, every time it is draw
 ## Rules
 
 - Input history: `↑`/`↓` while focused cycle previous questions (session-scoped).
-- Multi-line input is out of scope; long questions wrap within the single logical line.
+- Multi-line input is out of scope. Implementation note (TASK-34, B3): "wrap within
+  the single logical line" turned out to be ambiguous — soft-wrapping a long input
+  across multiple *rendered* rows grows the box past its fixed 3-row budget, which
+  visually collides with the row-count invariant every other panel follows (see
+  patterns/layout.md's Composition notes). The input display instead truncates to its
+  visible tail (cursor glued to the right edge, like a normal terminal input line);
+  the right-aligned hint is dropped first if there's no room for both. The box is
+  always exactly 3 rows regardless of how long the question is.
 - `⏎` on an empty buffer releases focus (no-op send).
 - The minibuffer is chromeless-adjacent to the footer: footer hints while focused
   shrink to the minibuffer-mode keys only (see
