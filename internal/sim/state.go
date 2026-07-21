@@ -410,6 +410,9 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Asleep = true
 		a.Intent = nil
+		// A sleeper sheds any hail (TASK-47): un-interruptible, and leaving
+		// the pointer set would silently freeze it on waking.
+		a.Hail = nil
 	case "agent.woke":
 		var p AgentPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -449,6 +452,48 @@ func (s *State) Apply(e store.Event) error {
 		a.Dead = true
 		a.Asleep = false
 		a.Intent = nil
+		// The dead shed any hail (TASK-47); the hailer's seek proceeds or
+		// fails exactly as today.
+		a.Hail = nil
+
+	case "social.hailed":
+		var p HailedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.To)
+		if err != nil {
+			return err
+		}
+		// Emitters never hail an already-hailed target (first-hail-wins); the
+		// reducer applies what the log says — replay fidelity over
+		// re-validation, like every other event.
+		a.Hail = &AgentHail{By: p.From, Until: p.Until}
+	case "social.hail_met":
+		var p HailMetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.To)
+		if err != nil {
+			return err
+		}
+		// The accompanying agent.talked applies its own morale/LastTalk
+		// effects; the sweep just lifts the pause.
+		a.Hail = nil
+	case "social.hail_expired":
+		var p HailExpiredPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.To)
+		if err != nil {
+			return err
+		}
+		// Nothing else changes: intent, plan, and needs are exactly as the
+		// pause left them (FR-005, SC-003).
+		a.Hail = nil
+
 	case "social.relation_changed", "social.gave", "social.promise_broken",
 		"social.rumor_told", "social.secret_seeded",
 		"social.conversation_turn", "social.conversation":

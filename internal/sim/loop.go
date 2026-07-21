@@ -448,6 +448,7 @@ func (l *Loop) handleCommand(cmd command) error {
 			break
 		}
 		adapted := false
+		hailTarget := -1 // set when a talk_to landing should hail on success
 		if in.Class != "" {
 			if in.Generation != a.Generation {
 				reject(OutcomeSuperseded, fmt.Sprintf("generation %d, thought was %d", a.Generation, in.Generation))
@@ -461,6 +462,28 @@ func (l *Loop) handleCommand(cmd command) error {
 			for _, g := range in.Guards {
 				ok, why := g.Eval(l.state, in.Agent)
 				if !ok {
+					// The hail rung (TASK-47): a talk_to landing whose target
+					// has walked beyond presentRadius is not dead if the
+					// target can be flagged down — the world pauses the
+					// target so the hailer can close the distance. The guard
+					// vocabulary stays closed; the relaxation lives here in
+					// the ladder (research D1), for alive targets only (dead/
+					// out-of-range fall through to the existing rejection).
+					if g.Type == GuardTargetPresent && in.Goal == "talk_to" &&
+						g.Target >= 0 && g.Target < len(l.state.Agents) && !l.state.Agents[g.Target].Dead {
+						// Mutual-presence rung (D6): the target is the actor's
+						// own hailer — the pair is already converging, so land
+						// adapted with no new hail (never freeze a hailer).
+						if a.Hail != nil && a.Hail.By == g.Target {
+							adapted = true
+							continue
+						}
+						if hailable(l.state, in.Agent, g.Target) {
+							adapted = true
+							hailTarget = g.Target
+							continue
+						}
+					}
 					reject(OutcomeRejectedGuard, why)
 					failed = true
 					break
@@ -472,6 +495,13 @@ func (l *Loop) handleCommand(cmd command) error {
 					if t.X != g.X || t.Y != g.Y {
 						adapted = true
 					}
+				}
+				// A hailable in-radius talk_to target is still hailed: it can
+				// wander during the walk-over, and the courtesy pause is cheap
+				// (FR-001, research D2).
+				if g.Type == GuardTargetPresent && in.Goal == "talk_to" &&
+					hailable(l.state, in.Agent, g.Target) {
+					hailTarget = g.Target
 				}
 			}
 			if failed {
@@ -521,6 +551,14 @@ func (l *Loop) handleCommand(cmd command) error {
 					ResX: intent.ResX, ResY: intent.ResY,
 					Source: "planner",
 				})
+			}
+			// The hail (TASK-47): a talk_to landing pauses a hailable
+			// target so the hailer can close distance and the pair
+			// actually meets — every hailable landing, in- or out-of-
+			// radius (FR-001, research D2).
+			if hailTarget >= 0 {
+				emit("social.hailed", HailedPayload{
+					From: in.Agent, To: hailTarget, Until: l.state.Tick + hailWindowTicks})
 			}
 		}
 		if in.Class != "" {
