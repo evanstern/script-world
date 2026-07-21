@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/ipc"
 	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/metatron"
@@ -98,12 +99,35 @@ func Run(dir string) error {
 	if llmCfg, err := llm.LoadConfig(w.LLMConfigPath()); err != nil {
 		return err
 	} else if llmCfg != nil {
+		// Cognition-horizon gate (FR-002): every call kind must resolve to
+		// a registered decision class before a model is ever reachable.
+		kinds := make([]string, 0, 8)
+		for _, k := range llm.Kinds() {
+			kinds = append(kinds, string(k))
+		}
+		if err := cognition.ValidateKinds(kinds); err != nil {
+			return err
+		}
 		orch, err := llm.New(*llmCfg, st)
 		if err != nil {
 			return err
 		}
 		defer orch.Close()
 		srv.SetLLM(orch)
+		// Seed the seconds-per-point estimators from the calibration
+		// profile before any traffic; a missing or unreadable file means
+		// pessimistic bootstrap defaults (fail toward reflex, never toward
+		// stale action).
+		if prof, perr := cognition.LoadProfile(w.CalibrationPath()); perr != nil {
+			fmt.Printf("daemon: %v — using bootstrap calibration defaults\n", perr)
+		} else if prof != nil {
+			orch.SeedCalibration(prof)
+			fmt.Printf("daemon: calibration seeded (local %.1fs/pt, cloud %.1fs/pt, calibrated %s)\n",
+				cognition.SeedFor(prof, "local"), cognition.SeedFor(prof, "cloud"), prof.CalibratedAt)
+		} else {
+			fmt.Printf("daemon: no calibration profile — bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt); run `scriptworld calibrate`\n",
+				cognition.BootstrapLocalSecPerPt, cognition.BootstrapCloudSecPerPt)
+		}
 		cloudDesc := llmCfg.Cloud.Model
 		if llmCfg.Cloud.Provider == llm.ProviderOpenAICompat {
 			cloudDesc = fmt.Sprintf("%s @ %s", llmCfg.Cloud.Model, llmCfg.Cloud.Endpoint)
@@ -116,6 +140,9 @@ func Run(dir string) error {
 		}
 		defer md.Close()
 		consumers = append(consumers, md.Observe)
+		// Drift signal: a tier's estimator breaching its spike-rate
+		// threshold lands as cog.recalibration_recommended telemetry.
+		orch.SetRecalibrateHook(md.RecalibrateSignal)
 		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
 			sim.AgentCount, sim.PlannerCadenceTicks/60)
 		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir)

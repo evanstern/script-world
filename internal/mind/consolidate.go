@@ -93,6 +93,13 @@ func (md *Mind) maybeConsolidate(e store.Event) {
 	if len(job.buffer) > maxBufferSent {
 		job.buffer = job.buffer[len(job.buffer)-maxBufferSent:] // newest kept
 	}
+	// Router gate (FR-007): a night-scale budget passes at every watchable
+	// speed today; the gate is doctrine-completeness, and a suppression here
+	// (future faster speeds) skips the night — the next sleep retries.
+	if v := md.routeVerdict("consolidation", llm.KindConsolidation); !v.Allow {
+		md.emitSuppressed("consolidation", p.Agent, e.Tick, v)
+		return
+	}
 	md.consolInFlight[p.Agent].Store(true)
 	select {
 	case md.consolQ <- job:

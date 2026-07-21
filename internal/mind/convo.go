@@ -36,6 +36,7 @@ const sceneJoinRadius = 2
 
 type convoCtx struct {
 	conv     int64 // founding talk's tick = conversation id
+	meta     thoughtMeta
 	idx      []int
 	names    []string
 	personas []string
@@ -58,13 +59,25 @@ func (md *Mind) maybeStartConversation(e store.Event) {
 	if json.Unmarshal(e.Payload, &p) != nil {
 		return
 	}
+	// Router gate (FR-007): a scene is the tier's most expensive thought
+	// (13 points) — if it can't land inside its budget at this speed, the
+	// encounter stays a primitive talk and the suppression is recorded.
+	if v := md.routeVerdict("conversation", llm.KindConversation); !v.Allow {
+		md.emitSuppressed("conversation", p.A, e.Tick, v)
+		return
+	}
 	if !md.convoBusy.CompareAndSwap(false, true) {
 		return // one at a time; this encounter stays a primitive talk
 	}
 	cc := md.snapshotConvo(e.Tick, p.A, p.B)
+	// The scene is one 13-point decision (contracts/registry.md): its
+	// telemetry identity is minted at founding, agent = founding speaker.
+	cc.meta = md.newMeta("conversation", p.A, e.Tick, e.Seq, llm.KindConversation)
+	cc.meta.job = fmt.Sprintf("conversation-%d", cc.conv)
 	log.Printf("mind: conversation %d starting between %s", cc.conv, strings.Join(cc.names, ", "))
 	go func() {
 		defer md.convoBusy.Store(false)
+		md.emitCog(cogThoughtEvent(cc.meta))
 		md.runConversation(cc)
 	}()
 }
@@ -170,6 +183,7 @@ func (md *Mind) snapshotConvo(tick int64, a, b int) convoCtx {
 const convoDeadline = 10 * time.Minute
 
 func (md *Mind) runConversation(cc convoCtx) {
+	sceneStart := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), convoDeadline)
 	defer cancel()
 	transcript := []string{}
@@ -180,6 +194,8 @@ func (md *Mind) runConversation(cc convoCtx) {
 		say, err := md.utterance(ctx, cc, sp, transcript)
 		if err != nil {
 			log.Printf("mind: conversation %d abandoned at turn %d: %v", cc.conv, t, err)
+			md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
+				fmt.Sprintf("abandoned at turn %d: %v", t, err), time.Since(sceneStart).Milliseconds()))
 			return // all-or-nothing: inject nothing
 		}
 		transcript = append(transcript, fmt.Sprintf("%s: %s", cc.names[sp], say))
@@ -188,6 +204,18 @@ func (md *Mind) runConversation(cc convoCtx) {
 	out, err := md.outcome(ctx, cc, transcript)
 	if err != nil {
 		log.Printf("mind: conversation %d outcome failed: %v", cc.conv, err)
+		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
+			"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds()))
+		return
+	}
+	// Landing enforcement for scenes (FR-010): a completed scene that
+	// overran its staleness budget — the router admitted it, the tier was
+	// slower than predicted — must not act. All-or-nothing, recorded.
+	if st := md.tick.Load() - cc.conv; cc.meta.class.BudgetTicks > 0 && st > cc.meta.class.BudgetTicks {
+		log.Printf("mind: conversation %d stale at landing (%d ticks)", cc.conv, st)
+		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeRejectedStale,
+			fmt.Sprintf("scene staleness %d > budget %d", st, cc.meta.class.BudgetTicks),
+			time.Since(sceneStart).Milliseconds()))
 		return
 	}
 	// Tones arrive per participant; missing tail entries read neutral.
@@ -254,8 +282,13 @@ func (md *Mind) runConversation(cc convoCtx) {
 			Text: text, Confidence: cc.tell.Confidence, Secret: cc.secret,
 		})
 	}
+	// The scene and its terminal record land atomically.
+	batch = append(batch, md.cogOutcomeEvent(cc.meta, sim.OutcomeLanded, "",
+		time.Since(sceneStart).Milliseconds()))
 	if err := md.social.InjectSocial(batch); err != nil {
 		log.Printf("mind: conversation %d injection rejected: %v", cc.conv, err)
+		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
+			"injection rejected: "+err.Error(), time.Since(sceneStart).Milliseconds()))
 	} else {
 		log.Printf("mind: conversation %d landed (%d turns, %d participants)", cc.conv, turns, n)
 	}

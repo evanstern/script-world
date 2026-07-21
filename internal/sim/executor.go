@@ -143,6 +143,14 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 
 		if a.Intent == nil {
+			// Guarded plan steps (TASK-32 US4) own an idle agent while the
+			// head step's window is open: holding emits nothing, firing
+			// sets the intent, expiry clears the plan — all deterministic,
+			// no model at firing time (FR-017).
+			if len(a.Plan) > 0 {
+				events = append(events, planStepEvents(s, m, i, nextTick)...)
+				continue
+			}
 			// The reflex is the fallback mind (TASK-7): it acts only on
 			// agents idle past the grace window, leaving room for planner
 			// injections; with no planner it remains the permanent

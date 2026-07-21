@@ -7,12 +7,26 @@ import (
 	"strings"
 )
 
-// planReply is the goal JSON contract.
+// planReply is the goal JSON contract; a reply is either one goal or a
+// short guarded plan (TASK-32 US4), never both.
 type planReply struct {
-	Goal   string `json:"goal"`
-	Target string `json:"target,omitempty"`
-	Reason string `json:"reason"`
+	Goal   string          `json:"goal"`
+	Target string          `json:"target,omitempty"`
+	Reason string          `json:"reason"`
+	Plan   []planStepReply `json:"plan,omitempty"`
 }
+
+// planStepReply is one model-expressed step: timed guards only in v1 —
+// after_min becomes an after_tick guard, for_min bounds the window.
+type planStepReply struct {
+	Goal     string  `json:"goal"`
+	Target   string  `json:"target,omitempty"`
+	AfterMin float64 `json:"after_min,omitempty"`
+	ForMin   float64 `json:"for_min,omitempty"`
+}
+
+// planStepCap mirrors sim.PlanStepCap for the prompt and the parser.
+const planStepCap = 3
 
 var validGoals = map[string]bool{
 	"forage": true, "chop": true, "hunt": true,
@@ -163,6 +177,24 @@ func parseReply(text string) (planReply, error) {
 	var r planReply
 	if err := json.Unmarshal([]byte(text[start:end]), &r); err != nil {
 		return planReply{}, fmt.Errorf("bad JSON: %w", err)
+	}
+	if len(r.Plan) > 0 {
+		// The plan form: every step's goal must be in vocabulary, the cap
+		// is hard (an over-long plan is a model failure, not a trim).
+		if len(r.Plan) > planStepCap {
+			return planReply{}, fmt.Errorf("plan has %d steps (cap %d)", len(r.Plan), planStepCap)
+		}
+		for i := range r.Plan {
+			r.Plan[i].Goal = strings.ToLower(strings.TrimSpace(r.Plan[i].Goal))
+			if !validGoals[r.Plan[i].Goal] {
+				return planReply{}, fmt.Errorf("plan step %d: unknown goal %q", i, r.Plan[i].Goal)
+			}
+			if r.Plan[i].AfterMin < 0 || r.Plan[i].ForMin < 0 {
+				return planReply{}, fmt.Errorf("plan step %d: negative time", i)
+			}
+		}
+		r.Goal = ""
+		return r, nil
 	}
 	r.Goal = strings.ToLower(strings.TrimSpace(r.Goal))
 	if !validGoals[r.Goal] {

@@ -204,8 +204,58 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Memories = append(a.Memories, Memory{Text: p.Text, Salience: p.Salience, Tick: e.Tick, Subject: p.Subject, Tone: p.Tone})
+		// Cognition horizon (TASK-32): a high-salience stimulus bumps the
+		// agent's generation — in-flight thoughts snapshotted under the old
+		// generation are superseded at landing (FR-014). The salience table
+		// is the definition of "high": near-death (9), witnessed death (10),
+		// exile (9); dreams (8) deliberately do not interrupt thought.
+		if p.Salience >= GenerationBumpSalience {
+			a.Generation++
+		}
 	case "agent.thought":
 		// Chronicle material; no state effect.
+	case "cog.thought", "cog.outcome", "cog.recalibration_recommended",
+		"agent.intent_rejected":
+		// Cognition-horizon telemetry (TASK-32): recorded observability,
+		// no state effect.
+
+	case "agent.plan_set":
+		var p PlanSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Plan = append([]PlanStep(nil), p.Steps...)
+	case "agent.plan_step_started":
+		var p PlanStepPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Plan) > 0 {
+			a.Plan = a.Plan[1:]
+		}
+		if len(a.Plan) == 0 {
+			a.Plan = nil
+		}
+	case "agent.plan_expired":
+		var p PlanStepPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		// v1 semantics: a broken sequence is not resumed — the whole
+		// remaining plan clears and the reflex floor covers.
+		a.Plan = nil
 
 	case "sim.night_started":
 		s.Night = true

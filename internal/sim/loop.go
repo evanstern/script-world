@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/script-world/internal/cognition"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/worldmap"
 )
@@ -43,6 +44,20 @@ type InjectArgs struct {
 	Goal        string
 	TargetAgent int // for seek/talk_to; -1 otherwise
 	Reason      string
+	// Cognition-horizon landing metadata (TASK-32). Class empty means an
+	// unmetered caller (tests, tooling): the ladder's staleness, generation,
+	// and guard checks are skipped and no telemetry is emitted — the
+	// pre-TASK-32 contract.
+	Class           string
+	JobID           string
+	SnapshotTick    int64
+	Generation      int64
+	PredictedWallMs int64
+	ActualWallMs    int64
+	Guards          []Guard
+	// Plan is a guarded conditional plan (US4) — mutually exclusive with
+	// Goal; the same ladder applies, then agent.plan_set records the steps.
+	Plan []PlanStep
 }
 
 type command struct {
@@ -102,6 +117,13 @@ func (l *Loop) Do(name string, speed clock.Speed) (Status, error) {
 // goal is validated and resolved deterministically, then recorded as
 // agent.intent_set (source planner) + agent.thought. Model output enters the
 // sim ONLY through here — as recorded input.
+//
+// Deliberately pause-open (FR-018, decision-4): pause means "the world
+// freezes and the minds catch up" — an in-flight thought completes on the
+// wall clock and lands at the frozen tick, where its game-tick staleness is
+// zero by construction. Cancelling completed thought was considered and
+// rejected: it would discard work that is, by tick arithmetic, perfectly
+// fresh.
 func (l *Loop) InjectIntent(args InjectArgs) error {
 	cmd := command{name: "inject_intent", inject: &args, reply: make(chan commandResult, 1)}
 	select {
@@ -144,11 +166,24 @@ var injectSocialWhitelist = map[string]bool{
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.
 	"meeting.proposal_rephrased": true,
+	// Cognition telemetry (TASK-32): recorded observability, reducer no-ops.
+	// Every thought's lifecycle lands here so no failure is ever silent
+	// (FR-015) and thought chains are walkable from the log alone (FR-020).
+	"cog.thought":                   true,
+	"cog.outcome":                   true,
+	"cog.recalibration_recommended": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
 // the next tick boundary (all-or-nothing): ticks are re-stamped, payloads
 // dry-run on a state copy first, then applied and recorded.
+//
+// Deliberately pause-open, like InjectIntent (FR-018): a conversation
+// founded before a pause completes on the wall clock and lands its whole
+// scene at the frozen tick. Tick-driven scheduling freezes with the clock;
+// a landing batch may wake one debounce-bounded round of catch-up thought
+// at zero staleness before the mind quiesces (live finding, 2026-07-20) —
+// pause is the one state where thought fidelity is perfect.
 func (l *Loop) InjectSocial(events []store.Event) error {
 	cmd := command{name: "inject_social", social: events, reply: make(chan commandResult, 1)}
 	select {
@@ -197,13 +232,13 @@ func (l *Loop) status() Status {
 		eff = 0
 	}
 	return Status{
-		Tick:          s.Tick,
-		GameTime:      clock.Format(s.Tick),
-		Paused:        s.Paused,
-		Speed:         s.Speed,
-		EffectiveRate: eff,
-		Degraded:      s.Degraded,
-		LastSeq:       l.st.LastSeq(),
+		Tick:            s.Tick,
+		GameTime:        clock.Format(s.Tick),
+		Paused:          s.Paused,
+		Speed:           s.Speed,
+		EffectiveRate:   eff,
+		Degraded:        s.Degraded,
+		LastSeq:         l.st.LastSeq(),
 		MetatronCharges: s.MetatronCharges,
 	}
 }
@@ -376,37 +411,138 @@ func (l *Loop) handleCommand(cmd command) error {
 			break
 		}
 		a := &l.state.Agents[in.Agent]
+		// The landing ladder (TASK-32, FR-010..FR-013): enforcement happens
+		// against the world as it is NOW. Every metered rejection is
+		// recorded atomically with the verdict — the rejection events land
+		// even though err is set (silent failure is gone, FR-015).
+		staleness := l.state.Tick - in.SnapshotTick
+		if staleness < 0 {
+			staleness = 0
+		}
+		reject := func(outcome, reason string) {
+			err = fmt.Errorf("%s: %s", outcome, reason)
+			if in.Class == "" {
+				return
+			}
+			kind := RejectKindWorldChange
+			if in.PredictedWallMs > 0 && in.ActualWallMs > PredictionMissFactor*in.PredictedWallMs {
+				kind = RejectKindPredictionMiss
+			}
+			emit("agent.intent_rejected", IntentRejectedPayload{
+				Agent: in.Agent, Goal: in.Goal, Reason: reason, StalenessTicks: staleness,
+			})
+			emit("cog.outcome", CogOutcomePayload{
+				Job: in.JobID, Class: in.Class, Agent: in.Agent,
+				Outcome: outcome, SnapshotTick: in.SnapshotTick,
+				LandingTick: l.state.Tick, StalenessTicks: staleness,
+				PredictedWallMs: in.PredictedWallMs, ActualWallMs: in.ActualWallMs,
+				Kind: kind, Reason: reason,
+			})
+		}
 		if a.Dead {
-			err = fmt.Errorf("%s is dead", a.Name)
+			reject(OutcomeUnavailable, a.Name+" is dead")
 			break
 		}
 		if a.Asleep {
-			err = fmt.Errorf("%s is asleep", a.Name)
+			reject(OutcomeUnavailable, a.Name+" is asleep")
 			break
 		}
-		intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
-		if rerr != nil {
-			err = rerr
-			break
+		adapted := false
+		if in.Class != "" {
+			if in.Generation != a.Generation {
+				reject(OutcomeSuperseded, fmt.Sprintf("generation %d, thought was %d", a.Generation, in.Generation))
+				break
+			}
+			if dc, ok := cognition.ClassFor(in.Class); ok && staleness > dc.BudgetTicks {
+				reject(OutcomeRejectedStale, fmt.Sprintf("staleness %d > budget %d", staleness, dc.BudgetTicks))
+				break
+			}
+			failed := false
+			for _, g := range in.Guards {
+				ok, why := g.Eval(l.state, in.Agent)
+				if !ok {
+					reject(OutcomeRejectedGuard, why)
+					failed = true
+					break
+				}
+				// The adapt rung: a target_present guard that holds but
+				// whose target moved means resolveGoal repaired the intent.
+				if g.Type == GuardTargetPresent && (g.X != 0 || g.Y != 0) {
+					t := &l.state.Agents[g.Target]
+					if t.X != g.X || t.Y != g.Y {
+						adapted = true
+					}
+				}
+			}
+			if failed {
+				break
+			}
 		}
-		if in.Reason != "" {
-			emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+		if len(in.Plan) > 0 {
+			// A guarded conditional plan (US4): validate at the door, then
+			// record the steps — the executor evaluates guards per tick.
+			if len(in.Plan) > PlanStepCap {
+				reject(OutcomeRejectedGuard, fmt.Sprintf("plan has %d steps (cap %d)", len(in.Plan), PlanStepCap))
+				break
+			}
+			for si := range in.Plan {
+				if !planGoals[in.Plan[si].Goal] {
+					reject(OutcomeRejectedGuard, fmt.Sprintf("plan step %d: unknown goal %q", si, in.Plan[si].Goal))
+					break
+				}
+				if in.Plan[si].Until == 0 {
+					in.Plan[si].Until = l.state.Tick + PlanDefaultWindowTicks
+				}
+			}
+			if err != nil {
+				break
+			}
+			if in.Reason != "" {
+				emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+			}
+			emit("agent.plan_set", PlanSetPayload{Agent: in.Agent, Job: in.JobID, Steps: in.Plan})
+		} else {
+			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
+			if rerr != nil {
+				// resolveGoal is the repair path; failing here means no
+				// deterministic adaptation exists — a world change.
+				reject(OutcomeRejectedGuard, rerr.Error())
+				break
+			}
+			if in.Reason != "" {
+				emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
+			}
+			if direct == "agent.ate" {
+				emit("agent.ate", AgentPayload{Agent: in.Agent})
+			} else if intent != nil {
+				emit("agent.intent_set", IntentSetPayload{
+					Agent: in.Agent, Goal: intent.Goal,
+					TargetX: intent.TargetX, TargetY: intent.TargetY,
+					ResX: intent.ResX, ResY: intent.ResY,
+					Source: "planner",
+				})
+			}
 		}
-		if direct == "agent.ate" {
-			emit("agent.ate", AgentPayload{Agent: in.Agent})
-		} else if intent != nil {
-			emit("agent.intent_set", IntentSetPayload{
-				Agent: in.Agent, Goal: intent.Goal,
-				TargetX: intent.TargetX, TargetY: intent.TargetY,
-				ResX: intent.ResX, ResY: intent.ResY,
-				Source: "planner",
+		if in.Class != "" {
+			outcome := OutcomeLanded
+			if adapted {
+				outcome = OutcomeAdapted
+			}
+			emit("cog.outcome", CogOutcomePayload{
+				Job: in.JobID, Class: in.Class, Agent: in.Agent,
+				Outcome: outcome, SnapshotTick: in.SnapshotTick,
+				LandingTick: l.state.Tick, StalenessTicks: staleness,
+				PredictedWallMs: in.PredictedWallMs, ActualWallMs: in.ActualWallMs,
 			})
 		}
 	default:
 		err = fmt.Errorf("unknown command %q", cmd.name)
 	}
 
-	if err == nil {
+	// Events land whenever they were emitted — a rejected inject_intent sets
+	// err AND emits its rejection record (the only command that pairs the
+	// two); every other error path emits nothing.
+	{
 		for _, e := range events {
 			if aerr := l.state.Apply(e); aerr != nil {
 				return aerr

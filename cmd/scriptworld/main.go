@@ -59,6 +59,8 @@ func main() {
 		err = cmdSpeed(args)
 	case "llm":
 		err = cmdLLM(args)
+	case "calibrate":
+		err = cmdCalibrate(args)
 	case "metatron":
 		err = cmdMetatron(args)
 	case "help", "-h", "--help":

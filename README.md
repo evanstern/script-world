@@ -63,3 +63,33 @@ scriptworld stop ~/worlds/demo            # graceful stop; kill -9 also resumes 
 Default speed is 4x: 1 game minute per 15 real seconds; the watchable ladder tops at
 32x. `go test -race ./...` covers determinism (same seed → byte-identical history),
 crash recovery, the client protocol, and the model-output firewalls.
+
+## The cognition horizon (TASK-32)
+
+A model turn takes real wall time while game time keeps flowing — a ~50s local
+planner call is 50 game-seconds of drift at 1x but ~27 game-minutes at 32x. The
+cognition horizon (decision-4, `specs/007-cognition-horizon`) scopes **what the
+model may decide** by **how stale its answer will be when it lands**:
+
+- Every model-reaching decision class carries a **Fibonacci thought cost**
+  (host-independent) and a **staleness budget in game time** (a property of the
+  fiction) — `internal/cognition/registry.go`.
+- `scriptworld calibrate <dir>` benchmarks your host+model to seconds-per-point
+  (`calibration.json`) and prints the horizon your hardware buys ("planner
+  suppressed above 16x; musing OK at 32x"). A live estimator follows drift and
+  rejects lag spikes; a missing profile means pessimistic bootstrap defaults.
+- A **deterministic router** (never a model) gates every call: predicted drift
+  over budget → the class degrades (reflex floor, skip, template) and the
+  suppression is recorded with its arithmetic.
+- **Landing enforcement**: intents carry their snapshot tick, generation, and
+  guards; the loop rejects stale/superseded/guard-failed landings — recorded,
+  classified (prediction-miss vs world-change), never silent. Prompts are
+  future-dated ("your decision takes effect around 09:30") and may return
+  guarded plans (≤3 steps; timed guards are the act-at-time-T mechanism).
+- **Pause is doctrine**: the world freezes, in-flight minds catch up and land at
+  the frozen tick at zero game-tick staleness; no new thought starts.
+
+Read the trail: `sqlite3 world.db "SELECT * FROM events WHERE type LIKE 'cog.%'"`
+— every thought terminates in exactly one recorded outcome, chained to its
+stimulus (`trigger_seq`), so `stimulus → thought → intent → action` is walkable
+from the log alone.

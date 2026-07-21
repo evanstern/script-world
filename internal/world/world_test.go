@@ -47,3 +47,10 @@ func TestOpenRejectsBadFormat(t *testing.T) {
 		t.Fatal("Open should reject unknown format_version")
 	}
 }
+
+func TestCalibrationPath(t *testing.T) {
+	w := &World{Dir: "/tmp/w"}
+	if got := w.CalibrationPath(); got != filepath.Join("/tmp/w", "calibration.json") {
+		t.Errorf("CalibrationPath = %q", got)
+	}
+}

@@ -1,0 +1,92 @@
+package sim
+
+// Guarded conditional plans (TASK-32 US4, FR-017): a planner reply may be a
+// short sequence of steps, each gated by a deterministic guard and bounded
+// by a validity window. Steps execute with no model involvement at firing
+// time — timed guards are the sole act-at-time-T mechanism. The whole plan
+// is recorded state (agent.plan_set), so replay is untouched.
+
+import (
+	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
+)
+
+// PlanStepCap bounds a plan: prompt-expressible in 256 tokens, and per-tick
+// evaluation stays trivial.
+const PlanStepCap = 3
+
+// PlanDefaultWindowTicks is the validity window when the model gives none:
+// 2 game hours.
+const PlanDefaultWindowTicks = 2 * 3600
+
+// PlanStep is one guarded step in deterministic state.
+type PlanStep struct {
+	Job    string `json:"job"`
+	Goal   string `json:"goal"`
+	Target int    `json:"target,omitempty"` // agent index for talk_to; -1/absent otherwise
+	When   *Guard `json:"when,omitempty"`   // gate to start; nil = immediately
+	Until  int64  `json:"until"`            // validity deadline (tick)
+}
+
+// planGoals mirrors the planner goal vocabulary — the loop validates plan
+// steps against it at the door so garbage never enters state.
+var planGoals = map[string]bool{
+	"forage": true, "chop": true, "hunt": true,
+	"build_fire": true, "build_shelter": true,
+	"eat": true, "sleep": true, "wander": true,
+	"goto_warmth": true, "talk_to": true,
+}
+
+// PlanSetPayload — agent.plan_set (loop-emitted on a plan landing).
+type PlanSetPayload struct {
+	Agent int        `json:"agent"`
+	Job   string     `json:"job"`
+	Steps []PlanStep `json:"steps"`
+}
+
+// PlanStepPayload — agent.plan_step_started / agent.plan_expired.
+type PlanStepPayload struct {
+	Agent  int    `json:"agent"`
+	Job    string `json:"job"`
+	Step   string `json:"step"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// planStepEvents evaluates the head step for an idle agent (executor-called,
+// pure). Holding (guard not yet true, window open) emits nothing; expiry
+// clears the whole plan (v1 semantics: a broken sequence is not resumed);
+// firing starts the step and sets its intent — Source "plan".
+func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Event {
+	a := &s.Agents[idx]
+	st := a.Plan[0]
+	ev := func(typ string, payload any) store.Event {
+		return store.Event{Tick: tick, Type: typ, Payload: mustPayload(payload)}
+	}
+	if st.Until > 0 && tick >= st.Until {
+		return []store.Event{ev("agent.plan_expired", PlanStepPayload{
+			Agent: idx, Job: st.Job, Step: st.Goal, Reason: "window closed"})}
+	}
+	if st.When != nil {
+		if ok, _ := st.When.EvalAt(s, idx, tick); !ok {
+			return nil // holding — deterministically re-checked next tick
+		}
+	}
+	intent, direct, err := resolveGoal(s, m, idx, st.Goal, st.Target, tick)
+	if err != nil {
+		return []store.Event{ev("agent.plan_expired", PlanStepPayload{
+			Agent: idx, Job: st.Job, Step: st.Goal, Reason: err.Error()})}
+	}
+	evs := []store.Event{ev("agent.plan_step_started", PlanStepPayload{
+		Agent: idx, Job: st.Job, Step: st.Goal})}
+	if direct == "agent.ate" {
+		evs = append(evs, ev("agent.ate", AgentPayload{Agent: idx}))
+	} else if intent != nil {
+		evs = append(evs, ev("agent.intent_set", IntentSetPayload{
+			Agent: idx, Goal: intent.Goal,
+			TargetX: intent.TargetX, TargetY: intent.TargetY,
+			ResX: intent.ResX, ResY: intent.ResY,
+			Source: "plan",
+		}))
+	}
+	return evs
+}

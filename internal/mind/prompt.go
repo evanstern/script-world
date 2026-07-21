@@ -24,8 +24,22 @@ func systemPrompt(name, personaText string) string {
 	fmt.Fprintf(&b, `You decide what %s does next. Reply with ONLY a JSON object:
 {"goal": "<goal>", "target": "<agent name, only for talk_to>", "reason": "<one short sentence in your voice>"}
 Goals: %s.
-`, name, goalVocabulary)
+For a short sequence instead, reply:
+{"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
+At most %d steps; steps run in order, each waits for its time.
+`, name, goalVocabulary, planStepCap)
 	return b.String()
+}
+
+// futureDated tells the model when its decision will land (FR-016): thought
+// is not instant, and the prompt stops pretending it is. Empty when there is
+// no meaningful prediction (uncapped test speeds).
+func futureDated(now, landing int64) string {
+	if landing <= now {
+		return ""
+	}
+	return fmt.Sprintf("It is now %s. Your decision will take effect around %s — plan for then, not for this instant.\n",
+		clock.Format(now), clock.Format(landing))
 }
 
 // musingSystemPrompt frames the same situation window as pure interiority

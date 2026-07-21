@@ -160,7 +160,7 @@ func TestChargesReplayIdentically(t *testing.T) {
 	live := NewState(7, m)
 	events := []store.Event{
 		regenEvent, regenEvent, // 1 -> 3
-		nudgeEvent(t, 10, MetatronNudgedPayload{Form: "dream", Targets: []int{3}, Text: "d1"}), // 2
+		nudgeEvent(t, 10, MetatronNudgedPayload{Form: "dream", Targets: []int{3}, Text: "d1"}),   // 2
 		nudgeEvent(t, 20, MetatronNudgedPayload{Form: "omen", Targets: []int{0, 1}, Text: "o1"}), // 1
 		regenEvent, // 2
 	}
