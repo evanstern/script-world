@@ -1,6 +1,6 @@
 ---
 name: llm-orchestrator
-description: Two-tier call layer for all model traffic — kind routing (local Ollama / cloud Anthropic-or-router), persisted monthly spend meter with hard ceiling, circuit-breaker degraded mode, bounded-queue backpressure
+description: Two-tier call layer for all model traffic — kind routing (local Ollama / cloud Anthropic-or-router), configurable N-worker local concurrency, persisted monthly spend meter with hard ceiling, circuit-breaker degraded mode, bounded-queue backpressure
 kind: component
 sources:
   - internal/llm/llm.go
@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 8b8e05827ef3a52f8b87469179a11d36ce968114
+verified_against: 4f045f24b04312ec55e1cb9b8ed348946e5a0f3f
 ---
 
 # LLM orchestrator
@@ -44,12 +44,22 @@ musing — and the compat endpoint ignores `think: false` but honors
 resolved (`resolveReasoningEffort`); empty means the field is omitted
 from the body.
 
+**Concurrency** (TASK-45): each tier owns `slots` worker goroutines — N identical
+copies of the same worker loop draining the same two channels. The local tier's
+slot count comes from `llm.json`'s `local.parallel` via `LocalConfig.Workers()`
+(absent/0 → 1, clamped to `maxLocalWorkers` = 16, negative → 1; never an error —
+the daemon prints the clamp warning at boot and the world always starts); the
+cloud tier is pinned at 1. An `atomic.Int32` `inflight` counter per tier
+(incremented at dequeue, decremented on every reply path) tracks occupied slots
+for admission.
+
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
-queue the worker drains first — dialogue turns are interactive, while planner
+queue idle workers drain first — dialogue turns are interactive, while planner
 thoughts tolerate staleness (the reflex grace covers them). The opposite
 extreme is caller-flagged: `Request.BestEffort` calls (musings,
-`KindMusing`, local) are refused with `ErrTierBusy` the moment either
-local queue has work waiting — flavor yields to real cognition. The flag
+`KindMusing`, local) are refused with `ErrTierBusy` when no worker slot is
+free — either local queue has work waiting, or `inflight` has reached
+`slots` — flavor yields to real cognition. The flag
 belongs to the caller so the mind can drop it as a fairness floor when a
 musing has been starved too long (TASK-21, [[agent-mind]]). A worker-side hard cap
 (`workerCallCap`, 2 min) bounds any single provider call so a hung transport can
@@ -80,7 +90,10 @@ the daemon and loop never notice.
 call's true duration is observed, so on each *successful* call it samples the
 wall time normalized by the kind's registered point cost
 (`cognition.ClassForKind`; failures are not latency observations, and spike
-rejection guards only the high side). Estimators start from bootstrap seeds
+rejection guards only the high side). With `local.parallel` > 1 those samples
+are per-call wall times under concurrent load — server-side contention included
+— so the estimate converges on true concurrent-rate seconds-per-point rather
+than a serial-calibration optimum. Estimators start from bootstrap seeds
 (`cognition.SeedFor`); `SeedCalibration` re-seeds both tiers from a
 calibration profile once at daemon start, and `SecondsPerPoint` exposes the
 live estimate — the router's bridge from Fibonacci points to this
@@ -99,7 +112,9 @@ keys are never stored — only the *name* of an environment variable (`api_key_e
 default `ANTHROPIC_API_KEY`). The one exception is the optional inline `api_key`
 (both tiers), intended solely for keys that guard LAN-local routers; when both are
 set the inline key wins. Provider values are validated at load time (`LoadConfig`
-rejects unknown providers and `openai_compat` without an endpoint). Both tiers
+rejects unknown providers and `openai_compat` without an endpoint; the local
+`parallel` field is deliberately exempt — out-of-range values clamp with a
+warning instead of failing the boot). Both tiers
 carry an optional `reasoning_effort` (`*string`, TASK-37) with a nil/""
 convention resolved by `resolveReasoningEffort`: local absent defaults to
 `"none"` (interiority prose never needs hidden reasoning, and local latency is
@@ -121,7 +136,13 @@ are the intended callers.
 
 Tested against httptest mock providers for both tiers: routing, cost math, ceiling
 refusal with zero HTTP, circuit open/fast-fail/recovery, queue overflow, meter
-persistence, and world-keeps-ticking-with-dead-endpoints. Live-verified against a
-real Ollama instance end-to-end through the daemon. Budget reality check: nightly
+persistence, and world-keeps-ticking-with-dead-endpoints; concurrency is proven
+under `go test -race` (4-wide overlapping in-flight calls, slot-aware best-effort
+admission, exactly-once breaker/meter/estimator accounting under parallel load,
+serial-when-absent compatibility). Live-verified against a
+real Ollama instance end-to-end through the daemon. Motivating measurement
+(TASK-45): one worker serialized everything — 130 s queue waits behind 19 s calls
+produced rejected-stale planners and total musing silence, while the server ran
+4 concurrent calls in 0.98 s wall vs 3.8 s for one cold call. Budget reality check: nightly
 consolidation volume at v1 scale ≈ $34/month on the default cloud model — inside the
 $100 ceiling from the grounding session.

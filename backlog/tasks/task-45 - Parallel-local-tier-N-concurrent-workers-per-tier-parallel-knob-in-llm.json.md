@@ -3,10 +3,10 @@ id: TASK-45
 title: >-
   Parallel local tier: N concurrent workers per tier ('parallel' knob in
   llm.json)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 14:11'
-updated_date: '2026-07-21 15:29'
+updated_date: '2026-07-21 16:18'
 labels:
   - cognition
   - performance
@@ -25,12 +25,12 @@ Spec: specs/009-parallel-local-tier
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Spec phase: Setup
-- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #3 Spec phase: User Story 1 — Timely village cognition at speed (Priority: P1) 🎯 MVP
-- [ ] #4 Spec phase: User Story 2 — Best-effort thoughts stop losing every race (Priority: P2)
-- [ ] #5 Spec phase: User Story 3 — Honest speed governance under concurrency (Priority: P3)
-- [ ] #6 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #1 Spec phase: Setup
+- [x] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #3 Spec phase: User Story 1 — Timely village cognition at speed (Priority: P1) 🎯 MVP
+- [x] #4 Spec phase: User Story 2 — Best-effort thoughts stop losing every race (Priority: P2)
+- [x] #5 Spec phase: User Story 3 — Honest speed governance under concurrency (Priority: P3)
+- [x] #6 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -45,4 +45,12 @@ Full Spec Kit pipeline complete: spec.md + plan.md + research.md (R1-R8) + data-
 PIPELINE STATE (for any session picking this up): speckit-specify COMPLETE — spec at specs/009-parallel-local-tier/spec.md, quality checklist passing, zero NEEDS-CLARIFICATION (the concurrency-cap knob is explicitly delegated to the plan). .specify/feature.json already points at specs/009-parallel-local-tier, so /speckit-plan picks it up directly. NEXT: speckit-plan → speckit-tasks → spec-bridge:link (required before implementation, constitution v1.1.0) → implement in worktree .worktrees/task-45 on branch task-45-<slug> via the spec-implementer agent with model=opus (rubric: concurrency/orchestrator logic in internal/llm — senior tier). No clarify round needed. Related evidence and scope fences are in this task's description and the spec's Assumptions.
 
 speckit-plan + speckit-tasks complete (2026-07-21). spec-bridge:link done: marker + 6 phase ACs seeded, status In Progress. Next: implement T001-T013 in worktree via spec-implementer (opus), then spec-bridge:sync + wiki-update post-merge.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Timely village cognition at speed (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Best-effort thoughts stop losing every race (Priority: P2): 2/2 · User Story 3 — Honest speed governance under concurrency (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Timely village cognition at speed (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Best-effort thoughts stop losing every race (Priority: P2): 2/2 · User Story 3 — Honest speed governance under concurrency (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

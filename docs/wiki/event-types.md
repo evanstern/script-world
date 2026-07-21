@@ -9,7 +9,7 @@ sources:
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 4f045f24b04312ec55e1cb9b8ed348946e5a0f3f
 ---
 
 # Event types
