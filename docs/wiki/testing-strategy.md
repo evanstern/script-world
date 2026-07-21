@@ -7,7 +7,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Testing strategy
@@ -27,7 +27,7 @@ suites — multi-step intent chains with zero input (AC#1), needs decay + self-f
 and starvation death with recorded cause (AC#2), night warmth mechanics and exposure
 death (AC#3), and a two-day unattended village survival run on multiple seeds.
 (Terrain generation has its own determinism/AC suite in `internal/worldmap`, covered
-by [[worldmap-generation]].) Proves: same seed + same command timeline over 10k ticks → byte-identical
+by [[worldmap-generation]].) Proves: same seed + same command timeline over 30k ticks → byte-identical
 event sequences and equal state hashes; different seeds diverge; replaying the logged
 events over genesis (then re-living the quiet tail) reproduces the live state hash
 exactly; the day/night cycle behaves (nobody moves at night).

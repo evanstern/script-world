@@ -7,7 +7,7 @@ sources:
   - internal/sim/agents.go
   - internal/sim/plan.go
   - internal/sim/terrain.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Executor
@@ -98,5 +98,5 @@ replaces goal *selection*, never execution.
 A fresh village (seed 42) builds fires within the first game-hour and survives
 multiple days unattended. Known day-1 quirk: agents can't see construction in
 progress, so several may each build a fire in the same window — wasteful, harmless.
-Event volume: ~4 needs events/game-minute plus movement bursts; a two-day run is
-~100k events.
+Event volume: ~8 needs events/game-minute (one per living agent) plus movement bursts;
+a two-day run is ~100k events.

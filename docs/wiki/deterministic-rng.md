@@ -4,7 +4,7 @@ description: Stateless randomness — every random decision is a PCG seeded from
 kind: pattern
 sources:
   - internal/sim/rng.go
-verified_against: cdb24b60395f9f75d86df545df7dcc027f384bcb
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Deterministic RNG
@@ -18,7 +18,7 @@ persisting RNG state.
 
 `sim.rngAt(seed uint64, purpose string, tick int64, index int) *rand.Rand`:
 
-- `purpose` (e.g. `"move"`, `"genesis"`) is FNV-64a hashed and XORed into the world
+- `purpose` (e.g. `"wander"`, `"genesis"`) is FNV-64a hashed and XORed into the world
   seed, giving each decision family an independent stream;
 - the second PCG seed word mixes `tick` (via the splitmix64 constant
   `0x9e3779b97f4a7c15`) with the entity `index`.

@@ -9,7 +9,7 @@ sources:
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Event types
@@ -40,7 +40,7 @@ TUI) will read.
 | `agent.slept` / `agent.woke` | `AgentPayload{agent}` | executor | sleep flag (slept clears intent) |
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
 | `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared |
-| `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent idle pair | +morale both, talk cooldown; both remember |
+| `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent pair (chat-while-working) | +morale both, talk cooldown; both remember |
 | `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone}` | executor heuristics; convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds ([[agent-mind]], [[social-fabric]]) |
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command (planner); `inject_social` (musing) | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |

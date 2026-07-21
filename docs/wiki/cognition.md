@@ -8,7 +8,8 @@ sources:
   - internal/cognition/estimate.go
   - internal/cognition/route.go
   - internal/cognition/calibration.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+  - internal/sim/cognition.go
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Cognition horizon

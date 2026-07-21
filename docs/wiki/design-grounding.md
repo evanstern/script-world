@@ -4,7 +4,7 @@ description: The TASK-1 Socratic grounding session outcomes that the daemon subs
 kind: concept
 sources:
   - docs/design/grounded-assumptions.md
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Design grounding
@@ -29,10 +29,12 @@ Decisions the current code embodies:
 - **Graceful degradation**: when the host can't hold the requested rate, the world
   slows honestly rather than dropping ticks. Implemented as auto-slow in [[sim-loop]].
 
-Decisions the substrate anticipates but does not implement: the agent mind
-(persona/soul files — the `agents/` directory exists empty), Metatron, the social
-fabric, chronicle, and the gru. Five candidate Spec Kit specs are listed at the end of
-the assumptions doc; `specs/001-world-daemon` is #1.
+Decisions the substrate anticipated but did not itself implement — the agent mind,
+Metatron, the social fabric, chronicle, and the gru — have all since landed (TASK-5
+through TASK-13; see [[agent-mind]], [[metatron]], [[social-fabric]], [[chronicle]],
+[[gru]]); the `agents/` directory now holds per-agent persona/soul files at runtime.
+Five candidate Spec Kit specs are listed at the end of the assumptions doc;
+`specs/001-world-daemon` was #1.
 
 ## Connections
 
