@@ -29,6 +29,51 @@ type Manifest struct {
 	// (Seed, MapWidth, MapHeight), never persisted.
 	MapWidth  int `json:"map_width,omitempty"`
 	MapHeight int `json:"map_height,omitempty"`
+	// Meeting is an optional per-world meeting convention (TASK-36). When
+	// present, the daemon seeds a meeting.convention_established event on boot
+	// so the convene→open lifecycle honors it. Absent, no meeting convenes
+	// unless one emerges in-world. `scriptworld new` never writes it —
+	// emergent is the default.
+	Meeting *MeetingConfig `json:"meeting,omitempty"`
+}
+
+// MeetingConfig declares when (and optionally where) the daily assembly
+// convenes. Convene and Open are 24-hour game clock times, "HH:MM"; Convene
+// must fall before Open and both within the day. X/Y are optional map
+// coordinates for the meeting place — omitted, the daemon derives it (first
+// fire, else first shelter, else map center).
+type MeetingConfig struct {
+	Convene string `json:"convene"`
+	Open    string `json:"open"`
+	X       *int   `json:"x,omitempty"`
+	Y       *int   `json:"y,omitempty"`
+}
+
+// Seconds parses Convene/Open into seconds-of-day and validates the window:
+// both well-formed "HH:MM" within the day, convene strictly before open.
+func (c *MeetingConfig) Seconds() (convene, open int, err error) {
+	if convene, err = parseClock(c.Convene); err != nil {
+		return 0, 0, fmt.Errorf("meeting.convene: %w", err)
+	}
+	if open, err = parseClock(c.Open); err != nil {
+		return 0, 0, fmt.Errorf("meeting.open: %w", err)
+	}
+	if convene >= open {
+		return 0, 0, fmt.Errorf("meeting.convene (%s) must be before meeting.open (%s)", c.Convene, c.Open)
+	}
+	return convene, open, nil
+}
+
+// parseClock reads an "HH:MM" 24-hour time into a second-of-day in [0, 86400).
+func parseClock(s string) (int, error) {
+	var h, m int
+	if _, err := fmt.Sscanf(s, "%d:%d", &h, &m); err != nil {
+		return 0, fmt.Errorf("time %q is not HH:MM: %w", s, err)
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, fmt.Errorf("time %q out of range (00:00–23:59)", s)
+	}
+	return h*3600 + m*60, nil
 }
 
 type World struct {
@@ -87,6 +132,11 @@ func Open(dir string) (*World, error) {
 	}
 	if m.MapHeight <= 0 {
 		m.MapHeight = worldmap.DefaultSize
+	}
+	if m.Meeting != nil {
+		if _, _, err := m.Meeting.Seconds(); err != nil {
+			return nil, fmt.Errorf("corrupt %s: %w", ManifestName, err)
+		}
 	}
 	return &World{Dir: dir, Manifest: m}, nil
 }

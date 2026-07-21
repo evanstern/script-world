@@ -68,6 +68,9 @@ func Run(dir string) error {
 	if err != nil {
 		return err
 	}
+	if err := seedMeetingConvention(w, st, state); err != nil {
+		return err
+	}
 	recoveryMs := time.Since(startWall).Milliseconds()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -179,6 +182,27 @@ func Run(dir string) error {
 	}
 	fmt.Printf("daemon: stopped at tick %d\n", state.Tick)
 	return runErr
+}
+
+// seedMeetingConvention injects the config-declared meeting convention on boot
+// if the manifest declares one and none has taken hold yet (TASK-36) — once,
+// at the recovered tick. It lands in the log like genesis, so replay
+// re-applies it and this boot-time seed never fires twice (the reducer is
+// one-shot, and the guard skips re-injection once state carries a convention).
+func seedMeetingConvention(w *world.World, st *store.Store, state *sim.State) error {
+	mc := w.Manifest.Meeting
+	if mc == nil || state.MeetingConvention != nil {
+		return nil
+	}
+	convene, open, err := mc.Seconds()
+	if err != nil {
+		return err // already validated in world.Open; defensive
+	}
+	ev := sim.NewConventionEvent(state, w.Map(), state.Tick, convene, open, mc.X, mc.Y)
+	if err := state.Apply(ev); err != nil {
+		return err
+	}
+	return st.AppendEvents([]store.Event{ev})
 }
 
 func appendDaemonEvent(st *store.Store, srv *ipc.Server, typ string, payload any, tick int64) error {
