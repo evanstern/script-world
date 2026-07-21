@@ -110,6 +110,11 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Hail sweep (TASK-47): resolve outstanding pauses — met (hailer arrived)
+	// or expired — before anyone moves this tick, so met-vs-expired is a
+	// deterministic race with met winning ties (research D4).
+	events = append(events, hailStep(s, nextTick)...)
+
 	// Per-agent execution. Uses current state s (pre-tick); all effects
 	// land as events.
 	for i := range s.Agents {
@@ -143,7 +148,17 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			continue
 		}
 
+		// Hail pause (TASK-47): a flagged-down agent stands still — no reflex,
+		// no plan-step evaluation, no stepping en route — until the window
+		// lifts. Its needs still decay (heartbeat above), it still takes part
+		// in social beats, and stationary work at a tile it already stands on
+		// continues; intent and plan are left exactly as they were (FR-004).
+		paused := hailPaused(a, nextTick)
+
 		if a.Intent == nil {
+			if paused {
+				continue
+			}
 			// Guarded plan steps (TASK-32 US4) own an idle agent while the
 			// head step's window is open: holding emits nothing, firing
 			// sets the intent, expiry clears the plan — all deterministic,
@@ -177,6 +192,9 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		if a.X == in.TargetX && a.Y == in.TargetY {
 			events = append(events, executeAtTarget(s, m, i, nextTick)...)
 			continue
+		}
+		if paused {
+			continue // frozen in place: no stepping toward the target
 		}
 
 		// En route: one tile per moveEveryTicks, staggered like decisions.
@@ -271,28 +289,37 @@ func socialEvents(s *State, nextTick int64) []store.Event {
 			// planners kept everyone permanently tasked (cooldowns still
 			// bound the chatter).
 			if canTalk(a, nextTick) && canTalk(b, nextTick) {
-				events = append(events,
-					store.Event{Tick: nextTick, Type: "agent.talked",
-						Payload: mustPayload(TalkedPayload{A: i, B: j})},
-					store.Event{Tick: nextTick, Type: "social.relation_changed",
-						Payload: mustPayload(RelationChangedPayload{
-							A: i, B: j, AffectionDelta: talkAffection, Reason: "talked"})},
-					store.Event{Tick: nextTick, Type: "social.relation_changed",
-						Payload: mustPayload(RelationChangedPayload{
-							A: j, B: i, AffectionDelta: talkAffection, Reason: "talked"})},
-					memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
-					memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name))
-				// Deterministic gossip floor: the better-stocked teller
-				// passes one rumor verbatim (the mind's conversations
-				// paraphrase instead when a model is available).
-				if tell, ok := TellableFor(s, i, j); ok {
-					events = append(events, rumorTellEvent(nextTick, i, j, tell))
-				} else if tell, ok := TellableFor(s, j, i); ok {
-					events = append(events, rumorTellEvent(nextTick, j, i, tell))
-				}
-				return events
+				return append(events, talkEvents(s, i, j, nextTick)...)
 			}
 		}
+	}
+	return events
+}
+
+// talkEvents founds a talk between adjacent agents i and j: the morale/
+// affection/memory shape plus the deterministic verbatim rumor floor (the
+// better-stocked teller passes one rumor; the mind's conversations paraphrase
+// instead when a model is available). Shared by the ambient social beat and
+// the hail sweep — the sweep founds deliberately, bypassing the ambient
+// cooldown (the caller here gates on canTalk; hailStep does not).
+func talkEvents(s *State, i, j int, nextTick int64) []store.Event {
+	a, b := &s.Agents[i], &s.Agents[j]
+	events := []store.Event{
+		{Tick: nextTick, Type: "agent.talked",
+			Payload: mustPayload(TalkedPayload{A: i, B: j})},
+		{Tick: nextTick, Type: "social.relation_changed",
+			Payload: mustPayload(RelationChangedPayload{
+				A: i, B: j, AffectionDelta: talkAffection, Reason: "talked"})},
+		{Tick: nextTick, Type: "social.relation_changed",
+			Payload: mustPayload(RelationChangedPayload{
+				A: j, B: i, AffectionDelta: talkAffection, Reason: "talked"})},
+		memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
+		memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name),
+	}
+	if tell, ok := TellableFor(s, i, j); ok {
+		events = append(events, rumorTellEvent(nextTick, i, j, tell))
+	} else if tell, ok := TellableFor(s, j, i); ok {
+		events = append(events, rumorTellEvent(nextTick, j, i, tell))
 	}
 	return events
 }

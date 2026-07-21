@@ -75,6 +75,19 @@ type Agent struct {
 	LastConsolidatedNight int64    `json:"last_consolidated_night,omitempty"`
 	ConsolidatedUpTo      int64    `json:"consolidated_up_to,omitempty"`
 	LastConsolidateMark   int64    `json:"last_consolidate_mark,omitempty"`
+	// Hail (TASK-47) is the target-side pause: nil unless a talk_to landing
+	// flagged this agent down. Pointer + omitempty so pre-feature snapshots
+	// and un-hailed agents keep byte-identical canonical state (determinism
+	// hash). Written only by the reducer.
+	Hail *AgentHail `json:"hail,omitempty"`
+}
+
+// AgentHail is the courtesy pause a talk_to landing lays on its target: who
+// hailed it (By) and the tick the pause lifts (Until). Denominated in game
+// ticks so wall-speed changes never stretch or shrink the window.
+type AgentHail struct {
+	By    int   `json:"by"`
+	Until int64 `json:"until"`
 }
 
 // Memory is one episodic record; salience 1..10 weights the working-memory
@@ -241,5 +254,21 @@ type (
 		Agent  int    `json:"agent"`
 		Text   string `json:"text"`
 		Source string `json:"source"` // "planner" (reflex acts without narrating)
+	}
+	// Hail lifecycle (TASK-47). from = hailer, to = target — the field names
+	// the chronicle grammar already resolves to agent names, so tail/TUI
+	// visibility lands with no view-layer change.
+	HailedPayload struct {
+		From  int   `json:"from"`
+		To    int   `json:"to"`
+		Until int64 `json:"until"`
+	}
+	HailMetPayload struct {
+		From int `json:"from"`
+		To   int `json:"to"`
+	}
+	HailExpiredPayload struct {
+		From int `json:"from"`
+		To   int `json:"to"`
 	}
 )
