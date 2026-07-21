@@ -3,6 +3,7 @@ package mind
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -12,6 +13,29 @@ import (
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 )
+
+// transportError marks a Submit/admission failure at a scene call site — a
+// backpressure signal the orchestrator owns (queue full, tier down, ctx
+// expired). These are NEVER retried (FR-007, backpressure doctrine); only
+// parse/validation failures (the untyped errors) get one retry per site.
+type transportError struct{ err error }
+
+func (e transportError) Error() string { return e.err.Error() }
+
+// isTransport reports whether err is a scene transport/admission failure.
+func isTransport(err error) bool {
+	var te transportError
+	return errors.As(err, &te)
+}
+
+// rawOnParse returns raw only for a parse failure: a transport-error
+// abandonment carries no raw (contracts/telemetry.md §Terminal outcomes).
+func rawOnParse(err error, raw string) string {
+	if isTransport(err) {
+		return ""
+	}
+	return raw
+}
 
 // The conversation driver (TASK-8, scenes + fodder in TASK-22): when two
 // villagers talk (the executor's deterministic adjacency beat), the mind may
@@ -189,33 +213,84 @@ func (md *Mind) runConversation(cc convoCtx) {
 	transcript := []string{}
 	turns := 0
 	n := len(cc.idx)
+	// retried marks that the scene consumed at least one retry at either site
+	// (FR-005); it rides the terminal outcome so recovery rates are countable.
+	retried := false
+	// utteranceRetried is the utterance site's whole retry budget: ONE retry
+	// per scene (FR-002/FR-007), not one per turn — once spent, a later
+	// parse failure abandons all-or-nothing.
+	utteranceRetried := false
 	for t := 0; t < n*sim.ConvoTurnsPerSide; t++ {
 		sp := t % n // speaker position, round-robin
-		say, err := md.utterance(ctx, cc, sp, transcript)
+		say, raw, err := md.utterance(ctx, cc, sp, transcript)
 		if err != nil {
-			log.Printf("mind: conversation %d abandoned at turn %d: %v", cc.conv, t, err)
-			md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
-				fmt.Sprintf("abandoned at turn %d: %v", t, err), time.Since(sceneStart).Milliseconds()))
-			return // all-or-nothing: inject nothing
+			if isTransport(err) {
+				// Backpressure: abandon at once, never retried, no raw (FR-007).
+				log.Printf("mind: conversation %d abandoned at turn %d: %v", cc.conv, t, err)
+				md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+					fmt.Sprintf("abandoned at turn %d: %v", t, err),
+					time.Since(sceneStart).Milliseconds(), "", retried))
+				return // all-or-nothing: inject nothing
+			}
+			if utteranceRetried {
+				// The scene's one utterance retry is already spent (FR-002/
+				// FR-007): a second parse failure — even on a later turn —
+				// abandons, all-or-nothing.
+				log.Printf("mind: conversation %d abandoned at turn %d: utterance retry budget spent: %v", cc.conv, t, err)
+				md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+					fmt.Sprintf("abandoned at turn %d (utterance retry budget spent): %v", t, err),
+					time.Since(sceneStart).Milliseconds(), raw, retried))
+				return
+			}
+			// Spend the scene's one utterance retry: re-ask this same speaker
+			// (retry-not-skip, R1 — skipping breaks the round-robin invariant).
+			md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeRetried,
+				fmt.Sprintf("utterance turn %d: %v", t, err),
+				time.Since(sceneStart).Milliseconds(), raw, false))
+			utteranceRetried = true
+			retried = true
+			say, raw, err = md.utterance(ctx, cc, sp, transcript)
+			if err != nil {
+				log.Printf("mind: conversation %d abandoned at turn %d after retry: %v", cc.conv, t, err)
+				md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+					fmt.Sprintf("abandoned at turn %d after retry: %v", t, err),
+					time.Since(sceneStart).Milliseconds(), rawOnParse(err, raw), retried))
+				return // consecutive failure on the same turn: all-or-nothing
+			}
 		}
 		transcript = append(transcript, fmt.Sprintf("%s: %s", cc.names[sp], say))
 		turns++
 	}
-	out, err := md.outcome(ctx, cc, transcript)
+	out, raw, err := md.outcome(ctx, cc, transcript)
 	if err != nil {
-		log.Printf("mind: conversation %d outcome failed: %v", cc.conv, err)
-		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
-			"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds()))
-		return
+		if isTransport(err) {
+			log.Printf("mind: conversation %d outcome failed: %v", cc.conv, err)
+			md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+				"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds(), "", retried))
+			return
+		}
+		// A malformed summary discards a whole completed scene: re-request the
+		// identical summary once before abandoning (FR-001).
+		md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeRetried,
+			"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds(), raw, false))
+		retried = true
+		out, raw, err = md.outcome(ctx, cc, transcript)
+		if err != nil {
+			log.Printf("mind: conversation %d outcome failed after retry: %v", cc.conv, err)
+			md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+				"outcome: "+err.Error(), time.Since(sceneStart).Milliseconds(),
+				rawOnParse(err, raw), retried))
+			return
+		}
 	}
 	// Landing enforcement for scenes (FR-010): a completed scene that
 	// overran its staleness budget — the router admitted it, the tier was
 	// slower than predicted — must not act. All-or-nothing, recorded.
 	if st := md.tick.Load() - cc.conv; cc.meta.class.BudgetTicks > 0 && st > cc.meta.class.BudgetTicks {
 		log.Printf("mind: conversation %d stale at landing (%d ticks)", cc.conv, st)
-		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeRejectedStale,
+		md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeRejectedStale,
 			fmt.Sprintf("scene staleness %d > budget %d", st, cc.meta.class.BudgetTicks),
-			time.Since(sceneStart).Milliseconds()))
+			time.Since(sceneStart).Milliseconds(), "", retried))
 		return
 	}
 	// Tones arrive per participant; missing tail entries read neutral.
@@ -283,12 +358,12 @@ func (md *Mind) runConversation(cc convoCtx) {
 		})
 	}
 	// The scene and its terminal record land atomically.
-	batch = append(batch, md.cogOutcomeEvent(cc.meta, sim.OutcomeLanded, "",
-		time.Since(sceneStart).Milliseconds()))
+	batch = append(batch, md.cogSceneOutcome(cc.meta, sim.OutcomeLanded, "",
+		time.Since(sceneStart).Milliseconds(), "", retried))
 	if err := md.social.InjectSocial(batch); err != nil {
 		log.Printf("mind: conversation %d injection rejected: %v", cc.conv, err)
-		md.emitCog(md.cogOutcomeEvent(cc.meta, sim.OutcomeUnusable,
-			"injection rejected: "+err.Error(), time.Since(sceneStart).Milliseconds()))
+		md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+			"injection rejected: "+err.Error(), time.Since(sceneStart).Milliseconds(), "", retried))
 	} else {
 		log.Printf("mind: conversation %d landed (%d turns, %d participants)", cc.conv, turns, n)
 	}
@@ -298,7 +373,11 @@ func (md *Mind) runConversation(cc convoCtx) {
 // (-60..60), the same scale executor witness memories use.
 const convoMemoryToneScale = 30
 
-func (md *Mind) utterance(ctx context.Context, cc convoCtx, sp int, transcript []string) (string, error) {
+// utterance generates one dialogue turn. It returns the parsed say, the raw
+// model reply (for persistence on a parse failure), and an error: a
+// transportError on Submit/admission failure (never retried) or a plain parse
+// error (eligible for one retry).
+func (md *Mind) utterance(ctx context.Context, cc convoCtx, sp int, transcript []string) (string, string, error) {
 	var user strings.Builder
 	if len(cc.memories[sp]) > 0 {
 		user.WriteString("You remember:\n")
@@ -337,9 +416,13 @@ Reply with ONLY {"say": "<one or two short sentences in your voice>"}`,
 		MaxTokens: 128,
 	})
 	if err != nil {
-		return "", err
+		return "", "", transportError{err}
 	}
-	return parseSay(resp.Text)
+	say, err := parseSay(resp.Text)
+	if err != nil {
+		return "", resp.Text, err
+	}
+	return say, resp.Text, nil
 }
 
 type convoOutcome struct {
@@ -354,7 +437,10 @@ type convoOutcome struct {
 	RawToneB float64   `json:"tone_b"`
 }
 
-func (md *Mind) outcome(ctx context.Context, cc convoCtx, transcript []string) (convoOutcome, error) {
+// outcome condenses the transcript into durable social state. Like utterance
+// it returns the raw reply and distinguishes transportError (never retried)
+// from a parse error (one retry).
+func (md *Mind) outcome(ctx context.Context, cc convoCtx, transcript []string) (convoOutcome, string, error) {
 	note := "(none)"
 	if cc.tell != nil {
 		note = cc.tell.Text
@@ -363,8 +449,8 @@ func (md *Mind) outcome(ctx context.Context, cc convoCtx, transcript []string) (
 	prompt := fmt.Sprintf(`Summarize this exchange between %s:
 %s
 
-Reply with ONLY:
-{"gist": "<one sentence>", "topics": ["<1-3 short topic tags>"], "tones": [%s — one -2..2 integer per person, in that order], "retold": "<if %s passed on the note below, how they phrased it, else null>"}
+Reply with ONLY (gist and retold MUST be double-quoted JSON strings):
+{"gist": "<one sentence>", "topics": ["<1-3 short topic tags>"], "tones": [%s — one -2..2 integer per person, in that order], "retold": "<if %s passed on the note below, how they phrased it, else an empty string "">"}
 Note %s may pass on: %q`,
 		strings.Join(cc.names, ", "), strings.Join(transcript, "\n"),
 		strings.Join(cc.names, ", "), teller, teller, note)
@@ -372,9 +458,13 @@ Note %s may pass on: %q`,
 		Kind: llm.KindConversation, Prompt: prompt, MaxTokens: 224,
 	})
 	if err != nil {
-		return convoOutcome{}, err
+		return convoOutcome{}, "", transportError{err}
 	}
-	return parseOutcome(resp.Text)
+	out, err := parseOutcome(resp.Text)
+	if err != nil {
+		return convoOutcome{}, resp.Text, err
+	}
+	return out, resp.Text, nil
 }
 
 func (cc convoCtx) tellerName() int {

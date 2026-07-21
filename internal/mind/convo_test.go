@@ -1,6 +1,7 @@
 package mind
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -39,6 +40,394 @@ func convoScript(outcome string) []string {
 		replies = append(replies, `{"say": "`+lines[i%len(lines)]+`"}`)
 	}
 	return append(replies, outcome)
+}
+
+// countingModel returns queued replies and a transport error once they run
+// out, counting EVERY Submit (including the errored ones) — so a test can
+// prove that a transport failure was not retried.
+type countingModel struct {
+	mu      sync.Mutex
+	replies []string
+	calls   int
+}
+
+func (m *countingModel) Submit(_ context.Context, _ llm.Request) (llm.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls++
+	if m.calls > len(m.replies) {
+		return llm.Response{}, context.DeadlineExceeded
+	}
+	return llm.Response{Text: m.replies[m.calls-1], Tier: llm.TierLocal}, nil
+}
+
+// validSays returns the scene's utterance replies (no outcome).
+func validSays() []string {
+	lines := []string{"Cold morning.", "Aye, bitter.", "Fire held though.", "Barely."}
+	var r []string
+	for i := 0; i < 2*sim.ConvoTurnsPerSide; i++ {
+		r = append(r, `{"say": "`+lines[i%len(lines)]+`"}`)
+	}
+	return r
+}
+
+// sceneOutcomes collects the conversation-class cog.outcome payloads from a
+// full event dump, split into the single terminal record and any non-terminal
+// retried markers (contract §Compatibility).
+func sceneOutcomes(t *testing.T, all []store.Event) (terminal sim.CogOutcomePayload, markers []sim.CogOutcomePayload, terminals int) {
+	t.Helper()
+	for _, e := range all {
+		if e.Type != "cog.outcome" {
+			continue
+		}
+		var p sim.CogOutcomePayload
+		if json.Unmarshal(e.Payload, &p) != nil || p.Class != "conversation" {
+			continue
+		}
+		if p.Outcome == sim.OutcomeRetried {
+			markers = append(markers, p)
+			continue
+		}
+		terminal = p
+		terminals++
+	}
+	return terminal, markers, terminals
+}
+
+func startConvo(t *testing.T, h *harness, md *Mind) {
+	t.Helper()
+	md.maybeStartConversation(store.Event{
+		Tick: 100, Type: "agent.talked",
+		Payload: mustJSON(t, sim.TalkedPayload{A: 0, B: 1}),
+	})
+}
+
+// TestConvoOutcomeRetryLandsWhole (T007a / US1 / SC-001): a malformed first summary
+// reply is re-requested once; on success the scene lands whole with
+// retried:true, and the failed reply rode a non-terminal retried marker.
+func TestConvoOutcomeRetryLandsWhole(t *testing.T) {
+	badSummary := "the model rambles without json"
+	replies := append(validSays(),
+		badSummary,
+		`{"gist": "planned the firewood run", "topics": ["fire"], "tones": [1, 1], "retold": null}`)
+	model := &scriptedModel{replies: replies}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	if len(convs) == 0 {
+		t.Fatal("scene did not land after outcome retry")
+	}
+	var cp sim.ConversationPayload
+	json.Unmarshal(convs[0].Payload, &cp)
+	if cp.Turns != 2*sim.ConvoTurnsPerSide || cp.Gist == "" {
+		t.Errorf("scene not whole after retry: turns=%d gist=%q", cp.Turns, cp.Gist)
+	}
+
+	all, _ := h.st.EventsSince(0, 0)
+	term, markers, n := sceneOutcomes(t, all)
+	if n != 1 {
+		t.Fatalf("terminal outcomes = %d, want exactly 1", n)
+	}
+	if term.Outcome != sim.OutcomeLanded || !term.Retried {
+		t.Errorf("terminal = %q retried=%v, want landed retried=true", term.Outcome, term.Retried)
+	}
+	if term.Raw != "" {
+		t.Errorf("landed event must never carry raw, got %q", term.Raw)
+	}
+	if len(markers) != 1 {
+		t.Fatalf("retried markers = %d, want 1", len(markers))
+	}
+	if markers[0].Raw != badSummary {
+		t.Errorf("marker raw = %q, want verbatim %q", markers[0].Raw, badSummary)
+	}
+	if !strings.HasPrefix(markers[0].Reason, "outcome:") {
+		t.Errorf("marker reason should locate the site: %q", markers[0].Reason)
+	}
+}
+
+// TestConvoOutcomeDoubleFailureAbandons (T007b / US1): two consecutive malformed
+// summaries abandon the scene with no partial state; the terminal unusable
+// carries the RETRY's raw reply.
+func TestConvoOutcomeDoubleFailureAbandons(t *testing.T) {
+	replies := append(validSays(), "garbage one", "garbage two")
+	model := &scriptedModel{replies: replies}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	outcomes := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		var p sim.CogOutcomePayload
+		return e.Type == "cog.outcome" && json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	})
+	if len(outcomes) == 0 {
+		t.Fatal("double outcome failure never abandoned")
+	}
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if strings.HasPrefix(e.Type, "social.conversation") {
+			t.Fatalf("abandoned scene leaked %s", e.Type)
+		}
+	}
+	term, markers, _ := sceneOutcomes(t, all)
+	if !term.Retried || term.Raw != "garbage two" {
+		t.Errorf("terminal unusable: retried=%v raw=%q, want retried=true raw=%q", term.Retried, term.Raw, "garbage two")
+	}
+	if len(markers) != 1 || markers[0].Raw != "garbage one" {
+		t.Errorf("want one retried marker carrying %q, got %+v", "garbage one", markers)
+	}
+}
+
+// TestConvoOutcomeTransportErrorNoRetry (T007c / US1 / FR-007): a transport error
+// at the summary site abandons immediately — no retry, no raw.
+func TestConvoOutcomeTransportErrorNoRetry(t *testing.T) {
+	model := &countingModel{replies: validSays()} // no summary reply → outcome errors
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		var p sim.CogOutcomePayload
+		return e.Type == "cog.outcome" && json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	})
+	all, _ := h.st.EventsSince(0, 0)
+	term, markers, _ := sceneOutcomes(t, all)
+	if term.Raw != "" || term.Retried {
+		t.Errorf("transport abandon carried raw=%q retried=%v, want neither", term.Raw, term.Retried)
+	}
+	if len(markers) != 0 {
+		t.Errorf("transport error must not emit a retried marker: %+v", markers)
+	}
+	model.mu.Lock()
+	calls := model.calls
+	model.mu.Unlock()
+	// 2*ConvoTurnsPerSide utterances + exactly one (failed) outcome attempt:
+	// a retry would show as a further call.
+	if want := 2*sim.ConvoTurnsPerSide + 1; calls != want {
+		t.Errorf("Submit calls = %d, want %d (no retry on transport error)", calls, want)
+	}
+}
+
+// TestConvoUtteranceRetryCompletes (T009a / US2 / SC-002): one bad utterance is
+// retried on the same speaker; the scene completes with alternation intact and
+// lands retried:true.
+func TestConvoUtteranceRetryCompletes(t *testing.T) {
+	replies := []string{"garbage", `{"say": "Cold morning."}`}
+	for i := 1; i < 2*sim.ConvoTurnsPerSide; i++ {
+		replies = append(replies, `{"say": "Aye."}`)
+	}
+	replies = append(replies, `{"gist": "planned firewood", "topics": ["fire"], "tones": [1, 1], "retold": null}`)
+	model := &scriptedModel{replies: replies}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	if len(convs) == 0 {
+		t.Fatal("scene did not complete after utterance retry")
+	}
+	all, _ := h.st.EventsSince(0, 0)
+	// Alternation intact: turns come back in round-robin speaker order.
+	var speakers []int
+	for _, e := range all {
+		if e.Type == "social.conversation_turn" {
+			var p sim.ConversationTurnPayload
+			json.Unmarshal(e.Payload, &p)
+			speakers = append(speakers, p.Speaker)
+		}
+	}
+	if len(speakers) != 2*sim.ConvoTurnsPerSide {
+		t.Fatalf("turns = %d, want %d", len(speakers), 2*sim.ConvoTurnsPerSide)
+	}
+	// Founding pair A=0,B=1 → scene participants idx=[0,1], round-robin.
+	for i, sp := range speakers {
+		if want := i % 2; sp != want {
+			t.Errorf("turn %d speaker = %d, want %d (round-robin broken)", i, sp, want)
+		}
+	}
+	term, markers, n := sceneOutcomes(t, all)
+	if n != 1 || term.Outcome != sim.OutcomeLanded || !term.Retried {
+		t.Errorf("terminal = %q retried=%v (n=%d), want landed retried=true", term.Outcome, term.Retried, n)
+	}
+	if len(markers) != 1 || markers[0].Raw != "garbage" || !strings.HasPrefix(markers[0].Reason, "utterance turn 0:") {
+		t.Errorf("want one utterance retried marker for turn 0 carrying %q: %+v", "garbage", markers)
+	}
+}
+
+// TestConvoUtteranceDoubleFailureAbandons (T009b / US2): two consecutive bad
+// utterances abandon with nothing injected.
+func TestConvoUtteranceDoubleFailureAbandons(t *testing.T) {
+	model := &scriptedModel{replies: []string{"garbage", "still garbage"}}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		var p sim.CogOutcomePayload
+		return e.Type == "cog.outcome" && json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	})
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if strings.HasPrefix(e.Type, "social.conversation") {
+			t.Fatalf("abandoned scene leaked %s", e.Type)
+		}
+	}
+	term, _, _ := sceneOutcomes(t, all)
+	if !term.Retried || term.Raw != "still garbage" {
+		t.Errorf("terminal unusable: retried=%v raw=%q, want retried=true raw=%q", term.Retried, term.Raw, "still garbage")
+	}
+}
+
+// TestConvoUtteranceRetryOnFinalTurn (T009c / US2 edge case): a bad reply on the
+// scene's last utterance recovers and the outcome step still receives a
+// well-formed, full-length transcript.
+func TestConvoUtteranceRetryOnFinalTurn(t *testing.T) {
+	var replies []string
+	for i := 0; i < 2*sim.ConvoTurnsPerSide-1; i++ {
+		replies = append(replies, `{"say": "Aye."}`)
+	}
+	replies = append(replies, "garbage", `{"say": "Right then."}`,
+		`{"gist": "settled it", "topics": ["fire"], "tones": [1, 1], "retold": null}`)
+	model := &scriptedModel{replies: replies}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	if len(convs) == 0 {
+		t.Fatal("scene did not land after final-turn retry")
+	}
+	var cp sim.ConversationPayload
+	json.Unmarshal(convs[0].Payload, &cp)
+	if cp.Turns != 2*sim.ConvoTurnsPerSide {
+		t.Errorf("turns = %d, want full %d", cp.Turns, 2*sim.ConvoTurnsPerSide)
+	}
+	all, _ := h.st.EventsSince(0, 0)
+	if _, _, n := sceneOutcomes(t, all); n != 1 {
+		t.Errorf("terminal outcomes = %d, want 1", n)
+	}
+}
+
+// TestConvoUtteranceBudgetPerScene (US2 / FR-002 / FR-007): the utterance
+// retry budget is ONE per scene, not one per turn. Turn 0 fails then recovers
+// (spending the budget); a later turn-2 failure abandons the scene even though
+// the two failures are non-consecutive. At most one utterance retried marker;
+// no second retry Submit is made.
+func TestConvoUtteranceBudgetPerScene(t *testing.T) {
+	// t0 attempt (fail) → retry (ok) → t1 (ok) → t2 attempt (fail → abandon).
+	model := &countingModel{replies: []string{
+		"garbage", `{"say": "Cold."}`, `{"say": "Aye."}`, "garbage again",
+	}}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		var p sim.CogOutcomePayload
+		return e.Type == "cog.outcome" && json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	})
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if strings.HasPrefix(e.Type, "social.conversation") {
+			t.Fatalf("abandoned scene leaked %s", e.Type)
+		}
+	}
+	term, markers, _ := sceneOutcomes(t, all)
+	if len(markers) != 1 || markers[0].Raw != "garbage" {
+		t.Errorf("want exactly one utterance retried marker carrying %q, got %+v", "garbage", markers)
+	}
+	if !term.Retried || term.Raw != "garbage again" {
+		t.Errorf("terminal unusable: retried=%v raw=%q, want retried=true raw=%q", term.Retried, term.Raw, "garbage again")
+	}
+	if !strings.Contains(term.Reason, "budget spent") {
+		t.Errorf("terminal reason should name the spent budget: %q", term.Reason)
+	}
+	model.mu.Lock()
+	calls := model.calls
+	model.mu.Unlock()
+	// t0 attempt + t0 retry + t1 + t2 attempt = 4; a second retry would be a 5th.
+	if calls != 4 {
+		t.Errorf("Submit calls = %d, want 4 (no second utterance retry)", calls)
+	}
+}
+
+// TestConvoRawReplyRecoverableFromStore (T011 / US3 / SC-003): a parse failure's
+// verbatim reply is recoverable from the persisted event log and attributable
+// to the conversation job id.
+func TestConvoRawReplyRecoverableFromStore(t *testing.T) {
+	badSummary := `{"gist": broken and unquoted but too weird, "extra": nonsense here too`
+	replies := append(validSays(), badSummary,
+		`{"gist": "recovered", "topics": ["fire"], "tones": [1, 1], "retold": null}`)
+	model := &scriptedModel{replies: replies}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	all, _ := h.st.EventsSince(0, 0)
+	var found bool
+	for _, e := range all {
+		if e.Type != "cog.outcome" {
+			continue
+		}
+		var p sim.CogOutcomePayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Raw != "" {
+			found = true
+			if p.Raw != badSummary {
+				t.Errorf("raw = %q, want verbatim %q", p.Raw, badSummary)
+			}
+			if p.Job != "conversation-100" {
+				t.Errorf("raw not attributable: job = %q, want conversation-100", p.Job)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no raw reply persisted for the parse failure")
+	}
+}
+
+// TestConvoGoldenHappyPath (T017 / SC-004 / FR-009): an all-valid scene emits the
+// pre-change batch — no raw, no retried fields, no extra Submit calls.
+func TestConvoGoldenHappyPath(t *testing.T) {
+	model := &scriptedModel{replies: convoScript(
+		`{"gist": "planned firewood", "topics": ["fire"], "tones": [1, 1], "retold": null}`)}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	})
+	if len(convs) == 0 {
+		t.Fatal("happy-path scene never landed")
+	}
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if e.Type != "cog.outcome" {
+			continue
+		}
+		var p sim.CogOutcomePayload
+		if json.Unmarshal(e.Payload, &p) != nil || p.Class != "conversation" {
+			continue
+		}
+		// The new fields must be omitempty-absent from the serialized payload.
+		if bytes.Contains(e.Payload, []byte(`"retried"`)) || bytes.Contains(e.Payload, []byte(`"raw"`)) {
+			t.Errorf("happy-path outcome carries new fields: %s", e.Payload)
+		}
+		if p.Outcome != sim.OutcomeLanded {
+			t.Errorf("outcome = %q, want landed", p.Outcome)
+		}
+	}
+	model.mu.Lock()
+	calls := model.calls
+	model.mu.Unlock()
+	if want := 2*sim.ConvoTurnsPerSide + 1; calls != want {
+		t.Errorf("Submit calls = %d, want %d (no extra calls on the happy path)", calls, want)
+	}
 }
 
 func setupConvo(t *testing.T, model Submitter) (*harness, *Mind) {

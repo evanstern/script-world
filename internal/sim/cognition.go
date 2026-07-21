@@ -19,6 +19,11 @@ const (
 	OutcomeUnavailable   = "rejected-unavailable"
 	OutcomeUnusable      = "unusable"
 	OutcomeSuppressed    = "suppressed"
+	// OutcomeRetried is a NON-TERMINAL marker (TASK-42, conversation
+	// robustness): one scene reply failed to parse and the scene continued
+	// via one retry. It carries the failed reply's raw text; consumers that
+	// sum job completions MUST filter it out (contracts/telemetry.md rule 1).
+	OutcomeRetried = "retried"
 )
 
 // Rejection classification (FR-013): prediction-miss is an infrastructure
@@ -69,6 +74,12 @@ type CogOutcomePayload struct {
 	ActualWallMs    int64  `json:"actual_wall_ms"`
 	Kind            string `json:"kind,omitempty"`
 	Reason          string `json:"reason,omitempty"`
+	// Raw / Retried (TASK-42): raw is the verbatim model reply on a scene
+	// parse failure (bounded, truncated on a rune boundary); retried marks a
+	// terminal scene outcome whose run consumed ≥1 retry. Both omitempty, so
+	// every pre-TASK-42 emission stays byte-identical (FR-009).
+	Raw     string `json:"raw,omitempty"`
+	Retried bool   `json:"retried,omitempty"`
 }
 
 // IntentRejectedPayload — agent.intent_rejected: the loop refused a landing

@@ -5,11 +5,39 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/evanstern/script-world/internal/llm"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 )
+
+// TestConvoRawTruncation (TASK-42 T004): oversized raw replies are cut on a rune
+// boundary with a marker, stay ≤ cap, and remain valid UTF-8; small replies
+// pass through untouched.
+func TestConvoRawTruncation(t *testing.T) {
+	if got := truncateRaw("short reply"); got != "short reply" {
+		t.Errorf("small reply mutated: %q", got)
+	}
+	// A reply of multi-byte runes (é = 2 bytes) longer than the cap must cut
+	// mid-string without splitting a rune.
+	big := strings.Repeat("é", rawReplyCap) // 2*cap bytes
+	got := truncateRaw(big)
+	if len(got) > rawReplyCap {
+		t.Errorf("truncated length %d exceeds cap %d", len(got), rawReplyCap)
+	}
+	if !strings.HasSuffix(got, rawTruncMarker) {
+		t.Errorf("missing truncation marker: %q", got[len(got)-20:])
+	}
+	if !utf8.ValidString(got) {
+		t.Error("truncation split a rune (invalid UTF-8)")
+	}
+	// Exactly at the cap: no truncation.
+	exact := strings.Repeat("a", rawReplyCap)
+	if got := truncateRaw(exact); got != exact {
+		t.Error("reply at the cap should not be truncated")
+	}
+}
 
 // TestPlannerTelemetryLanded (US1): a successful planner thought leaves a
 // cog.thought and exactly one landed cog.outcome sharing its job id, with
