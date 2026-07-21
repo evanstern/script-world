@@ -7,7 +7,7 @@ sources:
   - internal/sim/agents.go
   - internal/sim/plan.go
   - internal/sim/terrain.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Executor
@@ -75,8 +75,10 @@ debt, give to a starving neighbor, or talk (chat-while-working, cooldown-bounded
 with a verbatim rumor fallback — and the hourly due-check breaks overdue debts
 (also emitting a `norm.violated` when a repay-debts norm is in force — [[governance]]).
 `stepEvents` further runs the whole governance layer (TASK-13, `governanceEvents` in
-`governance.go`): the daily meeting lifecycle (11:30 convene with attendee intent
-pinning to `attend_meeting`, noon open, speaking-turn beats, timebox+grace close)
+`governance.go`): the daily meeting lifecycle — gated since TASK-36 on an
+event-sourced meeting convention (convene at the convention's hour with attendee
+intent pinning to `attend_meeting`, open, speaking-turn beats, timebox+grace
+close; no convention → the per-minute emergent-gathering watch runs instead) —
 and the per-minute curfew/exile violation detectors. `attend_meeting` is the one
 intent goal the executor sets itself (never planner-choosable): arrival idles at
 the meeting place until close, and stale pins clear when the meeting ends.

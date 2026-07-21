@@ -6,7 +6,7 @@ sources:
   - internal/store/store.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Snapshots
