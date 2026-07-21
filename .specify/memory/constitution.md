@@ -1,18 +1,22 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.0.1 (PATCH: worktree-location refinement in Principle II)
+- Version change: 1.0.1 → 1.1.0 (MINOR: Principle V materially expanded to a three-tier
+  model scheme; spec-rigor rule added to Development Workflow)
 - Modified principles:
-  - II. One Task, One PR — worktrees relocated from sibling directories
-    (../script-world-task-<N>) to the repo-local, gitignored `.worktrees/` folder
-- Added sections: none
+  - V. Model-Tiered Workflow — two-tier (plan/implement) split expanded to three tiers
+    (Fable 5 planning / Opus 4.8 senior implementation / Sonnet implementation) with an
+    escalation rubric; rubric operationalized in .claude/agents/spec-implementer.md
+- Added sections:
+  - Development Workflow — spec-rigor rule: non-trivial TASKs MUST run full Spec Kit
+    before implementation; explicit triviality exemption criteria
 - Removed sections: none
 - Templates:
   - ✅ .specify/templates/plan-template.md — Constitution Check gate is generic; unaffected
   - ✅ .specify/templates/spec-template.md — no constitution references; unaffected
   - ✅ .specify/templates/tasks-template.md — no constitution references; unaffected
   - ✅ .specify/templates/checklist-template.md — no constitution references; unaffected
-  - ✅ CLAUDE.md — worktree section updated to the `.worktrees/` convention
-  - ✅ .gitignore — `.worktrees/` entry added
+  - ✅ CLAUDE.md — Model-tiered workflow section rewritten to match (three tiers + spec rigor)
+  - ✅ .claude/agents/spec-implementer.md — escalation rubric added
 - Follow-up TODOs: none
 -->
 
@@ -63,24 +67,31 @@ and specs built on it.
 
 ### V. Model-Tiered Workflow
 
-Planning and implementation run on different model tiers, and the split is enforced by
-delegation, not discipline:
+Work runs on three model tiers, and the split is enforced by delegation, not discipline:
 
-- **Planning-stage work runs on Claude Fable 5** (Mythos-class): writing specs
-  (`speckit-specify`), plans (`speckit-plan`), task generation (`speckit-tasks`),
-  clarification/analysis, and board/task creation.
-- **Implementation of specs runs on Claude Sonnet by default** (`speckit-implement`,
-  `build:implement`); Claude Opus MAY be used for high-complexity specs at the
-  orchestrator's discretion.
-- Implementation MUST execute in subagents pinned to the implementing model — the
-  `.claude/agents/spec-implementer.md` agent definition — never inline on the planning
-  model. The planning model orchestrates, reviews, and gates; it does not write the
-  implementation itself.
+- **Planning tier — Claude Fable 5** (Mythos-class): writing specs (`speckit-specify`),
+  clarification (`speckit-clarify`), plans (`speckit-plan`), task generation
+  (`speckit-tasks`), analysis, board/task creation, gating, and review of implementer
+  reports. The planning tier NEVER writes implementation code inline.
+- **Senior implementation tier — Claude Opus 4.8**: implements high-complexity slices —
+  cross-package or architectural changes; concurrency, scheduling, or governor logic
+  (`internal/llm`, `internal/cognition`, `internal/mind` orchestration); doctrine-adjacent
+  behavior changes; and any slice whose prior Sonnet attempt failed gates or shipped live
+  defects. Also runs adversarial verification passes when the orchestrator requests them.
+- **Implementation tier — Claude Sonnet** (default): implements routine and mechanical
+  slices — single-package features, view/rendering code, tests alongside code, doc
+  reconciliation.
+
+Implementation MUST execute in subagents pinned to the implementing model — the
+`.claude/agents/spec-implementer.md` agent definition, which carries the escalation
+rubric — never inline on the planning model. Tier escalation is one-way (Sonnet → Opus,
+via the Agent tool's `model` parameter); the orchestrator records the tier choice and its
+rubric justification on the board task.
 
 **Rationale:** the highest-capability tier is spent where judgment concentrates (specs,
-plans, decomposition); execution of a well-specified plan is delegated to
-cost-appropriate tiers, and pinning the model in the agent definition makes the split
-mechanical rather than aspirational.
+plans, decomposition, gating); execution is matched to slice complexity so quality-risk
+concentrates on the senior tier and cost concentrates on the routine tier. Pinning models
+in the agent definition makes the split mechanical rather than aspirational.
 
 ## Additional Constraints
 
@@ -103,6 +114,19 @@ Plans MUST pass the plan template's Constitution Check gate before Phase 0 resea
 re-check it after Phase 1 design; violations require an explicit Complexity Tracking
 entry justifying why no simpler alternative suffices.
 
+**Spec rigor:** every non-trivial TASK MUST go through full Spec Kit — `speckit-specify`
+→ `speckit-clarify` (where ambiguity exists) → `speckit-plan` → `speckit-tasks` →
+implementation — with the spec directory linked to the board via `spec-bridge:link`
+BEFORE implementation starts. A TASK qualifies as trivial ONLY when all of the following
+hold: the fix is surgical (single mechanism, narrow blast radius), the diagnosis is
+complete and pinned to evidence (file:line root cause recorded on the task), and
+acceptance criteria live on the board task. Trivial TASKs still follow Principles I–III
+and V (adopted 2026-07-21; precedent: TASK-44).
+
+**Rationale:** implementation launched from an under-specified task fails at a much
+higher rate than implementation launched from a spec that survived clarify/analyze —
+observed directly in this project when work jumped straight from board notes to code.
+
 ## Governance
 
 This constitution supersedes ad-hoc practice for the areas it covers. Amendments are made
@@ -113,4 +137,4 @@ PATCH for clarifications. Every plan's Constitution Check MUST verify compliance
 the version named in its footer; runtime development guidance lives in `CLAUDE.md` and
 MUST stay consistent with this document.
 
-**Version**: 1.0.1 | **Ratified**: 2026-07-20 | **Last Amended**: 2026-07-20
+**Version**: 1.1.0 | **Ratified**: 2026-07-20 | **Last Amended**: 2026-07-21

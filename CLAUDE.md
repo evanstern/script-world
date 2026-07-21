@@ -82,20 +82,31 @@ Features are specified with GitHub Spec Kit (`specify`) under `specs/NNN-<featur
 <!-- pdlc:peer:spec-kit END -->
 <!-- pdlc:grounding END -->
 
-## Model-tiered workflow (constitution Principle V)
+## Model-tiered workflow (constitution Principle V, v1.1.0)
 
-Planning and implementation run on different model tiers, enforced by delegation
-(`.specify/memory/constitution.md`, Principle V):
+Three tiers, enforced by delegation (`.specify/memory/constitution.md`, Principle V):
 
-- **Fable 5 plans:** specs (`speckit-specify`), plans (`speckit-plan`), task generation
-  (`speckit-tasks`), clarify/analyze, and board/task creation stay on the main session's
-  planning model.
-- **Sonnet/Opus implements:** when executing implementation tasks (`speckit-implement`,
-  `build:implement`, or any tasks.md/SPEC execution), delegate the code-writing to the
-  `spec-implementer` agent (`.claude/agents/spec-implementer.md`, pinned to Sonnet;
-  override to Opus via the Agent tool's `model` param for high-complexity specs) —
-  never implement inline on the planning model. The planning model orchestrates,
-  reviews the agent's findings, and gates.
+- **Fable 5 plans and gates:** specs (`speckit-specify`), clarify, plans (`speckit-plan`),
+  task generation (`speckit-tasks`), analysis, board/task creation, and review/gating of
+  implementer reports stay on the main session's planning model. Never implements inline.
+- **Opus 4.8 implements the hard slices:** cross-package/architectural changes;
+  concurrency/scheduling/governor logic (`internal/llm`, `internal/cognition`,
+  `internal/mind` orchestration); doctrine-adjacent behavior changes; any slice whose
+  prior Sonnet attempt failed gates or shipped live defects; adversarial verification
+  passes on request. Select via the Agent tool's `model` param on the
+  `spec-implementer` agent.
+- **Sonnet implements the routine slices (default):** single-package features,
+  view/rendering code, tests alongside code, doc reconciliation.
+
+The escalation rubric lives in `.claude/agents/spec-implementer.md`; escalation is
+one-way Sonnet → Opus, and the tier choice + rubric justification is recorded on the
+board task.
+
+**Spec rigor (constitution, Development Workflow):** every non-trivial TASK runs full
+Spec Kit (specify → clarify where ambiguous → plan → tasks → implement) with the spec
+linked to the board via `spec-bridge:link` BEFORE implementation starts. Trivial
+exemption only when ALL hold: surgical fix, complete file:line diagnosis pinned on the
+task, and ACs on the board task.
 
 ## Git worktrees — root stays on main, branches live in `.worktrees/`
 
