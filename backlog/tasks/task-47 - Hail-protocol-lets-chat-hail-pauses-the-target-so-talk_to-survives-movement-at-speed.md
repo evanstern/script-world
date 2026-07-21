@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 15:47'
-updated_date: '2026-07-21 16:36'
+updated_date: '2026-07-21 17:03'
 labels:
   - bug
   - feature
@@ -52,12 +52,12 @@ Spec: specs/010-hail-protocol
 - [ ] #2 Hailed target pauses without abandoning its plan: pause expires safely and prior intent/plan resumes if the hailer never arrives
 - [ ] #3 Hail path is deterministic sim logic — zero LLM calls; hail and expiry are emitted as events visible in scriptworld tail
 - [ ] #4 Un-interruptible states (e.g. sleeping, mid-conversation) are exempt from being paused by a hail
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #7 Spec phase: User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 - A stood-up target resumes its life safely (Priority: P2)
-- [ ] #9 Spec phase: User Story 3 - Un-interruptible villagers are left alone (Priority: P2)
-- [ ] #10 Spec phase: User Story 4 - Hails are visible to the observer (Priority: P3)
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 - A stood-up target resumes its life safely (Priority: P2)
+- [x] #9 Spec phase: User Story 3 - Un-interruptible villagers are left alone (Priority: P2)
+- [x] #10 Spec phase: User Story 4 - Hails are visible to the observer (Priority: P3)
 - [ ] #11 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
@@ -69,4 +69,10 @@ Baseline evidence (myworld-01, 2026-07-21, local tier at speed): in ~30 min of w
 spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 0/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 0/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 0/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 0/1 · Polish & Cross-Cutting Concerns: 0/4
 
 Tier decision (constitution V rubric): implementation delegated to spec-implementer on **Opus 4.8** — the slice changes the cognition-horizon landing ladder in internal/sim/loop.go (doctrine-adjacent behavior change: guard-failure outcomes for talk_to) and executor scheduling behavior (pause suppression in the per-agent step). Planning/spec/tasks authored on Fable 5.
+
+Implementation complete on branch task-47-hail-protocol (2 commits, T002-T018 all checked in spec tasks.md on the branch). Full gate green incl. e2e. PR #28 open: https://github.com/evanstern/script-world/pull/28. Diff reviewed by orchestrator: rung order matches contracts/events.md, talkEvents extraction byte-order-preserving, no double-emit in sweep. Known acceptable race: meeting pin set while paused delays attendance <=8 game-min (research D7 priority holds). Remaining: T019 live before/after measurement, merge, T020 wiki re-ground.
+
+spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 2/4
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 2/4
 <!-- SECTION:NOTES:END -->

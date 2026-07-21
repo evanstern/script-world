@@ -15,7 +15,7 @@ spec's Independent Test criteria are executable only as `internal/sim` unit test
 
 **Purpose**: branch/worktree per constitution Principle II
 
-- [ ] T001 Create worktree `.worktrees/task-47` on branch `task-47-hail-protocol` from fresh `origin/main` (`git worktree add .worktrees/task-47 -b task-47-hail-protocol origin/main`); all subsequent tasks execute inside it
+- [X] T001 Create worktree `.worktrees/task-47` on branch `task-47-hail-protocol` from fresh `origin/main` (`git worktree add .worktrees/task-47 -b task-47-hail-protocol origin/main`); all subsequent tasks execute inside it
 
 ---
 
