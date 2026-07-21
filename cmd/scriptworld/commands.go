@@ -25,6 +25,7 @@ import (
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/tui"
 	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/script-world/internal/worlds"
 )
 
 func dirArg(fs *flag.FlagSet, args []string) (string, error) {
@@ -317,32 +318,25 @@ func cmdStatus(args []string) error {
 		return nil
 	}
 
-	// Offline: last-known state from the store, read-only.
-	st, err := store.Open(w.DBPath())
+	// Offline: last-known state from the store, read-only (shared with
+	// `ps --all`'s stopped rows — specs/008-instance-manager D7).
+	tick, paused, speed, lastSeq, err := worlds.OfflineSnapshot(w)
 	if err != nil {
 		return err
-	}
-	defer st.Close()
-	state := sim.NewState(w.Manifest.Seed, w.Map())
-	if snap, err := st.LatestValidSnapshot(); err == nil && snap != nil {
-		json.Unmarshal(snap.State, state)
-	}
-	if lastTick, err := st.LastEventTick(); err == nil && lastTick > state.Tick {
-		state.Tick = lastTick
 	}
 	if *asJSON {
 		return printJSON(map[string]any{
 			"world":  map[string]any{"name": w.Manifest.Name, "seed": w.Manifest.Seed, "format_version": w.Manifest.FormatVersion},
 			"daemon": map[string]any{"running": false},
 			"clock": map[string]any{
-				"tick": state.Tick, "game_time": clock.Format(state.Tick),
-				"paused": state.Paused, "speed": string(state.Speed),
+				"tick": tick, "game_time": clock.Format(tick),
+				"paused": paused, "speed": speed,
 			},
-			"log": map[string]any{"last_seq": st.LastSeq()},
+			"log": map[string]any{"last_seq": lastSeq},
 		})
 	}
 	fmt.Printf("world %q (seed %d) — daemon not running\nlast known: tick %d (%s), speed %s, paused %v\nlog: last seq %d\n",
-		w.Manifest.Name, w.Manifest.Seed, state.Tick, clock.Format(state.Tick), state.Speed, state.Paused, st.LastSeq())
+		w.Manifest.Name, w.Manifest.Seed, tick, clock.Format(tick), speed, paused, lastSeq)
 	return nil
 }
 

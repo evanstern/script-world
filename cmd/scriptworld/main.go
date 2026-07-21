@@ -11,6 +11,7 @@ const usage = `scriptworld — the always-on script-world daemon and client
 
 Usage:
   scriptworld new <dir> [--name NAME] [--seed N]   create a new world
+  scriptworld ps [--all] [--json]                  list world daemons machine-wide
   scriptworld daemon <dir>                         run the daemon in the foreground
   scriptworld start <dir>                          start a detached daemon
   scriptworld stop <dir>                           gracefully stop the daemon
@@ -37,6 +38,8 @@ func main() {
 	switch cmd {
 	case "new":
 		err = cmdNew(args)
+	case "ps":
+		err = cmdPs(args)
 	case "daemon":
 		err = cmdDaemon(args)
 	case "start":
