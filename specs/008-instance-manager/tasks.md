@@ -22,7 +22,7 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 **Purpose**: Branch/worktree per constitution Principle II; no scaffolding needed (existing module).
 
-- [ ] T001 Create worktree `.worktrees/task-43` on branch `task-43-instance-manager` from fresh `origin/main` (`git fetch origin && git worktree add .worktrees/task-43 -b task-43-instance-manager origin/main`); confirm `go build ./...` and `go test ./...` are green at baseline
+- [X] T001 Create worktree `.worktrees/task-43` on branch `task-43-instance-manager` from fresh `origin/main` (`git fetch origin && git worktree add .worktrees/task-43 -b task-43-instance-manager origin/main`); confirm `go build ./...` and `go test ./...` are green at baseline
 
 ---
 
@@ -32,10 +32,10 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 [P] Create `internal/worlds/home.go`: `Root()` (`$SCRIPTWORLD_HOME` else `~/.scriptworld`), `WorldsHome()` (`<root>/worlds`), `RegistryPath()` (`<root>/known_worlds.json`), `ValidateName(name)` per data-model.md rules (non-empty, no `/`, no leading `-` or `.`); unit tests in `internal/worlds/home_test.go` covering override env var and every validation rule
-- [ ] T003 [P] Create `internal/worlds/registry.go`: registry file shape `{"worlds":{name:{path}}}` per data-model.md; `LoadRegistry()` tolerant of missing/corrupt file (⇒ empty, never error), `Upsert(name, path)` atomic (temp+rename, prunes entries whose dir lacks readable `world.json` and entries whose path is inside the current worlds home); unit tests in `internal/worlds/registry_test.go` including corrupt-file, prune-on-write, and moved-world upsert-by-name repair
-- [ ] T004 Create `internal/worlds/resolve.go`: `IsPathArg(arg)` (contains `/` or leading `.`/`~` — D3), `Resolve(arg)` returning the world dir with worlds-home-first order, `ErrAmbiguous` listing both candidate paths, not-found error naming the searched worlds home and suggesting `scriptworld ps --all` (FR-007/FR-011); unit tests in `internal/worlds/resolve_test.go` for the full decision table in data-model.md (depends on T002, T003)
-- [ ] T005 Create `internal/worlds/discover.go`: `Discover()` returning deduped candidates = worlds-home scan (immediate subdirs with `world.json`; unreadable manifests flagged, never fatal) ∪ registry entries (missing dirs flagged); unit tests in `internal/worlds/discover_test.go` (depends on T002, T003)
+- [X] T002 [P] Create `internal/worlds/home.go`: `Root()` (`$SCRIPTWORLD_HOME` else `~/.scriptworld`), `WorldsHome()` (`<root>/worlds`), `RegistryPath()` (`<root>/known_worlds.json`), `ValidateName(name)` per data-model.md rules (non-empty, no `/`, no leading `-` or `.`); unit tests in `internal/worlds/home_test.go` covering override env var and every validation rule
+- [X] T003 [P] Create `internal/worlds/registry.go`: registry file shape `{"worlds":{name:{path}}}` per data-model.md; `LoadRegistry()` tolerant of missing/corrupt file (⇒ empty, never error), `Upsert(name, path)` atomic (temp+rename, prunes entries whose dir lacks readable `world.json` and entries whose path is inside the current worlds home); unit tests in `internal/worlds/registry_test.go` including corrupt-file, prune-on-write, and moved-world upsert-by-name repair
+- [X] T004 Create `internal/worlds/resolve.go`: `IsPathArg(arg)` (contains `/` or leading `.`/`~` — D3), `Resolve(arg)` returning the world dir with worlds-home-first order, `ErrAmbiguous` listing both candidate paths, not-found error naming the searched worlds home and suggesting `scriptworld ps --all` (FR-007/FR-011); unit tests in `internal/worlds/resolve_test.go` for the full decision table in data-model.md (depends on T002, T003)
+- [X] T005 Create `internal/worlds/discover.go`: `Discover()` returning deduped candidates = worlds-home scan (immediate subdirs with `world.json`; unreadable manifests flagged, never fatal) ∪ registry entries (missing dirs flagged); unit tests in `internal/worlds/discover_test.go` (depends on T002, T003)
 
 **Checkpoint**: `go test ./internal/worlds/` green — user story phases can begin.
 
@@ -49,7 +49,7 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 ### Implementation for User Story 1
 
-- [ ] T006 [P] [US1] Create `internal/worlds/probe.go`: per-candidate classification per the data-model.md state machine (`running|paused|unresponsive|stopped|missing|unreadable`) — pidfile pre-filter (reuse `daemon.IsRunning`), bounded dial+`status` call (~1s per-world budget) run concurrently across candidates (D2, SC-001 < 2s), offline last-known clock via store snapshot + last event tick (extract/share the logic currently in `cmdStatus`'s offline branch, `cmd/scriptworld/commands.go:320-346`); unit tests in `internal/worlds/probe_test.go` for classification (fake pidfiles/sockets)
+- [X] T006 [P] [US1] Create `internal/worlds/probe.go`: per-candidate classification per the data-model.md state machine (`running|paused|unresponsive|stopped|missing|unreadable`) — pidfile pre-filter (reuse `daemon.IsRunning`), bounded dial+`status` call (~1s per-world budget) run concurrently across candidates (D2, SC-001 < 2s), offline last-known clock via store snapshot + last event tick (extract/share the logic currently in `cmdStatus`'s offline branch, `cmd/scriptworld/commands.go:320-346`); unit tests in `internal/worlds/probe_test.go` for classification (fake pidfiles/sockets)
 - [ ] T007 [US1] Register worlds on daemon boot: in `internal/daemon/daemon.go` `Run()`, after `world.Open`/pidfile acquisition, best-effort `worlds.Upsert(manifest name, dir)` iff dir is outside the current worlds home — failure logs and continues, never fatal (D1/D6, FR-008) (depends on T003)
 - [ ] T008 [US1] Create `cmd/scriptworld/ps.go`: `cmdPs` — discovery (T005) + probe (T006), human table per contracts/cli.md (`NAME STATE PID TICK GAME TIME SPEED LLM PATH`, `no worlds running` when empty, exit 0), `--all` adds non-live states, `--json` array reusing `status --json` vocabulary + `name`/`path`/`state` (`llm` presence ⇒ on; stopped worlds get `llm_configured` from `llm.json` existence); output-shaping tests in `cmd/scriptworld/ps_test.go` (depends on T006)
 - [ ] T009 [US1] Wire `ps` into `cmd/scriptworld/main.go`: dispatch case + usage text line (`scriptworld ps [--all] [--json]`) (depends on T008)
