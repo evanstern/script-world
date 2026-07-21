@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -706,6 +707,209 @@ func TestBestEffortSlotAware(t *testing.T) {
 	}
 	if d := time.Since(start); d > 100*time.Millisecond {
 		t.Errorf("best-effort refusal must be immediate, took %v", d)
+	}
+}
+
+// TestEstimatorSampleCountUnderConcurrency (US3, FR-004): under N-wide load
+// the estimator observes exactly one sample per completed call — no lost or
+// double counts — and the estimate moves off its seed.
+func TestEstimatorSampleCountUnderConcurrency(t *testing.T) {
+	var hits atomic.Int64
+	local := mockLocal(t, &hits)
+	cfg := testConfig(local.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = 8
+	o := newOrch(t, cfg, testStore(t))
+
+	seed := o.tiers[TierLocal].est.Estimate()
+	const n = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"}); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("planner call: %v", err)
+	}
+	est, _, samples, _ := o.tiers[TierLocal].est.Stats()
+	if samples != n {
+		t.Errorf("estimator samples = %d, want %d (one per completed call)", samples, n)
+	}
+	if est == seed {
+		t.Errorf("estimate did not move from seed %v under concurrent load", seed)
+	}
+	if hits.Load() != n {
+		t.Errorf("server hits = %d, want %d", hits.Load(), n)
+	}
+}
+
+// TestBreakerConsecutiveUnderConcurrency (US3, FR-005): under concurrent
+// failures the breaker counts exactly, opens only on failuresToOpen
+// CONSECUTIVE failures, and a success resets the run — proven by driving each
+// batch concurrently and gating on completion between batches.
+func TestBreakerConsecutiveUnderConcurrency(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(lastUserPrompt(r), "fail") {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		localReplyJSON(w)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = 4
+	o := newOrch(t, cfg, testStore(t))
+	local := o.tiers[TierLocal]
+
+	// fire submits n concurrent calls and blocks until all have replied, so
+	// the breaker's fail()/succeed() bookkeeping is fully settled after it.
+	fire := func(prompt string, n int, wantErr bool) {
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: prompt})
+				if (err != nil) != wantErr {
+					t.Errorf("prompt %q: err=%v, wantErr=%v", prompt, err, wantErr)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+
+	// One short of the threshold: not enough to open (exact count, no over-count).
+	fire("fail", failuresToOpen-1, true)
+	if local.health.down() {
+		t.Fatalf("breaker opened after only %d failures (threshold %d)", failuresToOpen-1, failuresToOpen)
+	}
+	// A success resets the consecutive run to zero.
+	fire("ok", 1, false)
+	if local.health.down() {
+		t.Fatal("breaker down after a healthy call")
+	}
+	// Another sub-threshold burst: total failures now exceed the threshold,
+	// but they are not consecutive — the breaker must stay closed.
+	fire("fail", failuresToOpen-1, true)
+	if local.health.down() {
+		t.Fatalf("breaker opened on non-consecutive failures — success failed to reset the run")
+	}
+	// One more consecutive failure crosses the threshold.
+	fire("fail", 1, true)
+	if !local.health.down() {
+		t.Fatalf("breaker did not open after %d consecutive failures", failuresToOpen)
+	}
+}
+
+// TestReplyIntegrityUnderConcurrency (US3, FR-005): a failing call never
+// corrupts another caller's reply. With the breaker held out of the way, every
+// successful caller gets ITS OWN echoed prompt back and every failing caller
+// gets an error — no crossed wires under N-wide load (-race validated).
+func TestReplyIntegrityUnderConcurrency(t *testing.T) {
+	old := failuresToOpen
+	failuresToOpen = 1 << 30 // isolate reply routing from breaker behavior
+	defer func() { failuresToOpen = old }()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := lastUserPrompt(r)
+		if strings.HasPrefix(p, "fail") {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": p}}}, // echo
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = 8
+	o := newOrch(t, cfg, testStore(t))
+
+	// Stay within the tier's admission capacity (slots + queueCap) so this
+	// stays a reply-routing test, not a backpressure one.
+	const n = 30
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			fail := i%2 == 0
+			prompt := fmt.Sprintf("ok-%d", i)
+			if fail {
+				prompt = fmt.Sprintf("fail-%d", i)
+			}
+			resp, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: prompt})
+			if fail {
+				if err == nil {
+					t.Errorf("%s: expected error, got success %q", prompt, resp.Text)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("%s: unexpected error %v", prompt, err)
+				return
+			}
+			if resp.Text != prompt {
+				t.Errorf("reply crossed wires: caller %q received %q", prompt, resp.Text)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// TestMeterExactUnderConcurrency (US3, FR-006, SC-005): concurrent cloud
+// completions through the 1-slot cloud tier, interleaved with direct concurrent
+// Meter.Add calls, sum to the exact expected total. Prices are chosen so every
+// cost is exactly representable, so the assertion is exact equality.
+func TestMeterExactUnderConcurrency(t *testing.T) {
+	var hits atomic.Int64
+	cloud := mockCloud(t, &hits)
+	cfg := testConfig("http://unused.invalid", cloud.URL, 1e9)
+	cfg.Cloud.InputUSDPerMTok = 10000 // 100 input tokens → exactly $1.00 per call
+	cfg.Cloud.OutputUSDPerMTok = 0
+	o := newOrch(t, cfg, testStore(t))
+
+	const calls = 20
+	const adders = 10
+	const perAdd = 2.0
+	var wg sync.WaitGroup
+	for i := 0; i < calls; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := o.Submit(context.Background(), Request{Kind: KindNarrator, Prompt: "x"}); err != nil {
+				t.Errorf("cloud call: %v", err)
+			}
+		}()
+	}
+	for i := 0; i < adders; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := o.meter.Add(perAdd); err != nil {
+				t.Errorf("meter add: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	want := float64(calls)*1.0 + float64(adders)*perAdd
+	_, spent, _ := o.meter.Snapshot()
+	if spent != want {
+		t.Errorf("meter spend = %v, want exactly %v", spent, want)
+	}
+	if hits.Load() != calls {
+		t.Errorf("cloud hits = %d, want %d", hits.Load(), calls)
 	}
 }
 

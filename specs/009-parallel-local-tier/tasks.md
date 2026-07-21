@@ -85,8 +85,8 @@ empty, a best-effort musing is admitted; with all 4 slots parked, it gets
 
 ### Implementation for User Story 3
 
-- [ ] T009 [US3] Race-proof accounting tests in internal/llm/llm_test.go, run under `-race`: (a) N concurrent successful local calls → estimator `Stats()` sample count equals call count and estimate moved (FR-004); (b) concurrent failures/successes → breaker opens only on `failuresToOpen` consecutive failures, one failing call never corrupts others' replies (FR-005); (c) concurrent completions on a 1-slot cloud tier plus direct concurrent `Meter.Add` exercise → final `Snapshot()` spend equals the exact sum of costs (FR-006, SC-005)
-- [ ] T010 [US3] Full verification sweep: `go test ./... -race -count=1` green from the worktree root; `go vet ./...` clean (SC-003 whole-suite gate)
+- [x] T009 [US3] Race-proof accounting tests in internal/llm/llm_test.go, run under `-race`: (a) N concurrent successful local calls → estimator `Stats()` sample count equals call count and estimate moved (FR-004); (b) concurrent failures/successes → breaker opens only on `failuresToOpen` consecutive failures, one failing call never corrupts others' replies (FR-005); (c) concurrent completions on a 1-slot cloud tier plus direct concurrent `Meter.Add` exercise → final `Snapshot()` spend equals the exact sum of costs (FR-006, SC-005)
+- [x] T010 [US3] Full verification sweep: `go test ./... -race -count=1` green from the worktree root; `go vet ./...` clean (SC-003 whole-suite gate)
 
 **Checkpoint**: all three stories proven; package race-clean.
 
