@@ -21,20 +21,20 @@ func TestIsWidescreen(t *testing.T) {
 	}
 }
 
-// TestComputeColumns is layout.md's "Column budget": the dock holds 44
-// cols until the map would otherwise shrink below its 73-col target, then
-// the dock gives up columns (down to a 36-col floor) before the map does.
+// TestComputeColumns is layout.md's "Column budget": map and dock split
+// 50/50 (minus the 1-col gutter), with the map taking the odd leftover
+// column when (total - gutter) is odd.
 func TestComputeColumns(t *testing.T) {
 	cases := []struct {
-		total        int
-		wantDock     int
-		wantMap      int
-		wantMapFixed bool // map should equal 73 (unaffected by the shrink)
+		total    int
+		wantDock int
+		wantMap  int
 	}{
-		{200, dockWidthMax, 200 - 1 - dockWidthMax, false},
-		{118, dockWidthMax, mapWidthTarget, true},
-		{112, 38, mapWidthTarget, true}, // dock shrinks, map holds its target
-		{100, dockWidthMin, 100 - 1 - dockWidthMin, false},
+		{200, (200 - 1) / 2, 200 - 1 - (200-1)/2},
+		{118, (118 - 1) / 2, 118 - 1 - (118-1)/2},
+		{112, 55, 56}, // (112-1)=111 odd: dock floors to 55, map takes the extra column
+		{113, 56, 56}, // 112 even: splits exactly
+		{100, (100 - 1) / 2, 100 - 1 - (100-1)/2},
 	}
 	for _, c := range cases {
 		got := computeColumns(c.total)
@@ -47,8 +47,9 @@ func TestComputeColumns(t *testing.T) {
 		if got.MapCols+got.Gutter+got.DockCols != c.total {
 			t.Errorf("computeColumns(%d) columns don't sum to total: %+v", c.total, got)
 		}
-		if got.DockCols < dockWidthMin || got.DockCols > dockWidthMax {
-			t.Errorf("computeColumns(%d).DockCols = %d out of [%d,%d]", c.total, got.DockCols, dockWidthMin, dockWidthMax)
+		if got.MapCols < got.DockCols {
+			t.Errorf("computeColumns(%d): map (%d) should never be smaller than dock (%d) — map takes the odd column",
+				c.total, got.MapCols, got.DockCols)
 		}
 	}
 }
@@ -78,12 +79,13 @@ func TestComputeRows(t *testing.T) {
 	}
 }
 
-// TestMapViewportTiles: 2 terminal columns per tile, minus border/legend
-// overhead; never below 1x1.
+// TestMapViewportTiles: 2 terminal columns per tile, minus border+padding
+// (B1: styleBox's Padding(0,1) eats 2 more columns beyond the border, a
+// budget that was originally missed) and the legend row; never below 1x1.
 func TestMapViewportTiles(t *testing.T) {
 	w, h := mapViewportTiles(74, 30)
-	if w != (74-2)/2 {
-		t.Errorf("tilesW = %d, want %d", w, (74-2)/2)
+	if w != (74-4)/2 {
+		t.Errorf("tilesW = %d, want %d", w, (74-4)/2)
 	}
 	if h != 30-3 {
 		t.Errorf("tilesH = %d, want %d", h, 30-3)

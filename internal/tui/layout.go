@@ -9,16 +9,10 @@ package tui
 // (map ‖ dock) renders instead of today's single-pane narrow fallback.
 const widescreenBreakpoint = 112
 
-// Column budget constants (widescreen). The dock holds steady at
-// dockWidthMax until the terminal narrows past the point where the map
-// would otherwise shrink below mapWidthTarget; below that, the dock gives
-// up columns down to dockWidthMin before the map gives up any.
-const (
-	dockWidthMax   = 44
-	dockWidthMin   = 36
-	gutterCols     = 1
-	mapWidthTarget = 118 - dockWidthMax - gutterCols // 73: map width once dock is at max
-)
+// Column budget constants (widescreen). The map and dock split the
+// terminal 50/50 (patterns/layout.md "Column budget") — the map takes the
+// odd leftover column when (width - gutter) doesn't divide evenly.
+const gutterCols = 1
 
 // Row budget constants (widescreen).
 const (
@@ -37,21 +31,17 @@ type columnBudget struct {
 	DockCols int
 }
 
-// computeColumns splits totalCols between the map and the dock. The dock
-// shrinks (down to dockWidthMin) before the map gives up its target width;
-// see docs/design/tui/patterns/layout.md "Column budget".
+// computeColumns splits totalCols 50/50 between the map and the dock (a
+// planning decision superseding the earlier fixed-44-col dock — see
+// docs/design/tui/patterns/layout.md "Column budget"); the map takes the
+// odd column when (totalCols - gutter) is odd.
 func computeColumns(totalCols int) columnBudget {
-	dock := totalCols - gutterCols - mapWidthTarget
-	if dock > dockWidthMax {
-		dock = dockWidthMax
+	avail := totalCols - gutterCols
+	if avail < 0 {
+		avail = 0
 	}
-	if dock < dockWidthMin {
-		dock = dockWidthMin
-	}
-	mapCols := totalCols - gutterCols - dock
-	if mapCols < 0 {
-		mapCols = 0
-	}
+	dock := avail / 2
+	mapCols := avail - dock
 	return columnBudget{MapCols: mapCols, Gutter: gutterCols, DockCols: dock}
 }
 
@@ -76,9 +66,9 @@ func computeRows(totalRows int) rowBudget {
 
 // mapViewportTiles converts a panel's (cols, rows) into terrain tiles: 2
 // terminal columns per tile (same family as today's vw/vh computation),
-// minus room for the panel's border and legend row.
+// minus room for the panel's border+padding and legend row.
 func mapViewportTiles(panelCols, panelRows int) (tilesW, tilesH int) {
-	tilesW = (panelCols - 2) / 2 // border eats ~2 cols
+	tilesW = (panelCols - 4) / 2 // border (2) + the box style's Padding(0,1) (2) — B1
 	if tilesW < 1 {
 		tilesW = 1
 	}
