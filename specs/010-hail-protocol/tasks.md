@@ -25,10 +25,10 @@ spec's Independent Test criteria are executable only as `internal/sim` unit test
 
 **⚠️ CRITICAL**: no user story work until this phase completes
 
-- [ ] T002 Add `AgentHail` type (`By int`, `Until int64`) and `Hail *AgentHail json:"hail,omitempty"` field on `Agent`, plus `HailedPayload{From,To,Until}`, `HailMetPayload{From,To}`, `HailExpiredPayload{From,To}` payload structs (fields serialize as `from`/`to`/`until`) in internal/sim/agents.go
-- [ ] T003 Create internal/sim/hail.go with tunables `hailRadius = 64`, `hailWindowTicks = 480` and pure predicates `hailable(s, hailer, target)` and `hailPaused(a, tick)` per data-model.md (alive, awake, not already hailed, not an active hailer, not meeting-pinned, within radius)
-- [ ] T004 Add reducer cases in internal/sim/state.go: `social.hailed` sets target `Hail`, `social.hail_met` / `social.hail_expired` clear it; extend existing `agent.died` and `agent.slept` cases to clear `Hail` (contracts/events.md)
-- [ ] T005 [P] Foundational tests in internal/sim/hail_test.go: reducer lifecycle transitions (set → met/expired/died/slept clears) and snapshot round-trip — canonical bytes unchanged for un-hailed agents, `Hail` survives marshal/unmarshal mid-pause (FR-010)
+- [X] T002 Add `AgentHail` type (`By int`, `Until int64`) and `Hail *AgentHail json:"hail,omitempty"` field on `Agent`, plus `HailedPayload{From,To,Until}`, `HailMetPayload{From,To}`, `HailExpiredPayload{From,To}` payload structs (fields serialize as `from`/`to`/`until`) in internal/sim/agents.go
+- [X] T003 Create internal/sim/hail.go with tunables `hailRadius = 64`, `hailWindowTicks = 480` and pure predicates `hailable(s, hailer, target)` and `hailPaused(a, tick)` per data-model.md (alive, awake, not already hailed, not an active hailer, not meeting-pinned, within radius)
+- [X] T004 Add reducer cases in internal/sim/state.go: `social.hailed` sets target `Hail`, `social.hail_met` / `social.hail_expired` clear it; extend existing `agent.died` and `agent.slept` cases to clear `Hail` (contracts/events.md)
+- [X] T005 [P] Foundational tests in internal/sim/hail_test.go: reducer lifecycle transitions (set → met/expired/died/slept clears) and snapshot round-trip — canonical bytes unchanged for un-hailed agents, `Hail` survives marshal/unmarshal mid-pause (FR-010)
 
 **Checkpoint**: state machine exists and round-trips; no behavior yet
 
@@ -45,12 +45,12 @@ adjacent → `social.hail_met` + `agent.talked` despite fresh cooldown.
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Add the hail rung to the landing ladder in internal/sim/loop.go `handleCommand` (`inject_intent`): on `target_present` guard failure for a `talk_to` landing, (a) target is actor's own hailer → proceed as adapted with no new hail; (b) `hailable` → proceed as adapted; otherwise reject with the existing reason (contracts/events.md rung order; guard.go stays untouched)
-- [ ] T007 [US1] Emit `social.hailed` (until = tick + `hailWindowTicks`) after every successful/adapted `talk_to` landing whose target is hailable, in internal/sim/loop.go — including in-radius landings (FR-001, research D2)
-- [ ] T008 [US1] Emit `social.hailed` on plan-step `talk_to` firing when target is hailable in internal/sim/plan.go `planStepEvents`
-- [ ] T009 [US1] Enforce the pause in internal/sim/executor.go per-agent step: an agent with active hail (`hailPaused`) skips the reflex branch, plan-step evaluation, and en-route movement; `executeAtTarget` still runs when already standing on its intent target; needs decay and social participation unaffected (FR-004, research D3)
-- [ ] T010 [US1] Implement the per-tick hail sweep met-branch in internal/sim/hail.go (`hailStep`), wired into `stepEvents` in internal/sim/executor.go before the per-agent loop: hailer within Manhattan ≤ 1 of paused target → emit `social.hail_met` + `agent.talked` + the ambient beat's relation/memory event shape, bypassing `canTalk` (FR-006, research D4)
-- [ ] T011 [P] [US1] US1 tests in internal/sim/hail_test.go: distance-35 landing → adapted outcome + hail + pause; in-radius landing also hails; arrival founds talk despite fresh `LastTalk`; paused target emits no `agent.moved` across the window; hailer's seek completes normally
+- [X] T006 [US1] Add the hail rung to the landing ladder in internal/sim/loop.go `handleCommand` (`inject_intent`): on `target_present` guard failure for a `talk_to` landing, (a) target is actor's own hailer → proceed as adapted with no new hail; (b) `hailable` → proceed as adapted; otherwise reject with the existing reason (contracts/events.md rung order; guard.go stays untouched)
+- [X] T007 [US1] Emit `social.hailed` (until = tick + `hailWindowTicks`) after every successful/adapted `talk_to` landing whose target is hailable, in internal/sim/loop.go — including in-radius landings (FR-001, research D2)
+- [X] T008 [US1] Emit `social.hailed` on plan-step `talk_to` firing when target is hailable in internal/sim/plan.go `planStepEvents`
+- [X] T009 [US1] Enforce the pause in internal/sim/executor.go per-agent step: an agent with active hail (`hailPaused`) skips the reflex branch, plan-step evaluation, and en-route movement; `executeAtTarget` still runs when already standing on its intent target; needs decay and social participation unaffected (FR-004, research D3)
+- [X] T010 [US1] Implement the per-tick hail sweep met-branch in internal/sim/hail.go (`hailStep`), wired into `stepEvents` in internal/sim/executor.go before the per-agent loop: hailer within Manhattan ≤ 1 of paused target → emit `social.hail_met` + `agent.talked` + the ambient beat's relation/memory event shape, bypassing `canTalk` (FR-006, research D4)
+- [X] T011 [P] [US1] US1 tests in internal/sim/hail_test.go: distance-35 landing → adapted outcome + hail + pause; in-radius landing also hails; arrival founds talk despite fresh `LastTalk`; paused target emits no `agent.moved` across the window; hailer's seek completes normally
 
 **Checkpoint**: MVP — conversations survive movement at speed in unit-verifiable form
 
@@ -65,8 +65,8 @@ window; `social.hail_expired` recorded, intent/plan byte-identical, movement res
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Add the expiry branch to `hailStep` in internal/sim/hail.go: `tick >= Until` and hailer not adjacent → emit `social.hail_expired`; adjacency (met) checked first so met wins the same-tick race (FR-005, data-model.md)
-- [ ] T013 [P] [US2] US2 tests in internal/sim/hail_test.go: expiry event lands at the right tick; target's `Intent` and `Plan` byte-identical pre-pause vs post-expiry (SC-003); needs kept decaying during pause; movement resumes on the next move-cadence tick after expiry
+- [X] T012 [US2] Add the expiry branch to `hailStep` in internal/sim/hail.go: `tick >= Until` and hailer not adjacent → emit `social.hail_expired`; adjacency (met) checked first so met wins the same-tick race (FR-005, data-model.md)
+- [X] T013 [P] [US2] US2 tests in internal/sim/hail_test.go: expiry event lands at the right tick; target's `Intent` and `Plan` byte-identical pre-pause vs post-expiry (SC-003); needs kept decaying during pause; movement resumes on the next move-cadence tick after expiry
 
 **Checkpoint**: US1 and US2 independently green
 
@@ -81,8 +81,8 @@ active-hailer targets emit no hail; out-of-radius landings against them reject a
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] Verify/complete exemption coverage end-to-end: `hailable` exemptions from T003 exercised through the landing path in internal/sim/loop.go (no hail event, fallback to today's present-radius verdict) and through plan-step firing in internal/sim/plan.go (FR-009)
-- [ ] T015 [P] [US3] US3 tests in internal/sim/hail_test.go: full hailable matrix (asleep, dead, meeting-pinned, already-hailed, active-hailer, out-of-hail-range); mutual-hail scenario ends in a meeting, never two frozen agents (research D6); second hail against a paused target neither re-targets nor extends `Until` (spec US3-3)
+- [X] T014 [US3] Verify/complete exemption coverage end-to-end: `hailable` exemptions from T003 exercised through the landing path in internal/sim/loop.go (no hail event, fallback to today's present-radius verdict) and through plan-step firing in internal/sim/plan.go (FR-009)
+- [X] T015 [P] [US3] US3 tests in internal/sim/hail_test.go: full hailable matrix (asleep, dead, meeting-pinned, already-hailed, active-hailer, out-of-hail-range); mutual-hail scenario ends in a meeting, never two frozen agents (research D6); second hail against a paused target neither re-targets nor extends `Until` (spec US3-3)
 
 **Checkpoint**: all behavioral stories functional
 
@@ -97,7 +97,7 @@ active-hailer targets emit no hail; out-of-radius landings against them reject a
 
 ### Implementation for User Story 4
 
-- [ ] T016 [US4] Add table-driven cases to internal/tui/grammar_test.go asserting the three hail event types render with resolved agent names via the existing `from`/`to` resolution (classDefault path — no grammar.go change expected; if resolution gaps surface, fix in internal/tui/grammar.go)
+- [X] T016 [US4] Add table-driven cases to internal/tui/grammar_test.go asserting the three hail event types render with resolved agent names via the existing `from`/`to` resolution (classDefault path — no grammar.go change expected; if resolution gaps surface, fix in internal/tui/grammar.go)
 
 **Checkpoint**: all four stories done
 
@@ -105,8 +105,8 @@ active-hailer targets emit no hail; out-of-radius landings against them reject a
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T017 Extend the replay/determinism coverage in internal/sim/sim_test.go (or hail_test.go using the same harness): a scripted run containing hailed → met and hailed → expired sequences replays from the event log to an identical state hash (SC-004)
-- [ ] T018 Full gate inside the worktree: `go build ./... && go vet ./... && go test ./...` all green (quickstart.md)
+- [X] T017 Extend the replay/determinism coverage in internal/sim/sim_test.go (or hail_test.go using the same harness): a scripted run containing hailed → met and hailed → expired sequences replays from the event log to an identical state hash (SC-004)
+- [X] T018 Full gate inside the worktree: `go build ./... && go vet ./... && go test ./...` all green (quickstart.md)
 - [ ] T019 Live before/after measurement per quickstart.md on the baseline world shape (local tier, 8x): record "is gone" rejection count, conversation count, and hail met/expired mix on TASK-47 via `backlog task edit TASK-47 --append-notes` (SC-001, SC-002)
 - [ ] T020 Post-merge re-grounding: run `/grounding-wiki:wiki-update` for wiki notes whose sources changed (sim-loop, executor, sim-state-reducer, event-types, cognition) — constitution Principle IV
 

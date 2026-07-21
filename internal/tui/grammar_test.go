@@ -113,6 +113,32 @@ func TestFormatChronicleLineDefault(t *testing.T) {
 	}
 }
 
+// TestFormatChronicleLineHail: the three TASK-47 hail types land in
+// classDefault and render with from/to resolved to agent names via the
+// existing payload-name resolution — no grammar.go change needed for
+// observability (FR-008, research D8).
+func TestFormatChronicleLineHail(t *testing.T) {
+	cases := []struct {
+		eventType string
+		payload   string
+		want      string
+	}{
+		{"social.hailed", `{"from":1,"to":3,"until":12345}`, `{"from":"Birch","to":"Rowan","until":12345}`},
+		{"social.hail_met", `{"from":1,"to":3}`, `{"from":"Birch","to":"Rowan"}`},
+		{"social.hail_expired", `{"from":0,"to":2}`, `{"from":"Ash","to":"Cedar"}`},
+	}
+	for _, c := range cases {
+		e := store.Event{Seq: 1, Tick: 1, Type: c.eventType, Payload: json.RawMessage(c.payload)}
+		l := formatChronicleLine(e, testNames)
+		if l.Class != classDefault {
+			t.Errorf("%s class = %v, want classDefault", c.eventType, l.Class)
+		}
+		if l.Payload != c.want {
+			t.Errorf("%s payload = %q, want %q", c.eventType, l.Payload, c.want)
+		}
+	}
+}
+
 // TestResolvePayloadNames: order preserved, unrelated fields untouched,
 // out-of-range indices fall back to the raw match.
 func TestResolvePayloadNames(t *testing.T) {
