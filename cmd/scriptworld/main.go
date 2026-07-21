@@ -32,6 +32,8 @@ Usage:
   scriptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon
                                                    (kinds: planner, conversation, musing,
                                                     consolidation, narrator, drama)
+  scriptworld calibrate <world> [--tier local|cloud|all] [--samples N]
+                                                   benchmark seconds-per-point, write calibration.json
 `
 
 func main() {

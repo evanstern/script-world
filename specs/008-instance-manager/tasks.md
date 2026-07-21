@@ -92,7 +92,7 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T016 [P] Reconcile user-facing docs: README.md command examples and `specs/001-world-daemon/contracts/cli.md` cross-reference note (base contract now extended by `specs/008-instance-manager/contracts/cli.md`); ensure `scriptworld help` usage text matches contracts/cli.md exactly
+- [X] T016 [P] Reconcile user-facing docs: README.md command examples and `specs/001-world-daemon/contracts/cli.md` cross-reference note (base contract now extended by `specs/008-instance-manager/contracts/cli.md`); ensure `scriptworld help` usage text matches contracts/cli.md exactly
 - [ ] T017 Run the full quickstart.md walkthrough against a fresh build (hermetic `SCRIPTWORLD_HOME`) and the complete suite `go test ./... && go test ./e2e/`; fix anything it surfaces; record the run in the PR description
 
 ---
