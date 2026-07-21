@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 8b8e05827ef3a52f8b87469179a11d36ce968114
 ---
 
 # LLM orchestrator
@@ -34,7 +34,15 @@ always-on local model); the cloud tier is provider-selectable
 cache-read rates on repeat calls; `openai_compat` reuses the chat-completions
 caller for OpenAI-compatible routers (e.g. a LAN-local 9router), requires
 `cloud.endpoint`, and pins `stream: false` because some routers stream by
-default.
+default. The chat-completions body also carries `max_tokens` (from
+`Request.MaxTokens`, when positive) and a per-tier `reasoning_effort`
+(TASK-37): thinking-default models (gemma4 on Ollama) otherwise free-run
+hidden chain-of-thought on every call — live diagnosis measured 2–6 s
+calls inflated to 60–120 s, enough to saturate the tier and shed every
+musing — and the compat endpoint ignores `think: false` but honors
+`reasoning_effort`. The value arrives at `newOpenAICompat` already
+resolved (`resolveReasoningEffort`); empty means the field is omitted
+from the body.
 
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
 queue the worker drains first — dialogue turns are interactive, while planner
@@ -91,7 +99,14 @@ keys are never stored — only the *name* of an environment variable (`api_key_e
 default `ANTHROPIC_API_KEY`). The one exception is the optional inline `api_key`
 (both tiers), intended solely for keys that guard LAN-local routers; when both are
 set the inline key wins. Provider values are validated at load time (`LoadConfig`
-rejects unknown providers and `openai_compat` without an endpoint).
+rejects unknown providers and `openai_compat` without an endpoint). Both tiers
+carry an optional `reasoning_effort` (`*string`, TASK-37) with a nil/""
+convention resolved by `resolveReasoningEffort`: local absent defaults to
+`"none"` (interiority prose never needs hidden reasoning, and local latency is
+the cap on sim speed), while an explicit `""` sends nothing — the escape hatch
+for backends that reject the field; cloud absent or `""` sends nothing, and the
+field only applies on the `openai_compat` transport (the Anthropic SDK path is
+untouched).
 
 ## Connections
 
