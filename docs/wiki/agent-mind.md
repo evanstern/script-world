@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: acd2cd91f85396f28706e357b8c1676a3597ccd8
 ---
 
 # Agent mind
@@ -49,7 +49,10 @@ on governance events ([[governance]]). The files are regenerable views — the e
 log remains the only truth, so souls survive restarts and travel with the save dir.
 
 **The mind driver** (`internal/mind`): a replica fed by the loop's notify fan-out;
-per-agent cadence (1800 ticks, staggered by index) plus triggers — wake, completion
+per-agent cadence (1800 ticks, staggered by index; since TASK-44 the stagger is
+phase-preserving — every re-arm steps in whole cadence multiples from the agent's
+own due via `nextPhasePreservingDue`, never from the current tick, so a shared
+stall cannot collapse agents into lockstep) plus triggers — wake, completion
 idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floored
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
@@ -103,7 +106,9 @@ mode. The daemon also installs `RecalibrateSignal` as the orchestrator's drift
 hook: an estimator spike-rate breach lands as `cog.recalibration_recommended`.
 
 **Musings** (TASK-21): between planner calls each agent has a 15-game-minute
-best-effort musing cadence (staggered half a slot off the planner stagger).
+best-effort musing cadence (staggered half a slot off the planner stagger; the
+same TASK-44 phase-preserving re-arm applies, so drops and busy stretches never
+merge the per-agent phases).
 A musing is one `llm.KindMusing` call (same situation + memory window, a
 plain-sentence system frame, MaxTokens 48) whose reply lands as a single
 `agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
