@@ -82,6 +82,23 @@ Features are specified with GitHub Spec Kit (`specify`) under `specs/NNN-<featur
 <!-- pdlc:peer:spec-kit END -->
 <!-- pdlc:grounding END -->
 
+## Git worktrees — root stays on main
+
+The root checkout (`~/evan/script-world`) is **pinned to `main`** — never check out a
+task branch there. All branch work happens in sibling worktrees.
+
+- **Create:** when starting a TASK branch, make a worktree instead of switching:
+  `git worktree add ../script-world-task-<N> -b task-<N>-<slug> origin/main`
+  (sibling dir named `script-world-task-<N>`, matching the task id). Do the work,
+  commit, and open the PR from inside that worktree.
+- **Root freshness:** keep the root current with `git fetch origin && git pull --ff-only`
+  — at session start and always before cutting a new worktree, so branches fork from
+  fresh `origin/main`.
+- **Cleanup:** after a TASK's PR merges, `git worktree remove ../script-world-task-<N>`,
+  delete the branch (`git branch -d …`), and ff-pull the root.
+- One TASK, one worktree — this is the same "one task, one branch, one PR" rule; the
+  worktree is just where that branch lives.
+
 ## educate — Socratic learning layer (planted by educate:start, adapted for PDLC)
 
 This project also hosts **educate** lessons (Socratic grounding/Q&A sessions) under
