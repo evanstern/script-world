@@ -40,10 +40,10 @@ debts, nightly memory consolidation, the nocturnal gru, a cloud-narrated chronic
 (the catch-up mechanism), **Metatron** (TASK-12): the player's sole influence
 channel, conversing in the TUI console, mediating dreams and omens on a regenerating
 charge economy, governed by `charter.md` — the game's only player-editable prompt —
-and **norms and votes** (TASK-13): the village legislates itself at a daily noon
-meeting, proposals and votes resolving deterministically off the relationship graph,
-with the agreed law living in `village_charter.md` and witnessed violations feeding
-memories, grudges, and gossip.
+and **norms and votes** (TASK-13): the village legislates itself at a village meeting
+whose hour is a convention (per-world config or emergent), proposals and votes
+resolving deterministically off the relationship graph, with the agreed law living in
+`village_charter.md` and witnessed violations feeding memories, grudges, and gossip.
 
 ```sh
 go build ./cmd/scriptworld
@@ -53,11 +53,13 @@ scriptworld start ~/worlds/demo           # detached daemon; the world now runs 
 scriptworld status ~/worlds/demo          # tick, game time, speed
 scriptworld attach ~/worlds/demo          # watch events live; pause/resume/speed/quit
 scriptworld pause ~/worlds/demo           # pause is a player verb (detaching is not)
+scriptworld resume ~/worlds/demo          # counterpart of pause
 scriptworld speed ~/worlds/demo max       # real-time up to as-fast-as-affordable
 scriptworld tail ~/worlds/demo --follow   # stream the event log
 scriptworld ui ~/worlds/demo              # full-screen TUI: map, chronicle, metatron, souls
 scriptworld metatron ~/worlds/demo "who thrives, who struggles?"   # converse with your angel
 scriptworld stop ~/worlds/demo            # graceful stop; kill -9 also resumes lossless
+scriptworld help                          # full command list incl. daemon, llm, calibrate
 ```
 
 Default speed is 4x: 1 game minute per 15 real seconds; the watchable ladder tops at
