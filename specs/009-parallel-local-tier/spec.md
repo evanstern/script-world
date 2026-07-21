@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-21
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Parallel local LLM tier: the daemon's LLM orchestrator currently runs exactly one worker per tier, serializing every local-model call. Evidence from live session 2026-07-21: 130s queue waits behind 19s calls caused rejected-stale planner intents; best-effort musings dropped as 'tier busy' herds; conversation scenes starved. The local server already parallelizes natively (measured: 4 concurrent cogito:3b calls complete in 0.98s wall vs 3.8s for one cold call). Feature: a `parallel` setting in llm.json's local tier config (default 1) that runs N concurrent workers against the local tier; best-effort admission accounts for free slots; the cognition estimator's samples reflect true concurrent-rate latency; queue/prio semantics, health/breaker behavior, and the monthly spend meter remain correct under concurrency. Out of scope: per-class/per-provider model routing (TASK-35), cloud tier parallelism. Board task: TASK-45."
 
@@ -166,7 +166,11 @@ converged seconds-per-point against wall-clock measurements of the same calls.
 - Default concurrency stays 1 to preserve existing worlds byte-for-byte; opting in is a
   per-world configuration decision.
 - A practical upper cap on configured concurrency is acceptable (protects against
-  pathological configs); the exact cap is an implementation-plan decision.
+  pathological configs); the exact cap is an implementation-plan decision. **Resolved:
+  the cap is 16** (delegated to plan.md; rationale in research.md R2 — `queueCap` is 32,
+  and 16 slots exceed any measured local-server benefit while bounding pathological
+  configs). Out-of-range values clamp (never error): `< 1 → 1`, `> 16 → 16`, each with a
+  daemon boot-line warning; absent/0 stays 1.
 - Sequential-vs-concurrent calibration discrepancy (recorded on TASK-40) is mitigated,
   not owned, here: this feature makes live estimates honest; calibration procedure
   changes remain TASK-40 scope.
