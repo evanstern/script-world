@@ -1,10 +1,10 @@
 ---
 id: TASK-43
 title: 'World instance manager — ps/start/stop by name, default worlds home'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 14:01'
-updated_date: '2026-07-21 20:19'
+updated_date: '2026-07-21 20:26'
 labels: []
 dependencies: []
 ordinal: 37500
@@ -20,17 +20,19 @@ Spec: specs/008-instance-manager
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 scriptworld ps lists every running world machine-wide with name, state, pid, tick, game time, speed, LLM on/off — no false 'running' from stale files
-- [ ] #2 new <worldname> creates in the default worlds home; explicit paths still work everywhere; worlds remain self-contained copyable directories
-- [ ] #3 All per-world commands accept a name or a path; path invocations behave exactly as before
-- [ ] #4 Manager state is advisory and self-healing; a world runs with no manager state present
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #7 Spec phase: User Story 1 — See everything that is running (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — Create and address worlds by name (Priority: P2)
-- [ ] #9 Spec phase: User Story 3 — Manage custom-path worlds by name (Priority: P3)
-- [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #1 scriptworld ps lists every running world machine-wide with name, state, pid, tick, game time, speed, LLM on/off — no false 'running' from stale files
+- [x] #2 new <worldname> creates in the default worlds home; explicit paths still work everywhere; worlds remain self-contained copyable directories
+- [x] #3 All per-world commands accept a name or a path; path invocations behave exactly as before
+- [x] #4 Manager state is advisory and self-healing; a world runs with no manager state present
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 1 — See everything that is running (Priority: P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — Create and address worlds by name (Priority: P2)
+- [x] #9 Spec phase: User Story 3 — Manage custom-path worlds by name (Priority: P3)
+- [x] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
+
+
 
 ## Implementation Plan
 
@@ -48,4 +50,12 @@ spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/4 · Us
 Model tier (constitution V rubric): Sonnet — new leaf package internal/worlds + CLI plumbing; only concurrency is a bounded fan-out status probe with no shared mutable state, below the governor/scheduler bar reserved for Opus. Escalation one-way to Opus if a slice fails gates.
 
 Implementation complete: spec 008 T001–T017 all done on branch task-43-instance-manager (9 commits). PR #30 open (https://github.com/evanstern/script-world/pull/30), mergeable/clean, awaiting merge (merge action gated to user). Full suite green fresh (-count=1) incl. e2e; quickstart walkthrough 8/8 PASS. Post-merge remaining: wiki-update (cmd/scriptworld, internal/daemon, internal/world touched), spec-bridge sync to Done, worktree cleanup.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — See everything that is running (Priority: P1) 🎯 MVP: 5/5 · User Story 2 — Create and address worlds by name (Priority: P2): 3/3 · User Story 3 — Manage custom-path worlds by name (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — See everything that is running (Priority: P1) 🎯 MVP: 5/5 · User Story 2 — Create and address worlds by name (Priority: P2): 3/3 · User Story 3 — Manage custom-path worlds by name (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
