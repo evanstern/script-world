@@ -4,7 +4,7 @@ title: 'World instance manager — ps/start/stop by name, default worlds home'
 status: In Progress
 assignee: []
 created_date: '2026-07-21 14:01'
-updated_date: '2026-07-21 19:06'
+updated_date: '2026-07-21 20:19'
 labels: []
 dependencies: []
 ordinal: 37500
@@ -46,4 +46,6 @@ spec-bridge sync:  — status To Do → In Progress
 spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/4 · User Story 1 — See everything that is running (Priority: P1) 🎯 MVP: 0/5 · User Story 2 — Create and address worlds by name (Priority: P2): 0/3 · User Story 3 — Manage custom-path worlds by name (Priority: P3): 0/2 · Polish & Cross-Cutting Concerns: 0/2
 
 Model tier (constitution V rubric): Sonnet — new leaf package internal/worlds + CLI plumbing; only concurrency is a bounded fan-out status probe with no shared mutable state, below the governor/scheduler bar reserved for Opus. Escalation one-way to Opus if a slice fails gates.
+
+Implementation complete: spec 008 T001–T017 all done on branch task-43-instance-manager (9 commits). PR #30 open (https://github.com/evanstern/script-world/pull/30), mergeable/clean, awaiting merge (merge action gated to user). Full suite green fresh (-count=1) incl. e2e; quickstart walkthrough 8/8 PASS. Post-merge remaining: wiki-update (cmd/scriptworld, internal/daemon, internal/world touched), spec-bridge sync to Done, worktree cleanup.
 <!-- SECTION:NOTES:END -->
