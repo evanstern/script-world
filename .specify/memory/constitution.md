@@ -1,22 +1,18 @@
 <!--
 Sync Impact Report
-- Version change: [template, unversioned] → 1.0.0 (initial ratification)
-- Modified principles: none (all five principles newly defined)
-  - I. Artifact-Grounded Action
-  - II. One Task, One PR
-  - III. Gates Over Assertions
-  - IV. Grounding Freshness
-  - V. Model-Tiered Workflow
-- Added sections: Additional Constraints; Development Workflow; Governance
+- Version change: 1.0.0 → 1.0.1 (PATCH: worktree-location refinement in Principle II)
+- Modified principles:
+  - II. One Task, One PR — worktrees relocated from sibling directories
+    (../script-world-task-<N>) to the repo-local, gitignored `.worktrees/` folder
+- Added sections: none
 - Removed sections: none
 - Templates:
-  - ✅ .specify/templates/plan-template.md — Constitution Check gate is generic and filled
-    per-plan; no structural change required
+  - ✅ .specify/templates/plan-template.md — Constitution Check gate is generic; unaffected
   - ✅ .specify/templates/spec-template.md — no constitution references; unaffected
   - ✅ .specify/templates/tasks-template.md — no constitution references; unaffected
   - ✅ .specify/templates/checklist-template.md — no constitution references; unaffected
-  - ⚠ .claude/agents/spec-implementer.md — enforcement artifact for Principle V; created
-    alongside this amendment (see follow-up)
+  - ✅ CLAUDE.md — worktree section updated to the `.worktrees/` convention
+  - ✅ .gitignore — `.worktrees/` entry added
 - Follow-up TODOs: none
 -->
 
@@ -40,7 +36,8 @@ decision; chat context evaporates, files and commits do not.
 A top-level TASK is a deliverable and maps 1:1 to a branch and a pull request. Subtasks
 (dotted ids, spec phases, mirrored criteria) are internal breakdown: they land as commits
 on the parent TASK's single branch and merge in that TASK's one PR — never their own.
-Branch work happens in sibling worktrees; the root checkout stays pinned to `main`.
+Branch work happens in worktrees under the repo-local, gitignored `.worktrees/` folder;
+the root checkout stays pinned to `main`.
 
 **Rationale:** a 1:1 task↔PR mapping keeps the board, git history, and review surface in
 lockstep, so any one of them can be audited from the others.
@@ -116,4 +113,4 @@ PATCH for clarifications. Every plan's Constitution Check MUST verify compliance
 the version named in its footer; runtime development guidance lives in `CLAUDE.md` and
 MUST stay consistent with this document.
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-20 | **Last Amended**: 2026-07-20
+**Version**: 1.0.1 | **Ratified**: 2026-07-20 | **Last Amended**: 2026-07-20

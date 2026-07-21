@@ -1,4 +1,5 @@
 .handoff/
+.worktrees/
 
 # Go build artifacts
 /scriptworld

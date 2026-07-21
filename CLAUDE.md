@@ -97,19 +97,19 @@ Planning and implementation run on different model tiers, enforced by delegation
   never implement inline on the planning model. The planning model orchestrates,
   reviews the agent's findings, and gates.
 
-## Git worktrees — root stays on main
+## Git worktrees — root stays on main, branches live in `.worktrees/`
 
-The root checkout (`~/evan/script-world`) is **pinned to `main`** — never check out a
-task branch there. All branch work happens in sibling worktrees.
+The root checkout is **pinned to `main`** — never check out a task branch there. All
+branch work happens in worktrees under the repo-local, gitignored `.worktrees/` folder.
 
 - **Create:** when starting a TASK branch, make a worktree instead of switching:
-  `git worktree add ../script-world-task-<N> -b task-<N>-<slug> origin/main`
-  (sibling dir named `script-world-task-<N>`, matching the task id). Do the work,
-  commit, and open the PR from inside that worktree.
+  `git worktree add .worktrees/task-<N> -b task-<N>-<slug> origin/main`
+  (dir named `task-<N>`, matching the task id). Do the work, commit, and open the PR
+  from inside `.worktrees/task-<N>`.
 - **Root freshness:** keep the root current with `git fetch origin && git pull --ff-only`
   — at session start and always before cutting a new worktree, so branches fork from
   fresh `origin/main`.
-- **Cleanup:** after a TASK's PR merges, `git worktree remove ../script-world-task-<N>`,
+- **Cleanup:** after a TASK's PR merges, `git worktree remove .worktrees/task-<N>`,
   delete the branch (`git branch -d …`), and ff-pull the root.
 - One TASK, one worktree — this is the same "one task, one branch, one PR" rule; the
   worktree is just where that branch lives.
