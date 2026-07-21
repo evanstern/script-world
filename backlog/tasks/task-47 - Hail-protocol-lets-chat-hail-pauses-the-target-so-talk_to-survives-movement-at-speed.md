@@ -3,10 +3,10 @@ id: TASK-47
 title: >-
   Hail protocol: 'let's chat' hail pauses the target so talk_to survives
   movement at speed
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-21 15:47'
-updated_date: '2026-07-21 15:53'
+updated_date: '2026-07-21 16:36'
 labels:
   - bug
   - feature
@@ -42,6 +42,8 @@ A "hail" — a cheap, deterministic (no-LLM) sim-level message an agent emits wh
 
 - No LLM call in the hail path — this is a sim-level courtesy protocol.
 - Not a fix for cognition-horizon calibration generally (TASK-40 covers warning/auto-suggest).
+
+Spec: specs/010-hail-protocol
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -50,10 +52,21 @@ A "hail" — a cheap, deterministic (no-LLM) sim-level message an agent emits wh
 - [ ] #2 Hailed target pauses without abandoning its plan: pause expires safely and prior intent/plan resumes if the hailer never arrives
 - [ ] #3 Hail path is deterministic sim logic — zero LLM calls; hail and expiry are emitted as events visible in scriptworld tail
 - [ ] #4 Un-interruptible states (e.g. sleeping, mid-conversation) are exempt from being paused by a hail
+- [ ] #5 Spec phase: Setup
+- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #7 Spec phase: User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP
+- [ ] #8 Spec phase: User Story 2 - A stood-up target resumes its life safely (Priority: P2)
+- [ ] #9 Spec phase: User Story 3 - Un-interruptible villagers are left alone (Priority: P2)
+- [ ] #10 Spec phase: User Story 4 - Hails are visible to the observer (Priority: P3)
+- [ ] #11 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Baseline evidence (myworld-01, 2026-07-21, local tier at speed): in ~30 min of wall time only ONE conversation landed (conv 2190, 11:31, 4 turns). Afterwards zero conversations in 45+ min while talk_to attempts kept failing the target_present guard — Birch→Sage rejected 3× at distances 47, 50, 36 (11:42–11:53). 4× agent.intent_rejected vs 1× social.conversation in the event log. Use this world/config shape for the AC #1 before/after measurement.
+
+spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 0/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 0/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 0/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 0/1 · Polish & Cross-Cutting Concerns: 0/4
+
+Tier decision (constitution V rubric): implementation delegated to spec-implementer on **Opus 4.8** — the slice changes the cognition-horizon landing ladder in internal/sim/loop.go (doctrine-adjacent behavior change: guard-failure outcomes for talk_to) and executor scheduling behavior (pause suppression in the per-agent step). Planning/spec/tasks authored on Fable 5.
 <!-- SECTION:NOTES:END -->
