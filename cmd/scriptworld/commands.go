@@ -59,17 +59,88 @@ func parseDirFlags(fs *flag.FlagSet, args []string) (string, error) {
 	return dir, nil
 }
 
+// resolveWorld turns a per-world command's positional argument — a name or
+// a path (FR-006) — into a directory. Path-shaped arguments bypass name
+// resolution entirely and are returned verbatim, today's exact behavior
+// (FR-012); bare names resolve via worlds.Resolve (FR-007/FR-011). Every
+// per-world command except `new` (whose argument creates rather than
+// resolves) routes through this.
+func resolveWorld(arg string) (string, error) {
+	if worlds.IsPathArg(arg) {
+		return arg, nil
+	}
+	return worlds.Resolve(arg)
+}
+
+// worldArg is dirArg's name-or-path counterpart (see resolveWorld).
+func worldArg(fs *flag.FlagSet, args []string) (string, error) {
+	arg, err := dirArg(fs, args)
+	if err != nil {
+		return "", err
+	}
+	return resolveWorld(arg)
+}
+
+// parseWorldFlags is parseDirFlags's name-or-path counterpart (see
+// resolveWorld).
+func parseWorldFlags(fs *flag.FlagSet, args []string) (string, error) {
+	arg, err := parseDirFlags(fs, args)
+	if err != nil {
+		return "", err
+	}
+	return resolveWorld(arg)
+}
+
+// cmdNew implements `scriptworld new` per contracts/cli.md (research.md D5):
+// a bare-word argument is name-form — create <worlds-home>/<name> (or --at
+// DIR exactly), manifest name = the argument. A path-shaped argument
+// (worlds.IsPathArg) is legacy path-form, byte-compatible with today:
+// create at that path, name from --name or the basename (FR-012).
 func cmdNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
-	name := fs.String("name", "", "world name (default: directory basename)")
+	name := fs.String("name", "", "path-form only: world name (default: directory basename)")
+	at := fs.String("at", "", "name-form only: create at this exact path instead of the default worlds home")
 	seed := fs.Uint64("seed", 0, "world seed (default: random)")
-	dir, err := parseDirFlags(fs, args)
+	arg, err := parseDirFlags(fs, args)
 	if err != nil {
 		return err
 	}
-	if *name == "" {
-		*name = filepath.Base(filepath.Clean(dir))
+
+	nameForm := !worlds.IsPathArg(arg)
+	var dir, worldName string
+	if nameForm {
+		if *name != "" {
+			return fmt.Errorf("new %q: --name is not valid with a bare name argument (the argument is already the name)", arg)
+		}
+		if err := worlds.ValidateName(arg); err != nil {
+			return err
+		}
+		worldName = arg
+		if *at != "" {
+			dir = *at
+		} else {
+			home, err := worlds.WorldsHome()
+			if err != nil {
+				return err
+			}
+			dir = filepath.Join(home, arg)
+		}
+	} else {
+		if *at != "" {
+			return fmt.Errorf("new %q: --at is only valid with a bare name, not a path — the path itself is already the location", arg)
+		}
+		dir = arg
+		worldName = *name
+		if worldName == "" {
+			// Backward compatible: the auto-derived basename was never
+			// validated before this feature and stays that way (FR-012).
+			worldName = filepath.Base(filepath.Clean(dir))
+		} else if err := worlds.ValidateName(worldName); err != nil {
+			// An explicit --name IS validated (contracts/cli.md D5).
+			return err
+		}
 	}
+
 	if *seed == 0 {
 		var b [8]byte
 		if _, err := rand.Read(b[:]); err != nil {
@@ -77,7 +148,7 @@ func cmdNew(args []string) error {
 		}
 		*seed = binary.LittleEndian.Uint64(b[:]) >> 12 // keep it comfortably printable
 	}
-	w, err := world.Create(dir, *name, *seed)
+	w, err := world.Create(dir, worldName, *seed)
 	if err != nil {
 		return err
 	}
@@ -86,7 +157,7 @@ func cmdNew(args []string) error {
 		return err
 	}
 	defer st.Close()
-	payload, err := json.Marshal(sim.WorldCreatedPayload{Name: *name, Seed: *seed})
+	payload, err := json.Marshal(sim.WorldCreatedPayload{Name: worldName, Seed: *seed})
 	if err != nil {
 		return err
 	}
@@ -105,8 +176,23 @@ func cmdNew(args []string) error {
 	if err := persona.Genesis(dir); err != nil {
 		return err
 	}
+
+	// A name-form world at a custom --at location is outside the worlds
+	// home, so it needs a registry pointer to be name-addressable later
+	// (D1/D6) — the default name-form location is inside the home and is
+	// scan-owned, no registry entry wanted. Advisory: never fatal.
+	if nameForm && *at != "" {
+		if err := worlds.Upsert(worldName, dir); err != nil {
+			fmt.Printf("warning: could not register %q in the known-worlds registry (advisory, continuing): %v\n", worldName, err)
+		}
+	}
+
+	startHint := dir
+	if nameForm {
+		startHint = worldName
+	}
 	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: scriptworld start %s\n",
-		*name, dir, *seed, w.LLMConfigPath(), dir)
+		worldName, dir, *seed, w.LLMConfigPath(), startHint)
 	return nil
 }
 
@@ -118,9 +204,13 @@ func cmdLLM(args []string) error {
 		return err
 	}
 	if fs.NArg() < 3 {
-		return fmt.Errorf("usage: scriptworld llm <dir> <kind> <prompt...>")
+		return fmt.Errorf("usage: scriptworld llm <world> <kind> <prompt...>")
 	}
-	dir, kind := fs.Arg(0), fs.Arg(1)
+	dir, err := resolveWorld(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	kind := fs.Arg(1)
 	prompt := strings.Join(fs.Args()[2:], " ")
 	w, err := world.Open(dir)
 	if err != nil {
@@ -154,9 +244,12 @@ func cmdMetatron(args []string) error {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: scriptworld metatron <dir> [message...]")
+		return fmt.Errorf("usage: scriptworld metatron <world> [message...]")
 	}
-	dir := fs.Arg(0)
+	dir, err := resolveWorld(fs.Arg(0))
+	if err != nil {
+		return err
+	}
 	w, err := world.Open(dir)
 	if err != nil {
 		return err
@@ -205,7 +298,7 @@ func chargeGlyphs(n int) string {
 
 func cmdDaemon(args []string) error {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -214,7 +307,7 @@ func cmdDaemon(args []string) error {
 
 func cmdStart(args []string) error {
 	fs := flag.NewFlagSet("start", flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -260,7 +353,7 @@ func cmdStart(args []string) error {
 
 func cmdStop(args []string) error {
 	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -294,7 +387,7 @@ func cmdStop(args []string) error {
 func cmdStatus(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
-	dir, err := parseDirFlags(fs, args)
+	dir, err := parseWorldFlags(fs, args)
 	if err != nil {
 		return err
 	}
@@ -342,7 +435,7 @@ func cmdStatus(args []string) error {
 
 func cmdTimeCtl(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -369,10 +462,14 @@ func cmdSpeed(args []string) error {
 		return err
 	}
 	if fs.NArg() < 2 {
-		return fmt.Errorf("usage: scriptworld speed <dir> <1x|4x|8x|16x|32x|max>")
+		return fmt.Errorf("usage: scriptworld speed <world> <1x|4x|8x|16x|32x|max>")
 	}
-	dir, val := fs.Arg(0), fs.Arg(1)
+	val := fs.Arg(1)
 	if _, err := clock.ParseSpeed(val); err != nil {
+		return err
+	}
+	dir, err := resolveWorld(fs.Arg(0))
+	if err != nil {
 		return err
 	}
 	w, err := world.Open(dir)
@@ -394,7 +491,7 @@ func cmdSpeed(args []string) error {
 
 func cmdUI(args []string) error {
 	fs := flag.NewFlagSet("ui", flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -416,7 +513,7 @@ func cmdUI(args []string) error {
 
 func cmdAttach(args []string) error {
 	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
-	dir, err := dirArg(fs, args)
+	dir, err := worldArg(fs, args)
 	if err != nil {
 		return err
 	}
@@ -491,7 +588,7 @@ func cmdTail(args []string) error {
 	fs := flag.NewFlagSet("tail", flag.ContinueOnError)
 	since := fs.Int64("since", -1, "start after this seq (default: last 20 events)")
 	follow := fs.Bool("follow", false, "keep following live events (requires a running daemon)")
-	dir, err := parseDirFlags(fs, args)
+	dir, err := parseWorldFlags(fs, args)
 	if err != nil {
 		return err
 	}

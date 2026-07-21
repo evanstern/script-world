@@ -203,6 +203,44 @@ func TestProbeOneMissing(t *testing.T) {
 	}
 }
 
+func TestProbeMixedCandidatesNeverAborts(t *testing.T) {
+	// T014: `ps --all` renders missing/unreadable rows alongside
+	// running/stopped ones from a single Probe call — one broken candidate
+	// must never abort the batch.
+	setHome(t)
+
+	runningDir := shortWorldDir(t)
+	makeWorld(t, runningDir, "alive")
+	writePidfile(t, runningDir, os.Getpid())
+	fakeDaemon(t, filepath.Join(runningDir, "daemon.sock"), &ipc.StatusData{World: ipc.WorldStatus{Name: "alive"}}, 0)
+
+	stoppedDir := shortWorldDir(t)
+	makeWorld(t, stoppedDir, "sleeping")
+
+	unreadableDir := shortWorldDir(t)
+	if err := os.WriteFile(filepath.Join(unreadableDir, "world.json"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := []Candidate{
+		{Name: "alive", Path: runningDir, Readable: true},
+		{Name: "sleeping", Path: stoppedDir, Readable: true},
+		{Name: "corrupt", Path: unreadableDir},
+		{Name: "ghost", Path: "/nonexistent/ghost", Missing: true},
+	}
+
+	out := Probe(candidates)
+	if len(out) != 4 {
+		t.Fatalf("expected 4 instances (no candidate dropped), got %d: %+v", len(out), out)
+	}
+	want := map[string]State{"alive": Running, "sleeping": Stopped, "corrupt": Unreadable, "ghost": Missing}
+	for _, inst := range out {
+		if got, ok := want[inst.Name]; !ok || inst.State != got {
+			t.Errorf("candidate %s: state = %s, want %s", inst.Name, inst.State, want[inst.Name])
+		}
+	}
+}
+
 func TestProbeRunsConcurrently(t *testing.T) {
 	setHome(t)
 	const n = 5

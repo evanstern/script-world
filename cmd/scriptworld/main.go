@@ -9,21 +9,27 @@ import (
 
 const usage = `scriptworld — the always-on script-world daemon and client
 
+A <world> argument below is a name or a path: a name (e.g. "aria") resolves
+against the default worlds home (~/.scriptworld/worlds, overridable via
+SCRIPTWORLD_HOME) then the known-worlds list; a path (contains "/", or
+starts with "." or "~") is used exactly as given.
+
 Usage:
-  scriptworld new <dir> [--name NAME] [--seed N]   create a new world
+  scriptworld new <name> [--at DIR] [--seed N]     create a world by name in the worlds home
+  scriptworld new <path> [--name NAME] [--seed N]  create a world at an explicit path (legacy form)
   scriptworld ps [--all] [--json]                  list world daemons machine-wide
-  scriptworld daemon <dir>                         run the daemon in the foreground
-  scriptworld start <dir>                          start a detached daemon
-  scriptworld stop <dir>                           gracefully stop the daemon
-  scriptworld status <dir> [--json]                report world/daemon status
-  scriptworld ui <dir>                             full-screen TUI (map, chronicle, metatron, souls)
-  scriptworld attach <dir>                         line-mode event stream + commands
-  scriptworld tail <dir> [--since SEQ] [--follow]  print events from the log
-  scriptworld pause <dir>                          pause game time
-  scriptworld resume <dir>                         resume game time
-  scriptworld speed <dir> <1x|4x|8x|16x|32x|max>       set game speed
-  scriptworld metatron <dir> [message...]          converse with the angel (no message: status peek)
-  scriptworld llm <dir> <kind> <prompt...>         one-shot LLM call via the daemon
+  scriptworld daemon <world>                       run the daemon in the foreground
+  scriptworld start <world>                        start a detached daemon
+  scriptworld stop <world>                         gracefully stop the daemon
+  scriptworld status <world> [--json]              report world/daemon status
+  scriptworld ui <world>                           full-screen TUI (map, chronicle, metatron, souls)
+  scriptworld attach <world>                       line-mode event stream + commands
+  scriptworld tail <world> [--since SEQ] [--follow] print events from the log
+  scriptworld pause <world>                        pause game time
+  scriptworld resume <world>                       resume game time
+  scriptworld speed <world> <1x|4x|8x|16x|32x|max>     set game speed
+  scriptworld metatron <world> [message...]        converse with the angel (no message: status peek)
+  scriptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon
                                                    (kinds: planner, conversation, musing,
                                                     consolidation, narrator, drama)
 `

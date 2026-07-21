@@ -2,7 +2,9 @@ package worlds
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,6 +102,54 @@ func TestResolveAmbiguous(t *testing.T) {
 	}
 	if len(amb.Paths) != 2 {
 		t.Errorf("expected 2 candidate paths, got %v", amb.Paths)
+	}
+}
+
+func TestResolveMissingRegistryEntry(t *testing.T) {
+	// T014: a name known only to the registry, whose directory has since
+	// vanished, must resolve to a specific ErrMissing — never a raw
+	// world.Open error, and never the generic "never heard of it" message.
+	setHome(t)
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "ghost")
+	makeWorld(t, sub, "ghost")
+	if err := Upsert("ghost", sub); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(sub); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Resolve("ghost")
+	var missing *ErrMissing
+	if !errors.As(err, &missing) {
+		t.Fatalf("expected ErrMissing, got %v (%T)", err, err)
+	}
+	if missing.Name != "ghost" {
+		t.Errorf("ErrMissing.Name = %q, want ghost", missing.Name)
+	}
+	abs, _ := filepath.Abs(sub)
+	if missing.Path != abs {
+		t.Errorf("ErrMissing.Path = %q, want %q", missing.Path, abs)
+	}
+	if !strings.Contains(err.Error(), "ghost") || !strings.Contains(err.Error(), "gone") {
+		t.Errorf("ErrMissing message not helpful: %q", err.Error())
+	}
+}
+
+func TestResolveUnknownNameStaysNotFound(t *testing.T) {
+	// A name the registry has never seen at all must still be the generic
+	// ErrNotFound, not ErrMissing (that's reserved for names the manager
+	// actually recognized once).
+	setHome(t)
+	_, err := Resolve("never-heard-of-it")
+	var missing *ErrMissing
+	if errors.As(err, &missing) {
+		t.Fatalf("unknown name must not produce ErrMissing, got %v", err)
+	}
+	var nf *ErrNotFound
+	if !errors.As(err, &nf) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
 

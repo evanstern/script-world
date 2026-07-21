@@ -2,6 +2,7 @@ package worlds
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -32,8 +33,9 @@ func (e *ErrAmbiguous) Error() string {
 	return fmt.Sprintf("name %q is ambiguous:\n%s\nuse a path to disambiguate", e.Name, strings.Join(lines, "\n"))
 }
 
-// ErrNotFound is returned by Resolve when a bare name matches nothing
-// (FR-007): the error names the worlds home searched and suggests `ps --all`.
+// ErrNotFound is returned by Resolve when a bare name matches nothing at
+// all — the manager has never heard of it (FR-007): the error names the
+// worlds home searched and suggests `ps --all`.
 type ErrNotFound struct {
 	Name       string
 	WorldsHome string
@@ -41,6 +43,21 @@ type ErrNotFound struct {
 
 func (e *ErrNotFound) Error() string {
 	return fmt.Sprintf("no world named %q (searched %s and the known-worlds list) — try `scriptworld ps --all`", e.Name, e.WorldsHome)
+}
+
+// ErrMissing is returned by Resolve when a bare name matches only a
+// registry entry whose directory has vanished (deleted or moved) — distinct
+// from ErrNotFound (a name the manager has never heard of at all), so the
+// message can say what happened instead of surfacing a raw world.Open
+// error or a generic "not found" for a name the registry does recognize
+// (D6/T014).
+type ErrMissing struct {
+	Name string
+	Path string
+}
+
+func (e *ErrMissing) Error() string {
+	return fmt.Sprintf("world %q was last known at %s, but that directory is gone (deleted or moved) — check `scriptworld ps --all`, or re-create it with `scriptworld new`", e.Name, e.Path)
 }
 
 // Resolve turns a bare world name into an absolute world directory,
@@ -72,9 +89,18 @@ func Resolve(name string) (string, error) {
 		return homeCandidate, nil
 	case regOK:
 		return regPath, nil
-	default:
-		return "", &ErrNotFound{Name: name, WorldsHome: home}
 	}
+
+	// Neither resolved. If the registry once knew this name, say
+	// specifically that its directory vanished rather than a generic
+	// "not found" (or, worse, a raw world.Open error) — the manager did
+	// recognize the name, it just can't use it right now (D6/T014).
+	if hasReg {
+		if _, statErr := os.Stat(regPath); os.IsNotExist(statErr) {
+			return "", &ErrMissing{Name: name, Path: regPath}
+		}
+	}
+	return "", &ErrNotFound{Name: name, WorldsHome: home}
 }
 
 func isReadableWorld(dir string) bool {
