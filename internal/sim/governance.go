@@ -135,7 +135,7 @@ type MeetingState struct {
 	// detector tracks a sustained daytime gathering at one structure.
 	// GatherStart is the tick the current gathering began (0 = not watching);
 	// GatherX/Y is that structure's tile. All reducer-advanced off
-	// meeting.gathering_progressed so replay reconstructs the watch exactly.
+	// sim.gathering_observed so replay reconstructs the watch exactly.
 	GatherStart int64 `json:"gather_start,omitempty"`
 	GatherX     int   `json:"gather_x,omitempty"`
 	GatherY     int   `json:"gather_y,omitempty"`

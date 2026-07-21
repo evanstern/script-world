@@ -138,7 +138,7 @@ func (md *Mind) chronicleNote(e store.Event) {
 	case "meeting.convention_established":
 		var p sim.MeetingConventionPayload
 		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "emergent" {
-			line = "The villagers took to gathering at the fire — a daily assembly was born."
+			line = "The villagers took to gathering at the same spot — a daily assembly was born."
 		}
 	case "meeting.opened":
 		var p sim.MeetingOpenedPayload
