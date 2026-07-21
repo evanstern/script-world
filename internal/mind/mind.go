@@ -307,7 +307,10 @@ func (md *Mind) plan() {
 			md.emitSuppressed("planner", i, tick, v)
 			md.pending[i] = false
 			md.pendingSeq[i] = 0
-			md.nextDue[i] = tick + sim.PlannerCadenceTicks
+			// Phase-preserving (TASK-44): see nextPhasePreservingDue — a
+			// speed spike that suppresses several agents in the same batch
+			// must not collapse their boot-staggered cadence phases.
+			md.nextDue[i] = nextPhasePreservingDue(md.nextDue[i], tick, sim.PlannerCadenceTicks)
 			continue
 		}
 		job := planJob{
@@ -333,7 +336,11 @@ func (md *Mind) plan() {
 			md.pending[i] = false
 			md.pendingSeq[i] = 0
 			md.lastPlanned[i] = tick
-			md.nextDue[i] = tick + sim.PlannerCadenceTicks
+			// Phase-preserving (TASK-44): a shared trigger (e.g. a busy-tier
+			// backlog clearing several overdue agents in one batch) must not
+			// re-arm them all onto the identical nextDue — that permanently
+			// locks the cadence fallback into lockstep, same as the musing bug.
+			md.nextDue[i] = nextPhasePreservingDue(md.nextDue[i], tick, sim.PlannerCadenceTicks)
 		default:
 			md.planInFlight[i].Store(false) // queue full; retry next batch
 		}
@@ -458,6 +465,23 @@ func (md *Mind) injectPlan(job planJob, reply planReply, actualMs int64) {
 	}
 }
 
+// nextPhasePreservingDue advances an overdue schedule to the next tick
+// strictly after tick, stepping in whole cadence multiples from its own due
+// — never from tick. This is the TASK-44 fix: re-arming "from now" instead
+// of from the agent's own due collapses every agent a shared stall left
+// overdue onto the identical due, locking the whole village into lockstep
+// the next time cadence comes around. Preserving due's phase (due mod
+// cadence) keeps each agent's boot offset intact forever, regardless of how
+// many cadences it had to skip. Arithmetic equivalent of:
+//
+//	for due <= tick { due += cadence }
+func nextPhasePreservingDue(due, tick, cadence int64) int64 {
+	if cadence <= 0 || due > tick {
+		return due
+	}
+	return due + (tick-due)/cadence*cadence + cadence
+}
+
 // muse fires at most one best-effort interior thought per batch (TASK-21):
 // pure flavor with no goal effect, run detached so it never blocks the
 // absorb loop, and dropped — never queued — whenever the tier is busy or
@@ -483,7 +507,10 @@ func (md *Mind) muse() {
 		return
 	}
 	// Re-arm before the call: a dropped musing is silence, not a debt.
-	md.museDue[pick] = tick + museCadenceTicks
+	// Phase-preserving (TASK-44): step forward from this agent's own due,
+	// not from tick, so a shared stall that leaves several agents overdue
+	// at once doesn't collapse their boot-staggered phases together.
+	md.museDue[pick] = nextPhasePreservingDue(md.museDue[pick], tick, museCadenceTicks)
 	// Router gate (FR-007): musings survive far higher speeds than planners
 	// (1 point vs 3), but the horizon still applies.
 	if v := md.routeVerdict("musing", llm.KindMusing); !v.Allow {
