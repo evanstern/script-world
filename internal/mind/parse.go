@@ -105,7 +105,18 @@ func parseOutcome(text string) (convoOutcome, error) {
 	}
 	var o convoOutcome
 	if err := json.Unmarshal([]byte(raw), &o); err != nil {
-		return convoOutcome{}, fmt.Errorf("bad outcome JSON: %w", err)
+		// Lenient recovery (TASK-42 R3) for the one shape observed live: the
+		// model emits gist/retold as a bare, unquoted prose value. Quote the
+		// bare value(s) and retry once — anything past the known shape stays a
+		// failure (the retry site covers it). A lenient success is a parse
+		// success: no retry is consumed.
+		fixed := lenientOutcome(raw)
+		if fixed == "" {
+			return convoOutcome{}, fmt.Errorf("bad outcome JSON: %w", err)
+		}
+		if err := json.Unmarshal([]byte(fixed), &o); err != nil {
+			return convoOutcome{}, fmt.Errorf("bad outcome JSON: %w", err)
+		}
 	}
 	if o.Gist == "" {
 		return convoOutcome{}, fmt.Errorf("empty gist")
@@ -145,6 +156,76 @@ func parseOutcome(text string) (convoOutcome, error) {
 		o.Retold = ""
 	}
 	return o, nil
+}
+
+// lenientOutcome repairs the observed unquoted-value shape (TASK-42 R3):
+//
+//	{"gist": Hazel talked about the fire, "topics": [...], "retold": null}
+//
+// It quotes bare gist/retold values and returns JSON encoding/json can read;
+// "" means nothing was repaired (leave the original failure to the retry).
+// This is deliberately NOT a general tolerant parser.
+func lenientOutcome(raw string) string {
+	out := quoteBareValue(raw, "gist")
+	out = quoteBareValue(out, "retold")
+	if out == raw {
+		return ""
+	}
+	return out
+}
+
+func isJSONSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }
+
+// quoteBareValue quotes an unquoted string value for key in a flat JSON
+// object. The value runs to the next `, "` (the following key) or the object
+// close; if that span is already valid JSON it is left untouched.
+func quoteBareValue(s, key string) string {
+	marker := `"` + key + `"`
+	ki := strings.Index(s, marker)
+	if ki < 0 {
+		return s
+	}
+	rest := ki + len(marker)
+	ci := strings.IndexByte(s[rest:], ':')
+	if ci < 0 {
+		return s
+	}
+	vstart := rest + ci + 1
+	for vstart < len(s) && isJSONSpace(s[vstart]) {
+		vstart++
+	}
+	if vstart >= len(s) {
+		return s
+	}
+	vend := -1
+	for j := vstart; j < len(s); j++ {
+		if s[j] == '}' {
+			vend = j
+			break
+		}
+		if s[j] == ',' {
+			k := j + 1
+			for k < len(s) && isJSONSpace(s[k]) {
+				k++
+			}
+			if k < len(s) && s[k] == '"' {
+				vend = j
+				break
+			}
+		}
+	}
+	if vend < 0 {
+		return s
+	}
+	region := strings.TrimRight(s[vstart:vend], " \t\n\r")
+	if region == "" || json.Valid([]byte(region)) {
+		return s // already a valid JSON value — nothing to repair
+	}
+	enc, err := json.Marshal(region) // correct quoting/escaping/UTF-8
+	if err != nil {
+		return s
+	}
+	return s[:vstart] + string(enc) + s[vend:]
 }
 
 // parseReply extracts the first JSON object from model output and validates
