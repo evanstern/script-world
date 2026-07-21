@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-21 15:47'
-updated_date: '2026-07-21 15:47'
+updated_date: '2026-07-21 15:53'
 labels:
   - bug
   - feature
@@ -51,3 +51,9 @@ A "hail" — a cheap, deterministic (no-LLM) sim-level message an agent emits wh
 - [ ] #3 Hail path is deterministic sim logic — zero LLM calls; hail and expiry are emitted as events visible in scriptworld tail
 - [ ] #4 Un-interruptible states (e.g. sleeping, mid-conversation) are exempt from being paused by a hail
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Baseline evidence (myworld-01, 2026-07-21, local tier at speed): in ~30 min of wall time only ONE conversation landed (conv 2190, 11:31, 4 turns). Afterwards zero conversations in 45+ min while talk_to attempts kept failing the target_present guard — Birch→Sage rejected 3× at distances 47, 50, 36 (11:42–11:53). 4× agent.intent_rejected vs 1× social.conversation in the event log. Use this world/config shape for the AC #1 before/after measurement.
+<!-- SECTION:NOTES:END -->
