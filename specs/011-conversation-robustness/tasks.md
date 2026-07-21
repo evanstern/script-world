@@ -65,8 +65,8 @@
 
 - [X] T017 Golden happy-path test in internal/mind/convo_test.go: all-valid scripted scene → emitted batch identical to pre-change shape — no `retried`, no `raw`, no extra Submit calls (SC-004 / FR-009)
 - [X] T018 Run quickstart.md §1-2 (`go vet ./... && go test ./...`) green; optional §3 live smoke on a throwaway world
-- [ ] T019 Update wiki sources post-merge: `/grounding-wiki:wiki-update` re-pins agent-mind, social-fabric, event-types (+ any note listing convo.go/parse.go/telemetry.go/cognition.go as sources) — Constitution IV
-- [ ] T020 `spec-bridge:sync` after each phase completes and at Done; tick board ACs as their tests land
+- [X] T019 Update wiki sources post-merge: `/grounding-wiki:wiki-update` re-pins agent-mind, social-fabric, event-types (+ any note listing convo.go/parse.go/telemetry.go/cognition.go as sources) — Constitution IV (re-pinned: cognition, agent-mind, social-fabric → b6f2378; freshness gate 29/29)
+- [X] T020 `spec-bridge:sync` after each phase completes and at Done; tick board ACs as their tests land
 
 ## Dependencies
 

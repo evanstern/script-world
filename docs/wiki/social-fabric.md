@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
 ---
 
 # Social fabric
@@ -65,10 +65,23 @@ topic; at most one rumor between the founding pair. The scene's terminal
 atomically. Landing is also staleness-enforced (TASK-32): a completed scene
 whose wall time overran the conversation class's budget in ticks (the router
 admitted it, but the tier ran slower than predicted) injects nothing and
-records `cog.outcome{rejected-stale}` with the arithmetic. Any failure —
-abandoned turn, unusable outcome call, rejected injection — likewise injects
-nothing and records a terminal `cog.outcome{unusable}`;
-the primitive talk stands alone. Replay is model-free.
+records `cog.outcome{rejected-stale}` with the arithmetic. Since TASK-42
+(specs/011-conversation-robustness) a scene tolerates one bad reply per site
+rather than dying on the first: a parse-failed utterance gets one same-speaker
+retry (one utterance retry TOTAL per scene — retry-not-skip, preserving the
+round-robin transcript), and a parse-failed outcome call gets one re-request;
+each consumed retry emits a non-terminal `cog.outcome{retried}` carrying the
+failed reply's verbatim text (`raw`, bounded at 2048 bytes, rune-boundary
+truncated), and the scene's terminal event carries `retried: true`. Before
+retrying, `parse.go`'s `lenientOutcome` repairs the observed unquoted-gist
+shape with no model call at all. Transport/admission errors are NEVER retried
+— backpressure stays authoritative — and a second parse failure at either
+site abandons: the scene injects nothing and records a terminal
+`cog.outcome{unusable}` (with `raw` when the killer was a parse failure); the
+primitive talk stands alone. The stale-at-landing check runs after any retry,
+so retry wall-time cannot smuggle a stale scene past its budget. The outcome
+prompt states that `gist`/`retold` must be double-quoted JSON strings. Replay
+is model-free.
 
 **Conversation records** (TASK-22): `social.conversation` is no longer a reducer
 no-op — the payload (`participants`, `topics`, `tones`; empty participants means

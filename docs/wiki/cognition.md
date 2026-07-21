@@ -9,7 +9,7 @@ sources:
   - internal/cognition/route.go
   - internal/cognition/calibration.go
   - internal/sim/cognition.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
 ---
 
 # Cognition horizon
@@ -95,5 +95,9 @@ a reminder to run calibrate. Telemetry: router verdicts land as `cog.outcome`
 events with the arithmetic string as the reason; estimator drift surfaces as
 `cog.recalibration_recommended` (fires once per breach, re-armed on recovery);
 `Estimator.Stats` exposes estimate, rolling spike rate, and lifetime
-sample/spike counts. Budgets are never widened automatically — persistent
+sample/spike counts. `OutcomeRetried` (`"retried"`, TASK-42) is the one
+NON-terminal outcome value — a scene reply failed to parse and the scene
+continued via one retry; consumers summing job completions must filter it, and
+the payload's optional `Raw`/`Retried` fields (omitempty) carry the failed
+reply's bounded verbatim text and the consumed-a-retry flag on terminals. Budgets are never widened automatically — persistent
 suppression or rejection on one class is a human retune signal.

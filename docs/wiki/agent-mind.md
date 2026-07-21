@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: acd2cd91f85396f28706e357b8c1676a3597ccd8
+verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
 ---
 
 # Agent mind
@@ -57,7 +57,13 @@ idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floo
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
 feedback loop that saturates the local tier). Planner prompts carry a social
 context block (bonds, debts, reputation, loudest rumor, and the
-last-conversation callback from the record ring — [[social-fabric]], TASK-22) and,
+last-conversation callback from the record ring — [[social-fabric]], TASK-22;
+since TASK-42 scene replies get bounded parse-failure tolerance: `parse.go`'s
+`lenientOutcome` repairs the observed unquoted-gist shape with zero extra
+calls, and `telemetry.go`'s `cogSceneOutcome` variant carries the failed
+reply's bounded `raw` text and a `retried` flag — the base `cogOutcomeEvent`
+delegates there with the extras zeroed, keeping every other call site
+byte-identical) and,
 since TASK-13, a "Village law" block (`villageLaw` in prompt.go: active norms with
 provenance, exile judgments — second-person for the exile — and the assembly call
 while convening — since TASK-36 all rendered from the event-sourced meeting
