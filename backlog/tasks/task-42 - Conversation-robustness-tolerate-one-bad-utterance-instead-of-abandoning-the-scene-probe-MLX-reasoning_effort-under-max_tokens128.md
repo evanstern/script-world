@@ -4,10 +4,10 @@ title: >-
   Conversation robustness: tolerate one bad utterance AND one bad outcome
   instead of abandoning the scene; probe MLX reasoning_effort under
   max_tokens=128
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-21 18:50'
+updated_date: '2026-07-21 18:55'
 labels:
   - robustness
 dependencies: []
@@ -27,19 +27,19 @@ Spec: specs/011-conversation-robustness
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Utterance site (convo.go:196-199): one failed/unusable say is retried once or skipped without abandoning the scene; two consecutive failures may still abandon
-- [ ] #2 Outcome site (convo.go:204-210): a parse-failed outcome is retried once before giving up; scene state (turns, memories, relation deltas, rumor) is not lost when the retry succeeds
-- [ ] #3 On any outcome/utterance parse failure the raw model reply is persisted (event payload or log) so failures are inspectable after the fact
-- [ ] #4 Outcome prompt hardened (gist MUST be a quoted string or equivalent); optionally lenient field extraction in parse.go shared with parseSay/parseConsolidation
+- [x] #1 Utterance site (convo.go:196-199): one failed/unusable say is retried once or skipped without abandoning the scene; two consecutive failures may still abandon
+- [x] #2 Outcome site (convo.go:204-210): a parse-failed outcome is retried once before giving up; scene state (turns, memories, relation deltas, rumor) is not lost when the retry succeeds
+- [x] #3 On any outcome/utterance parse failure the raw model reply is persisted (event payload or log) so failures are inspectable after the fact
+- [x] #4 Outcome prompt hardened (gist MUST be a quoted string or equivalent); optionally lenient field extraction in parse.go shared with parseSay/parseConsolidation
 - [x] #5 MLX reasoning_effort:none probe under max_tokens=128 completed and findings recorded on this task
-- [ ] #6 Spec phase: Setup
-- [ ] #7 Spec phase: Foundational (blocking prerequisites for all stories)
-- [ ] #8 Spec phase: User Story 1 — A completed scene survives one bad summary reply (P1)
-- [ ] #9 Spec phase: User Story 2 — A scene survives one bad utterance (P2)
-- [ ] #10 Spec phase: User Story 3 — Parse failures are inspectable (P3)
-- [ ] #11 Spec phase: User Story 4 — Fewer malformed summaries (P4)
-- [ ] #12 Spec phase: User Story 5 — MLX reasoning_effort probe (P5)
-- [ ] #13 Spec phase: Polish & Cross-Cutting
+- [x] #6 Spec phase: Setup
+- [x] #7 Spec phase: Foundational (blocking prerequisites for all stories)
+- [x] #8 Spec phase: User Story 1 — A completed scene survives one bad summary reply (P1)
+- [x] #9 Spec phase: User Story 2 — A scene survives one bad utterance (P2)
+- [x] #10 Spec phase: User Story 3 — Parse failures are inspectable (P3)
+- [x] #11 Spec phase: User Story 4 — Fewer malformed summaries (P4)
+- [x] #12 Spec phase: User Story 5 — MLX reasoning_effort probe (P5)
+- [x] #13 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -54,4 +54,12 @@ Implementation tier: Opus 4.8 (constitution V rubric: internal/mind orchestratio
 Implementation complete on branch task-42-conversation-robustness; PR #29 open (https://github.com/evanstern/script-world/pull/29). Opus implementer: 5 commits, 20/20 quickstart-gate tests, full suite green; per-scene utterance budget ruling (FR-002/FR-007) applied after gate review. Awaiting review/merge; post-merge: wiki-update (T019) + spec-bridge sync (T020), then Done.
 
 MLX reasoning_effort probe findings (FR-008/US5, AC #5; run live against localhost:11434 gemma4:12b-mlx, utterance-shaped requests, max_tokens=128, N=10 per config): reasoning_effort IS honored, and the empty-utterance hypothesis is CONFIRMED — unset: 10/10 empty replies (median content 0); low: 10/10 empty; none: 0/10 empty, median 62 chars. A thinking model spends the entire 128-token budget on hidden CoT unless effort is 'none'. The orchestrator's existing local-tier default resolveReasoningEffort(..., "none") (llm.go:186) is therefore both necessary and sufficient — load-bearing, do not remove. Probe script: specs/011-conversation-robustness/probe-mlx-reasoning.sh. (Re-applied to main: original note commit landed on the task branch by mistake and was dropped in the rebase.)
+
+spec-bridge sync: all 8 phases 20/20 tasks done; PR #29 merged (b6f2378); wiki re-pinned (cognition, agent-mind, social-fabric). Derivation: Done-eligible.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Both all-or-nothing failure sites in the conversation scene runner now tolerate one bad reply per site (outcome retry + per-scene utterance retry, retry-not-skip), with lenient unquoted-gist recovery (zero extra calls), hardened outcome prompt, raw failed-reply persistence (bounded) + retried telemetry for measurable recovery rates, and doctrine intact (transport errors never retried, stale-at-landing enforced, happy path byte-identical, golden-tested). MLX probe recorded: reasoning_effort honored; 'none' is load-bearing (unset/low = 100% empty at 128 tokens). Delivered via PR #29, merged as b6f2378; Opus 4.8 implementer, 20/20 quickstart-gate tests, full suite green.
+<!-- SECTION:FINAL_SUMMARY:END -->
