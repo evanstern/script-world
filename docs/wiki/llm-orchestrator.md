@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # LLM orchestrator
@@ -66,6 +66,24 @@ died mid-call — only genuine provider failures and the worker cap strike the
 breaker, so planners timing out behind a long conversation can no longer
 self-inflict an outage. A killed model degrades the AI layer;
 the daemon and loop never notice.
+
+**Latency estimation** (TASK-32, [[cognition]]): each tier carries a live
+`cognition.Estimator` of seconds-per-point — the worker is the one place every
+call's true duration is observed, so on each *successful* call it samples the
+wall time normalized by the kind's registered point cost
+(`cognition.ClassForKind`; failures are not latency observations, and spike
+rejection guards only the high side). Estimators start from bootstrap seeds
+(`cognition.SeedFor`); `SeedCalibration` re-seeds both tiers from a
+calibration profile once at daemon start, and `SecondsPerPoint` exposes the
+live estimate — the router's bridge from Fibonacci points to this
+deployment's wall clock, read by the mind when routing. When an estimator
+first breaches the spike-rate drift threshold, the hook installed via
+`SetRecalibrateHook` fires (own goroutine, once per breach episode); the mind
+turns it into a `cog.recalibration_recommended` telemetry event. Two small
+exports serve the same layer: `TierFor(kind)` lets the mind read the right
+tier's estimate, and `Kinds()` returns every accepted call kind sorted — the
+cognition registry's completeness gate iterates it at daemon start so an
+unregistered kind can never reach a model at runtime.
 
 **Config** (`config.go`): `llm.json` in the save directory, written with defaults by
 `scriptworld new`; deleting the file disables the orchestrator entirely. Hosted-API

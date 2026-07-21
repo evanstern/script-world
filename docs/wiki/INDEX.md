@@ -38,6 +38,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 ## Inference & minds
 
 - [[llm-orchestrator]] — two-tier model traffic: routing, spend ceiling, degraded mode
+- [[cognition]] — the cognition horizon: Fibonacci-point decision registry, seconds-per-point calibration, deterministic LLM-vs-reflex routing by staleness budget
 - [[agent-mind]] — personas, souls, memory window, and the planner driver
 - [[social-fabric]] — relationships, rumors, debts, secrets, conversations
 - [[nightly-consolidation]] — sleep-triggered soul digestion behind the persona firewall

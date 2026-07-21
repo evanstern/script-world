@@ -6,7 +6,7 @@ sources:
   - internal/store/store.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Snapshots
@@ -31,7 +31,7 @@ Cadence, all driven from [[sim-loop]]:
 touches only `snapshots`, never `events`). `Store.LatestValidSnapshot` walks newest →
 oldest and returns the first whose `state_hash` verifies — a corrupt newest snapshot
 silently falls back to an older one, and if none survive, recovery starts from genesis
-state (`sim.NewState(seed)`).
+state (`sim.NewState(seed, map)`).
 
 Recovery in `daemon.recoverState`: unmarshal the chosen snapshot into the state, then
 replay events with `seq > snapshot.seq` through the same `Apply` reducer the live loop

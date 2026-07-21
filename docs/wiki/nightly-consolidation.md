@@ -7,7 +7,7 @@ sources:
   - internal/mind/consolidate.go
   - internal/mind/validate.go
   - internal/persona/personas.go
-verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Nightly consolidation + persona firewall
@@ -27,7 +27,13 @@ fields — and `ConsolidatedUpTo`, the digested-buffer high-water mark — are r
 from the recorded `agent.consolidated` marker, so once-per-night survives restarts
 and replay is model-free. The episodic buffer is every memory with
 `Tick > ConsolidatedUpTo`; empty buffers close the night with a `skipped_empty`
-marker and spend nothing. Due agents queue FIFO through a single-flight worker
+marker and spend nothing. Since TASK-32 `maybeConsolidate` also passes the
+[[cognition]] router gate (`routeVerdict` with the `consolidation` class,
+`llm.KindConsolidation`) before enqueueing: the night-scale staleness budget
+passes at every watchable speed today, but a suppression (future faster
+speeds) emits a `cog.outcome{suppressed}` record and skips the night with no
+marker — the buffer stays intact and the next sleep retries. Due agents queue
+FIFO through a single-flight worker
 (the night is hours long; latency is irrelevant).
 
 **The call**: prompt = persona + verbatim temperament anchor + the buffer with

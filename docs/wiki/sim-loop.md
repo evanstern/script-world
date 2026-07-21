@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Sim loop
@@ -37,6 +37,9 @@ ticks it snapshots and prunes.
 `set_speed` to the current speed emits nothing; otherwise the `clock.*` event is
 applied, appended, and broadcast, and a pause also triggers an immediate snapshot.
 Replies carry a coherent `Status` snapshot (tick, game time, flags, last seq).
+Emitted events now land regardless of the command's error — a rejected
+`inject_intent` is the only command that pairs an error with events (its rejection
+telemetry, so no failure is silent); every other error path emits nothing.
 
 Auto-slow (`observeWindow`): every `degradeWindow = 5s` the loop compares achieved
 ticks/sec against the requested rate; sustained shortfall below 90% emits
@@ -49,17 +52,52 @@ protocol's `state` command with the canonical `State` JSON plus a status capture
 the same loop iteration — the returned `last_seq` is exactly the log position the
 state reflects, which is what makes client-side replicas gapless.
 `Loop.InjectIntent` (the `inject_intent` command) is the door for planner output
-([[agent-mind]]): validated, resolved to coordinates deterministically at the
-boundary via `resolveGoal`, recorded as `agent.intent_set (source: planner)` +
-`agent.thought`. `Loop.InjectSocial` is the second door — the mind's injection
+([[agent-mind]]). `InjectArgs` now carries cognition-horizon landing metadata
+([[cognition]]): `Class`, `JobID`, `SnapshotTick`, `Generation`,
+`PredictedWallMs`/`ActualWallMs`, `Guards`, and an optional `Plan` (mutually
+exclusive with `Goal`). An empty `Class` means an unmetered caller (tests,
+tooling): the ladder below is skipped and no telemetry is emitted — the
+pre-TASK-32 contract.
+
+At the boundary, a metered intent climbs the **landing ladder** against the
+world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
+
+1. dead/asleep agent → `rejected-unavailable`;
+2. `Generation` mismatch with `Agent.Generation` → `superseded`;
+3. staleness over the class's `BudgetTicks` (looked up via
+   `cognition.ClassFor`) → `rejected-stale`;
+4. any `Guard.Eval` failure → `rejected-guard`; a `target_present` guard that
+   holds but whose target moved marks the landing **adapted** (the repair is
+   `resolveGoal`'s re-resolution);
+5. success: `resolveGoal` resolves coordinates deterministically, recorded as
+   `agent.intent_set (source: planner)` + `agent.thought`, or — for a `Plan` —
+   validated against `PlanStepCap` and the `planGoals` vocabulary (missing
+   `Until` defaults to `state.Tick + PlanDefaultWindowTicks`) and recorded as
+   `agent.plan_set`; a `resolveGoal` failure is itself `rejected-guard`.
+
+Every metered verdict lands atomically as `cog.outcome` (rejections also emit
+`agent.intent_rejected`), classified `prediction-miss` when
+`ActualWallMs > PredictionMissFactor × PredictedWallMs` and `world-change`
+otherwise — see [[event-types]] for payload shapes.
+
+Both injection doors are deliberately pause-open (FR-018): pause means "the
+world freezes and the minds catch up" — an in-flight thought completes on the
+wall clock and lands at the frozen tick, where its game-tick staleness is zero
+by construction.
+
+`Loop.InjectSocial` is the second door — the mind's injection
 door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]],
 narrator entries per [[chronicle]], nudges per [[metatron]], proposal rephrasing
 per [[governance]] — `agent.thought` is
 whitelisted as a reducer no-op, `chronicle.entry` appends the story ring,
 `metatron.nudged` spends a charge with a validating reducer the dry-run enforces,
-`meeting.proposal_rephrased` swaps an enacted norm's text and nothing else):
+`meeting.proposal_rephrased` swaps an enacted norm's text and nothing else,
+and the `cog.*` telemetry triple — `cog.thought`, `cog.outcome`,
+`cog.recalibration_recommended` — is whitelisted as reducer no-ops so the
+[[cognition]] layer's observability is recorded, never silent):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
-nudge, or phrasing effects, dry-run on a state copy before applying. Model output enters
+nudge, phrasing, or telemetry effects, dry-run on a state copy before applying.
+Model output enters
 the sim only through these two doors, as recorded input. The protocol `Status`
 carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
 
@@ -68,7 +106,9 @@ carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
 [[game-clock]] supplies intervals; the [[executor]] supplies tick events;
 [[sim-state-reducer]] is the mutation path; [[event-log]] and [[snapshots]] persist;
 [[ipc-server]] feeds commands in and broadcasts events out; [[daemon-lifecycle]] owns
-the ctx whose cancellation triggers the final snapshot.
+the ctx whose cancellation triggers the final snapshot. The landing ladder's
+budgets and classes come from [[cognition]] (`cognition.ClassFor`), whose router
+and estimators produce the snapshot/landing metadata the ladder judges.
 
 ## Operational notes
 

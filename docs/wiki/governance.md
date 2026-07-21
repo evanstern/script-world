@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/governance.go
   - internal/mind/meeting.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Governance (norms and votes)
@@ -65,8 +65,11 @@ norm-blind so defiance survives degraded mode.
 one best-effort `llm.KindMeeting` (local tier) call to restate the template in
 the proposer's voice, injected as `meeting.proposal_rephrased` — the single
 whitelisted governance type, validated by the [[sim-loop]] dry-run (norm
-exists, text ≤ 280), swapping text and nothing else. Any failure leaves the
-template standing.
+exists, text ≤ 280), swapping text and nothing else. Since TASK-32 the call
+first passes the deterministic [[cognition]] router (`routeVerdict` on the
+`meeting` class): a disallow emits a suppressed `cog.outcome` record and
+returns — the degrade action is the template itself, so enacted law never
+waits on a model. Any failure likewise leaves the template standing.
 
 **The charter**: authoritative law is event-sourced state; the scribe renders
 `village_charter.md` (rules in force with proposer/day/tally, standing

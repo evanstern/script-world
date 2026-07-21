@@ -9,13 +9,14 @@ sources:
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Event types
 
 Every event has a namespaced `type` and a canonical-JSON payload defined as a Go
-struct in `internal/sim/state.go` (structs, never maps, so bytes are deterministic).
+struct in `internal/sim` (structs, never maps, so bytes are deterministic; core
+payloads live in `state.go`, families note their own file below).
 This catalog is the contract downstream consumers (chronicle, Metatron digests, the
 TUI) will read.
 
@@ -29,7 +30,7 @@ TUI) will read.
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
 | `sim.day_started` / `sim.night_started` | `DayPayload{day}` | executor, 06:00/22:00 | `Night` flag only — waking is explicit |
 | `sim.forage_regrown` | `RegrownPayload{x, y}` | executor, regrow tick | harvest overlay removed |
-| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res, source}` | reflex (grace-gated) or planner injection | intent installed; `source` says which mind chose it |
+| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res, source}` | reflex (grace-gated), planner injection, or a plan step firing | intent installed; `source` (`reflex`/`planner`/`plan`/`meeting`) says which mind chose it |
 | `agent.work_started` | `WorkStartedPayload{agent, tick}` | executor at target | `WorkStart` stamped |
 | `agent.intent_done` | `AgentPayload{agent}` | executor (done/invalid/unreachable) | intent cleared |
 | `agent.moved` | `AgentMovedPayload{agent, x, y}` | executor pathing | position updated |
@@ -50,6 +51,12 @@ TUI) will read.
 | `metatron.charge_regenerated` | `ChargeRegeneratedPayload{}` in `internal/sim/metatron.go` | executor, absolute 6-game-hour boundaries below cap | `MetatronCharges` +1, cap 3 ([[metatron]]) |
 | `metatron.nudged` | `MetatronNudgedPayload{form, targets, text}` | Metatron console turn (injected, TASK-12) | validates (charges > 0, form, living targets, text cap) then `MetatronCharges` −1; villager memories ride companion `agent.memory_added` events in the same atomic batch |
 | `meeting.*` / `norm.*` families (TASK-13) | payload structs in `internal/sim/governance.go`; contract in `specs/006-norms-and-votes/contracts/governance-events.md` | all executor beats (`governanceEvents`) EXCEPT `meeting.proposal_rephrased`, the one injected governance type (mind phrasing driver) | meeting lifecycle on `State.Meeting`, norms enact/amend/repeal on `State.Norms`, reducer-internal voter/witness edge deltas; rephrase validates (norm exists, text ≤ 280) then swaps text only ([[governance]]) |
+| `cog.thought` | `CogThoughtPayload{job, class, agent, snapshot_tick, generation, trigger_seq, points, predicted_wall_ms, predicted_land_tick}` in `internal/sim/cognition.go` | mind driver (injected) when a call passes the router; `trigger_seq` is the log seq of the arming stimulus (0 = pure cadence) | none (telemetry, TASK-32, [[cognition]]) |
+| `cog.outcome` | `CogOutcomePayload{job, class, agent, outcome, snapshot_tick, landing_tick, staleness_ticks, predicted_wall_ms, actual_wall_ms, kind?, reason?}` | loop landing ladder (landed/adapted/rejected-* /superseded) or mind driver (suppressed/expired/unusable — router suppressions have no matching `cog.thought`) | none — the single terminal record of every thought; rejections carry `kind` `prediction-miss` or `world-change` |
+| `agent.intent_rejected` | `IntentRejectedPayload{agent, goal, reason, staleness_ticks}` in `internal/sim/cognition.go` | loop, when the landing ladder refuses a metered intent (alongside its `cog.outcome`) | none — its own type so souls/chronicle can notice refused intentions without parsing `cog.*` |
+| `cog.recalibration_recommended` | `RecalibrationPayload{tier, estimate_s_per_pt, spike_rate, window}` in `internal/sim/cognition.go` | mind driver (injected) when a tier's live estimator breaches the spike-rate drift threshold (once per breach episode) | none (telemetry) |
+| `agent.plan_set` | `PlanSetPayload{agent, job, steps}` in `internal/sim/plan.go` | loop, on a guarded plan landing (TASK-32 US4) | `Agent.Plan` replaced with the steps |
+| `agent.plan_step_started` / `agent.plan_expired` | `PlanStepPayload{agent, job, step, reason?}` in `internal/sim/plan.go` | executor (`planStepEvents`) on an idle agent's head step firing / window closing or resolve failing | head step popped / whole remaining plan cleared (a broken sequence is not resumed) |
 
 Conventions: `clock.*` are applied player/scheduler commands; `sim.*` and `agent.*`
 are world happenings (pure functions of state + seed + tick); `daemon.*` are process
@@ -57,12 +64,18 @@ bookkeeping, wall-time dependent, and excluded from determinism comparisons (as 
 `clock.*` in the binary-level test, since their ticks depend on command timing).
 Payloads record **outcomes** (positions reached, absolute need values), never dice
 rolls, so replay needs no RNG. Unknown types are no-ops in the reducer, so adding
-types is backward-compatible with old replay code.
+types is backward-compatible with old replay code. The `cog.*` family and
+`agent.intent_rejected` (TASK-32, [[cognition]]) are recorded observability —
+explicit reducer no-ops whose wall-time fields are recorded input, so no failure
+is silent and thought chains are walkable from the log alone; their payload
+field order is canonical per `specs/007-cognition-horizon/contracts/events.md`.
 
 ## Connections
 
 [[sim-state-reducer]] applies these; the [[executor]], [[reflex-policy]], and
-[[sim-loop]] emit the sim/agent/clock families; [[daemon-lifecycle]] emits `daemon.*`; [[event-log]] stores them;
+[[sim-loop]] emit the sim/agent/clock families; the mind driver and the loop's
+landing ladder emit the `cog.*` telemetry ([[cognition]]); [[daemon-lifecycle]]
+emits `daemon.*`; [[event-log]] stores them;
 [[ipc-protocol]] pushes them to subscribers verbatim.
 
 ## Operational notes

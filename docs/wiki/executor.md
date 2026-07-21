@@ -5,8 +5,9 @@ kind: component
 sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
+  - internal/sim/plan.go
   - internal/sim/terrain.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Executor
@@ -39,6 +40,21 @@ immediately; work goals re-validate the resource (someone may have taken it), em
 `agent.work_started`, and after the goal's duration emit the completion event
 (`agent.foraged/chopped/hunted/built`), which the reducer turns into inventory,
 overlays, and a cleared intent.
+
+**Guarded plans** (TASK-32, `plan.go`): a planner reply may land as a short
+conditional plan — up to `PlanStepCap` (3) `PlanStep`s, each with a goal, an
+optional `When` guard, and an `Until` validity deadline (default window
+`PlanDefaultWindowTicks`, 2 game-hours). The steps live on `Agent.Plan` in
+deterministic state (`agent.plan_set`); each idle tick the executor evaluates
+the head step via `planStepEvents` *before* falling through to the reflex:
+holding (guard false, window open) emits nothing, expiry or a failed goal
+resolution clears the whole plan with `agent.plan_expired` (a broken sequence
+is not resumed), and firing emits `agent.plan_step_started` plus the intent
+with source `plan`. No model runs at firing time — timed guards are the sole
+act-at-time-T mechanism. `Agent.Generation` (also TASK-32) counts
+high-salience interrupts: the reducer bumps it on memories at or above
+`GenerationBumpSalience` (9), and in-flight thoughts snapshotted under an
+older generation are superseded when they land ([[cognition]]).
 
 **Terrain overlays** (`terrain.go`): chopped trees and harvested forage are
 event-sourced state over the static map — `effectiveKind`/`passable` merge

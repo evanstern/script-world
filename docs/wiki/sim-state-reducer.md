@@ -5,15 +5,17 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Sim state & reducer
 
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
 degraded, effective rate) plus the living world — agents with needs/intents/
-inventories/memories (with `IdleSince` for the reflex grace and a `NearDeath`
-latch), structures, cleared trees, harvested forage, den cooldowns, the social
+inventories/memories (with `IdleSince` for the reflex grace, a `NearDeath`
+latch, a `Generation` interrupt counter and pending `Plan` steps for the
+[[cognition]] horizon — both `omitempty` so pre-TASK-32 snapshots stay
+byte-stable), structures, cleared trees, harvested forage, den cooldowns, the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
 variants and the bounded conversation-record ring ([[social-fabric]]) — the
 consolidated inner life: per-agent beliefs, self-narrative, and the
@@ -46,6 +48,15 @@ imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
 and death; the `gru.*` family dispatches to `applyGru` in `gru.go` ([[gru]]);
 the `meeting.*`/`norm.*` families dispatch to `applyGovernance` in
 `governance.go` ([[governance]]).
+`agent.memory_added` additionally bumps `Agent.Generation` when the memory's
+salience is at or above `GenerationBumpSalience` (9) — in-flight thoughts
+snapshotted under the old generation are superseded at landing ([[cognition]],
+[[sim-loop]]). The plan family maintains `Agent.Plan`: `agent.plan_set`
+replaces the steps, `agent.plan_step_started` pops the head, and
+`agent.plan_expired` clears the whole remaining plan (a broken sequence is
+not resumed). The cognition telemetry types — `cog.thought`, `cog.outcome`,
+`cog.recalibration_recommended`, `agent.intent_rejected` — are explicit
+reducer no-ops: recorded observability with zero state effect.
 Unknown types — including `daemon.*` and `world.created` — are recorded
 history but state no-ops, so new event types never break old replay.
 
@@ -62,7 +73,8 @@ verification and the determinism tests. Wall-clock time never appears in state.
 
 [[sim-loop]] generates events via the [[executor]] and applies them here;
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
-[[event-types]] lists every payload struct defined in this file.
+[[event-types]] lists every payload struct (the cognition-horizon payloads
+live in sibling files `cognition.go`, `guard.go`, and `plan.go`).
 
 ## Operational notes
 

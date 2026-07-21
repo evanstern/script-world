@@ -6,11 +6,12 @@ sources:
   - internal/mind/mind.go
   - internal/mind/prompt.go
   - internal/mind/parse.go
+  - internal/mind/telemetry.go
   - internal/persona/personas.go
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Agent mind
@@ -59,27 +60,60 @@ provenance, exile judgments — second-person for the exile — and the assembly
 while convening; [[governance]]). The driver also runs conversations (see
 [[social-fabric]]). Villagers convened to the noon meeting are planner- and
 musing-suppressed (`sim.AtMeeting`) until close, their pending triggers left
-armed. Due agents are
+armed. Since TASK-32 every trigger records its arming stimulus: `arm` takes the
+event seq, kept in `pendingSeq` as the causality edge on the eventual telemetry.
+
+Before enqueue, each due agent passes the cognition-horizon gate
+(`routeVerdict` in telemetry.go, backed by [[cognition]]'s deterministic
+router): a planner thought whose predicted drift exceeds its staleness budget
+at the current speed is never attempted — a `cog.outcome{suppressed}` records
+the arithmetic, and the reflex floor is the degrade action. Allowed agents are
 enqueued as immutable prompt snapshots to a single-flight-per-agent planner
 worker — a model call must never block the absorb loop, or the events channel
-overflows at high speed and edge triggers are dropped. Each job is one call
-(`llm.KindPlanner`, persona system prefix, situation
-+ memory window suffix, MaxTokens 256); the first JSON object in the reply is parsed
-against the goal vocabulary and injected via `Loop.InjectIntent` — which validates,
-resolves coordinates deterministically at the tick boundary (`resolveGoal`), and
-records `agent.intent_set (source: planner)` + `agent.thought`. Failures of any kind
-(dead model, budget, garbage output, impossible goal) emit nothing; the reflex grace
-(120 ticks idle) is the floor under every gap, and remains the permanent degraded
-mode.
+overflows at high speed and edge triggers are dropped. Each job carries a
+`thoughtMeta` identity (job id, decision class, snapshot tick, agent
+generation, trigger seq, predicted wall-ms and landing tick from
+[[cognition]]'s latency estimate) plus a snapshot of every agent's position
+(`agentSnap`) — the assumptions guards are built from. Because the planner
+class is `FutureDated`, the prompt opens with `futureDated` (prompt.go): "your
+decision will take effect around <landing clock> — plan for then". Each job is
+one call (`llm.KindPlanner`, persona system prefix, situation + memory window
+suffix, MaxTokens 256); the worker emits `cog.thought` at call start and every
+job terminates in exactly one `cog.outcome` (landed, unusable, or —
+loop-owned — rejected), riding `InjectSocial` as reducer no-ops
+(telemetry.go). The reply's first JSON object is parsed against the goal
+vocabulary; the contract now allows either one goal or a guarded plan of at
+most `planStepCap` (3) steps (parse.go) — `after_min` becomes a
+`GuardAfterTick` guard anchored at the snapshot tick, `for_min` bounds each
+step's window (`injectPlan`). Single goals are injected via `Loop.InjectIntent`
+— which validates, resolves coordinates deterministically at the tick boundary
+(`resolveGoal`), and records `agent.intent_set (source: planner)` +
+`agent.thought` — now carrying the landing metadata (`sim.InjectArgs`: Class,
+JobID, SnapshotTick, Generation, Predicted/ActualWallMs) and, for `talk_to`,
+`GuardTargetAlive` + `GuardTargetPresent` guards built from the job's world
+snapshot; the loop owns the landing verdict and its outcome telemetry. A
+landing rejection sends the agent index over the `rearm` channel back to the
+absorb goroutine — the agent noticed the plan failed and re-thinks at the next
+open debounce window, promptly but never hotly. Call and parse failures emit
+no intent but always a terminal `cog.outcome{unusable}`; the reflex grace (120
+ticks idle) is the floor under every gap, and remains the permanent degraded
+mode. The daemon also installs `RecalibrateSignal` as the orchestrator's drift
+hook: an estimator spike-rate breach lands as `cog.recalibration_recommended`.
 
 **Musings** (TASK-21): between planner calls each agent has a 15-game-minute
 best-effort musing cadence (staggered half a slot off the planner stagger).
 A musing is one `llm.KindMusing` call (same situation + memory window, a
 plain-sentence system frame, MaxTokens 48) whose reply lands as a single
 `agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
-interiority with zero goal effect. Single-flight and detached from the absorb
+interiority with zero goal effect. Musings pass the same [[cognition]] router
+gate as planners (1 point vs the planner's 3, so they survive far higher
+speeds) and carry the same telemetry: `cog.thought` at call start, and a
+landed musing rides one `InjectSocial` batch with its
+`cog.outcome{landed}` — the musing and its terminal record land atomically.
+Single-flight and detached from the absorb
 loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy` on `BestEffort`
-requests) or unusable replies drop the musing silently. One exception, the
+requests) or unusable replies drop the musing — recorded silence, a
+`cog.outcome{unusable}`, never a goal. One exception, the
 fairness floor: a musing starved past `museStarveWindow` (2 wall-minutes)
 drops the `BestEffort` flag and rides the normal queue — a saturated tier
 (live finding: back-to-back ~50s planner calls admit zero best-effort work)
@@ -88,9 +122,13 @@ costs at most one 48-token call per window instead of total silence.
 ## Connections
 
 [[executor]] emits memories and runs the intents; [[reflex-policy]] shares
-`resolveGoal` and provides the fallback; [[llm-orchestrator]] carries the calls
+`resolveGoal` and provides the fallback; [[cognition]] owns the decision-class
+registry, the router the mind gates on, and the latency estimate behind
+predictions and future-dating; [[llm-orchestrator]] carries the calls
 (local tier); [[sim-loop]]'s `inject_intent` command is the only door into
-deterministic space; [[event-types]] catalogs the new events; the [[tui-client]]
+deterministic space and since TASK-32 the owner of landing-time validation
+(staleness ladder, generation and guard checks); [[event-types]] catalogs the
+new events; the [[tui-client]]
 souls pane shows each agent's newest memory. [[nightly-consolidation]] digests each
 day's memories into the soul at sleep; TASK-8 turned the talk primitive into real
 conversations. The mind also hosts the [[chronicle]] narrator (TASK-11): absorb

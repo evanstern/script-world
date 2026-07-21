@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: b37bdb7ead272ee360b494fa4c9b476318b96578
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Social fabric
@@ -44,7 +44,13 @@ any rumor.
 **Conversations** (`mind/convo.go`, scenes in TASK-22): on the executor's
 `agent.talked` beat, the driver (slot = 1, immutable snapshot, 10-min deadline —
 sized for a full scene at honest local pace)
-forms a **scene**: the founding pair plus any awake villager within
+forms a **scene**. Since TASK-32 the beat first passes the [[cognition]]
+router gate: a scene is the tier's most expensive thought (13 points), and if
+it can't land inside its staleness budget at the current speed the encounter
+stays a primitive talk with a `cog.outcome{suppressed}` record. An admitted
+scene mints a telemetry identity at founding (`conversation-<founding tick>`,
+agent = founding speaker) and emits `cog.thought` before the first turn.
+The scene is the founding pair plus any awake villager within
 `sceneJoinRadius` (2) of the founding speaker, up to `sceneCap` (4). Round-robin
 turns, `ConvoTurnsPerSide` (2) each; the snapshot carries each participant's
 feelings toward every other, open debts inside the scene, and the last
@@ -54,7 +60,14 @@ call returns gist, 1–3 topic tags, per-participant tones (the pre-TASK-22
 ONE atomic `inject_social` batch — turns, summary, and per participant×counterpart
 fodder: a gist memory **about** the counterpart (subject-tagged, toned ×30 — a
 `TellableFor` gossip seed) and a tone edge per pair, reason-tagged with the first
-topic; at most one rumor between the founding pair. Any failure injects nothing;
+topic; at most one rumor between the founding pair. The scene's terminal
+`cog.outcome{landed}` rides the same batch — the scene and its record land
+atomically. Landing is also staleness-enforced (TASK-32): a completed scene
+whose wall time overran the conversation class's budget in ticks (the router
+admitted it, but the tier ran slower than predicted) injects nothing and
+records `cog.outcome{rejected-stale}` with the arithmetic. Any failure —
+abandoned turn, unusable outcome call, rejected injection — likewise injects
+nothing and records a terminal `cog.outcome{unusable}`;
 the primitive talk stands alone. Replay is model-free.
 
 **Conversation records** (TASK-22): `social.conversation` is no longer a reducer

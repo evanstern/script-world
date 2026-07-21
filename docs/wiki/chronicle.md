@@ -6,7 +6,7 @@ sources:
   - internal/sim/chronicle.go
   - internal/mind/narrate.go
   - internal/scribe/scribe.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Chronicle
@@ -37,7 +37,12 @@ rumors told, gifts, broken promises, musings, and (TASK-13) the whole
 [[governance]] arc: assemblies with attendance named, grievances raised,
 proposals tabled/passed/voted down with tallies, exiles, and witnessed norm
 violations — each stamped with in-world time. `sim.night_started` closes the day chapter, `sim.day_started` closes
-the night chapter; a chapter with no lines spends no call. The chapter job
+the night chapter; a chapter with no lines spends no call. Since TASK-32,
+`closeChapter` also consults the [[cognition]] router (`routeVerdict` with the
+`chronicle` decision class, `llm.KindNarrator`) before enqueueing: the class's
+day-scale staleness budget passes at every watchable speed, but a suppression
+(possible at future faster speeds) emits a `cog.outcome{suppressed}` record
+and drops the chapter — a gap in the story, no call spent. The chapter job
 snapshots the lines plus up to 8 recent thread slugs (offered for reuse) to a
 single-flight worker: one `llm.KindNarrator` call ([[llm-orchestrator]] cloud
 tier, 3-minute cap, MaxTokens 800) asking for strict JSON of 1–3 entries.

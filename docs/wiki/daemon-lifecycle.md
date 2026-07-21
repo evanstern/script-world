@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # Daemon lifecycle
@@ -38,6 +38,17 @@ Startup sequence:
    orchestrator ([[llm-orchestrator]]) starts only when `llm.json` exists
    (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit — config-gated,
    fully outside the loop, so inference failures can never touch the simulation.
+   Before the orchestrator is built, `cognition.ValidateKinds(llm.Kinds())` is a
+   hard startup gate: every call kind must resolve to a registered decision class
+   before a model is ever reachable ([[cognition]]). After it is built,
+   `cognition.LoadProfile(w.CalibrationPath())` seeds the seconds-per-point
+   estimators (`orch.SeedCalibration`); a missing or unreadable `calibration.json`
+   falls back to pessimistic bootstrap defaults
+   (`cognition.BootstrapLocalSecPerPt`/`BootstrapCloudSecPerPt` — fail toward
+   reflex, never toward stale action), with a printed hint to run
+   `scriptworld calibrate`. `orch.SetRecalibrateHook(md.RecalibrateSignal)` wires
+   the drift signal: a tier's estimator breaching its spike-rate threshold lands
+   as `cog.recalibration_recommended` telemetry.
 7. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
    `signal.NotifyContext(SIGTERM, SIGINT)` cancel — so the protocol `shutdown`
    command and Unix signals share one graceful path. `SetLoop` closes the
@@ -60,7 +71,8 @@ without touching the world.
 
 [[cli-scriptworld]] runs this via `daemon` and detaches it via `start`; [[sim-loop]]
 is the foreground engine; [[ipc-server]] the concurrent face; [[event-types]] defines
-the `daemon.*` bookkeeping events it emits.
+the `daemon.*` bookkeeping events it emits; [[cognition]] supplies the startup kind
+gate and the calibration profile it seeds into the orchestrator.
 
 ## Operational notes
 

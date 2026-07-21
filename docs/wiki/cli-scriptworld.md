@@ -5,14 +5,16 @@ kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
-verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
+  - cmd/scriptworld/calibrate.go
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # scriptworld CLI
 
 One binary serves every role: daemon, client tools, world management. `main.go` is a
-plain dispatch table; all behavior lives in `commands.go`. The prose contract is
-`specs/001-world-daemon/contracts/cli.md`.
+plain dispatch table; behavior lives in `commands.go`, except `calibrate` in its own
+`calibrate.go`. The prose contract is `specs/001-world-daemon/contracts/cli.md`
+(and `specs/007-cognition-horizon/contracts/cli.md` for `calibrate`).
 
 ## How it works
 
@@ -55,6 +57,14 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
 - `llm <dir> <kind> <prompt...> [--system] [--max-tokens]` — one-shot model call via
   the daemon's `llm_call` command, printing tier, model, tokens, cost, and latency
   ([[llm-orchestrator]]). `new` also writes the default `llm.json` config.
+- `calibrate <dir> [--tier local|cloud|all] [--samples N]` — the cognition horizon's
+  setup stage ([[cognition]], TASK-32): benchmarks the configured host+model per tier
+  against fixed reference prompt shapes (default 5 samples per shape, local tier only;
+  cloud spend is opt-in and announced up front), takes the median seconds-per-point,
+  writes/merges `calibration.json` in the save directory, and prints the horizon the
+  hardware buys (e.g. "planner suppressed above 16x") by evaluating the registry
+  across the watchable speed ladder. Uses an in-memory meter so it never contends
+  with a running daemon's store; a tier whose every sample fails is not written.
 
 `parseDirFlags` accepts both `cmd <dir> --flag` and `cmd --flag <dir>` orderings.
 
@@ -62,7 +72,8 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
 
 [[daemon-lifecycle]] is what `daemon`/`start` run; [[ipc-client]] carries every online
 command; [[world-save-directory]] and [[event-log]] back the offline paths;
-[[game-clock]] formats times in `clockLine`/`eventLine`.
+[[game-clock]] formats times in `clockLine`/`eventLine`; `calibrate` writes the
+profile [[cognition]] routes with.
 
 ## Operational notes
 

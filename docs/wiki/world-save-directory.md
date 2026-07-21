@@ -4,7 +4,7 @@ description: One directory = one world run — manifest (world.json), path helpe
 kind: component
 sources:
   - internal/world/world.go
-verified_against: 8f24c13a5b2eb1c1f37244978055e3f6eb5d42d2
+verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
 ---
 
 # World save directory
@@ -31,7 +31,10 @@ so the map is never stored ([[worldmap-generation]]).
   half-load a newer world.
 - Path helpers centralize layout: `DBPath()` → `world.db`, `LLMConfigPath()` →
   `llm.json` (the [[llm-orchestrator]] config, written by `new`, deletable to
-  disable inference), `SockPath()` → `daemon.sock`, `PidPath()` → `daemon.pid`,
+  disable inference), `CalibrationPath()` → `calibration.json` (the
+  seconds-per-point profile written only by `scriptworld calibrate` —
+  [[cognition]]; an absent file is legal, pessimistic bootstrap defaults apply),
+  `SockPath()` → `daemon.sock`, `PidPath()` → `daemon.pid`,
   `LogPath()` → `daemon.log`, `CharterPath()` → `charter.md` (the player-editable
   prompt), `MetatronDir()` → `metatron/` (the angel's soul and transcript —
   [[metatron]]), and `VillageCharterPath()` → `village_charter.md` (the village's
