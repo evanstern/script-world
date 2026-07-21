@@ -7,7 +7,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-21 18:06'
+updated_date: '2026-07-21 18:50'
 labels:
   - robustness
 dependencies: []
@@ -31,7 +31,7 @@ Spec: specs/011-conversation-robustness
 - [ ] #2 Outcome site (convo.go:204-210): a parse-failed outcome is retried once before giving up; scene state (turns, memories, relation deltas, rumor) is not lost when the retry succeeds
 - [ ] #3 On any outcome/utterance parse failure the raw model reply is persisted (event payload or log) so failures are inspectable after the fact
 - [ ] #4 Outcome prompt hardened (gist MUST be a quoted string or equivalent); optionally lenient field extraction in parse.go shared with parseSay/parseConsolidation
-- [ ] #5 MLX reasoning_effort:none probe under max_tokens=128 completed and findings recorded on this task
+- [x] #5 MLX reasoning_effort:none probe under max_tokens=128 completed and findings recorded on this task
 - [ ] #6 Spec phase: Setup
 - [ ] #7 Spec phase: Foundational (blocking prerequisites for all stories)
 - [ ] #8 Spec phase: User Story 1 — A completed scene survives one bad summary reply (P1)
@@ -52,4 +52,6 @@ Scope decision resolved by user 2026-07-21: TASK-42 widened to cover the outcome
 Implementation tier: Opus 4.8 (constitution V rubric: internal/mind orchestration; doctrine-adjacent all-or-nothing landing semantics; prior-era site shipped live defects). Spec 011 planned on Fable 5; 20 tasks, MVP = US1 outcome retry.
 
 Implementation complete on branch task-42-conversation-robustness; PR #29 open (https://github.com/evanstern/script-world/pull/29). Opus implementer: 5 commits, 20/20 quickstart-gate tests, full suite green; per-scene utterance budget ruling (FR-002/FR-007) applied after gate review. Awaiting review/merge; post-merge: wiki-update (T019) + spec-bridge sync (T020), then Done.
+
+MLX reasoning_effort probe findings (FR-008/US5, AC #5; run live against localhost:11434 gemma4:12b-mlx, utterance-shaped requests, max_tokens=128, N=10 per config): reasoning_effort IS honored, and the empty-utterance hypothesis is CONFIRMED — unset: 10/10 empty replies (median content 0); low: 10/10 empty; none: 0/10 empty, median 62 chars. A thinking model spends the entire 128-token budget on hidden CoT unless effort is 'none'. The orchestrator's existing local-tier default resolveReasoningEffort(..., "none") (llm.go:186) is therefore both necessary and sufficient — load-bearing, do not remove. Probe script: specs/011-conversation-robustness/probe-mlx-reasoning.sh. (Re-applied to main: original note commit landed on the task branch by mistake and was dropped in the rebase.)
 <!-- SECTION:NOTES:END -->
