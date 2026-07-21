@@ -82,6 +82,21 @@ Features are specified with GitHub Spec Kit (`specify`) under `specs/NNN-<featur
 <!-- pdlc:peer:spec-kit END -->
 <!-- pdlc:grounding END -->
 
+## Model-tiered workflow (constitution Principle V)
+
+Planning and implementation run on different model tiers, enforced by delegation
+(`.specify/memory/constitution.md`, Principle V):
+
+- **Fable 5 plans:** specs (`speckit-specify`), plans (`speckit-plan`), task generation
+  (`speckit-tasks`), clarify/analyze, and board/task creation stay on the main session's
+  planning model.
+- **Sonnet/Opus implements:** when executing implementation tasks (`speckit-implement`,
+  `build:implement`, or any tasks.md/SPEC execution), delegate the code-writing to the
+  `spec-implementer` agent (`.claude/agents/spec-implementer.md`, pinned to Sonnet;
+  override to Opus via the Agent tool's `model` param for high-complexity specs) —
+  never implement inline on the planning model. The planning model orchestrates,
+  reviews the agent's findings, and gates.
+
 ## Git worktrees — root stays on main
 
 The root checkout (`~/evan/script-world`) is **pinned to `main`** — never check out a
