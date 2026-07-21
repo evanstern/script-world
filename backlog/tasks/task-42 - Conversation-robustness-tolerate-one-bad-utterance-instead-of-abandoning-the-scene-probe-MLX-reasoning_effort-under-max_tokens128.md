@@ -7,7 +7,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-21 17:37'
+updated_date: '2026-07-21 18:06'
 labels:
   - robustness
 dependencies: []
@@ -50,4 +50,6 @@ Opus investigation (2026-07-21, myworld-01) of 'conversation 48896 outcome faile
 Scope decision resolved by user 2026-07-21: TASK-42 widened to cover the outcome site (was: pending widen-vs-sibling).
 
 Implementation tier: Opus 4.8 (constitution V rubric: internal/mind orchestration; doctrine-adjacent all-or-nothing landing semantics; prior-era site shipped live defects). Spec 011 planned on Fable 5; 20 tasks, MVP = US1 outcome retry.
+
+Implementation complete on branch task-42-conversation-robustness; PR #29 open (https://github.com/evanstern/script-world/pull/29). Opus implementer: 5 commits, 20/20 quickstart-gate tests, full suite green; per-scene utterance budget ruling (FR-002/FR-007) applied after gate review. Awaiting review/merge; post-merge: wiki-update (T019) + spec-bridge sync (T020), then Done.
 <!-- SECTION:NOTES:END -->
