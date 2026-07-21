@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 13:18'
-updated_date: '2026-07-21 13:22'
+updated_date: '2026-07-21 13:23'
 labels: []
 dependencies: []
 ordinal: 32000
@@ -34,14 +34,18 @@ Full-repo drift scan (wiki mechanical freshness gate + semantic verification of 
 - [x] #12 nightly-consolidation.md: anchor echo is normalized comparison (case/whitespace/trailing punct), not byte-for-byte (validate.go:71-75)
 - [x] #13 README.md: 'daily noon meeting' stale post-TASK-36; meeting hour is per-world config or emergent convention
 - [x] #14 README.md: quickstart omits resume; add it and point at scriptworld help for the full list
-- [ ] #15 repo hygiene: backlog task files task-34..37 untracked in git despite TASK-36/37 merged; commit board files
-- [ ] #16 edited wiki notes re-pinned (verified_against) to the audited commit 0264eb3
+- [x] #15 repo hygiene: backlog task files task-34..37 untracked in git despite TASK-36/37 merged; commit board files
+- [x] #16 edited wiki notes re-pinned (verified_against) to the audited commit 0264eb3
 <!-- AC:END -->
-
-
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
 1) Worktree .worktrees/task-38 off origin/main. 2) Delegate the 16 checklist edits to spec-implementer (constitution Principle V). 3) Verify: re-run mechanical freshness scan + grep spot checks. 4) Commit incl. untracked backlog files; PR.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fixes applied by spec-implementer in .worktrees/task-38; verified by orchestrator (diff review + freshness re-scan green). Commit 004a430: README + board files; d38f4c3: 11 wiki fixes, 10 notes re-pinned to 004a430 (child of audited 0264eb3 — only README/board changed between, README being a source of overview.md, hence the newer pin). Batches B–E clean notes needed no re-pin.
+<!-- SECTION:NOTES:END -->
