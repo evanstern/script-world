@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -346,6 +347,239 @@ func TestCallerTimeoutIsNotModelFailure(t *testing.T) {
 	}
 	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "after"}); err != nil {
 		t.Fatalf("healthy tier must serve the next caller: %v", err)
+	}
+}
+
+// lastUserPrompt pulls the final user message out of an OpenAI-compatible
+// chat-completions request body — the test servers key ordering off it.
+func lastUserPrompt(r *http.Request) string {
+	var body struct {
+		Messages []struct {
+			Role, Content string
+		} `json:"messages"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	for i := len(body.Messages) - 1; i >= 0; i-- {
+		if body.Messages[i].Role == "user" {
+			return body.Messages[i].Content
+		}
+	}
+	return ""
+}
+
+func localReplyJSON(w http.ResponseWriter) {
+	json.NewEncoder(w).Encode(map[string]any{
+		"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+		"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+	})
+}
+
+// TestParallelInFlight (US1, SC-004): with parallel: 4, four calls are
+// verifiably in flight at the same instant. The server counts concurrent
+// handlers and parks each until all four have arrived; a watchdog fails the
+// test if fewer than four ever overlap (i.e. the tier is still serial).
+func TestParallelInFlight(t *testing.T) {
+	const n = 4
+	var cur, max atomic.Int32
+	arrived := make(chan struct{}, n)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := cur.Add(1)
+		for { // record the high-water mark of simultaneous handlers
+			m := max.Load()
+			if c <= m || max.CompareAndSwap(m, c) {
+				break
+			}
+		}
+		arrived <- struct{}{}
+		<-release // hold every handler open until all n have arrived
+		cur.Add(-1)
+		localReplyJSON(w)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = n
+	o := newOrch(t, cfg, testStore(t))
+
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"})
+			errs <- err
+		}()
+	}
+	watchdog := time.After(5 * time.Second)
+	for i := 0; i < n; i++ {
+		select {
+		case <-arrived:
+		case <-watchdog:
+			t.Fatalf("only %d/%d calls reached the server — tier is not running %d-wide", i, n, n)
+		}
+	}
+	if got := max.Load(); got != n {
+		t.Errorf("max simultaneous in-flight = %d, want %d", got, n)
+	}
+	close(release)
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("call %d: %v", i, err)
+		}
+	}
+}
+
+// TestSerialWhenParallelAbsent (US1, SC-003): with the field absent behavior
+// is byte-identical to today — exactly one call is ever in flight, even with a
+// full queue waiting.
+func TestSerialWhenParallelAbsent(t *testing.T) {
+	var cur, max atomic.Int32
+	arrived := make(chan struct{}, 8)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := cur.Add(1)
+		for {
+			m := max.Load()
+			if c <= m || max.CompareAndSwap(m, c) {
+				break
+			}
+		}
+		arrived <- struct{}{}
+		<-release
+		cur.Add(-1)
+		localReplyJSON(w)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100) // no Parallel → default 1
+	o := newOrch(t, cfg, testStore(t))
+
+	const submitted = 5
+	errs := make(chan error, submitted)
+	for i := 0; i < submitted; i++ {
+		go func() {
+			_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"})
+			errs <- err
+		}()
+	}
+	<-arrived // one handler is in flight and parked
+	select {
+	case <-arrived:
+		t.Fatal("a second call reached the server with parallel absent — tier is not serial")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if got := max.Load(); got != 1 {
+		t.Errorf("max simultaneous in-flight = %d, want 1 (serial default)", got)
+	}
+	close(release)
+	for i := 0; i < submitted; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("call: %v", err)
+		}
+	}
+}
+
+// TestParallelOverflowPreservesOrderAndPrio (US1, FR-002): submissions beyond
+// N slots queue rather than drop, and the priority (conversation) lane still
+// jumps the FIFO line under saturation — a conversation submitted AFTER a full
+// queue of planners is served in the first freed-slot wave, not last.
+func TestParallelOverflowPreservesOrderAndPrio(t *testing.T) {
+	const slots = 4
+	const overflow = 8
+	var mu sync.Mutex
+	var order []string
+	var entered atomic.Int32
+	parked := make(chan struct{}, slots)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prompt := lastUserPrompt(r)
+		idx := entered.Add(1)
+		mu.Lock()
+		order = append(order, prompt)
+		mu.Unlock()
+		if idx <= slots { // the first `slots` calls occupy every slot and park
+			parked <- struct{}{}
+			<-release
+		}
+		localReplyJSON(w)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = slots
+	o := newOrch(t, cfg, testStore(t))
+
+	type res struct {
+		prompt string
+		err    error
+	}
+	done := make(chan res, slots+overflow+1)
+	submit := func(kind Kind, prompt string) {
+		go func() {
+			_, err := o.Submit(context.Background(), Request{Kind: kind, Prompt: prompt})
+			done <- res{prompt, err}
+		}()
+	}
+
+	// Fill every slot; wait until all `slots` are parked in the server.
+	for i := 0; i < slots; i++ {
+		submit(KindPlanner, "parked")
+	}
+	watchdog := time.After(5 * time.Second)
+	for i := 0; i < slots; i++ {
+		select {
+		case <-parked:
+		case <-watchdog:
+			t.Fatalf("only %d/%d slots occupied", i, slots)
+		}
+	}
+	// Overflow planners queue behind the full slots.
+	for i := 0; i < overflow; i++ {
+		submit(KindPlanner, "overflow")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if o.StatusSnapshot().Local.Queue >= overflow {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if q := o.StatusSnapshot().Local.Queue; q < overflow {
+		t.Fatalf("overflow did not queue: queue=%d, want >=%d", q, overflow)
+	}
+	// A conversation submitted LAST must still jump the line via the prio lane.
+	submit(KindConversation, "conversation")
+	time.Sleep(100 * time.Millisecond) // let it land in prio before release
+	close(release)
+
+	got := make(map[string]int)
+	for i := 0; i < slots+overflow+1; i++ {
+		select {
+		case r := <-done:
+			if r.err != nil {
+				t.Errorf("call %q: %v", r.prompt, r.err)
+			}
+			got[r.prompt]++
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d/%d calls completed — work was lost", i, slots+overflow+1)
+		}
+	}
+	// Nothing lost: every submitted call ran exactly once.
+	if got["parked"] != slots || got["overflow"] != overflow || got["conversation"] != 1 {
+		t.Errorf("completion counts = %v, want parked:%d overflow:%d conversation:1", got, slots, overflow)
+	}
+	// Prio lane intact: the conversation was dequeued in the first freed-slot
+	// wave, not last (pure FIFO would place it at index slots+overflow).
+	mu.Lock()
+	defer mu.Unlock()
+	convIdx := -1
+	for i, p := range order {
+		if p == "conversation" {
+			convIdx = i
+			break
+		}
+	}
+	if convIdx < slots || convIdx >= 2*slots {
+		t.Errorf("conversation served at index %d (order=%v); want the first overflow wave [%d,%d) — prio lane not honored", convIdx, order, slots, 2*slots)
 	}
 }
 

@@ -52,9 +52,9 @@ field absent, behavior is byte-identical to today (existing suite green).
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Extend `tier` with `slots int` and `inflight atomic.Int32`; `New` sets local `slots` from `cfg.Local.Workers()` and cloud `slots` to 1 (FR-008), then spawns `slots` copies of `worker(t)` per tier; worker increments `inflight` at dequeue and decrements on every reply path (stale-skip, error, success) in internal/llm/llm.go per data-model.md state transitions
-- [ ] T005 [US1] Concurrency tests in internal/llm/llm_test.go: (a) `parallel: 4` + parking httptest server → 4 calls verifiably in flight at once, all complete when released (SC-004 shape); (b) >N submissions → overflow queues, none lost, conversation still jumps via prio lane (FR-002); (c) `parallel` absent → exactly 1 in flight even with a full queue (SC-003)
-- [ ] T006 [US1] Boot surface in internal/daemon/daemon.go: compute `cfg.Local.Workers()`, print the clamp warning when non-empty, and include effective `parallel N` in the existing `daemon: llm orchestrator on (...)` line when N > 1, per contracts/llm-config.md
+- [x] T004 [US1] Extend `tier` with `slots int` and `inflight atomic.Int32`; `New` sets local `slots` from `cfg.Local.Workers()` and cloud `slots` to 1 (FR-008), then spawns `slots` copies of `worker(t)` per tier; worker increments `inflight` at dequeue and decrements on every reply path (stale-skip, error, success) in internal/llm/llm.go per data-model.md state transitions
+- [x] T005 [US1] Concurrency tests in internal/llm/llm_test.go: (a) `parallel: 4` + parking httptest server → 4 calls verifiably in flight at once, all complete when released (SC-004 shape); (b) >N submissions → overflow queues, none lost, conversation still jumps via prio lane (FR-002); (c) `parallel` absent → exactly 1 in flight even with a full queue (SC-003)
+- [x] T006 [US1] Boot surface in internal/daemon/daemon.go: compute `cfg.Local.Workers()`, print the clamp warning when non-empty, and include effective `parallel N` in the existing `daemon: llm orchestrator on (...)` line when N > 1, per contracts/llm-config.md
 
 **Checkpoint**: US1 fully functional — concurrent local calls, unchanged defaults.
 

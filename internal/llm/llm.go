@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/evanstern/script-world/internal/cognition"
@@ -142,6 +143,14 @@ type tier struct {
 	health *tierHealth
 	queue  chan job
 	prio   chan job // interactive work (conversations) jumps the line
+	// slots is the tier's concurrent capacity: the number of worker
+	// goroutines draining its channels (TASK-45). Local is configurable
+	// (LocalConfig.Workers()); cloud is always 1 (FR-008).
+	slots int
+	// inflight counts jobs a worker has dequeued and not yet replied to —
+	// incremented at dequeue, decremented on every reply path. It drives
+	// slot-aware best-effort admission: 0 ≤ inflight ≤ slots.
+	inflight atomic.Int32
 	// est is the live seconds-per-point estimate for this tier (TASK-32):
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
@@ -175,6 +184,10 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Local tier concurrency is operator-configurable (clamped in Workers());
+	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
+	// at one worker (FR-008).
+	localSlots, _ := cfg.Local.Workers()
 	o := &Orchestrator{
 		cfg:   cfg,
 		meter: meter,
@@ -183,14 +196,21 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
 				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none")),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
+				slots: localSlots,
+				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
 			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
+				slots: 1,
+				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
 		},
 	}
+	// One worker goroutine per slot: N identical copies of the existing loop
+	// drain the same two channels, preserving every per-job invariant while
+	// unlocking concurrency (TASK-45 R1).
 	for _, t := range o.tiers {
-		go o.worker(t)
+		for i := 0; i < t.slots; i++ {
+			go o.worker(t)
+		}
 	}
 	return o, nil
 }
@@ -286,7 +306,13 @@ func (o *Orchestrator) worker(t *tier) {
 			case j = <-t.queue:
 			}
 		}
+		// Count this job in-flight the instant it leaves the channel; the
+		// deferred decrement fires on every reply path (stale-skip, provider
+		// error, meter error, success), keeping 0 ≤ inflight ≤ slots for the
+		// slot-aware best-effort admission check in Submit (TASK-45 R3).
+		t.inflight.Add(1)
 		func() {
+			defer t.inflight.Add(-1)
 			// A job whose caller already gave up (its ctx expired in the
 			// queue) is starvation, not model failure: skip it without
 			// touching the model or the circuit. Otherwise every planner
