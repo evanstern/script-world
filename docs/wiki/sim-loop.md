@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Sim loop
@@ -112,6 +112,7 @@ and estimators produce the snapshot/landing metadata the ladder judges.
 
 ## Operational notes
 
-Measured throughput at max speed on the target machine: ~1.65M ticks/sec with the
-placeholder sim. Store errors inside the loop are fatal (the daemon exits) — an
+Measured throughput at max speed on the target machine: ~1.65M ticks/sec, measured on
+the TASK-2-era placeholder sim before the village systems landed (the full village does
+more work per tick). Store errors inside the loop are fatal (the daemon exits) — an
 unwritable log must never silently diverge from state.

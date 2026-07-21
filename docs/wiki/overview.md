@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Overview
@@ -24,7 +24,7 @@ decision by how stale its answer will be when it lands.
 
 ## How it works
 
-One Go module (`github.com/evanstern/script-world`, Go 1.22+; external deps: pure-Go
+One Go module (`github.com/evanstern/script-world`, Go 1.26; external deps: pure-Go
 SQLite, Bubble Tea/Lipgloss for the TUI, and the official Anthropic Go SDK for the
 cloud inference tier) builds one binary, `cmd/scriptworld`, which is both the daemon
 and every client tool. Data planes:
@@ -68,5 +68,6 @@ the [[llm-orchestrator]] is the (strictly quarantined) voice of the models, and
 
 Local, single-operator posture: daemon and clients share a trusted host; the protocol
 has no authentication. Target platform is darwin/arm64 (homelab MacBook); nothing is
-platform-specific beyond Unix sockets. Placeholder simulation events flow until real
-village systems (TASK-4+) replace them.
+platform-specific beyond Unix sockets. The full village stack — executor, minds, social
+fabric, chronicle, Metatron, governance — now runs on the substrate (see [[executor]],
+[[agent-mind]]).

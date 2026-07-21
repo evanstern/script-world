@@ -7,7 +7,7 @@ sources:
   - internal/mind/consolidate.go
   - internal/mind/validate.go
   - internal/persona/personas.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # Nightly consolidation + persona firewall
@@ -36,10 +36,12 @@ marker — the buffer stays intact and the next sleep retries. Due agents queue
 FIFO through a single-flight worker
 (the night is hours long; latency is irrelevant).
 
-**The call**: prompt = persona + verbatim temperament anchor + the buffer with
-per-memory `(tick, hash)` references (`sim.MemoryHash`, FNV-1a — memories have no
-IDs and slice indexes are unstable) + held beliefs by ID + the social context
-block. Output contract (`specs/004-nightly-consolidation/contracts/`): a single
+**The call**: prompt = persona + verbatim temperament anchor + the buffer presented as
+ordinal-labeled memories `m1`..`mN`, with the model told to reference them only by
+label (memories have no IDs and slice indexes are unstable); the `(tick, hash)`
+identity (`sim.MemoryHash`, FNV-1a) is used only internally, to map accepted ordinal
+refs back into landed events, + held beliefs by ID + the social context block. Output
+contract (`specs/004-nightly-consolidation/contracts/`): a single
 JSON object — `nature` (anchor echo), `gist`, `promote`/`fade` refs, `beliefs`
 (statement, confidence 0–100, provenance witnessed/told/inferred, source, subject),
 `narrative`.
@@ -53,8 +55,9 @@ are truncated to their best-first prefix. Then:
 1. structure — refs must resolve in the sent buffer (deduplicated, mapped back
    to durable tick+hash identity), caps as hard guards behind the pre-trim
    (≤5 promotes, ≤8 fades, ≤4 belief edits, narrative ≤1200 chars), bounds;
-2. anchor echo — `nature` must equal `persona.Anchors[name]` byte-for-byte
-   (paraphrase is the cheap canary for drift);
+2. anchor echo — `nature` must equal `persona.Anchors[name]` under a normalized
+   comparison (lowercase, trimmed, trailing `.`/`!` stripped, whitespace runs
+   collapsed) — echo fidelity is the canary, not typography;
 3. drift lexicon — authored `persona.DriftMarkers[name]` words (word-boundary,
    case-insensitive) in the narrative or any self-belief reject the night.
 Any failure lands ONLY a `rejected` marker with a stable reason; the buffer stays

@@ -6,7 +6,7 @@ sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
   - cmd/scriptworld/calibrate.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 ---
 
 # scriptworld CLI
@@ -33,7 +33,7 @@ Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on s
   the socket up to 5 s for a status round trip before reporting success. Never waits
   on the child.
 - `stop <dir>` — sends `shutdown` over the socket (falls back to SIGTERM if the
-  socket is dead but the pid lives), waits ≤10 s for the pidfile to clear. Idempotent:
+  socket is dead but the pid lives), waits ≤30 s for the pidfile to clear. Idempotent:
   "daemon not running" exits 0.
 - `status <dir> [--json]` — online: full `StatusData` via the client. Offline:
   last-known state reconstructed read-only from the store (latest snapshot +
