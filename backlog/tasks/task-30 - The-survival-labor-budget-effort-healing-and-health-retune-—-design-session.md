@@ -4,12 +4,13 @@ title: 'The survival labor budget: effort, healing, and health retune — design
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
+updated_date: '2026-07-21 14:12'
 labels:
   - design
 dependencies:
   - TASK-28
   - TASK-29
-ordinal: 25000
+ordinal: 26000
 ---
 
 ## Description

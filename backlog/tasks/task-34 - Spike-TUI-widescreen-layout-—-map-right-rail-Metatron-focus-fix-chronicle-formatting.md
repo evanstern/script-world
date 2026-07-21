@@ -3,10 +3,10 @@ id: TASK-34
 title: >-
   Spike: TUI widescreen layout — map + right rail, Metatron focus fix, chronicle
   formatting
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 02:05'
-updated_date: '2026-07-21 13:02'
+updated_date: '2026-07-21 15:21'
 labels:
   - spike
 dependencies: []
@@ -53,4 +53,12 @@ B1-B5 fix batch landed (393b492 50/50 split + viewport padding; b6dce6c row-budg
 Follow-up item from live testing: metatron tab shows an eternal '⋮ thinking…' spinner when the cloud tier can't be reached — daemon logs 'metatron: digest deferred: cloud tier: no Anthropic credentials found' but the console protocol never surfaces it, so the UI can't distinguish slow from dead. Proposed: daemon pushes a console error/deferred status; metatron tab renders it as a dim transcript row (e.g. 'angel unreachable — cloud tier deferred'). Observed against a credential-less test daemon; user separately reported an unresponsive metatron in their own world (note: two daemon processes were attached to ~/worlds/myworld at the time — possible stale-daemon cause on their side, left for user to check). Scope call needed: this touches daemon+IPC, may be its own TASK rather than TASK-34.
 
 Speech-formatting demo delegated to an Opus 4.8 subagent per user request: fresh disposable world (world-demo, seed 7) at 16x (fits the conversation governor budget; drops to 8x/4x if suppressions appear), local gemma tier only, polls for social.conversation_turn, captures plain+ANSI feed rows and the paused inspector view, mandatory teardown (no test worlds left running; user's myworld untouched).
+
+Correction: speech demo NOT blocked — conversations occur ~every 1.5-2 game-hours at 8x on the calibrated demo world (4/4 landed on day 1). Restarting world-demo with TUI attached to capture the next scene live.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Widescreen TUI shipped: PR #26 merged as 3911e4c. Map+dock 50/50 composite with chronicle/metatron/souls tabs, solo zoom, Metatron minibuffer with the focus contract (key-swallowing trap deleted), chronicle grammar with resolved-name speech rendering and paused JSON inspect mode, narrow single-pane fallback preserved. All 10 ACs verified (46 tui tests + live tmux verification at 140x40 and 100x30). Design reference stamped and reconciled at docs/design/tui/. Wiki re-grounded: tui-client.md rewritten and re-pinned to 3911e4c, freshness gate green. Worktree/branch cleaned. Unblocks TASK-41 (horizon surfacing in the dock). Follow-ups spawned during this task's live testing: TASK-40/41/42/44/45/46.
+<!-- SECTION:FINAL_SUMMARY:END -->

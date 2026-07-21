@@ -4,10 +4,11 @@ title: 'Fire fuel and the hearth: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
+updated_date: '2026-07-21 14:12'
 labels:
   - design
 dependencies: []
-ordinal: 24000
+ordinal: 25000
 ---
 
 ## Description

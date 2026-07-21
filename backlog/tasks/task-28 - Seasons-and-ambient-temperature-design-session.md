@@ -4,11 +4,11 @@ title: 'Seasons and ambient temperature: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
-updated_date: '2026-07-20 19:55'
+updated_date: '2026-07-21 14:12'
 labels:
   - design
 dependencies: []
-ordinal: 23000
+ordinal: 24000
 ---
 
 ## Description

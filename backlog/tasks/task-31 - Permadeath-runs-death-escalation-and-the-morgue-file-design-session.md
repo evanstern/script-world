@@ -4,10 +4,11 @@ title: 'Permadeath runs, death escalation, and the morgue file: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:55'
+updated_date: '2026-07-21 14:12'
 labels:
   - design
 dependencies: []
-ordinal: 26000
+ordinal: 27000
 ---
 
 ## Description
