@@ -1,10 +1,10 @@
 ---
 id: TASK-25
 title: 'Resources, food, and crafting v1: design session'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-20 13:18'
-updated_date: '2026-07-21 20:50'
+updated_date: '2026-07-21 20:55'
 labels:
   - design
 dependencies:
@@ -20,7 +20,7 @@ The resource economy needs a ground-up design session like TASK-23's (user, 2026
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A grounding/design session produces a spec directory for resources/food/crafting v1, linked on the board via spec-bridge
+- [x] #1 A grounding/design session produces a spec directory for resources/food/crafting v1, linked on the board via spec-bridge
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -34,3 +34,9 @@ Design session round 2 (per-item) decided: FIRE = needs fuel (burns out after N 
 
 Design session round 3 (cross-cutting) decided: EXECUTION = hand-craft portable things (planks, refined stone, spear) anywhere as timed work intents; structures (fire/shelter/oven) stay build-on-site intents with new recipe costs; no place-item mechanic. FOOD NUMBERS = berry 1 unit, rabbit ~8 units; eat raw +40/unit, fire-cooked +80, oven-cooked +100; agents eat units to satiety. BATH = heat water at oven (1 water + fuel share) gives bather +morale and +warmth. REFLEX (degraded mode) = survival raw-loop only: forage/hunt bare-handed, eat raw, chop, build+refuel fire; crafting/cooking/oven/spear/shelter are planner-initiated only — civilization requires minds.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Design session complete (3 Socratic rounds, decisions recorded in notes): produced specs/012-resources-food-crafting (spec.md + passing requirements checklist) covering stone/water/wood resources, fine-grained raw/cooked food, and the 5-item crafting layer (fuel-burning fire, plank shelter w/ rest bonus, fuel-per-batch oven w/ meals + baths, durability spear, food placeholder) with two intermediates (planks, refined stone). Linked on the board via spec-bridge as TASK-50 (implementation deliverable, In Progress per artifacts), following the task-13↔spec-006 precedent. TASK-26 dependency handled by treating inventory as an abstract interface — storage/carry caps explicitly out of scope and deferred; TASK-26's spec remains an input to TASK-50's plan phase. Committed 9703533. HTML design summary at specs/012-resources-food-crafting/design-summary.html.
+<!-- SECTION:FINAL_SUMMARY:END -->

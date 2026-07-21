@@ -1,0 +1,442 @@
+<title>Resources, Food &amp; Crafting v1 — script-world</title>
+<style>
+  :root {
+    --ground: #F1F2ED;
+    --panel: #E8EAE2;
+    --ink: #252A20;
+    --muted: #5C6354;
+    --line: #CDD2C4;
+    --moss: #4C6B3C;
+    --ember: #B4551F;
+    --stone: #66707A;
+    --water: #38678A;
+    --food: #8A6D2F;
+    --chip-ink: #FFFFFF;
+    --display: "Iowan Old Style", "Palatino", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --body: "Seravek", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #171A12;
+      --panel: #20241A;
+      --ink: #E3E6DA;
+      --muted: #9AA28C;
+      --line: #363D2C;
+      --moss: #8CAF75;
+      --ember: #E08A50;
+      --stone: #9AA7B3;
+      --water: #7AABCF;
+      --food: #C9A85C;
+      --chip-ink: #14170F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #171A12;
+    --panel: #20241A;
+    --ink: #E3E6DA;
+    --muted: #9AA28C;
+    --line: #363D2C;
+    --moss: #8CAF75;
+    --ember: #E08A50;
+    --stone: #9AA7B3;
+    --water: #7AABCF;
+    --food: #C9A85C;
+    --chip-ink: #14170F;
+  }
+  :root[data-theme="light"] {
+    --ground: #F1F2ED;
+    --panel: #E8EAE2;
+    --ink: #252A20;
+    --muted: #5C6354;
+    --line: #CDD2C4;
+    --moss: #4C6B3C;
+    --ember: #B4551F;
+    --stone: #66707A;
+    --water: #38678A;
+    --food: #8A6D2F;
+    --chip-ink: #FFFFFF;
+  }
+
+  html { background: var(--ground); }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    line-height: 1.6;
+    margin: 0;
+  }
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 5rem;
+  }
+  .wide { max-width: 58rem; margin-left: auto; margin-right: auto; }
+
+  header.masthead { border-bottom: 3px double var(--line); padding-bottom: 1.5rem; margin-bottom: 2.5rem; }
+  .eyebrow {
+    font-family: var(--body);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    margin: 0 0 0.75rem;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    font-weight: 600;
+    line-height: 1.12;
+    margin: 0 0 0.75rem;
+    text-wrap: balance;
+  }
+  .standfirst { font-size: 1.06rem; color: var(--muted); margin: 0 0 1rem; max-width: 62ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 1.55rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 3rem 0 0.35rem;
+    text-wrap: balance;
+  }
+  h2 + .kicker { margin-top: 0; }
+  .kicker { color: var(--muted); font-size: 0.92rem; margin: 0 0 1.25rem; max-width: 62ch; }
+  h3 { font-family: var(--body); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); margin: 1.75rem 0 0.5rem; }
+  p { max-width: 66ch; }
+  strong { font-weight: 650; }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    color: var(--chip-ink);
+    background: var(--muted);
+  }
+  .chip.wood { background: var(--moss); }
+  .chip.stone { background: var(--stone); }
+  .chip.water { background: var(--water); }
+  .chip.food { background: var(--food); }
+  .chip.fire { background: var(--ember); }
+  .chip.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+  .flow { display: grid; gap: 0.9rem; margin: 1.5rem 0; }
+  .tier {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 1rem;
+    align-items: start;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem;
+  }
+  .tier-label { font-family: var(--body); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); padding-top: 0.25rem; }
+  .tier-rows { display: grid; gap: 0.45rem; }
+  .rrow { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: 0.82rem; }
+  .rrow .arr { color: var(--muted); }
+  .rrow .via { color: var(--muted); font-size: 0.74rem; }
+  @media (max-width: 40rem) { .tier { grid-template-columns: 1fr; gap: 0.5rem; } }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.1rem 1.2rem 1.2rem;
+  }
+  .card h4 { font-family: var(--display); font-size: 1.18rem; font-weight: 600; margin: 0 0 0.15rem; }
+  .card .recipe { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); margin: 0 0 0.7rem; }
+  .card p { font-size: 0.92rem; margin: 0 0 0.6rem; }
+  .card p:last-child { margin-bottom: 0; }
+  .card ul { font-size: 0.92rem; margin: 0; padding-left: 1.1rem; }
+  .card li { margin-bottom: 0.35rem; }
+  .card li:last-child { margin-bottom: 0; }
+  .card.flagship { border-left: 4px solid var(--ember); }
+
+  .tablebox { overflow-x: auto; margin: 1.25rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th {
+    text-align: left;
+    font-family: var(--body);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    border-bottom: 2px solid var(--line);
+    padding: 0.45rem 1rem 0.45rem 0;
+  }
+  td { border-bottom: 1px solid var(--line); padding: 0.5rem 1rem 0.5rem 0; vertical-align: top; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 0.84rem; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .split .card h4 { font-size: 1.05rem; }
+
+  .callout {
+    border-left: 4px solid var(--moss);
+    background: var(--panel);
+    border-radius: 0 6px 6px 0;
+    padding: 0.85rem 1.1rem;
+    margin: 1.5rem 0;
+    font-size: 0.94rem;
+    max-width: 66ch;
+  }
+  .callout.warn { border-left-color: var(--ember); }
+  .callout p { margin: 0 0 0.5rem; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  footer { margin-top: 4rem; border-top: 3px double var(--line); padding-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
+  footer .meta { margin-top: 0.5rem; }
+  a { color: var(--moss); }
+  a:focus-visible, .chip:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">script-world · TASK-25 design session · spec 012</p>
+    <h1>Resources, Food &amp; Crafting v1</h1>
+    <p class="standfirst">
+      How the village economy works after v1: three gatherable resources, a fine-grained
+      food currency with cooking, and a five-item crafting layer with two intermediate
+      materials — all on the deterministic executor, with survival still guaranteed when
+      no mind is running.
+    </p>
+    <div class="meta">
+      <span>designed 2026-07-21</span>
+      <span>spec: specs/012-resources-food-crafting</span>
+      <span>build task: TASK-50</span>
+      <span>storage: deferred to TASK-26</span>
+    </div>
+  </header>
+
+  <h2>The economy at a glance</h2>
+  <p class="kicker">
+    Everything flows one way: terrain is gathered into raw resources, raw resources are
+    refined into intermediates or cooked into better food, and intermediates become the
+    items and stations that improve gathering and cooking. Fuel is the loop-closer — fire
+    and oven both burn wood, so wood never stops mattering.
+  </p>
+
+  <div class="wide">
+    <div class="flow">
+      <div class="tier">
+        <div class="tier-label">Gather<br>(terrain → inventory)</div>
+        <div class="tier-rows">
+          <div class="rrow"><span class="chip ghost">tree</span> <span class="arr">— chop —▸</span> <span class="chip wood">2 wood</span></div>
+          <div class="rrow"><span class="chip ghost">rock outcrop</span> <span class="arr">— quarry —▸</span> <span class="chip stone">2 stone</span> <span class="via">(new tile kind; depletes, never regrows)</span></div>
+          <div class="rrow"><span class="chip ghost">water tile</span> <span class="arr">— collect —▸</span> <span class="chip water">1 water</span> <span class="via">(inexhaustible, no container needed)</span></div>
+          <div class="rrow"><span class="chip ghost">forage patch</span> <span class="arr">— forage —▸</span> <span class="chip food">2 raw food</span></div>
+          <div class="rrow"><span class="chip ghost">animal den</span> <span class="arr">— hunt —▸</span> <span class="chip food">8 raw food</span> <span class="via">(12, faster, with spear)</span></div>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label">Refine<br>(hand-craft anywhere)</div>
+        <div class="tier-rows">
+          <div class="rrow"><span class="chip wood">1 wood</span> <span class="arr">—▸</span> <span class="chip wood">4 planks</span></div>
+          <div class="rrow"><span class="chip stone">1 stone</span> <span class="arr">—▸</span> <span class="chip stone">1 refined stone</span></div>
+          <div class="rrow"><span class="chip food">raw food</span> <span class="arr">— at lit fire —▸</span> <span class="chip food">cooked food</span> <span class="via">(2× value)</span></div>
+          <div class="rrow"><span class="chip food">raw food</span> <span class="arr">— at oven + 1 wood —▸</span> <span class="chip food">meals</span> <span class="via">(2.5× value)</span></div>
+        </div>
+      </div>
+      <div class="tier">
+        <div class="tier-label">Make<br>(items &amp; stations)</div>
+        <div class="tier-rows">
+          <div class="rrow"><span class="chip wood">2 wood</span> <span class="arr">—▸</span> <span class="chip fire">fire</span> <span class="via">(build on site · burns fuel)</span></div>
+          <div class="rrow"><span class="chip wood">8 planks</span> <span class="arr">—▸</span> <span class="chip ghost">shelter</span> <span class="via">(build on site)</span></div>
+          <div class="rrow"><span class="chip stone">4 refined stone</span> <span class="chip wood">2 planks</span> <span class="arr">—▸</span> <span class="chip fire">oven</span> <span class="via">(build on site · burns fuel)</span></div>
+          <div class="rrow"><span class="chip wood">1 wood</span> <span class="chip stone">1 refined stone</span> <span class="arr">—▸</span> <span class="chip ghost">spear</span> <span class="via">(hand-craft · 3 uses)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>The resource layer</h2>
+  <p class="kicker">Three base resources, each with its own source, action, and character.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>Wood</h4>
+      <p class="recipe">chop adjacent tree · exists today</p>
+      <p>The universal material — and now also the universal <strong>fuel</strong>. Beyond
+      building, wood is burned by fires (to stay lit) and by ovens (per batch), so demand
+      never plateaus. Chopped trees clear the tile, as today.</p>
+    </div>
+    <div class="card">
+      <h4>Stone</h4>
+      <p class="recipe">quarry adjacent rock outcrop · new</p>
+      <p>A new <strong>rock-outcrop terrain kind</strong>, noise-placed in coherent patches
+      on ~6% of dry land. Quarrying works like chopping: stand adjacent, work, take the
+      yield; the outcrop depletes permanently. Stone is finite but tuned to be
+      practically inexhaustible — and survival never needs it.</p>
+      <p>This is a format-versioned map change: every seed regenerates with outcrops.</p>
+    </div>
+    <div class="card">
+      <h4>Water</h4>
+      <p class="recipe">collect beside any water tile · new</p>
+      <p>An <strong>ingredient, not a need</strong> — there is no thirst in v1, no
+      container, and no death by dehydration. Water's only consumer is the oven bath;
+      it exists now so future recipes (stews, mortar, whatever the village invents)
+      have a supply chain waiting.</p>
+    </div>
+  </div>
+
+  <h2>The food system</h2>
+  <p class="kicker">
+    Food stops being "meals" and becomes a fine-grained unit: a berry is 1, a rabbit is 8.
+    What changes the game is the raw/cooked split — the same gathered unit is worth up to
+    2.5× more after passing through the village's infrastructure.
+  </p>
+
+  <div class="tablebox">
+    <table>
+      <tr><th>Form</th><th>Made by</th><th class="num">Restores / unit</th><th>Notes</th></tr>
+      <tr><td><span class="chip food">raw food</span></td><td>forage (2) · hunt (8, or 12 with spear)</td><td class="num">+40</td><td>the degraded-mode staple</td></tr>
+      <tr><td><span class="chip food">cooked food</span></td><td>cooking at a <strong>lit fire</strong></td><td class="num">+80</td><td>no extra fuel beyond the fire's burn</td></tr>
+      <tr><td><span class="chip food">meal</span></td><td>oven batch: 1 wood + up to 8 raw</td><td class="num">+100</td><td>best food in the game</td></tr>
+    </table>
+  </div>
+
+  <p><strong>Eating</strong> is one action that consumes units — most nutritious first —
+  until the villager is sated (food need ≥ 900 of 1000) or the pouch is empty. The need
+  scale and hunger thresholds are unchanged; only the currency got finer. For reference,
+  today's system was one indivisible +350 meal.</p>
+
+  <div class="callout">
+    <p><strong>The survival floor holds.</strong> A village with no planner at all still
+    lives: forage and hunt bare-handed, eat raw, chop wood, build and refuel fires. That
+    raw loop is the entire reflex vocabulary — verified by the spec's success criterion
+    that a planner-less village survives 3+ game days with zero crafting events.</p>
+  </div>
+
+  <h2>The five items</h2>
+  <p class="kicker">Each item earned its own discussion in the session; these are the settled mechanics.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>Fire</h4>
+      <p class="recipe">build on site · 2 wood → 8h of burn</p>
+      <ul>
+        <li><strong>Fuel:</strong> burns 4 game-hours per wood; refuel with 1 wood, capped at 12 hours remaining.</li>
+        <li><strong>Burnout:</strong> an untended fire goes cold — no warmth, no cooking. It persists as a structure and relights on refuel.</li>
+        <li><strong>Cooks:</strong> raw → cooked (+80) for anyone beside it while lit.</li>
+        <li>The one item the <strong>reflex</strong> still manages: build when cold nights demand, refuel when carrying wood.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Basic Shelter</h4>
+      <p class="recipe">build on site · 8 planks</p>
+      <ul>
+        <li>Re-costed from raw wood into <strong>planks</strong> — the wood chain's first load-bearing customer.</li>
+        <li>Warmth exactly as today, plus <strong>faster rest recovery</strong> when sleeping there.</li>
+        <li><strong>Communal:</strong> no ownership in v1. Who owns what is TASK-26 territory.</li>
+      </ul>
+    </div>
+    <div class="card flagship">
+      <h4>Oven</h4>
+      <p class="recipe">build on site · 4 refined stone + 2 planks</p>
+      <ul>
+        <li>The flagship station — the first thing in the world that needs the <strong>stone chain</strong>.</li>
+        <li><strong>Fuel from day one:</strong> every batch action burns 1 wood; no wood, no effect.</li>
+        <li><strong>Cook:</strong> up to 8 raw units → meals (+100 each) per batch.</li>
+        <li><strong>Bathe:</strong> 1 water + fuel → +150 morale, +300 warmth (capped). Water's only v1 consumer — and prime chronicle material.</li>
+        <li>Cooking needs no water in v1; water recipes are the intended future.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Spear</h4>
+      <p class="recipe">hand-craft anywhere · 1 wood + 1 refined stone</p>
+      <ul>
+        <li>The first <strong>carried tool</strong>. Hunting still works bare-handed (8 raw, full duration) — no tool gate on survival.</li>
+        <li>With a spear: <strong>12 raw units at two-thirds the time</strong>.</li>
+        <li><strong>Durability 3:</strong> each hunt spends a use; the last one breaks it, the villager remembers, and the re-craft loop begins.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Food (the placeholder)</h4>
+      <p class="recipe">forage &amp; hunt yields, in three forms</p>
+      <ul>
+        <li>All forage/hunt output is abstract <strong>food units</strong> — no per-species items in v1 (a rabbit is 8 units, not a rabbit).</li>
+        <li>The three forms (raw / cooked / meal) are the whole food item system until distinct ingredients arrive in a later version.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Who does what</h2>
+  <p class="kicker">
+    The execution model and the mind split — the two structural decisions that keep the
+    feature honest.
+  </p>
+
+  <div class="split">
+    <div class="card">
+      <h4>Hand-craft vs. build-on-site</h4>
+      <p><strong>Portable things</strong> — planks, refined stone, spear — are crafted
+      anywhere as timed work intents that re-validate and consume inputs on completion.</p>
+      <p><strong>Structures</strong> — fire, shelter, oven — remain build-on-site intents
+      exactly like today's builds, just with new costs. There is deliberately no
+      craft-then-place mechanic in v1.</p>
+    </div>
+    <div class="card">
+      <h4>Reflex vs. planner</h4>
+      <p><strong>Reflex (degraded mode):</strong> forage, hunt bare-handed, eat raw, chop,
+      build + refuel fire. Nothing else — subsistence living.</p>
+      <p><strong>Planner only:</strong> quarry, collect water, all crafting, all cooking,
+      shelter, oven, spear, baths. Every new goal is planner-choosable and works as a
+      guarded plan step. <em>Civilization requires minds.</em></p>
+    </div>
+  </div>
+
+  <h2>Pinned numbers</h2>
+  <p class="kicker">The tuning surface, in one place. Ratios are decisions (cooking ≈ doubles, spear strictly better, survival floor holds); exact values may shift in the plan phase.</p>
+
+  <div class="tablebox">
+    <table>
+      <tr><th>Knob</th><th class="num">Value</th><th>Knob</th><th class="num">Value</th></tr>
+      <tr><td>Raw / cooked / meal restore</td><td class="num">+40 / +80 / +100</td><td>Planks per wood</td><td class="num">4</td></tr>
+      <tr><td>Eat until food need ≥</td><td class="num">900 / 1000</td><td>Refined stone per stone</td><td class="num">1</td></tr>
+      <tr><td>Forage yield</td><td class="num">2 raw</td><td>Spear recipe</td><td class="num">1 wood + 1 r.stone</td></tr>
+      <tr><td>Hunt (bare / spear)</td><td class="num">8 / 12 raw</td><td>Spear durability</td><td class="num">3 hunts</td></tr>
+      <tr><td>Spear hunt duration</td><td class="num">⅔ of bare</td><td>Shelter cost</td><td class="num">8 planks</td></tr>
+      <tr><td>Fire burn per wood</td><td class="num">4 game-h</td><td>Oven recipe</td><td class="num">4 r.stone + 2 planks</td></tr>
+      <tr><td>New fire fuel (2 wood)</td><td class="num">8 game-h</td><td>Oven batch</td><td class="num">1 wood + 8 raw</td></tr>
+      <tr><td>Fire fuel cap</td><td class="num">12 game-h</td><td>Bath</td><td class="num">1 water + 1 wood</td></tr>
+      <tr><td>Quarry yield</td><td class="num">2 stone</td><td>Bath effect</td><td class="num">+150 morale, +300 warmth</td></tr>
+      <tr><td>Outcrop coverage</td><td class="num">~6% dry land</td><td>Water per collect</td><td class="num">1</td></tr>
+    </table>
+  </div>
+
+  <h2>Scope edges</h2>
+
+  <div class="callout">
+    <p><strong>Deferred to TASK-26 (inventory &amp; storage):</strong> carry capacity,
+    stacking, chests, stockpiles, ownership. This spec treats inventory as an abstract
+    "agents hold items" interface — unbounded and lost on death, as today. TASK-26's
+    spec is an input to TASK-50's plan phase.</p>
+  </div>
+
+  <div class="callout warn">
+    <p><strong>Compatibility: this is a world-format break.</strong> Outcrops change every
+    seed's terrain and the food rescale changes every yield constant, so pre-feature
+    worlds are invalidated — the daemon refuses to load them rather than migrating
+    (worlds are regenerable dev artifacts today). New event types remain no-ops under
+    old replay code; cross-version replay equivalence is explicitly not promised.</p>
+    <p>All the substrate guarantees hold within the new format: every happening is an
+    event through the reducer, payloads record outcomes (never dice rolls), integer math
+    only, and replaying a log reproduces byte-identical state.</p>
+  </div>
+
+  <footer>
+    <p>Produced by the TASK-25 Socratic design session (three rounds: foundations,
+    per-item mechanics, cross-cutting). Decisions are recorded on the board task;
+    requirements live in the spec.</p>
+    <div class="meta">
+      <span>spec: specs/012-resources-food-crafting/spec.md</span>
+      <span>board: TASK-25 (Done) → TASK-50 (implementation)</span>
+    </div>
+  </footer>
+</div>
