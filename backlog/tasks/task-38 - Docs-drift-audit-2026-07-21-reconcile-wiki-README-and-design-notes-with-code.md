@@ -3,10 +3,10 @@ id: TASK-38
 title: >-
   Docs drift audit 2026-07-21: reconcile wiki, README, and design notes with
   code
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 13:18'
-updated_date: '2026-07-21 13:23'
+updated_date: '2026-07-21 13:26'
 labels: []
 dependencies: []
 ordinal: 32000
@@ -49,3 +49,9 @@ Full-repo drift scan (wiki mechanical freshness gate + semantic verification of 
 <!-- SECTION:NOTES:BEGIN -->
 Fixes applied by spec-implementer in .worktrees/task-38; verified by orchestrator (diff review + freshness re-scan green). Commit 004a430: README + board files; d38f4c3: 11 wiki fixes, 10 notes re-pinned to 004a430 (child of audited 0264eb3 — only README/board changed between, README being a source of overview.md, hence the newer pin). Batches B–E clean notes needed no re-pin.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Full drift scan 2026-07-21: mechanical freshness gate green; 6 parallel auditors semantically verified all 29 wiki notes + README + grounded-assumptions + CLAUDE.md against 0264eb3. 14 drift items found and fixed (11 wiki, 2 README, 1 board hygiene); 10 notes re-pinned; freshness gate re-verified green on merged main (4926cb3). PR #24 merged; worktree and branch cleaned up.
+<!-- SECTION:FINAL_SUMMARY:END -->
