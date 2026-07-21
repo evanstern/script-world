@@ -212,7 +212,11 @@ func villageLaw(s *sim.State, idx int) string {
 		rules = append(rules, fmt.Sprintf("- %s (passed day %d, %s's proposal, %s)", n.Text, n.DayPassed, proposer, n.Tally))
 	}
 	if len(rules) > 0 {
-		b.WriteString("Village law (decided at the daily noon meeting):\n")
+		header := "Village law:"
+		if c := s.MeetingConvention; c != nil {
+			header = fmt.Sprintf("Village law (decided at the daily meeting, %s):", clock.FormatTOD(c.OpenSecond))
+		}
+		b.WriteString(header + "\n")
 		b.WriteString(strings.Join(rules, "\n"))
 		b.WriteString("\n")
 	}
@@ -221,7 +225,11 @@ func villageLaw(s *sim.State, idx int) string {
 		b.WriteString("\n")
 	}
 	if sim.AtMeeting(s, idx) {
-		b.WriteString("The village is gathering at the meeting place for the noon assembly — you can raise grievances and vote there.\n")
+		when := "the assembly"
+		if c := s.MeetingConvention; c != nil {
+			when = fmt.Sprintf("the %s assembly", clock.FormatTOD(c.OpenSecond))
+		}
+		fmt.Fprintf(&b, "The village is gathering at the meeting place for %s — you can raise grievances and vote there.\n", when)
 	}
 	return b.String()
 }

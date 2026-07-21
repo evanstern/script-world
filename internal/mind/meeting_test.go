@@ -211,6 +211,12 @@ func TestVillageLawPrompt(t *testing.T) {
 		t.Fatal("lawless prompt must not carry a law section")
 	}
 
+	// A convention (open at noon) fixes the meeting-time phrasing in the law header.
+	if err := s.Apply(mustEvent(t, 0, "meeting.convention_established",
+		sim.MeetingConventionPayload{ConveneSecond: 11*3600 + 1800, OpenSecond: 12 * 3600, X: 5, Y: 5, Source: "config"})); err != nil {
+		t.Fatal(err)
+	}
+
 	enact := sim.ProposalResolvedPayload{
 		ProposalPayload: sim.ProposalPayload{ProposalID: 1, Kind: sim.ProposeCurfew,
 			Target: -1, Param: 22 * 3600, Proposer: 1, Text: "No one out after nightfall."},
@@ -229,7 +235,7 @@ func TestVillageLawPrompt(t *testing.T) {
 
 	prompt := userPrompt(s, 0, sim.WindowK)
 	for _, want := range []string{
-		"Village law (decided at the daily noon meeting):",
+		"Village law (decided at the daily meeting, 12:00):",
 		"No one out after nightfall. (passed day 2, Birch's proposal, 3-0)",
 		"Rowan is exiled from the village (day 2).",
 	} {
@@ -282,7 +288,7 @@ func TestGovernanceChronicleNotes(t *testing.T) {
 
 	joined := strings.Join(md.narrLines, "\n")
 	for _, want := range []string{
-		"The village assembled at noon: Ash, Birch.",
+		"The village assembled for the meeting: Ash, Birch.",
 		`Birch raised a grievance at the meeting: "Cedar never repaid me."`,
 		`Ash put a proposal to the assembly: "No one out after nightfall."`,
 		`The village passed Ash's proposal 2-0: "No one out after nightfall."`,
