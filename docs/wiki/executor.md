@@ -7,7 +7,7 @@ sources:
   - internal/sim/agents.go
   - internal/sim/plan.go
   - internal/sim/terrain.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 0cfc04adc5ea41bc9c35442f137e9e5d60763e17
 ---
 
 # Executor
@@ -62,6 +62,22 @@ event-sourced state over the static map — `effectiveKind`/`passable` merge
 game-hours (`sim.forage_regrown`), dens cool down 6 game-hours after a hunt.
 Structures (`fire`, `shelter`) exist only in state; `warmAt` is fire within Manhattan
 radius 2 or standing on a shelter.
+
+**Hails** (TASK-47, `hail.go`): a `talk_to` landing flags its target down —
+`social.hailed` pauses the target for `hailWindowTicks` (480, 8 game-minutes) so
+the hailer can close distance. The per-tick `hailStep` sweep runs *before* the
+per-agent loop: a hailer within Manhattan 1 of its paused target founds the talk
+deterministically (`social.hail_met` + the `talkEvents` shape, bypassing the
+ambient `canTalk` cooldown — met is checked before expiry so an on-time arrival
+wins the edge tick); otherwise the window closing emits `social.hail_expired`
+and the target resumes untouched. A paused agent (`hailPaused`) skips the
+reflex, plan-step evaluation, and en-route movement, but keeps decaying,
+keeps its intent and plan exactly as they were, and still works if already
+standing on its intent target. `hailable` (same file) is the exemption
+predicate: dead, asleep, already-hailed, actively-hailing, meeting-pinned, or
+beyond `hailRadius` (64) targets are never paused. A plan-step `talk_to` firing
+hails exactly as a planner landing does. The ambient beat's talk founding is
+shared with the sweep via `talkEvents` (`executor.go`).
 
 The executor also emits `agent.memory_added` events from the salience table in
 `memory.go` ([[agent-mind]]) alongside memorable happenings, and regenerates

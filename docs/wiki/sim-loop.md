@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 0cfc04adc5ea41bc9c35442f137e9e5d60763e17
 ---
 
 # Sim loop
@@ -66,14 +66,20 @@ world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
 2. `Generation` mismatch with `Agent.Generation` → `superseded`;
 3. staleness over the class's `BudgetTicks` (looked up via
    `cognition.ClassFor`) → `rejected-stale`;
-4. any `Guard.Eval` failure → `rejected-guard`; a `target_present` guard that
-   holds but whose target moved marks the landing **adapted** (the repair is
-   `resolveGoal`'s re-resolution);
+4. any `Guard.Eval` failure → `rejected-guard` — EXCEPT the hail rung
+   (TASK-47): a failed `target_present` on a `talk_to` landing whose living
+   target is `hailable` (or is the actor's own hailer — mutual convergence)
+   proceeds as **adapted** instead of rejecting; a `target_present` guard that
+   holds but whose target moved likewise marks the landing **adapted** (the
+   repair is `resolveGoal`'s re-resolution);
 5. success: `resolveGoal` resolves coordinates deterministically, recorded as
    `agent.intent_set (source: planner)` + `agent.thought`, or — for a `Plan` —
    validated against `PlanStepCap` and the `planGoals` vocabulary (missing
    `Until` defaults to `state.Tick + PlanDefaultWindowTicks`) and recorded as
-   `agent.plan_set`; a `resolveGoal` failure is itself `rejected-guard`.
+   `agent.plan_set`; a `resolveGoal` failure is itself `rejected-guard`. A
+   successful `talk_to` landing with a `hailable` target additionally emits
+   `social.hailed` (in- or out-of-radius — the courtesy pause is uniform;
+   [[executor]] enforces it and resolves met/expiry).
 
 Every metered verdict lands atomically as `cog.outcome` (rejections also emit
 `agent.intent_rejected`), classified `prediction-miss` when

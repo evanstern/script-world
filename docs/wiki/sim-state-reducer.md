@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: 0cfc04adc5ea41bc9c35442f137e9e5d60763e17
 ---
 
 # Sim state & reducer
@@ -59,7 +59,11 @@ snapshotted under the old generation are superseded at landing ([[cognition]],
 [[sim-loop]]). The plan family maintains `Agent.Plan`: `agent.plan_set`
 replaces the steps, `agent.plan_step_started` pops the head, and
 `agent.plan_expired` clears the whole remaining plan (a broken sequence is
-not resumed). The cognition telemetry types — `cog.thought`, `cog.outcome`,
+not resumed). The hail family (TASK-47) maintains `Agent.Hail *AgentHail`
+(`{By, Until}`, `omitempty` so pre-TASK-47 snapshots and un-hailed agents stay
+byte-stable): `social.hailed` sets it, `social.hail_met`/`social.hail_expired`
+clear it, and `agent.died`/`agent.slept` also clear it (the dead and the
+sleeping shed hails). The cognition telemetry types — `cog.thought`, `cog.outcome`,
 `cog.recalibration_recommended`, `agent.intent_rejected` — are explicit
 reducer no-ops: recorded observability with zero state effect.
 Unknown types — including `daemon.*` and `world.created` — are recorded

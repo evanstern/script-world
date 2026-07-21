@@ -108,7 +108,7 @@ active-hailer targets emit no hail; out-of-radius landings against them reject a
 - [X] T017 Extend the replay/determinism coverage in internal/sim/sim_test.go (or hail_test.go using the same harness): a scripted run containing hailed → met and hailed → expired sequences replays from the event log to an identical state hash (SC-004)
 - [X] T018 Full gate inside the worktree: `go build ./... && go vet ./... && go test ./...` all green (quickstart.md)
 - [ ] T019 Live before/after measurement per quickstart.md on the baseline world shape (local tier, 8x): record "is gone" rejection count, conversation count, and hail met/expired mix on TASK-47 via `backlog task edit TASK-47 --append-notes` (SC-001, SC-002)
-- [ ] T020 Post-merge re-grounding: run `/grounding-wiki:wiki-update` for wiki notes whose sources changed (sim-loop, executor, sim-state-reducer, event-types, cognition) — constitution Principle IV
+- [X] T020 Post-merge re-grounding: run `/grounding-wiki:wiki-update` for wiki notes whose sources changed (sim-loop, executor, sim-state-reducer, event-types, cognition) — constitution Principle IV
 
 ---
 
