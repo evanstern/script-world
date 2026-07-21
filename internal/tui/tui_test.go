@@ -16,6 +16,8 @@ import (
 	"github.com/evanstern/script-world/internal/world"
 )
 
+// testModel defaults to a narrow (80-col) terminal — the widescreen tests
+// set width explicitly (>= widescreenBreakpoint) where they need it.
 func testModel(t *testing.T) Model {
 	t.Helper()
 	w, err := world.Create(t.TempDir()+"/w", "test", 42)
@@ -28,55 +30,44 @@ func testModel(t *testing.T) Model {
 	return m
 }
 
+func widescreenModel(t *testing.T) Model {
+	t.Helper()
+	m := testModel(t)
+	m.width, m.height = 140, 40
+	return m
+}
+
 func key(s string) tea.KeyMsg {
 	switch s {
 	case "tab":
 		return tea.KeyMsg{Type: tea.KeyTab}
+	case "shift+tab":
+		return tea.KeyMsg{Type: tea.KeyShiftTab}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
 	case "enter":
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case "backspace":
 		return tea.KeyMsg{Type: tea.KeyBackspace}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	case "left":
+		return tea.KeyMsg{Type: tea.KeyLeft}
+	case "right":
+		return tea.KeyMsg{Type: tea.KeyRight}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case " ":
+		return tea.KeyMsg{Type: tea.KeySpace}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
 
-func TestPaneNavigation(t *testing.T) {
-	m := testModel(t)
-	if m.active != paneMap {
-		t.Fatal("default pane must be the map (AC#1)")
-	}
-	// The metatron console owns the keyboard while active (TASK-12): pane
-	// keys type into the input there; Esc is the way out.
-	cases := []struct {
-		key  string
-		want pane
-	}{
-		{"2", paneChronicle},
-		{"3", paneMetatron},
-		{"esc", paneMap},
-		{"4", paneSouls},
-		{"1", paneMap},
-		{"tab", paneChronicle},
-		{"tab", paneMetatron},
-		{"esc", paneMap},
-	}
-	var mdl tea.Model = m
-	for _, c := range cases {
-		mdl, _ = mdl.(Model).Update(key(c.key))
-		if got := mdl.(Model).active; got != c.want {
-			t.Errorf("after %q active = %s, want %s", c.key, paneNames[got], paneNames[c.want])
-		}
-	}
-	// Every pane renders without a live connection (stubs included).
-	for i := pane(0); i < paneCount; i++ {
-		mm := mdl.(Model)
-		mm.active = i
-		if v := mm.View(); v == "" {
-			t.Errorf("pane %s rendered empty", paneNames[i])
-		}
-	}
+func update(mdl tea.Model, k string) tea.Model {
+	next, _ := mdl.Update(key(k))
+	return next
 }
 
 func TestMapRendersWanderers(t *testing.T) {
@@ -160,6 +151,24 @@ func TestQuitDetaches(t *testing.T) {
 	}
 }
 
+// TestCtrlCQuitsFromAnyState is focus-contract.md rule 3: "ctrl+c quits the
+// app from any state whatsoever" — including while the minibuffer is
+// focused and mid-input.
+func TestCtrlCQuitsFromAnyState(t *testing.T) {
+	m := testModel(t)
+	var mdl tea.Model = m
+	mdl = update(mdl, "m")
+	mdl = update(mdl, "h")
+	mdl = update(mdl, "i")
+	mdl, cmd := mdl.(Model).Update(key("ctrl+c"))
+	if cmd == nil {
+		t.Fatal("ctrl+c while focused must still produce tea.Quit")
+	}
+	if !mdl.(Model).quitting {
+		t.Fatal("ctrl+c while focused must set quitting")
+	}
+}
+
 // TestReplyTooLargeQuitsInsteadOfRetrying is TASK-19 AC#1 at the TUI: a
 // reply over the protocol cap used to feed the 2s retry loop forever; now it
 // is fatal — quit, with the actionable reason in the final view (and in
@@ -225,7 +234,7 @@ func TestChronicleNarratedView(t *testing.T) {
 
 	// 'a' cycles to agent 0 (Ash): only entries mentioning Ash remain.
 	var mdl tea.Model = m
-	mdl, _ = mdl.(Model).Update(key("a"))
+	mdl = update(mdl, "a")
 	view = mdl.(Model).chronicleView()
 	if !strings.Contains(view, "first fire") || strings.Contains(view, "gru circled") {
 		t.Errorf("agent filter leaked: %q", view)
@@ -233,9 +242,9 @@ func TestChronicleNarratedView(t *testing.T) {
 
 	// Back to all, then 't' cycles to the first thread (cold-start).
 	for i := 0; i < len(m.replica.Agents); i++ {
-		mdl, _ = mdl.(Model).Update(key("a"))
+		mdl = update(mdl, "a")
 	}
-	mdl, _ = mdl.(Model).Update(key("t"))
+	mdl = update(mdl, "t")
 	mm := mdl.(Model)
 	if mm.chronAgent != -1 || mm.chronThread != "cold-start" {
 		t.Fatalf("filter state: agent=%d thread=%q", mm.chronAgent, mm.chronThread)
@@ -246,11 +255,11 @@ func TestChronicleNarratedView(t *testing.T) {
 	}
 
 	// 't' again reaches "gru", once more wraps to all.
-	mdl, _ = mm.Update(key("t"))
+	mdl = update(mm, "t")
 	if mdl.(Model).chronThread != "gru" {
 		t.Errorf("thread cycle: %q", mdl.(Model).chronThread)
 	}
-	mdl, _ = mdl.(Model).Update(key("t"))
+	mdl = update(mdl, "t")
 	if mdl.(Model).chronThread != "" {
 		t.Errorf("thread cycle should wrap to all: %q", mdl.(Model).chronThread)
 	}
@@ -274,7 +283,7 @@ func TestChronicleRawFallback(t *testing.T) {
 		t.Fatalf("narrated view should replace raw once entries exist: %q", view)
 	}
 	var mdl tea.Model = m
-	mdl, _ = mdl.(Model).Update(key("r"))
+	mdl = update(mdl, "r")
 	if view := mdl.(Model).chronicleView(); !strings.Contains(view, "agent.moved") {
 		t.Errorf("'r' should show the raw feed: %q", view)
 	}
@@ -286,9 +295,9 @@ func TestChronicleKeysScopedToPane(t *testing.T) {
 	m.active = paneMap
 	chronEntry(&m, 1, "x", "cold-start", 0)
 	var mdl tea.Model = m
-	mdl, _ = mdl.(Model).Update(key("a"))
-	mdl, _ = mdl.(Model).Update(key("t"))
-	mdl, _ = mdl.(Model).Update(key("r"))
+	mdl = update(mdl, "a")
+	mdl = update(mdl, "t")
+	mdl = update(mdl, "r")
 	mm := mdl.(Model)
 	if mm.chronAgent != -1 || mm.chronThread != "" || mm.chronRaw {
 		t.Errorf("filters changed outside the pane: %+v", mm)
@@ -305,44 +314,13 @@ func TestWrapText(t *testing.T) {
 	}
 }
 
-// TestConsoleTyping (TASK-12): in the metatron pane every printable key
-// types (globals never hijack a message), backspace edits, Esc exits, and
-// Enter without a connection sends nothing.
-func TestConsoleTyping(t *testing.T) {
-	m := testModel(t)
-	m.active = paneMetatron
-	var mdl tea.Model = m
-	for _, k := range []string{"q", "u", "i", "c", "k", " ", "1"} {
-		mdl, _ = mdl.(Model).Update(key(k))
-	}
-	mm := mdl.(Model)
-	if mm.quitting || mm.active != paneMetatron {
-		t.Fatal("global keys hijacked console typing")
-	}
-	if mm.consoleInput != "quick 1" {
-		t.Fatalf("input = %q, want %q", mm.consoleInput, "quick 1")
-	}
-	mdl, _ = mm.Update(key("backspace"))
-	if got := mdl.(Model).consoleInput; got != "quick " {
-		t.Fatalf("backspace: %q", got)
-	}
-	// Enter with no connection: nothing sent, input kept.
-	mdl, cmd := mdl.(Model).Update(key("enter"))
-	if cmd != nil || mdl.(Model).consoleInput != "quick " {
-		t.Fatal("disconnected enter should be a no-op")
-	}
-	mdl, _ = mdl.(Model).Update(key("esc"))
-	if mdl.(Model).active != paneMap {
-		t.Fatal("esc must return to the map pane")
-	}
-}
-
-// TestConsoleReply: a turn's reply, nudge, and moments land in the
+// TestMinibufferReply: a turn's reply, nudge, and moments land in the
 // transcript and the busy flag clears; errors render honestly.
-func TestConsoleReply(t *testing.T) {
+func TestMinibufferReply(t *testing.T) {
 	m := testModel(t)
 	m.active = paneMetatron
-	m.consoleBusy = true
+	m.dockTab = paneMetatron
+	m.mbBusy = true
 	var mdl tea.Model = m
 	mdl, _ = mdl.(Model).Update(consoleReplyMsg{result: &metatron.TurnResult{
 		Reply:   "It is done.",
@@ -351,7 +329,7 @@ func TestConsoleReply(t *testing.T) {
 		Charges: 0,
 	}})
 	mm := mdl.(Model)
-	if mm.consoleBusy {
+	if mm.mbBusy {
 		t.Fatal("busy flag not cleared")
 	}
 	view := mm.metatronView()
@@ -363,5 +341,31 @@ func TestConsoleReply(t *testing.T) {
 	mdl, _ = mm.Update(consoleReplyMsg{err: fmt.Errorf("tier is down")})
 	if v := mdl.(Model).metatronView(); !strings.Contains(v, "unreachable") {
 		t.Errorf("error not rendered honestly: %q", v)
+	}
+}
+
+// TestMetatronBadgeWhenTabNotVisible is minibuffer.md's reply-arrival rule:
+// stream in place if the metatron tab/pane is visible, otherwise badge the
+// dock tab and flash the minibuffer once — never steal the selected tab.
+func TestMetatronBadgeWhenTabNotVisible(t *testing.T) {
+	m := widescreenModel(t)
+	m.dockTab = paneChronicle // metatron not visible
+	mdl, _ := m.Update(consoleReplyMsg{result: &metatron.TurnResult{Reply: "the wood is dry"}})
+	mm := mdl.(Model)
+	if !mm.metatronUnseen {
+		t.Error("tab should badge when metatron tab is not the visible one")
+	}
+	if mm.dockTab != paneChronicle {
+		t.Error("arriving reply must not steal the selected tab")
+	}
+	if mm.mbFlash == "" {
+		t.Error("minibuffer should flash once when the reply lands off-tab")
+	}
+
+	// Selecting the metatron tab clears the badge and flash.
+	mdl2, _ := mm.selectTab(paneMetatron)
+	mm2 := mdl2.(Model)
+	if mm2.metatronUnseen || mm2.mbFlash != "" {
+		t.Error("selecting the metatron tab should clear the badge/flash")
 	}
 }

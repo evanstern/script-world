@@ -1,7 +1,15 @@
-// Package tui is the attachable Bubble Tea client: four panes over a live
-// world replica maintained by log shipping — initial state via the protocol
+// Package tui is the attachable Bubble Tea client: a live view over a world
+// replica maintained by log shipping — initial state via the protocol
 // "state" command, then subscribed events applied through the same
 // sim.State reducer the daemon runs.
+//
+// TASK-34 widescreen redesign: at width >= widescreenBreakpoint the app
+// renders the composite home page (map ‖ dock, docs/design/tui/pages/home.md)
+// instead of the single-pane-at-a-time UI; below it, today's single-pane UI
+// renders unchanged (docs/design/tui/pages/solo-views.md "Narrow fallback").
+// The focus contract (docs/design/tui/patterns/focus-contract.md) replaces
+// the old "the metatron console owns the keyboard while active" rule, which
+// silently swallowed 1-4/q/space once pane 3 was entered.
 package tui
 
 import (
@@ -22,6 +30,10 @@ import (
 	"github.com/evanstern/script-world/internal/worldmap"
 )
 
+// pane names both the narrow-fallback's single active pane and the
+// widescreen dock's selected tab — paneMap is narrow-only (the widescreen
+// map is always visible, never a dock tab); the dock only ever selects
+// paneChronicle/paneMetatron/paneSouls.
 type pane int
 
 const (
@@ -33,6 +45,9 @@ const (
 )
 
 var paneNames = [paneCount]string{"map", "chronicle", "metatron", "souls"}
+
+// dockTabKey is the keymap.md key that selects/solos each dock tab.
+var dockTabKey = map[pane]string{paneChronicle: "2", paneMetatron: "3", paneSouls: "4"}
 
 // speedSteps is the [ / ] cycling order.
 // max is deliberately absent: the watchable ladder tops out at 32x (TASK-20);
@@ -57,7 +72,14 @@ type Model struct {
 	events  []store.Event   // chronicle ring, newest last
 	lastSeq int64
 
+	// active is the narrow fallback's single visible pane (today's model,
+	// unchanged). dockTab/solo are the widescreen composite's dock
+	// selection and zoom state (pages/solo-views.md). Both are kept in
+	// sync on tab-select so a resize across the breakpoint always shows
+	// whatever was last looked at, without either being reset by resize.
 	active        pane
+	dockTab       pane // paneChronicle by default (dock.md: "Default tab on launch")
+	solo          bool // dockTab is zoomed to full width (pages/solo-views.md)
 	width, height int
 	panX, panY    int // map-pane camera offset from the wanderer centroid
 	quitting      bool
@@ -68,18 +90,35 @@ type Model struct {
 	chronThread string
 	chronRaw    bool
 
-	// Metatron console (TASK-12): session transcript + input line. While
-	// pane 3 is active, printable keys type into the input; globals apply
-	// only on an empty input (the contract in console-protocol.md).
-	consoleLines   []string // rendered transcript, newest last
-	consoleInput   string
-	consoleBusy    bool // one turn in flight; input disabled
-	consoleErr     string
-	consoleCharter string // "default charter" | "custom charter" | ""
+	// Chronicle inspect mode (TASK-34, panels/chronicle.md): entered
+	// automatically whenever the clock is paused and the chronicle is
+	// visible. Selection indexes the raw feed (events); remembered across
+	// tab switches, collapsed and cleared on resume.
+	chronSelected int // -1 = none
+	chronExpanded bool
+	chronExpIdx   int
+
+	// Metatron (TASK-12, re-surfaced as the minibuffer by TASK-34): the
+	// transcript is dock/pane content; mbInput/mbFocused/mbBusy are the
+	// minibuffer's own state, governed by the focus contract
+	// (patterns/focus-contract.md) everywhere it appears.
+	transcript     []string // rendered transcript rows, newest last
+	consoleCharter string   // "default charter" | "custom charter" | ""
+
+	mbFocused bool
+	mbInput   string
+	mbBusy    bool
+	mbErr     string
+	mbHistory []string
+	mbHistPos int    // index into mbHistory while cycling; == len(mbHistory) means "the live draft"
+	mbDraft   string // input stashed when history-cycling away from an in-progress draft
+	mbFlash   string // one-shot dormant-state message (minibuffer.md "answer arrived — 3 to read")
+
+	metatronUnseen bool // dock tab badge: a reply landed while the tab wasn't visible
 }
 
 func New(w *world.World) Model {
-	return Model{w: w, gameMap: w.Map(), chronAgent: -1}
+	return Model{w: w, gameMap: w.Map(), chronAgent: -1, dockTab: paneChronicle, chronSelected: -1}
 }
 
 // FatalErr reports the unrecoverable error that made the TUI quit, if any —
@@ -112,7 +151,8 @@ type consoleReplyMsg struct {
 
 type consoleStatusMsg struct{ status *metatron.Status }
 
-// fetchConsoleStatus grabs the model-free peek when the pane is entered.
+// fetchConsoleStatus grabs the model-free peek when the metatron tab/pane is
+// selected.
 func fetchConsoleStatus(c *ipc.Client) tea.Cmd {
 	return func() tea.Msg {
 		st, err := c.MetatronStatus()
@@ -214,6 +254,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
+		// Resizing across the widescreen breakpoint swaps layouts live;
+		// no other field is touched here, so no state is lost
+		// (pages/solo-views.md "Narrow fallback").
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 
@@ -258,7 +301,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePush(msg.push)
 
 	case statusMsg:
+		wasPaused := m.status != nil && m.status.Clock.Paused
 		m.status = msg.status
+		nowPaused := m.status != nil && m.status.Clock.Paused
+		if wasPaused && !nowPaused {
+			// Resume: collapse everything, snap back to tail-follow
+			// (panels/chronicle.md Mode 2 "On resume").
+			m.chronSelected = -1
+			m.chronExpanded = false
+		}
 		return m, nil
 
 	case consoleStatusMsg:
@@ -272,22 +323,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case consoleReplyMsg:
-		m.consoleBusy = false
+		m.mbBusy = false
 		if msg.err != nil {
-			m.consoleErr = msg.err.Error()
+			m.mbErr = msg.err.Error()
 			return m, nil
 		}
 		r := msg.result
 		for _, mo := range r.Moments {
-			m.consoleLines = append(m.consoleLines, "! "+mo)
+			m.transcript = append(m.transcript, "! "+mo)
 		}
-		m.consoleLines = append(m.consoleLines, "metatron: "+r.Reply)
+		m.transcript = append(m.transcript, "angel: "+r.Reply)
 		if r.Nudge != nil {
-			m.consoleLines = append(m.consoleLines, fmt.Sprintf("⚡ %s → %s: %q",
+			m.transcript = append(m.transcript, fmt.Sprintf("⚡ %s → %s: %q",
 				r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text))
 		}
-		if len(m.consoleLines) > 200 {
-			m.consoleLines = m.consoleLines[len(m.consoleLines)-200:]
+		if len(m.transcript) > 200 {
+			m.transcript = m.transcript[len(m.transcript)-200:]
+		}
+		// Reply arrival (minibuffer.md): stream in place if the metatron
+		// tab/pane is visible; otherwise badge the tab and flash the
+		// minibuffer once.
+		if !m.metatronVisible() {
+			m.metatronUnseen = true
+			m.mbFlash = "answer arrived — 3 to read"
 		}
 		return m, nil
 
@@ -301,36 +359,113 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// The metatron console owns the keyboard while active (TASK-12):
-	// every printable key types; Enter sends; Esc returns to the map.
-	if m.active == paneMetatron && msg.String() != "ctrl+c" {
-		return m.handleConsoleKey(msg)
+// --- focus contract (patterns/focus-contract.md) ---
+
+// quit is ctrl+c/q from any unfocused state: rule 3, "ctrl+c quits the app
+// from any state whatsoever".
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	m.quitting = true
+	if m.client != nil {
+		m.client.Close()
 	}
-	switch msg.String() {
-	case "q", "ctrl+c":
-		m.quitting = true
-		if m.client != nil {
-			m.client.Close()
+	return m, tea.Quit
+}
+
+// chronicleVisible reports whether the chronicle is the thing currently on
+// screen, in whichever layout is active — the gate for both the a/t/r
+// filter keys and automatic inspect-mode entry.
+func (m Model) chronicleVisible() bool {
+	if isWidescreen(m.width) {
+		return m.dockTab == paneChronicle
+	}
+	return m.active == paneChronicle
+}
+
+// metatronVisible reports whether the metatron transcript is the thing
+// currently on screen — governs whether a reply streams in place or badges
+// the tab (minibuffer.md).
+func (m Model) metatronVisible() bool {
+	if isWidescreen(m.width) {
+		return m.dockTab == paneMetatron
+	}
+	return m.active == paneMetatron
+}
+
+// mapControllable reports whether arrow keys should pan the map: always in
+// widescreen (pages/home.md: "regardless of which dock tab is selected"),
+// only while the map pane is active in the narrow fallback (unchanged).
+func (m Model) mapControllable() bool {
+	if isWidescreen(m.width) {
+		return true
+	}
+	return m.active == paneMap
+}
+
+// inspecting reports whether inspect mode (panels/chronicle.md Mode 2) is
+// live: paused, and the chronicle is the thing on screen.
+func (m Model) inspecting() bool {
+	return m.status != nil && m.status.Clock.Paused && m.chronicleVisible()
+}
+
+// handleKey is the top-level key dispatcher implementing the three modes of
+// patterns/keymap.md, in priority order: ctrl+c always quits (rule 3);
+// minibuffer-focused keys own the keyboard only when focus was explicitly
+// acquired (rule 1); inspect-mode keys layer on top of, never replace, the
+// global mode (rule 5 / keymap.md "Mode: inspect").
+func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "ctrl+c" {
+		return m.quit()
+	}
+	if m.mbFocused {
+		return m.handleMinibufferKey(msg)
+	}
+	if m.inspecting() {
+		if mdl, cmd, handled := m.handleInspectKey(msg); handled {
+			return mdl, cmd
 		}
-		return m, tea.Quit
+	}
+	return m.handleGlobalKey(msg)
+}
+
+// handleGlobalKey is patterns/keymap.md "Mode: global".
+func (m Model) handleGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q":
+		return m.quit()
 	case "1":
+		m.solo = false
 		m.active = paneMap
+		return m, nil
 	case "2":
-		m.active = paneChronicle
+		return m.selectTab(paneChronicle)
 	case "3":
-		m.active = paneMetatron
-		return m.enteredPane()
+		return m.selectTab(paneMetatron)
 	case "4":
-		m.active = paneSouls
+		return m.selectTab(paneSouls)
 	case "tab":
-		m.active = (m.active + 1) % paneCount
-		return m.enteredPane()
+		return m.selectTab(nextDockTab(m.dockTab))
 	case "shift+tab":
-		m.active = (m.active + paneCount - 1) % paneCount
-		return m.enteredPane()
+		return m.selectTab(prevDockTab(m.dockTab))
+	case "m":
+		return m.focusMinibuffer()
+	case "enter":
+		// Narrow-fallback-only affordance (focus-contract.md scope): the
+		// metatron pane's dormant input line focuses on 'm' *or* Enter,
+		// mirroring minibuffer.md's placeholder hint since there is no
+		// separate always-visible minibuffer bar to press 'm' toward.
+		if !isWidescreen(m.width) && m.active == paneMetatron {
+			return m.focusMinibuffer()
+		}
+	case "esc":
+		// Rule 3, "esc always releases" — here nothing is focused, so the
+		// next thing esc releases is a solo zoom (solo-views.md state
+		// machine: "solo(k) --esc--> home, tab=k").
+		if m.solo {
+			m.solo = false
+		}
+		return m, nil
 	case "a", "t", "r":
-		if m.active == paneChronicle {
+		if m.chronicleVisible() {
 			switch msg.String() {
 			case "a": // all → each villager → all
 				m.chronAgent++
@@ -344,7 +479,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "up", "down", "left", "right", "c":
-		if m.active == paneMap {
+		if m.mapControllable() {
 			switch msg.String() {
 			case "up":
 				m.panY -= 4
@@ -388,43 +523,242 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// enteredPane fires pane-entry side effects (the console's charter peek).
-func (m Model) enteredPane() (tea.Model, tea.Cmd) {
-	if m.active == paneMetatron && m.connected && m.client != nil {
-		return m, fetchConsoleStatus(m.client)
+// nextDockTab/prevDockTab cycle the three dock tabs (tab/shift+tab aliases,
+// keymap.md "Migration notes" — not load-bearing).
+func nextDockTab(cur pane) pane {
+	switch cur {
+	case paneChronicle:
+		return paneMetatron
+	case paneMetatron:
+		return paneSouls
+	default:
+		return paneChronicle
+	}
+}
+
+func prevDockTab(cur pane) pane {
+	switch cur {
+	case paneChronicle:
+		return paneSouls
+	case paneMetatron:
+		return paneChronicle
+	default:
+		return paneMetatron
+	}
+}
+
+// selectTab implements the solo-views.md state machine for k ∈
+// {chronicle, metatron, souls}: same key on the already-selected tab zooms
+// solo; same key again returns home. A different key while solo switches
+// which tab is solo'd rather than dropping back to home — the state
+// machine only specifies the same-key case, so this keeps solo a pure
+// "the dock at full width" (dock.md: "same component, two widths") rather
+// than adding an implicit extra "back home" side effect to tab-switching.
+// active mirrors the selection so a resize down to the narrow fallback
+// shows the same content that was last looked at.
+func (m Model) selectTab(k pane) (tea.Model, tea.Cmd) {
+	if isWidescreen(m.width) {
+		if m.solo {
+			if m.dockTab == k {
+				m.solo = false
+			} else {
+				m.dockTab = k
+			}
+		} else if m.dockTab == k {
+			m.solo = true
+		} else {
+			m.dockTab = k
+		}
+	} else {
+		m.dockTab = k
+	}
+	m.active = k
+	var cmd tea.Cmd
+	if k == paneMetatron {
+		m.metatronUnseen = false
+		m.mbFlash = ""
+		if m.connected && m.client != nil {
+			cmd = fetchConsoleStatus(m.client)
+		}
+	}
+	return m, cmd
+}
+
+// focusMinibuffer is the 'm' key (focus-contract.md rule 1: "text capture
+// begins solely on an explicit focus action"). In the narrow fallback the
+// input line only exists inside the metatron pane, so focusing also
+// switches to it — the focused chrome must be visible the instant it is
+// focused (rule 2).
+func (m Model) focusMinibuffer() (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	if !isWidescreen(m.width) {
+		mdl, c := m.selectTab(paneMetatron)
+		m = mdl.(Model)
+		cmd = c
+	}
+	m.mbFocused = true
+	m.mbErr = ""
+	m.mbHistPos = len(m.mbHistory)
+	m.mbDraft = ""
+	m.metatronUnseen = false
+	m.mbFlash = ""
+	return m, cmd
+}
+
+// handleMinibufferKey is patterns/keymap.md "Mode: minibuffer focused" —
+// every key has a visible effect (focus-contract.md rule 4); there is no
+// key whose press produces no observable change.
+func (m Model) handleMinibufferKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		// Rule 3: "esc always releases. One keypress returns full
+		// keyboard control, instantly."
+		m.mbFocused = false
+		m.mbHistPos = len(m.mbHistory)
+	case tea.KeyEnter:
+		text := strings.TrimSpace(m.mbInput)
+		if text == "" {
+			// "⏎ on an empty buffer releases focus (no-op send)."
+			m.mbFocused = false
+			return m, nil
+		}
+		if !m.connected || m.client == nil {
+			m.mbFocused = false
+			m.mbErr = "not connected"
+			return m, nil
+		}
+		m.mbHistory = append(m.mbHistory, text)
+		m.transcript = append(m.transcript, "you: "+text)
+		m.mbInput = ""
+		m.mbHistPos = len(m.mbHistory)
+		m.mbBusy = true
+		m.mbErr = ""
+		// "Focus is released automatically on send; esc (or any
+		// navigation) just proceeds — busy never blocks the UI."
+		m.mbFocused = false
+		return m, sendConsole(m.client, text)
+	case tea.KeyBackspace:
+		if r := []rune(m.mbInput); len(r) > 0 {
+			m.mbInput = string(r[:len(r)-1])
+		}
+	case tea.KeyUp:
+		m.historyUp()
+	case tea.KeyDown:
+		m.historyDown()
+	case tea.KeySpace:
+		m.mbInput += " "
+	case tea.KeyRunes:
+		m.mbInput += string(msg.Runes)
 	}
 	return m, nil
 }
 
-// handleConsoleKey is the metatron pane's input mode.
-func (m Model) handleConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEsc:
-		m.active = paneMap
-	case tea.KeyEnter:
-		text := strings.TrimSpace(m.consoleInput)
-		if m.consoleBusy || text == "" || !m.connected || m.client == nil {
-			return m, nil
-		}
-		m.consoleLines = append(m.consoleLines, "> "+text)
-		m.consoleInput = ""
-		m.consoleBusy = true
-		m.consoleErr = ""
-		return m, sendConsole(m.client, text)
-	case tea.KeyBackspace:
-		if r := []rune(m.consoleInput); len(r) > 0 {
-			m.consoleInput = string(r[:len(r)-1])
-		}
-	case tea.KeySpace:
-		if !m.consoleBusy {
-			m.consoleInput += " "
-		}
-	case tea.KeyRunes:
-		if !m.consoleBusy {
-			m.consoleInput += string(msg.Runes)
-		}
+func (m *Model) historyUp() {
+	if len(m.mbHistory) == 0 {
+		return
 	}
-	return m, nil
+	if m.mbHistPos == len(m.mbHistory) {
+		m.mbDraft = m.mbInput
+	}
+	if m.mbHistPos > 0 {
+		m.mbHistPos--
+	}
+	m.mbInput = m.mbHistory[m.mbHistPos]
+}
+
+func (m *Model) historyDown() {
+	if m.mbHistPos < len(m.mbHistory) {
+		m.mbHistPos++
+	}
+	if m.mbHistPos >= len(m.mbHistory) {
+		m.mbHistPos = len(m.mbHistory)
+		m.mbInput = m.mbDraft
+		return
+	}
+	m.mbInput = m.mbHistory[m.mbHistPos]
+}
+
+// handleInspectKey is patterns/keymap.md "Mode: inspect" — layered on top
+// of the global mode, never replacing it (handled is false for any key it
+// does not own, so handleKey falls through to handleGlobalKey).
+func (m Model) handleInspectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	switch msg.String() {
+	case "j":
+		m.chronMoveSelection(1)
+		return m, nil, true
+	case "k":
+		m.chronMoveSelection(-1)
+		return m, nil, true
+	case "g":
+		m.chronJumpFirst()
+		return m, nil, true
+	case "G":
+		m.chronJumpLast()
+		return m, nil, true
+	case "enter":
+		m.chronToggleExpand()
+		return m, nil, true
+	}
+	return m, nil, false
+}
+
+// chronSelectionBase resolves the "current" selection: if nothing is
+// selected yet (or the ring rotated past the old index), it starts from
+// the tail — the most recently paused-over event.
+func (m Model) chronSelectionBase() int {
+	n := len(m.events)
+	if n == 0 {
+		return -1
+	}
+	if m.chronSelected < 0 || m.chronSelected >= n {
+		return n - 1
+	}
+	return m.chronSelected
+}
+
+func (m *Model) chronMoveSelection(delta int) {
+	n := len(m.events)
+	if n == 0 {
+		return
+	}
+	sel := m.chronSelectionBase() + delta
+	if sel < 0 {
+		sel = 0
+	}
+	if sel >= n {
+		sel = n - 1
+	}
+	m.chronSelected = sel
+}
+
+func (m *Model) chronJumpFirst() {
+	if len(m.events) == 0 {
+		return
+	}
+	m.chronSelected = 0
+}
+
+func (m *Model) chronJumpLast() {
+	if len(m.events) == 0 {
+		return
+	}
+	m.chronSelected = len(m.events) - 1
+}
+
+// chronToggleExpand: "One event expanded at a time; expanding another
+// collapses the first" (panels/chronicle.md).
+func (m *Model) chronToggleExpand() {
+	sel := m.chronSelectionBase()
+	if sel < 0 {
+		return
+	}
+	m.chronSelected = sel
+	if m.chronExpanded && m.chronExpIdx == sel {
+		m.chronExpanded = false
+		return
+	}
+	m.chronExpanded = true
+	m.chronExpIdx = sel
 }
 
 func (m Model) handlePush(p ipc.Push) (tea.Model, tea.Cmd) {
@@ -463,4 +797,18 @@ func (m *Model) applyEvent(e store.Event) {
 	if len(m.events) > chronicleCap {
 		m.events = m.events[len(m.events)-chronicleCap:]
 	}
+}
+
+// agentNames resolves the replica's roster for the chronicle grammar's
+// name-resolution (patterns/chronicle-grammar.md, "the existing chronNames
+// mechanism", generalized to raw event payloads).
+func (m Model) agentNames() []string {
+	if m.replica == nil {
+		return nil
+	}
+	names := make([]string, len(m.replica.Agents))
+	for i, a := range m.replica.Agents {
+		names[i] = a.Name
+	}
+	return names
 }
