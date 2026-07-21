@@ -312,6 +312,49 @@ func TestConvoUtteranceRetryOnFinalTurn(t *testing.T) {
 	}
 }
 
+// TestConvoUtteranceBudgetPerScene (US2 / FR-002 / FR-007): the utterance
+// retry budget is ONE per scene, not one per turn. Turn 0 fails then recovers
+// (spending the budget); a later turn-2 failure abandons the scene even though
+// the two failures are non-consecutive. At most one utterance retried marker;
+// no second retry Submit is made.
+func TestConvoUtteranceBudgetPerScene(t *testing.T) {
+	// t0 attempt (fail) → retry (ok) → t1 (ok) → t2 attempt (fail → abandon).
+	model := &countingModel{replies: []string{
+		"garbage", `{"say": "Cold."}`, `{"say": "Aye."}`, "garbage again",
+	}}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		var p sim.CogOutcomePayload
+		return e.Type == "cog.outcome" && json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	})
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if strings.HasPrefix(e.Type, "social.conversation") {
+			t.Fatalf("abandoned scene leaked %s", e.Type)
+		}
+	}
+	term, markers, _ := sceneOutcomes(t, all)
+	if len(markers) != 1 || markers[0].Raw != "garbage" {
+		t.Errorf("want exactly one utterance retried marker carrying %q, got %+v", "garbage", markers)
+	}
+	if !term.Retried || term.Raw != "garbage again" {
+		t.Errorf("terminal unusable: retried=%v raw=%q, want retried=true raw=%q", term.Retried, term.Raw, "garbage again")
+	}
+	if !strings.Contains(term.Reason, "budget spent") {
+		t.Errorf("terminal reason should name the spent budget: %q", term.Reason)
+	}
+	model.mu.Lock()
+	calls := model.calls
+	model.mu.Unlock()
+	// t0 attempt + t0 retry + t1 + t2 attempt = 4; a second retry would be a 5th.
+	if calls != 4 {
+		t.Errorf("Submit calls = %d, want 4 (no second utterance retry)", calls)
+	}
+}
+
 // TestConvoRawReplyRecoverableFromStore (T011 / US3 / SC-003): a parse failure's
 // verbatim reply is recoverable from the persisted event log and attributable
 // to the conversation job id.

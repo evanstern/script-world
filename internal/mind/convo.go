@@ -216,6 +216,10 @@ func (md *Mind) runConversation(cc convoCtx) {
 	// retried marks that the scene consumed at least one retry at either site
 	// (FR-005); it rides the terminal outcome so recovery rates are countable.
 	retried := false
+	// utteranceRetried is the utterance site's whole retry budget: ONE retry
+	// per scene (FR-002/FR-007), not one per turn — once spent, a later
+	// parse failure abandons all-or-nothing.
+	utteranceRetried := false
 	for t := 0; t < n*sim.ConvoTurnsPerSide; t++ {
 		sp := t % n // speaker position, round-robin
 		say, raw, err := md.utterance(ctx, cc, sp, transcript)
@@ -228,11 +232,22 @@ func (md *Mind) runConversation(cc convoCtx) {
 					time.Since(sceneStart).Milliseconds(), "", retried))
 				return // all-or-nothing: inject nothing
 			}
-			// Parse failure: retry this same speaker once (retry-not-skip, R1 —
-			// silently skipping breaks the round-robin transcript invariant).
+			if utteranceRetried {
+				// The scene's one utterance retry is already spent (FR-002/
+				// FR-007): a second parse failure — even on a later turn —
+				// abandons, all-or-nothing.
+				log.Printf("mind: conversation %d abandoned at turn %d: utterance retry budget spent: %v", cc.conv, t, err)
+				md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
+					fmt.Sprintf("abandoned at turn %d (utterance retry budget spent): %v", t, err),
+					time.Since(sceneStart).Milliseconds(), raw, retried))
+				return
+			}
+			// Spend the scene's one utterance retry: re-ask this same speaker
+			// (retry-not-skip, R1 — skipping breaks the round-robin invariant).
 			md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeRetried,
 				fmt.Sprintf("utterance turn %d: %v", t, err),
 				time.Since(sceneStart).Milliseconds(), raw, false))
+			utteranceRetried = true
 			retried = true
 			say, raw, err = md.utterance(ctx, cc, sp, transcript)
 			if err != nil {
@@ -240,7 +255,7 @@ func (md *Mind) runConversation(cc convoCtx) {
 				md.emitCog(md.cogSceneOutcome(cc.meta, sim.OutcomeUnusable,
 					fmt.Sprintf("abandoned at turn %d after retry: %v", t, err),
 					time.Since(sceneStart).Milliseconds(), rawOnParse(err, raw), retried))
-				return // second consecutive failure: all-or-nothing
+				return // consecutive failure on the same turn: all-or-nothing
 			}
 		}
 		transcript = append(transcript, fmt.Sprintf("%s: %s", cc.names[sp], say))

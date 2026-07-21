@@ -34,9 +34,11 @@ treat `retried` as informational, not terminal — verified against
 
 Local variables in `runConversation` / helpers — not a struct field, not shared:
 
-- utterance site: per-turn `retriedOnce bool` (reset each turn index; a turn may
-  retry at most once; retry failure aborts the scene).
-- outcome site: single `retriedOutcome bool`.
+- utterance site: scene-level `utteranceRetried bool` — ONE utterance retry
+  total per scene (FR-002/FR-007), NOT one per turn. A parse failure while the
+  budget is already spent aborts the scene even on a later, non-consecutive
+  turn; a retry that itself fails aborts too.
+- outcome site: single `retriedOutcome bool` (its own one-retry budget).
 - both feed the terminal event's `retried` flag.
 
 ## State transitions (scene lifecycle)
