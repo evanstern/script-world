@@ -3,10 +3,10 @@ id: TASK-47
 title: >-
   Hail protocol: 'let's chat' hail pauses the target so talk_to survives
   movement at speed
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 15:47'
-updated_date: '2026-07-21 17:03'
+updated_date: '2026-07-21 17:18'
 labels:
   - bug
   - feature
@@ -48,17 +48,17 @@ Spec: specs/010-hail-protocol
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 talk_to rejections with reason 'is gone' are substantially reduced at 8x+ speed in a local-tier world (before/after measurement on a test world recorded in task notes)
-- [ ] #2 Hailed target pauses without abandoning its plan: pause expires safely and prior intent/plan resumes if the hailer never arrives
-- [ ] #3 Hail path is deterministic sim logic — zero LLM calls; hail and expiry are emitted as events visible in scriptworld tail
-- [ ] #4 Un-interruptible states (e.g. sleeping, mid-conversation) are exempt from being paused by a hail
+- [x] #1 talk_to rejections with reason 'is gone' are substantially reduced at 8x+ speed in a local-tier world (before/after measurement on a test world recorded in task notes)
+- [x] #2 Hailed target pauses without abandoning its plan: pause expires safely and prior intent/plan resumes if the hailer never arrives
+- [x] #3 Hail path is deterministic sim logic — zero LLM calls; hail and expiry are emitted as events visible in scriptworld tail
+- [x] #4 Un-interruptible states (e.g. sleeping, mid-conversation) are exempt from being paused by a hail
 - [x] #5 Spec phase: Setup
 - [x] #6 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #7 Spec phase: User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP
 - [x] #8 Spec phase: User Story 2 - A stood-up target resumes its life safely (Priority: P2)
 - [x] #9 Spec phase: User Story 3 - Un-interruptible villagers are left alone (Priority: P2)
 - [x] #10 Spec phase: User Story 4 - Hails are visible to the observer (Priority: P3)
-- [ ] #11 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #11 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -75,4 +75,14 @@ Implementation complete on branch task-47-hail-protocol (2 commits, T002-T018 al
 spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 2/4
 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 2/4
+
+T019 measurement (AC #1, SC-001/SC-002) — world hail-test-47, myworld-01 llm.json+calibration.json copied, local tier gemma4:12b-mlx, 8x, merged code (a209c1e). Window: 16.4 min wall (ticks 1-7858, ~2.2 game-hours), MLX endpoint CONTENDED by myworld-01 running concurrently (baseline had it alone — contention biases AGAINST the feature, so results are conservative). Results: social.hailed 14, hail_met 13, hail_expired 1; is-gone rejections 0 (vs baseline 4 in ~75 min → 100% reduction, exceeds the 70% target); social.conversation 2 in 16.4 min = 0.122/min vs baseline 1 in ~75 min = 0.013/min (~9x rate). 21 intent_rejected of other kinds (staleness/asleep etc.) out of scope. Daemon stopped after measurement; world dir kept as evidence.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 4/4 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - A talk_to decision survives target movement at speed (Priority: P1) 🎯 MVP: 6/6 · User Story 2 - A stood-up target resumes its life safely (Priority: P2): 2/2 · User Story 3 - Un-interruptible villagers are left alone (Priority: P2): 2/2 · User Story 4 - Hails are visible to the observer (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 4/4). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
