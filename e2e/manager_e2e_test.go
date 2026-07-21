@@ -7,6 +7,7 @@ package e2e
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -244,5 +245,229 @@ func TestManagerPsWedgedDaemonRespectsBudget(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].State != "unresponsive" {
 		t.Fatalf("expected one unresponsive row, got %+v", rows)
+	}
+}
+
+// --- User Story 2 (T013): full name lifecycle, zero paths typed ---
+
+func TestManagerNewByNameFullLifecycle(t *testing.T) {
+	home := isolatedHome(t)
+	runFromElsewhere(t)
+
+	out := run(t, "new", "aria", "--seed", "1")
+	if !strings.Contains(out, `created world "aria"`) {
+		t.Fatalf("new aria output = %q", out)
+	}
+	if !strings.Contains(out, "scriptworld start aria") {
+		t.Errorf("expected the name-form success hint to suggest `start aria`, got %q", out)
+	}
+	dir := filepath.Join(home, "worlds", "aria")
+	manifest, err := os.ReadFile(filepath.Join(dir, "world.json"))
+	if err != nil {
+		t.Fatalf("expected a manifest under the worlds home: %v", err)
+	}
+
+	// Acceptance Scenario 2: duplicate name refused, existing world untouched.
+	if out, err := runErr("new", "aria", "--seed", "2"); err == nil {
+		t.Fatalf("expected duplicate `new aria` to be refused, got: %s", out)
+	}
+	after, err := os.ReadFile(filepath.Join(dir, "world.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(manifest) != string(after) {
+		t.Error("existing world was touched by the refused duplicate `new`")
+	}
+
+	// The rest of the lifecycle by name only — never a path (SC-002).
+	os.Remove(filepath.Join(dir, "llm.json"))
+	run(t, "start", "aria")
+	t.Cleanup(func() { stopHard(dir) })
+
+	if out := run(t, "status", "aria"); !strings.Contains(out, "running") {
+		t.Errorf("status aria = %q", out)
+	}
+	run(t, "speed", "aria", "8x")
+	run(t, "pause", "aria")
+	var s statusJSON
+	if err := json.Unmarshal([]byte(run(t, "status", "aria", "--json")), &s); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Clock.Paused {
+		t.Error("expected paused after `pause aria`")
+	}
+	run(t, "resume", "aria")
+
+	if out := run(t, "stop", "aria"); !strings.Contains(out, "stopped") {
+		t.Errorf("stop aria = %q", out)
+	}
+	// Idempotent by name exactly as by path (FR-010).
+	if out := run(t, "stop", "aria"); !strings.Contains(out, "not running") {
+		t.Errorf("second stop aria = %q", out)
+	}
+}
+
+// TestManagerNewInvalidNames covers the spec's name-rule edge cases
+// (FR-009). "bad/name" contains a path separator, so per the name-vs-path
+// rule (research.md D3) it is a PATH, not a name — it is legacy path-form
+// and legitimately succeeds at a relative path, not a name-validation
+// failure; name validation for a "/"-bearing value is only reachable
+// through --name (also exercised here), the one place a name-shaped string
+// can arrive without first being classified as a path.
+func TestManagerNewInvalidNames(t *testing.T) {
+	isolatedHome(t)
+	runFromElsewhere(t)
+
+	if out, err := runErr("new", "-flag"); err == nil {
+		t.Errorf("expected `new -flag` to be rejected, got: %s", out)
+	}
+	if out, err := runErr("new", ""); err == nil {
+		t.Errorf("expected `new \"\"` to be rejected, got: %s", out)
+	}
+	if out, err := runErr("new", "bad/name", "--seed", "1"); err != nil {
+		t.Errorf("expected `new bad/name` to succeed as legacy path-form (D3), got error: %v\n%s", err, out)
+	} else if _, statErr := os.Stat(filepath.Join("bad", "name", "world.json")); statErr != nil {
+		t.Errorf("expected a world created at relative path bad/name: %v", statErr)
+	}
+
+	dir := filepath.Join(t.TempDir(), "target")
+	if out, err := runErr("new", dir, "--name", "bad/name"); err == nil {
+		t.Errorf("expected --name with a path separator to be rejected, got: %s", out)
+	}
+	if out, err := runErr("new", dir, "--name", "-badname"); err == nil {
+		t.Errorf("expected a flag-like --name to be rejected, got: %s", out)
+	}
+}
+
+func TestManagerUnknownNameFailsWithHelpfulMessage(t *testing.T) {
+	home := isolatedHome(t)
+	runFromElsewhere(t)
+
+	out, err := runErr("status", "nowhere")
+	if err == nil {
+		t.Fatalf("expected `status nowhere` to fail, got: %s", out)
+	}
+	worldsHome := filepath.Join(home, "worlds")
+	if !strings.Contains(out, worldsHome) {
+		t.Errorf("expected the error to name the worlds home searched (%s), got %q", worldsHome, out)
+	}
+	if !strings.Contains(out, "ps --all") {
+		t.Errorf("expected the error to suggest `ps --all`, got %q", out)
+	}
+}
+
+// TestManagerCopiedNameWorldRunsUnderFreshHome is SC-004: a stopped
+// name-created world, copied to an arbitrary path under a completely
+// unrelated SCRIPTWORLD_HOME (no worlds-home entry, no registry entry —
+// nothing), starts and runs by path with zero manager state present.
+func TestManagerCopiedNameWorldRunsUnderFreshHome(t *testing.T) {
+	home := isolatedHome(t)
+	run(t, "new", "aria", "--seed", "42")
+	dir := filepath.Join(home, "worlds", "aria")
+	os.Remove(filepath.Join(dir, "llm.json"))
+	run(t, "start", "aria")
+	waitTick(t, dir, 1)
+	run(t, "stop", "aria")
+
+	archive := filepath.Join(t.TempDir(), "aria-archive")
+	if out, err := exec.Command("cp", "-R", dir, archive).CombinedOutput(); err != nil {
+		t.Fatalf("cp -R: %v\n%s", err, out)
+	}
+
+	isolatedHome(t) // a second, unrelated home — the copy must not need it
+	run(t, "start", archive)
+	t.Cleanup(func() { stopHard(archive) })
+	s := waitTick(t, archive, 1)
+	if s.World.Seed != 42 {
+		t.Errorf("archive seed = %d, want 42", s.World.Seed)
+	}
+}
+
+// --- User Story 3 (T015): custom-path worlds, addressable by name ---
+
+func TestManagerCustomPathWorldStoppedByName(t *testing.T) {
+	isolatedHome(t)
+	dir := newNamedWorld(t, "harbor-drift", "6", false)
+
+	rows := psJSON(t)
+	if len(rows) != 1 || rows[0].Name != "harbor-drift" || rows[0].State != "running" {
+		t.Fatalf("expected harbor-drift running, got %+v", rows)
+	}
+
+	out := run(t, "stop", "harbor-drift")
+	if !strings.Contains(out, "stopped") {
+		t.Errorf("stop by name output = %q", out)
+	}
+
+	all := psJSON(t, "--all")
+	found := false
+	for _, r := range all {
+		if r.Name == "harbor-drift" {
+			found = true
+			if r.State != "stopped" {
+				t.Errorf("state under --all = %q, want stopped", r.State)
+			}
+			if r.Path != dir {
+				t.Errorf("path = %q, want %q", r.Path, dir)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected harbor-drift to survive to ps --all after stopping")
+	}
+}
+
+// TestManagerDeletedCustomPathWorldGracefulByName: once a custom-path
+// world's directory is gone, the manager forgets it gracefully — ps --all
+// reports it missing (never aborts) and addressing it by name fails with a
+// specific, helpful exit-1 message (never a raw open error, T014).
+func TestManagerDeletedCustomPathWorldGracefulByName(t *testing.T) {
+	isolatedHome(t)
+	dir := newNamedWorld(t, "driftaway", "7", false)
+	run(t, "stop", "driftaway")
+
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range psJSON(t, "--all") {
+		if r.Name == "driftaway" && r.State != "missing" {
+			t.Errorf("expected driftaway state = missing after its dir vanished, got %q", r.State)
+		}
+	}
+
+	out, err := runErr("status", "driftaway")
+	if err == nil {
+		t.Fatalf("expected `status driftaway` to fail after its dir vanished, got: %s", out)
+	}
+	if !strings.Contains(out, "driftaway") || !strings.Contains(out, "gone") {
+		t.Errorf("expected a specific \"gone\" message, not a raw error: %q", out)
+	}
+}
+
+// TestManagerNameCollisionAmbiguousRefusal: a worlds-home world and a
+// registry-remembered custom-path world sharing a name must refuse rather
+// than silently pick one (FR-011).
+func TestManagerNameCollisionAmbiguousRefusal(t *testing.T) {
+	home := isolatedHome(t)
+	run(t, "new", "aria", "--seed", "1")
+	homeAria := filepath.Join(home, "worlds", "aria")
+
+	elsewhere := t.TempDir()
+	customDir := filepath.Join(elsewhere, "aria-elsewhere")
+	run(t, "new", customDir, "--name", "aria", "--seed", "2")
+	os.Remove(filepath.Join(customDir, "llm.json"))
+	run(t, "start", customDir)
+	t.Cleanup(func() { stopHard(customDir) })
+
+	out, err := runErr("status", "aria")
+	if err == nil {
+		t.Fatalf("expected addressing the colliding name to be refused as ambiguous, got: %s", out)
+	}
+	if !strings.Contains(out, "ambiguous") {
+		t.Errorf("expected an ambiguity message, got %q", out)
+	}
+	if !strings.Contains(out, homeAria) || !strings.Contains(out, customDir) {
+		t.Errorf("expected both candidate paths listed, got %q", out)
 	}
 }
