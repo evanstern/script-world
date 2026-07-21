@@ -650,6 +650,65 @@ func TestMusingBestEffort(t *testing.T) {
 	}
 }
 
+// TestBestEffortSlotAware (US2, FR-003, SC-002): with N slots a best-effort
+// musing is admitted whenever ANY slot is free — not refused the moment one
+// call is in flight — and refused only when every slot is occupied.
+func TestBestEffortSlotAware(t *testing.T) {
+	const slots = 4
+	parked := make(chan struct{}, slots)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if lastUserPrompt(r) == "park" {
+			parked <- struct{}{}
+			<-release // planners occupy a slot until released
+		}
+		localReplyJSON(w)
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
+	cfg.Local.Parallel = slots
+	o := newOrch(t, cfg, testStore(t))
+
+	// occupy submits n parked planners and blocks until all n hold a slot.
+	occupy := func(n int) {
+		for i := 0; i < n; i++ {
+			go o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "park"})
+		}
+		watchdog := time.After(5 * time.Second)
+		for i := 0; i < n; i++ {
+			select {
+			case <-parked:
+			case <-watchdog:
+				t.Fatalf("only %d/%d planners occupied a slot", i, n)
+			}
+		}
+	}
+
+	// One slot busy, three free, queues empty → the musing is served (today's
+	// serial tier would have refused it the instant anything was in flight).
+	occupy(1)
+	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	if err != nil {
+		t.Fatalf("best-effort musing with a free slot must be served: %v", err)
+	}
+	if resp.Tier != TierLocal || resp.Text != "ok" {
+		t.Errorf("musing response: %+v", resp)
+	}
+
+	// Occupy the remaining three slots → all four busy, queues still empty.
+	occupy(slots - 1)
+	start := time.Now()
+	_, err = o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	if !errors.Is(err, ErrTierBusy) {
+		t.Fatalf("all slots busy must drop the best-effort musing: got %v", err)
+	}
+	if d := time.Since(start); d > 100*time.Millisecond {
+		t.Errorf("best-effort refusal must be immediate, took %v", d)
+	}
+}
+
 func TestConfigRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "llm.json")
 	if cfg, err := LoadConfig(path); err != nil || cfg != nil {

@@ -266,8 +266,11 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
 	// Best-effort work (musings) is the opposite extreme: admitted only
-	// when nothing else is waiting, refused instantly otherwise.
-	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0) {
+	// when a slot is free, refused instantly otherwise. With N local
+	// workers, "free slot" means no queued work AND at least one idle
+	// worker (inflight < slots) — a non-empty queue already implies every
+	// slot is busy, so the queue checks remain the fast-path refusal (R3).
+	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
 		return Response{}, ErrTierBusy
 	}
 	q := t.queue

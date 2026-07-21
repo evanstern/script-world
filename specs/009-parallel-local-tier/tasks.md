@@ -71,8 +71,8 @@ empty, a best-effort musing is admitted; with all 4 slots parked, it gets
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Rewrite `Submit`'s best-effort refusal to slot-aware form — refuse iff `len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)` — in internal/llm/llm.go (FR-003, research R3)
-- [ ] T008 [US2] Best-effort slot tests in internal/llm/llm_test.go: (a) `parallel: 4`, one parked call, empty queues → musing admitted and served; (b) all 4 slots parked → `ErrTierBusy` immediately; (c) existing `TestMusingBestEffort` (queued-work-refuses, quiet-serves) still green unchanged (SC-002, SC-003)
+- [x] T007 [US2] Rewrite `Submit`'s best-effort refusal to slot-aware form — refuse iff `len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)` — in internal/llm/llm.go (FR-003, research R3)
+- [x] T008 [US2] Best-effort slot tests in internal/llm/llm_test.go: (a) `parallel: 4`, one parked call, empty queues → musing admitted and served; (b) all 4 slots parked → `ErrTierBusy` immediately; (c) existing `TestMusingBestEffort` (queued-work-refuses, quiet-serves) still green unchanged (SC-002, SC-003)
 
 **Checkpoint**: US1 + US2 independently green.
 
