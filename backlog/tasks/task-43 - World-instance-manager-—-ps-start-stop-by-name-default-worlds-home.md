@@ -4,10 +4,10 @@ title: 'World instance manager — ps/start/stop by name, default worlds home'
 status: In Progress
 assignee: []
 created_date: '2026-07-21 14:01'
-updated_date: '2026-07-21 14:01'
+updated_date: '2026-07-21 15:58'
 labels: []
 dependencies: []
-ordinal: 37000
+ordinal: 37500
 ---
 
 ## Description
@@ -25,3 +25,9 @@ Spec: specs/008-instance-manager
 - [ ] #3 All per-world commands accept a name or a path; path invocations behave exactly as before
 - [ ] #4 Manager state is advisory and self-healing; a world runs with no manager state present
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync:  — status To Do → In Progress
+<!-- SECTION:NOTES:END -->
