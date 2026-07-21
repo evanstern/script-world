@@ -1,8 +1,10 @@
 // Package llm is the orchestrator for all model traffic (TASK-6): two
 // tiers (local Ollama-style HTTP, cloud Anthropic), kind-based routing,
-// bounded queues with backpressure, a persisted monthly spend meter with a
-// hard ceiling, and per-tier circuit breakers so unreachable inference
-// degrades the AI layer — never the simulation.
+// bounded queues with backpressure feeding N concurrent local workers
+// (configurable via local.parallel, default 1; cloud is always single-worker,
+// TASK-45), a persisted monthly spend meter with a hard ceiling, and per-tier
+// circuit breakers so unreachable inference degrades the AI layer — never the
+// simulation.
 //
 // The orchestrator lives entirely OUTSIDE the deterministic sim loop. LLM
 // results reach the world only as recorded inputs (TASK-7's job), so replay
@@ -15,6 +17,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/evanstern/script-world/internal/cognition"
@@ -32,8 +35,8 @@ const (
 	// KindMetatron is the gatekeeper angel (TASK-12): console turns,
 	// nudge judgment, and digests — premium cognition, tiny volume.
 	KindMetatron Kind = "metatron"
-	// KindMusing is best-effort interiority (TASK-21): admitted only when
-	// the local tier is otherwise quiet, dropped without retry when not.
+	// KindMusing is best-effort interiority (TASK-21): admitted only when a
+	// local worker slot is free, dropped without retry when every slot is busy.
 	KindMusing Kind = "musing"
 	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
 	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
@@ -87,9 +90,10 @@ type Request struct {
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
 	// BestEffort requests drop-when-busy admission: the call is refused
-	// with ErrTierBusy whenever its tier has work waiting. Callers that
-	// may not displace real cognition (musings) set this; their fairness
-	// floor is the caller's business, not the orchestrator's.
+	// with ErrTierBusy when no worker slot is free — any queued work, or all
+	// N slots in flight (TASK-45). Callers that may not displace real
+	// cognition (musings) set this; their fairness floor is the caller's
+	// business, not the orchestrator's.
 	BestEffort bool `json:"best_effort,omitempty"`
 }
 
@@ -142,6 +146,14 @@ type tier struct {
 	health *tierHealth
 	queue  chan job
 	prio   chan job // interactive work (conversations) jumps the line
+	// slots is the tier's concurrent capacity: the number of worker
+	// goroutines draining its channels (TASK-45). Local is configurable
+	// (LocalConfig.Workers()); cloud is always 1 (FR-008).
+	slots int
+	// inflight counts jobs a worker has dequeued and not yet replied to —
+	// incremented at dequeue, decremented on every reply path. It drives
+	// slot-aware best-effort admission: 0 ≤ inflight ≤ slots.
+	inflight atomic.Int32
 	// est is the live seconds-per-point estimate for this tier (TASK-32):
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
@@ -175,6 +187,10 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Local tier concurrency is operator-configurable (clamped in Workers());
+	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
+	// at one worker (FR-008).
+	localSlots, _ := cfg.Local.Workers()
 	o := &Orchestrator{
 		cfg:   cfg,
 		meter: meter,
@@ -183,14 +199,21 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
 				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none")),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
+				slots: localSlots,
+				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
 			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				est: cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
+				slots: 1,
+				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
 		},
 	}
+	// One worker goroutine per slot: N identical copies of the existing loop
+	// drain the same two channels, preserving every per-job invariant while
+	// unlocking concurrency (TASK-45 R1).
 	for _, t := range o.tiers {
-		go o.worker(t)
+		for i := 0; i < t.slots; i++ {
+			go o.worker(t)
+		}
 	}
 	return o, nil
 }
@@ -246,8 +269,11 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
 	// Best-effort work (musings) is the opposite extreme: admitted only
-	// when nothing else is waiting, refused instantly otherwise.
-	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0) {
+	// when a slot is free, refused instantly otherwise. With N local
+	// workers, "free slot" means no queued work AND at least one idle
+	// worker (inflight < slots) — a non-empty queue already implies every
+	// slot is busy, so the queue checks remain the fast-path refusal (R3).
+	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
 		return Response{}, ErrTierBusy
 	}
 	q := t.queue
@@ -286,7 +312,13 @@ func (o *Orchestrator) worker(t *tier) {
 			case j = <-t.queue:
 			}
 		}
+		// Count this job in-flight the instant it leaves the channel; the
+		// deferred decrement fires on every reply path (stale-skip, provider
+		// error, meter error, success), keeping 0 ≤ inflight ≤ slots for the
+		// slot-aware best-effort admission check in Submit (TASK-45 R3).
+		t.inflight.Add(1)
 		func() {
+			defer t.inflight.Add(-1)
 			// A job whose caller already gave up (its ctx expired in the
 			// queue) is starvation, not model failure: skip it without
 			// touching the model or the circuit. Otherwise every planner

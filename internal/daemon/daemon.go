@@ -135,8 +135,19 @@ func Run(dir string) error {
 		if llmCfg.Cloud.Provider == llm.ProviderOpenAICompat {
 			cloudDesc = fmt.Sprintf("%s @ %s", llmCfg.Cloud.Model, llmCfg.Cloud.Endpoint)
 		}
-		fmt.Printf("daemon: llm orchestrator on (local %s @ %s, cloud %s, budget $%.0f/mo)\n",
-			llmCfg.Local.Model, llmCfg.Local.Endpoint, cloudDesc, llmCfg.MonthlyBudgetUSD)
+		// Local-tier concurrency (TASK-45): surface the effective worker count
+		// when it exceeds the default, and warn (never fatal) when the operator
+		// configured an out-of-range value that was clamped.
+		localWorkers, workersWarn := llmCfg.Local.Workers()
+		if workersWarn != "" {
+			fmt.Printf("daemon: %s\n", workersWarn)
+		}
+		localDesc := fmt.Sprintf("local %s @ %s", llmCfg.Local.Model, llmCfg.Local.Endpoint)
+		if localWorkers > 1 {
+			localDesc += fmt.Sprintf(", parallel %d", localWorkers)
+		}
+		fmt.Printf("daemon: llm orchestrator on (%s, cloud %s, budget $%.0f/mo)\n",
+			localDesc, cloudDesc, llmCfg.MonthlyBudgetUSD)
 		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
 		if err != nil {
 			return err
