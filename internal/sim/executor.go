@@ -50,8 +50,9 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 	// The gru: nightly emergence, stalking, wounds, dawn withdrawal (gru.go).
 	events = append(events, gruStep(s, m, night, nextTick)...)
 
-	// Governance (TASK-13): the daily noon meeting lifecycle and the
-	// per-minute violation detectors (governance.go).
+	// Governance (TASK-13): the meeting lifecycle (only once a convention is
+	// established — TASK-36) and the per-minute violation detectors
+	// (governance.go).
 	events = append(events, governanceEvents(s, m, nextTick)...)
 
 	// Forage regrowth.

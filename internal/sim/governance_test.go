@@ -7,13 +7,38 @@ import (
 	"testing"
 
 	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/script-world/internal/worldmap"
 )
 
 // Tick math (epoch 06:00): 11:30 day 1 = tick 19800, noon day 1 = tick 21600.
+// These are the historical convene/open times the lifecycle tests were
+// written against — no longer engine constants (TASK-36), so a convention
+// must be established to reproduce them (see establishConvention).
 const (
-	conveneTickDay1 = int64(meetingConveneSecond - 6*3600)
-	noonTickDay1    = int64(meetingOpenSecond - 6*3600)
+	conveneSecondTest = 11*3600 + 1800 // 11:30
+	openSecondTest    = 12 * 3600      // noon
+	conveneTickDay1   = int64(conveneSecondTest - 6*3600)
+	noonTickDay1      = int64(openSecondTest - 6*3600)
 )
+
+// conventionEvent builds a config-shaped convention_established event whose
+// place is the tile the engine would derive — convene 11:30, open noon.
+func conventionEvent(s *State, m *worldmap.Map, tick int64) store.Event {
+	p := deriveMeetingPlace(s, m)
+	return store.Event{Tick: tick, Type: "meeting.convention_established",
+		Payload: mustPayload(MeetingConventionPayload{
+			ConveneSecond: conveneSecondTest, OpenSecond: openSecondTest,
+			X: p.X, Y: p.Y, Source: "config"})}
+}
+
+// establishConvention reduces a convention at s.Tick so the meeting lifecycle
+// has when/where to convene (TASK-36 removed the hard-coded 11:30 clock).
+func establishConvention(t *testing.T, s *State, m *worldmap.Map) {
+	t.Helper()
+	if err := s.Apply(conventionEvent(s, m, s.Tick)); err != nil {
+		t.Fatalf("establish convention: %v", err)
+	}
+}
 
 func governanceLog(log []store.Event, types ...string) []store.Event {
 	want := map[string]bool{}
@@ -36,11 +61,15 @@ func TestMeetingLifecycleFullDay(t *testing.T) {
 	const seed = 42
 	m := testMap(seed)
 	s := NewState(seed, m)
+	establishConvention(t, s, m)
 	log := driveTicks(t, s, m, noonTickDay1+meetingTimeboxTicks+meetingGraceTicks+60, nil)
 
-	places := governanceLog(log, "meeting.place_designated")
-	if len(places) != 1 {
-		t.Fatalf("meeting place designated %d times, want exactly once", len(places))
+	// The place rides the convention (TASK-36): no separate designation event.
+	if places := governanceLog(log, "meeting.place_designated"); len(places) != 0 {
+		t.Fatalf("meeting place designated %d times, want none (place comes from the convention)", len(places))
+	}
+	if s.MeetingPlace == nil {
+		t.Fatal("convention did not set the meeting place")
 	}
 	convened := governanceLog(log, "meeting.convened")
 	if len(convened) != 1 || convened[0].Tick != conveneTickDay1 {
@@ -113,6 +142,7 @@ func TestAsleepVillagersMissMeeting(t *testing.T) {
 	const seed = 42
 	m := testMap(seed)
 	s := NewState(seed, m)
+	establishConvention(t, s, m)
 	driveTicks(t, s, m, conveneTickDay1-1, nil)
 	s.Agents[0].Asleep = true
 	s.Agents[0].Intent = nil
@@ -140,6 +170,7 @@ func TestEmptyMeetingOpensAndCloses(t *testing.T) {
 	const seed = 42
 	m := testMap(seed)
 	s := NewState(seed, m)
+	establishConvention(t, s, m)
 	driveTicks(t, s, m, conveneTickDay1+1, nil) // convened
 	for i := range s.Agents {
 		s.Agents[i].Asleep = true
@@ -643,11 +674,13 @@ func TestGovernanceReplay(t *testing.T) {
 			Target: -1, Param: nightStartSecond, Proposer: 0, Text: "No one out after nightfall."},
 		Yeas: []int{0, 1, 2}, Nays: nil, Passed: true,
 	}
+	live := NewState(seed, m)
+	// The convention rides the log (injected at tick 0), so replay reconstructs
+	// it and the day-1 meeting exactly (TASK-36).
 	timeline := map[int64][]store.Event{
+		0:    {conventionEvent(live, m, 0)},
 		1000: {{Tick: 1000, Type: "meeting.proposal_resolved", Payload: mustPayload(enact)}},
 	}
-
-	live := NewState(seed, m)
 	log := driveTicks(t, live, m, ticks, timeline)
 
 	if len(governanceLog(log, "meeting.opened")) != 1 {
@@ -733,6 +766,7 @@ func TestDegradedModeGovernanceEndToEnd(t *testing.T) {
 	const seed = 42
 	m := testMap(seed)
 	s := NewState(seed, m)
+	establishConvention(t, s, m)
 	// The night before, the gru got someone; the village likes agent 0.
 	s.Agents[0].Memories = append(s.Agents[0].Memories,
 		Memory{Text: "The gru came out of the dark and tore into me.", Salience: 9, Tick: 100, Subject: -1})
@@ -759,12 +793,152 @@ func TestDegradedModeGovernanceEndToEnd(t *testing.T) {
 	}
 }
 
+// TestFreshDefaultDayNoMeeting (TASK-36 AC#1): a fresh default world with no
+// convention runs a full game day and never emits a single meeting.* event —
+// villagers just follow their needs; no engine clock convenes them.
+func TestFreshDefaultDayNoMeeting(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	log := driveTicks(t, s, m, 90_000, nil) // a full day (86 400) and change
+
+	if s.MeetingConvention != nil {
+		t.Fatalf("a fresh default world grew a convention unbidden: %+v", s.MeetingConvention)
+	}
+	for _, e := range log {
+		if strings.HasPrefix(e.Type, "meeting.") {
+			t.Errorf("fresh default world emitted %s at tick %d — no meeting without a convention", e.Type, e.Tick)
+		}
+	}
+}
+
+// gatherLog drives governanceEvents alone (no reflex) across minute
+// heartbeats, applying and collecting the emitted events — full control over
+// who is gathered where.
+func gatherLog(t *testing.T, s *State, m *worldmap.Map, minutes int) []store.Event {
+	t.Helper()
+	var log []store.Event
+	for k := 0; k < minutes; k++ {
+		next := s.Tick + 60 // one game-minute heartbeat
+		for _, e := range governanceEvents(s, m, next) {
+			if err := s.Apply(e); err != nil {
+				t.Fatalf("apply %s: %v", e.Type, err)
+			}
+			log = append(log, e)
+		}
+		s.Tick = next
+	}
+	return log
+}
+
+// TestEmergentConventionFromGathering (TASK-36 AC#3): with no config, a quorum
+// that keeps gathering at one fire through the daytime establishes the
+// convention in-world (deterministically) — and that convention drives a real
+// meeting the next day.
+func TestEmergentConventionFromGathering(t *testing.T) {
+	const seed = 7
+	m := testMap(seed)
+	s := NewState(seed, m)
+
+	// Noon on day 1: a fire, with the whole village gathered on it, awake.
+	s.Tick = noonTickDay1
+	fx, fy := s.Agents[0].X, s.Agents[0].Y
+	s.Structures = append(s.Structures, Structure{Kind: "fire", X: fx, Y: fy})
+	for i := range s.Agents {
+		s.Agents[i].X, s.Agents[i].Y = fx, fy
+		s.Agents[i].Asleep = false
+	}
+
+	// Sustain the gathering just past the window (30 game-min → establishes).
+	log := gatherLog(t, s, m, emergentGatherTicks/60+1)
+
+	est := governanceLog(log, "meeting.convention_established")
+	if len(est) != 1 {
+		t.Fatalf("%d conventions established, want exactly one from the sustained gathering", len(est))
+	}
+	var p MeetingConventionPayload
+	json.Unmarshal(est[0].Payload, &p)
+	if p.Source != "emergent" {
+		t.Errorf("source %q, want emergent", p.Source)
+	}
+	if p.X != fx || p.Y != fy {
+		t.Errorf("place (%d,%d), want the fire tile (%d,%d)", p.X, p.Y, fx, fy)
+	}
+	// convene = the observed half-hour; the establish beat lands at 12:30 exactly.
+	if p.ConveneSecond != 12*3600+1800 || p.OpenSecond != 13*3600 {
+		t.Errorf("times convene=%d open=%d, want 45000/46800 (12:30/13:00)", p.ConveneSecond, p.OpenSecond)
+	}
+	if s.MeetingConvention == nil || s.MeetingConvention.Source != "emergent" {
+		t.Fatalf("state convention = %+v, want the emergent one", s.MeetingConvention)
+	}
+	if s.Meeting.GatherStart != 0 { // the watch is cleared once it takes hold
+		t.Errorf("gather watch not reset after establishment: %+v", s.Meeting)
+	}
+
+	// The next day, that convention drives a real meeting (convene → open).
+	for i := range s.Agents {
+		s.Agents[i].Needs = Needs{Health: 1000, Food: 900, Rest: 900, Warmth: 900, Morale: 900}
+	}
+	log2 := driveTicks(t, s, m, s.Tick+86400+2000, nil)
+	if len(governanceLog(log2, "meeting.convened")) == 0 {
+		t.Error("the emergent convention did not convene the village the next day")
+	}
+	if len(governanceLog(log2, "meeting.opened")) == 0 {
+		t.Error("the emergent convention did not open a meeting the next day")
+	}
+	// No second convention: the detector is off once one exists.
+	if n := len(governanceLog(log2, "meeting.convention_established")); n != 0 {
+		t.Errorf("%d further conventions established after the first", n)
+	}
+}
+
+// TestEmergentGatheringResets: a gathering that breaks before the window
+// resets the watch and never establishes a convention.
+func TestEmergentGatheringResets(t *testing.T) {
+	const seed = 7
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.Tick = noonTickDay1
+	fx, fy := s.Agents[0].X, s.Agents[0].Y
+	s.Structures = append(s.Structures, Structure{Kind: "fire", X: fx, Y: fy})
+	// Everyone but 0,1 out of the picture (asleep); 0,1 gathered at the fire.
+	for i := range s.Agents {
+		s.Agents[i].Asleep = true
+	}
+	gather := func(on bool) {
+		for _, i := range []int{0, 1} {
+			s.Agents[i].X, s.Agents[i].Y = fx, fy
+			s.Agents[i].Asleep = !on
+		}
+	}
+
+	gather(true)
+	log := gatherLog(t, s, m, 5) // five minutes gathered — the watch starts
+	if s.Meeting.GatherStart == 0 {
+		t.Fatal("the watch never started tracking the gathering")
+	}
+	gather(false) // disperse (0,1 asleep now)
+	log = append(log, gatherLog(t, s, m, 40)... /* well past the window */)
+
+	if len(governanceLog(log, "meeting.convention_established")) != 0 {
+		t.Error("a broken gathering must not establish a convention")
+	}
+	if s.MeetingConvention != nil {
+		t.Errorf("convention formed from a broken gathering: %+v", s.MeetingConvention)
+	}
+	if s.Meeting.GatherStart != 0 {
+		t.Errorf("watch not reset after the gathering dispersed: %+v", s.Meeting)
+	}
+}
+
 // TestGovernedDeterminism: same seed, same timeline, governance on — byte-
 // identical logs (the sim_test determinism contract extended over meetings).
 func TestGovernedDeterminism(t *testing.T) {
 	const seed, ticks = 13, 24_000 // through the day-1 meeting
 	m := testMap(seed)
 	a, b := NewState(seed, m), NewState(seed, m)
+	establishConvention(t, a, m)
+	establishConvention(t, b, m)
 	logA := driveTicks(t, a, m, ticks, nil)
 	logB := driveTicks(t, b, m, ticks, nil)
 	if !bytes.Equal(canonicalLog(t, logA), canonicalLog(t, logB)) {
