@@ -163,8 +163,12 @@ func (s *Scribe) renderVillageCharter() {
 	var b strings.Builder
 	b.WriteString("# Village charter\n\n")
 	if s.replica.MeetingPlace != nil {
-		fmt.Fprintf(&b, "Meeting place: (%d, %d). The village assembles daily at noon.\n",
-			s.replica.MeetingPlace.X, s.replica.MeetingPlace.Y)
+		when := ""
+		if c := s.replica.MeetingConvention; c != nil {
+			when = fmt.Sprintf(" The village assembles daily at %s.", clock.FormatTOD(c.OpenSecond))
+		}
+		fmt.Fprintf(&b, "Meeting place: (%d, %d).%s\n",
+			s.replica.MeetingPlace.X, s.replica.MeetingPlace.Y, when)
 	}
 
 	var rules, judgments, repealed []string
@@ -205,7 +209,11 @@ func (s *Scribe) renderVillageCharter() {
 		}
 	}
 	if len(rules)+len(judgments)+len(repealed) == 0 {
-		b.WriteString("\n*No rules yet — the village legislates itself at the daily noon meeting.*\n")
+		if c := s.replica.MeetingConvention; c != nil {
+			fmt.Fprintf(&b, "\n*No rules yet — the village legislates itself at the daily meeting (%s).*\n", clock.FormatTOD(c.OpenSecond))
+		} else {
+			b.WriteString("\n*No rules yet — the village has no meeting convention; villagers follow their own needs.*\n")
+		}
 	}
 	os.WriteFile(filepath.Join(s.worldDir, "village_charter.md"), []byte(b.String()), 0o644)
 }

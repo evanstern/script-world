@@ -1,35 +1,56 @@
 ---
 name: governance
-description: Norms and votes (TASK-13) — the daily noon meeting, relationship-deterministic votes, event-sourced norms with witnessed-violation teeth, and the scribe-rendered village charter
+description: Norms and votes (TASK-13) — the daily meeting under an event-sourced convention (TASK-36), relationship-deterministic votes, event-sourced norms with witnessed-violation teeth, and the scribe-rendered village charter
 kind: component
 sources:
   - internal/sim/governance.go
   - internal/mind/meeting.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Governance (norms and votes)
 
-TASK-13's self-legislating village: villagers gather once per game day at noon,
+TASK-13's self-legislating village: villagers gather once per game day,
 table rules born from their grievances, and vote them into a persistent charter
 — with every outcome a pure function of state, so replay never asks a model who
 won. The model's only role is phrasing. This is also the substrate for
-exile-by-vote, the grounding session's miscast valve of last resort.
+exile-by-vote, the grounding session's miscast valve of last resort. Since
+TASK-36 the meeting hour is not the engine's to know: it exists only as an
+event-sourced *convention*, established by per-world config or in-world
+emergence — a conventionless village never convenes.
 
 ## How it works
 
+**The convention** (`State.MeetingConvention`, nil until established): the
+standing agreement to meet — `ConveneSecond`, `OpenSecond`, source, and day it
+took hold — created one-shot by `meeting.convention_established` (first source
+wins; the event also seeds `State.MeetingPlace` from its coordinates). Two
+sources: **config** — an optional `meeting` block in `world.json`
+(`{convene, open}` as "HH:MM", optional x/y; validated on `world.Open`) that
+the daemon seeds on boot via `sim.NewConventionEvent` when state has no
+convention yet, appended to the log like genesis; and **emergent** — while no
+convention exists, a per-game-minute detector (`emergentGatheringEvents`)
+watches for ≥2 awake, non-exiled villagers sustaining a daytime gathering at
+one fire or shelter (`gatheringStructure`, deterministic tie-break on
+structure order). The watch is itself event-sourced (`sim.gathering_observed`
+advancing `Meeting.GatherStart/X/Y`, so replay reconstructs it); unbroken for
+1800 ticks (`emergentGatherTicks`), the convention is born — place = that
+structure, convene = the observed half-hour, open = a half-hour later.
+`scriptworld new` writes no meeting block: emergent is the default.
+
 **The meeting** (`sim/governance.go`, beats emitted from the [[executor]]'s
-`stepEvents`): at 11:30 (`meetingConveneSecond`), once per day
-(`Meeting.LastMeetingDay` vs `DayIndex`, the consolidation-marker pattern),
-`meeting.convened` fires and awake, non-exiled villagers are pinned to an
-`attend_meeting` intent toward the meeting place — event-sourced state
-(`State.MeetingPlace`), designated exactly once as the first fire's tile (else
-first shelter, else map center) since the cold-start map has no landmarks. At
-noon `meeting.opened` snapshots attendance (living ∧ awake ∧ within
-`meetingRadius` 3 ∧ not exiled); speaking turns fire every 360 ticks in seating
-order; the meeting closes when the agenda is done or at the 3600-tick timebox
-(+900 grace), and stale pins clear. The [[agent-mind]] suppresses
-planner/musing traffic for attendees (`sim.AtMeeting`) until close.
+`stepEvents`, all gated on a non-nil convention): at `ConveneSecond`, once per
+day (`Meeting.LastMeetingDay` vs `DayIndex`, the consolidation-marker
+pattern), `meeting.convened` fires and awake, non-exiled villagers are pinned
+to an `attend_meeting` intent toward the meeting place (`State.MeetingPlace`
+normally rides the convention event; the legacy `meeting.place_designated`
+derivation — first fire's tile, else first shelter, else map center — remains
+for old-save replay). At `OpenSecond` `meeting.opened` snapshots attendance
+(living ∧ awake ∧ within `meetingRadius` 3 ∧ not exiled); speaking turns fire
+every 360 ticks in seating order; the meeting closes when the agenda is done
+or at the 3600-tick timebox (+900 grace), and stale pins clear. The
+[[agent-mind]] suppresses planner/musing traffic for attendees
+(`sim.AtMeeting`) until close.
 
 **Proposals** are deterministic fodder rules, first match tables, at most one
 per turn: a gru memory within 3 days → curfew; a broken debt owed to you →
@@ -51,7 +72,9 @@ Attendees remember outcomes (subject-tagged, toned — gossip seeds).
 **Teeth**: norms are a closed vocabulary (`curfew`, `repay_debts`, `exile`)
 because only observable behavior can be judged. Detectors are deterministic and
 witnessed-only (≥1 awake villager in `witnessRadius`, else nothing happens):
-curfew rides the per-minute beat (night, uncovered, latch once per night);
+curfew rides the per-minute beat (night, uncovered, latch once per night) —
+and detectors run regardless of the convention, so an upgraded save carrying a
+law keeps enforcing it even before any convention exists;
 repay-debts piggybacks the hourly due-check's `promise_broken`; exile-defiance
 fires when the exile lingers near the village (latch hourly). `norm.violated`
 appends the norm's bounded violation ring (amend/repeal fodder) and moves
@@ -90,7 +113,8 @@ the `meeting.*`/`norm.*` families; [[metatron]] owns the *other* charter;
 ## Operational notes
 
 Live proof (seed 13, model-free, ~19 game days at max speed —
-`specs/006-norms-and-votes/quickstart-results.md`): 18/18 noon meetings at
+`specs/006-norms-and-votes/quickstart-results.md`; this run predates TASK-36
+and ran under the then hard-coded 11:30/noon clock): 18/18 noon meetings at
 full attendance, closed at +2881 ticks; 7 organic proposals in which the
 self-interested-legislator loop emerged unprompted — Fern, twice-caught,
 amended then repealed the curfew, Oak re-tabled it the same meeting, and Fern

@@ -87,3 +87,8 @@ func Format(tick int64) string {
 	day, h, m, _ := GameTime(tick)
 	return fmt.Sprintf("day %d %02d:%02d", day, h, m)
 }
+
+// FormatTOD renders a second-of-day as the clock time "HH:MM".
+func FormatTOD(sec int) string {
+	return fmt.Sprintf("%02d:%02d", sec/secondsPerHour, sec%secondsPerHour/secondsPerMinute)
+}

@@ -4,7 +4,7 @@ description: One directory = one world run — manifest (world.json), path helpe
 kind: component
 sources:
   - internal/world/world.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # World save directory
@@ -17,18 +17,23 @@ stopped world's directory is a complete, restorable archive.
 
 `Manifest` (serialized as `world.json` at the dir root) carries `name`, `seed`
 (uint64), `created_at` (RFC3339, metadata only — wall time never enters sim state),
-`format_version` (currently 1), `tick_game_seconds` (fixed 1), and
+`format_version` (currently 1), `tick_game_seconds` (fixed 1),
 `map_width`/`map_height` (default 64×64; zero/absent values from older saves default
-on `Open`). `World.Map()` regenerates the terrain from those fields — deterministic,
-so the map is never stored ([[worldmap-generation]]).
+on `Open`), and an optional `meeting` block (TASK-36, `MeetingConfig`:
+`convene`/`open` as "HH:MM" 24-hour game clock times, optional `x`/`y` meeting
+place) — the per-world meeting convention the daemon seeds on boot
+([[governance]], [[daemon-lifecycle]]); `scriptworld new` never writes it, so
+emergent is the default. `World.Map()` regenerates the terrain from the seed and
+dimensions — deterministic, so the map is never stored ([[worldmap-generation]]).
 
 - `Create(dir, name, seed)` refuses any existing non-empty directory, creates
   `agents/` (empty — flat files for later features live there), and writes the
   manifest. The genesis `world.created` event is appended by the CLI `new` command,
   not here.
-- `Open(dir)` reads and validates the manifest: unknown `format_version` or a
-  `tick_game_seconds` other than 1 is a hard error, so an old binary can never
-  half-load a newer world.
+- `Open(dir)` reads and validates the manifest: unknown `format_version`, a
+  `tick_game_seconds` other than 1, or a malformed `meeting` block (bad "HH:MM",
+  or convene not strictly before open) is a hard error, so an old binary can
+  never half-load a newer world.
 - Path helpers centralize layout: `DBPath()` → `world.db`, `LLMConfigPath()` →
   `llm.json` (the [[llm-orchestrator]] config, written by `new`, deletable to
   disable inference), `CalibrationPath()` → `calibration.json` (the

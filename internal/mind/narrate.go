@@ -135,17 +135,26 @@ func (md *Mind) chronicleNote(e store.Event) {
 		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "musing" {
 			line = fmt.Sprintf("%s mused: %q.", name(p.Agent), p.Text)
 		}
+	case "meeting.convention_established":
+		var p sim.MeetingConventionPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "emergent" {
+			line = "The villagers took to gathering at the same spot — a daily assembly was born."
+		}
 	case "meeting.opened":
 		var p sim.MeetingOpenedPayload
 		if json.Unmarshal(e.Payload, &p) == nil {
+			at := "the meeting"
+			if c := md.replica.MeetingConvention; c != nil {
+				at = "the " + clock.FormatTOD(c.OpenSecond) + " meeting"
+			}
 			if len(p.Attendees) == 0 {
-				line = "Noon came and went; nobody gathered for the village meeting."
+				line = fmt.Sprintf("The hour came for %s, but nobody gathered.", at)
 			} else {
 				names := make([]string, len(p.Attendees))
 				for i, a := range p.Attendees {
 					names[i] = name(a)
 				}
-				line = fmt.Sprintf("The village assembled at noon: %s.", strings.Join(names, ", "))
+				line = fmt.Sprintf("The village assembled for %s: %s.", at, strings.Join(names, ", "))
 			}
 		}
 	case "meeting.turn_taken":

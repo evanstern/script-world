@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Sim state & reducer
@@ -27,9 +27,13 @@ get catch-up history for free — Metatron's charge bank
 (`MetatronCharges`, genesis 1, deliberately not `omitempty` so a
 spent-to-zero bank round-trips as 0; [[metatron]], TASK-12) — and the village's
 law ([[governance]], TASK-13): `MeetingPlace` (set once), the `Meeting`
-lifecycle, and the `Norms` list with monotonic `NextNormID`/`NextProposalID`,
-all zero-valued in pre-TASK-13 snapshots (a lawless village) (executor types
-in `agents.go`; memories belong to [[agent-mind]]). Its
+lifecycle (including the TASK-36 emergent-gathering watch fields
+`GatherStart/GatherX/GatherY`), the `MeetingConvention` (TASK-36, nil until a
+source establishes it — pre-TASK-36 snapshots load nil, a village with no
+standing agreement to meet), and the `Norms` list with monotonic
+`NextNormID`/`NextProposalID`, all zero-valued in pre-TASK-13 snapshots (a
+lawless village) (executor types in `agents.go`; memories belong to
+[[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
 live execution.
@@ -46,8 +50,9 @@ imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
 `agent.*` family ([[event-types]]) drives intents, movement, work products
 (inventory + overlays + structures), eating, sleep, talk, needs (absolute values),
 and death; the `gru.*` family dispatches to `applyGru` in `gru.go` ([[gru]]);
-the `meeting.*`/`norm.*` families dispatch to `applyGovernance` in
-`governance.go` ([[governance]]).
+the `meeting.*`/`norm.*` families — plus `meeting.convention_established` and
+the `sim.gathering_observed` watch event (TASK-36) — dispatch to
+`applyGovernance` in `governance.go` ([[governance]]).
 `agent.memory_added` additionally bumps `Agent.Generation` when the memory's
 salience is at or above `GenerationBumpSalience` (9) — in-flight thoughts
 snapshotted under the old generation are superseded at landing ([[cognition]],

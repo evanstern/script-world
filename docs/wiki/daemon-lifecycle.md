@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Daemon lifecycle
@@ -29,7 +29,12 @@ Startup sequence:
    `sim.NewState(seed, w.Map())` (genesis derives terrain-valid agent positions
    from [[worldmap-generation]]), then `ReplayEvents(seq > snapshot.seq)` through the
    reducer, bumping `Tick` to the highest event tick ([[snapshots]]). Recovery
-   duration is measured and recorded.
+   duration is measured and recorded. Then `seedMeetingConvention` (TASK-36):
+   if the manifest declares a `meeting` block and recovered state carries no
+   convention yet, a `meeting.convention_established` event (source `config`)
+   is applied and appended at the recovered tick — landing in the log like
+   genesis, so replay re-applies it and the seed never fires twice
+   ([[governance]]).
 6. Notify fan-out + companions: the loop's notify goes to the IPC broadcast, the
    always-on soul scribe, and — when an orchestrator exists — the mind driver
    ([[agent-mind]]) and the Metatron component ([[metatron]], attached to the

@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: a49d615ec26d41ff14784f5a8f03f89d0e6c96f9
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Agent mind
@@ -57,8 +57,10 @@ context block (bonds, debts, reputation, loudest rumor, and the
 last-conversation callback from the record ring — [[social-fabric]], TASK-22) and,
 since TASK-13, a "Village law" block (`villageLaw` in prompt.go: active norms with
 provenance, exile judgments — second-person for the exile — and the assembly call
-while convening; [[governance]]). The driver also runs conversations (see
-[[social-fabric]]). Villagers convened to the noon meeting are planner- and
+while convening — since TASK-36 all rendered from the event-sourced meeting
+convention's clock, with a bare "Village law:" header when none exists;
+[[governance]]). The driver also runs conversations (see
+[[social-fabric]]). Villagers convened to the daily meeting are planner- and
 musing-suppressed (`sim.AtMeeting`) until close, their pending triggers left
 armed. Since TASK-32 every trigger records its arming stimulus: `arm` takes the
 event seq, kept in `pendingSeq` as the causality edge on the eventual telemetry.

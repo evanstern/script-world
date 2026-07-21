@@ -10,23 +10,32 @@ import (
 	"github.com/evanstern/script-world/internal/worldmap"
 )
 
-// Norms and votes (TASK-13): the village legislates itself at a daily noon
+// Norms and votes (TASK-13): the village legislates itself at a daily
 // meeting. Everything outcome-bearing here is deterministic — executor beats
 // that are pure functions of (state, map, tick), reduced like any event. The
 // model may only rephrase a proposal's text (meeting.proposal_rephrased, the
 // single injectable governance type); it never decides who proposes, who
 // votes which way, or what passes.
+//
+// The convention that there IS a meeting — when it convenes, when it opens,
+// and where — is not baked into the engine (TASK-36). It exists only once a
+// source establishes it: per-world config (source "config", injected on
+// daemon boot) or an in-world emergence (source "emergent", the sustained-
+// gathering detector below). With no convention, governance stays dormant and
+// villagers simply follow their needs.
 
 // --- tuning ---
 
 const (
-	meetingConveneSecond = 11*3600 + 1800 // 11:30 — villagers break routine
-	meetingOpenSecond    = 12 * 3600      // noon
-	meetingTurnTicks     = 360            // one speaking turn per 6 game-min
-	meetingTimeboxTicks  = 3600           // ~1 game hour
-	meetingGraceTicks    = 900            // bounded overrun for remaining agenda
-	meetingRadius        = 3              // attendance = this close at open
-	minVillagersToMeet   = 2
+	meetingTurnTicks    = 360  // one speaking turn per 6 game-min
+	meetingTimeboxTicks = 3600 // ~1 game hour
+	meetingGraceTicks   = 900  // bounded overrun for remaining agenda
+	meetingRadius       = 3    // attendance = this close at open
+	minVillagersToMeet  = 2
+
+	// A convention emerges when a quorum keeps gathering at one structure
+	// through the daytime: sampled each game-minute, unbroken for this long.
+	emergentGatherTicks = 1800 // 30 game-min of sustained daytime gathering
 
 	// Vote function weights (contracts/meeting-lifecycle.md).
 	selfInterestBonus     = 400 // repeat violators want the norm gone
@@ -102,6 +111,18 @@ type NormViolation struct {
 	Tick  int64 `json:"tick"`
 }
 
+// MeetingConvention is the village's standing agreement to meet — when it
+// convenes, when it opens, and where (TASK-36). Nil means no convention: the
+// lifecycle never convenes. Established once by config or emergence; the
+// reducer never overwrites an existing convention (the establish event is
+// one-shot and replay-safe).
+type MeetingConvention struct {
+	ConveneSecond  int    `json:"convene_second"`  // second-of-day the village breaks routine
+	OpenSecond     int    `json:"open_second"`     // second-of-day the assembly opens
+	Source         string `json:"source"`          // "config" | "emergent"
+	EstablishedDay int64  `json:"established_day"` // 1-based game day it took hold
+}
+
 // MeetingState is the assembly lifecycle; zero value = no meeting.
 type MeetingState struct {
 	Phase           string `json:"phase,omitempty"` // "" | "convening" | "open"
@@ -110,6 +131,14 @@ type MeetingState struct {
 	NextSpeaker     int    `json:"next_speaker,omitempty"`
 	ProposalsTabled int    `json:"proposals_tabled,omitempty"`
 	LastMeetingDay  int64  `json:"last_meeting_day,omitempty"`
+	// Emergent-convention watch (TASK-36): while no convention exists, the
+	// detector tracks a sustained daytime gathering at one structure.
+	// GatherStart is the tick the current gathering began (0 = not watching);
+	// GatherX/Y is that structure's tile. All reducer-advanced off
+	// sim.gathering_observed so replay reconstructs the watch exactly.
+	GatherStart int64 `json:"gather_start,omitempty"`
+	GatherX     int   `json:"gather_x,omitempty"`
+	GatherY     int   `json:"gather_y,omitempty"`
 }
 
 // --- computed views ---
@@ -181,6 +210,28 @@ type (
 		X int `json:"x"`
 		Y int `json:"y"`
 	}
+	// MeetingConventionPayload establishes the convention (TASK-36). X/Y is
+	// the meeting place, resolved by the source (config coords or the derived
+	// tile; the emergent detector's structure). Source is "config" | "emergent".
+	MeetingConventionPayload struct {
+		ConveneSecond int    `json:"convene_second"`
+		OpenSecond    int    `json:"open_second"`
+		X             int    `json:"x"`
+		Y             int    `json:"y"`
+		Source        string `json:"source"`
+	}
+	// GatheringObservedPayload advances the emergent-gathering watch (the
+	// sim.gathering_observed event): the structure tile and the tick the
+	// current gathering began (all zero = no gathering, the watch resets).
+	// Denormalized so the reducer never looks back at a prior event. It sits
+	// in the sim.* namespace, not meeting.* — a gathering is village
+	// fabric being watched, not a meeting; no meeting exists until a
+	// convention is established.
+	GatheringObservedPayload struct {
+		X     int   `json:"x"`
+		Y     int   `json:"y"`
+		Start int64 `json:"start"`
+	}
 	MeetingOpenedPayload struct {
 		Attendees []int `json:"attendees"`
 	}
@@ -229,6 +280,29 @@ type (
 // dry-run runs it on a copy, so bad injections are rejected at the door.
 func (s *State) applyGovernance(e store.Event) error {
 	switch e.Type {
+	case "meeting.convention_established":
+		var p MeetingConventionPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		if s.MeetingConvention == nil { // one-shot: first source wins
+			s.MeetingConvention = &MeetingConvention{
+				ConveneSecond: p.ConveneSecond, OpenSecond: p.OpenSecond,
+				Source: p.Source, EstablishedDay: DayIndex(e.Tick)}
+		}
+		if s.MeetingPlace == nil {
+			s.MeetingPlace = &Point{X: p.X, Y: p.Y}
+		}
+		// The watch is over once a convention exists.
+		s.Meeting.GatherStart, s.Meeting.GatherX, s.Meeting.GatherY = 0, 0, 0
+
+	case "sim.gathering_observed":
+		var p GatheringObservedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		s.Meeting.GatherStart, s.Meeting.GatherX, s.Meeting.GatherY = p.Start, p.X, p.Y
+
 	case "meeting.place_designated":
 		var p MeetingPlacePayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -404,47 +478,57 @@ func governanceEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 	}
 	sod := clock.SecondOfDay(nextTick)
 
-	// Convene: once per day, ahead of noon, when the village exists.
-	if sod == meetingConveneSecond && s.Meeting.Phase == "" &&
-		DayIndex(nextTick) > s.Meeting.LastMeetingDay && livingCount(s) >= minVillagersToMeet {
-		place := s.MeetingPlace
-		if place == nil {
-			p := deriveMeetingPlace(s, m)
-			place = &p
-			emit("meeting.place_designated", MeetingPlacePayload{X: p.X, Y: p.Y})
+	if conv := s.MeetingConvention; conv == nil {
+		// No convention → no meeting. Instead, watch for one to emerge
+		// in-world: a quorum sustaining a daytime gathering at one structure
+		// (TASK-36). Norm enforcement below still runs — an upgraded save can
+		// carry a law with no convention yet.
+		if nextTick%60 == 0 {
+			events = append(events, emergentGatheringEvents(s, nextTick)...)
 		}
-		emit("meeting.convened", MeetingPlacePayload{X: place.X, Y: place.Y})
-	}
-
-	// Open at noon with whoever made it.
-	if sod == meetingOpenSecond && s.Meeting.Phase == "convening" && s.MeetingPlace != nil {
-		var attendees []int
-		for i := range s.Agents {
-			a := &s.Agents[i]
-			if attendCandidate(s, i) &&
-				abs(a.X-s.MeetingPlace.X)+abs(a.Y-s.MeetingPlace.Y) <= meetingRadius {
-				attendees = append(attendees, i)
+	} else {
+		// Convene: once per day, ahead of the open, when the village exists.
+		if sod == int64(conv.ConveneSecond) && s.Meeting.Phase == "" &&
+			DayIndex(nextTick) > s.Meeting.LastMeetingDay && livingCount(s) >= minVillagersToMeet {
+			place := s.MeetingPlace
+			if place == nil {
+				p := deriveMeetingPlace(s, m)
+				place = &p
+				emit("meeting.place_designated", MeetingPlacePayload{X: p.X, Y: p.Y})
 			}
+			emit("meeting.convened", MeetingPlacePayload{X: place.X, Y: place.Y})
 		}
-		if attendees == nil {
-			attendees = []int{} // an empty meeting still opens (and closes)
-		}
-		emit("meeting.opened", MeetingOpenedPayload{Attendees: attendees})
-	}
 
-	// The open meeting: speaking turns on cadence, then close.
-	if s.Meeting.Phase == "open" {
-		elapsed := nextTick - s.Meeting.OpenedTick
-		agendaDone := s.Meeting.NextSpeaker >= len(s.Meeting.Attendees)
-		switch {
-		case agendaDone:
-			emit("meeting.closed", MeetingClosedPayload{
-				Proposals: s.Meeting.ProposalsTabled, Graced: elapsed > meetingTimeboxTicks})
-		case elapsed >= meetingTimeboxTicks+meetingGraceTicks:
-			emit("meeting.closed", MeetingClosedPayload{
-				Proposals: s.Meeting.ProposalsTabled, Graced: true})
-		case elapsed > 0 && elapsed%meetingTurnTicks == 0:
-			events = append(events, speakingTurn(s, nextTick)...)
+		// Open at the convention hour with whoever made it.
+		if sod == int64(conv.OpenSecond) && s.Meeting.Phase == "convening" && s.MeetingPlace != nil {
+			var attendees []int
+			for i := range s.Agents {
+				a := &s.Agents[i]
+				if attendCandidate(s, i) &&
+					abs(a.X-s.MeetingPlace.X)+abs(a.Y-s.MeetingPlace.Y) <= meetingRadius {
+					attendees = append(attendees, i)
+				}
+			}
+			if attendees == nil {
+				attendees = []int{} // an empty meeting still opens (and closes)
+			}
+			emit("meeting.opened", MeetingOpenedPayload{Attendees: attendees})
+		}
+
+		// The open meeting: speaking turns on cadence, then close.
+		if s.Meeting.Phase == "open" {
+			elapsed := nextTick - s.Meeting.OpenedTick
+			agendaDone := s.Meeting.NextSpeaker >= len(s.Meeting.Attendees)
+			switch {
+			case agendaDone:
+				emit("meeting.closed", MeetingClosedPayload{
+					Proposals: s.Meeting.ProposalsTabled, Graced: elapsed > meetingTimeboxTicks})
+			case elapsed >= meetingTimeboxTicks+meetingGraceTicks:
+				emit("meeting.closed", MeetingClosedPayload{
+					Proposals: s.Meeting.ProposalsTabled, Graced: true})
+			case elapsed > 0 && elapsed%meetingTurnTicks == 0:
+				events = append(events, speakingTurn(s, nextTick)...)
+			}
 		}
 	}
 
@@ -483,6 +567,89 @@ func deriveMeetingPlace(s *State, m *worldmap.Map) Point {
 		return p
 	}
 	return Point{X: cx, Y: cy}
+}
+
+// emergentGatheringEvents advances the emergent-convention watch (TASK-36):
+// a pure function of (state, tick), sampled once a game-minute while no
+// convention exists. It tracks how long a quorum has kept gathering at one
+// structure during daytime; unbroken for emergentGatherTicks, a convention is
+// born (source "emergent") — place = that structure, convene = the current
+// half-hour, open = a half-hour later. Emits only on a change to the watch
+// (start, break) or at establishment, so a quiet village logs nothing.
+func emergentGatheringEvents(s *State, nextTick int64) []store.Event {
+	gx, gy, present := gatheringStructure(s)
+	watching := s.Meeting.GatherStart > 0
+	same := watching && s.Meeting.GatherX == gx && s.Meeting.GatherY == gy
+
+	switch {
+	case present && same:
+		// The gathering has held. Once sustained, the convention takes hold.
+		if nextTick-s.Meeting.GatherStart >= emergentGatherTicks {
+			sod := clock.SecondOfDay(nextTick)
+			convene := int(sod - sod%1800) // round the observed hour down to the half-hour
+			return []store.Event{{Tick: nextTick, Type: "meeting.convention_established",
+				Payload: mustPayload(MeetingConventionPayload{
+					ConveneSecond: convene, OpenSecond: convene + 1800,
+					X: gx, Y: gy, Source: "emergent"})}}
+		}
+		return nil
+	case present:
+		// A new gathering (nothing watched, or it moved structures): start the clock.
+		return []store.Event{{Tick: nextTick, Type: "sim.gathering_observed",
+			Payload: mustPayload(GatheringObservedPayload{X: gx, Y: gy, Start: nextTick})}}
+	case watching:
+		// The gathering broke: reset the watch.
+		return []store.Event{{Tick: nextTick, Type: "sim.gathering_observed",
+			Payload: mustPayload(GatheringObservedPayload{})}}
+	}
+	return nil
+}
+
+// gatheringStructure: the fire or shelter with the most awake, non-exiled,
+// living villagers within meetingRadius during daytime — a candidate meeting
+// place forming on its own. ok is false at night, or below quorum. Ties break
+// on structure order, so the choice is deterministic.
+func gatheringStructure(s *State) (x, y int, ok bool) {
+	if s.Night {
+		return 0, 0, false
+	}
+	best := 0
+	for _, st := range s.Structures {
+		if st.Kind != "fire" && st.Kind != "shelter" {
+			continue
+		}
+		c := 0
+		for i := range s.Agents {
+			a := &s.Agents[i]
+			if a.Dead || a.Asleep || IsExiled(s, i) {
+				continue
+			}
+			if abs(a.X-st.X)+abs(a.Y-st.Y) <= meetingRadius {
+				c++
+			}
+		}
+		if c >= minVillagersToMeet && c > best {
+			best, x, y, ok = c, st.X, st.Y, true
+		}
+	}
+	return x, y, ok
+}
+
+// NewConventionEvent builds the meeting.convention_established event for a
+// per-world config-declared convention (TASK-36, source "config"), for the
+// daemon to seed on boot. Place defaults to the derived gathering tile when
+// the config supplies no coordinates.
+func NewConventionEvent(s *State, m *worldmap.Map, tick int64, conveneSecond, openSecond int, x, y *int) store.Event {
+	px, py := 0, 0
+	if x != nil && y != nil {
+		px, py = *x, *y
+	} else {
+		p := deriveMeetingPlace(s, m)
+		px, py = p.X, p.Y
+	}
+	return store.Event{Tick: tick, Type: "meeting.convention_established",
+		Payload: mustPayload(MeetingConventionPayload{
+			ConveneSecond: conveneSecond, OpenSecond: openSecond, X: px, Y: py, Source: "config"})}
 }
 
 // speakingTurn gives the next attendee the floor: a fodder-rule proposal

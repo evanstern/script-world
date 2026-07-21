@@ -4,7 +4,7 @@ description: Game time math — 1 tick = 1 game second, epoch day 1 06:00, Speed
 kind: component
 sources:
   - internal/clock/clock.go
-verified_against: 89843eb60a762de87d5cdcb2b9c99c6d70d0f738
+verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
 ---
 
 # Game clock
@@ -37,6 +37,8 @@ Key functions:
   and 06:00 day start boundaries by exact equality (valid because ticks are whole
   game seconds).
 - `Format(tick)` — the display form used everywhere: `"day N HH:MM"`.
+- `FormatTOD(sec)` — a second-of-day as `"HH:MM"` (TASK-36; meeting-convention
+  hours in prompts, narration, and the charter).
 
 ## Connections
 
