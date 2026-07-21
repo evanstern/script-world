@@ -94,7 +94,7 @@ empty, a best-effort musing is admitted; with all 4 slots parked, it gets
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T011 [P] Reconcile package doc comment in internal/llm/llm.go (header still says "bounded queues" — mention N-slot local concurrency) and `TierStatus`/status semantics if any comment now lies; no protocol shape changes
+- [x] T011 [P] Reconcile package doc comment in internal/llm/llm.go (header still says "bounded queues" — mention N-slot local concurrency) and `TierStatus`/status semantics if any comment now lies; no protocol shape changes
 - [ ] T012 Live smoke per specs/009-parallel-local-tier/quickstart.md §2–3: create a scratch world, copy `~/.scratch/calibration.json` and `~/worlds/village03/llm.json` in, set `"parallel": 4`, boot the daemon, capture the boot line (effective parallel + calibration seed); then set `"parallel": 64` and `-2`, confirm clamp warnings and clean boots (FR-007); record transcript evidence in the implementer report
 - [ ] T013 Mark spec.md Status: Implemented and note the delegated cap decision (16) in specs/009-parallel-local-tier/spec.md Assumptions once T001–T012 pass
 

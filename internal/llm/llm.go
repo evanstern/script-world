@@ -1,8 +1,10 @@
 // Package llm is the orchestrator for all model traffic (TASK-6): two
 // tiers (local Ollama-style HTTP, cloud Anthropic), kind-based routing,
-// bounded queues with backpressure, a persisted monthly spend meter with a
-// hard ceiling, and per-tier circuit breakers so unreachable inference
-// degrades the AI layer — never the simulation.
+// bounded queues with backpressure feeding N concurrent local workers
+// (configurable via local.parallel, default 1; cloud is always single-worker,
+// TASK-45), a persisted monthly spend meter with a hard ceiling, and per-tier
+// circuit breakers so unreachable inference degrades the AI layer — never the
+// simulation.
 //
 // The orchestrator lives entirely OUTSIDE the deterministic sim loop. LLM
 // results reach the world only as recorded inputs (TASK-7's job), so replay
@@ -33,8 +35,8 @@ const (
 	// KindMetatron is the gatekeeper angel (TASK-12): console turns,
 	// nudge judgment, and digests — premium cognition, tiny volume.
 	KindMetatron Kind = "metatron"
-	// KindMusing is best-effort interiority (TASK-21): admitted only when
-	// the local tier is otherwise quiet, dropped without retry when not.
+	// KindMusing is best-effort interiority (TASK-21): admitted only when a
+	// local worker slot is free, dropped without retry when every slot is busy.
 	KindMusing Kind = "musing"
 	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
 	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
@@ -88,9 +90,10 @@ type Request struct {
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
 	// BestEffort requests drop-when-busy admission: the call is refused
-	// with ErrTierBusy whenever its tier has work waiting. Callers that
-	// may not displace real cognition (musings) set this; their fairness
-	// floor is the caller's business, not the orchestrator's.
+	// with ErrTierBusy when no worker slot is free — any queued work, or all
+	// N slots in flight (TASK-45). Callers that may not displace real
+	// cognition (musings) set this; their fairness floor is the caller's
+	// business, not the orchestrator's.
 	BestEffort bool `json:"best_effort,omitempty"`
 }
 
