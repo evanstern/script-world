@@ -255,9 +255,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		// Resizing across the widescreen breakpoint swaps layouts live;
-		// no other field is touched here, so no state is lost
-		// (pages/solo-views.md "Narrow fallback").
+		// no field here is reset, so no state is lost (pages/solo-views.md
+		// "Narrow fallback"). clampGeometry re-bounds the handful of
+		// fields that persist *values* across frames (pan offset,
+		// chronicle selection) so nothing computed at the old size can
+		// push a panel off-frame at the new one (B5) — everything else
+		// (dock tab, solo, filters, transcript) is size-independent by
+		// construction and needs no clamping.
 		m.width, m.height = msg.Width, msg.Height
+		m.clampGeometry()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -797,6 +803,34 @@ func (m *Model) applyEvent(e store.Event) {
 	if len(m.events) > chronicleCap {
 		m.events = m.events[len(m.events)-chronicleCap:]
 	}
+}
+
+// clampGeometry re-bounds the size-independent-in-value-but-not-in-validity
+// fields on resize (B5). Almost all geometry in this package is derived
+// fresh every View() call from (width, height) directly — there is no
+// cache to go stale. The two fields that *do* persist a value across
+// frames are covered here:
+func (m *Model) clampGeometry() {
+	// Pan offset: render-time clamping in renderMapGrid already keeps the
+	// *visible* camera window inside the map regardless of panX/panY's
+	// magnitude, but an offset accumulated at a wide viewport is still
+	// stale once the viewport shrinks — cap it to a map-sized window so
+	// it can never represent "off the map" at any size.
+	if m.gameMap != nil {
+		m.panX = clampInt(m.panX, -m.gameMap.W, m.gameMap.W)
+		m.panY = clampInt(m.panY, -m.gameMap.H, m.gameMap.H)
+	}
+	// Chronicle selection: bounded to the current ring length. Read-time
+	// callers (chronSelectionBase) already tolerate an out-of-range
+	// value defensively, but the cached field itself should stay honest
+	// rather than merely tolerated.
+	if m.chronSelected >= len(m.events) {
+		m.chronSelected = len(m.events) - 1
+	}
+	// dockTab/solo are a small fixed enum + bool, never derived from
+	// width/height — nothing to clamp; the narrow fallback ignores
+	// `solo` entirely and `dockTab` is always one of the three valid
+	// tabs regardless of layout.
 }
 
 // agentNames resolves the replica's roster for the chronicle grammar's

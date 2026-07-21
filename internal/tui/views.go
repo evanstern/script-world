@@ -149,6 +149,9 @@ func (m Model) widescreenView() string {
 // narrow mapView (map.md: "content unchanged"), sized from the column
 // budget instead of the full terminal width.
 func (m Model) mapPanelView(cols, rows int) string {
+	if rows < 5 { // B5: never let a starved resize drive Height() negative
+		rows = 5
+	}
 	title := "MAP · following centroid"
 	if m.panX != 0 || m.panY != 0 {
 		title = "MAP · panned (c to recenter)"
@@ -159,12 +162,24 @@ func (m Model) mapPanelView(cols, rows int) string {
 	if legend != "" {
 		content += "\n" + legend
 	}
-	return styleBox.Width(cols - 2).Height(rows - 2).Render(content)
+	// clipContent is the load-bearing part here (B1): the legend line is
+	// prose and routinely wider than the panel — without a hard per-line
+	// cap, lipgloss's Width()-driven soft-wrap turns it into two rendered
+	// lines, growing the panel past its Height() budget (Height only
+	// pads short content, it never truncates tall content) and pushing
+	// the header off the top of a real terminal. See clipContent's doc
+	// for why a style-level MaxWidth() does not reliably substitute for
+	// this. Every panel must render to exactly its handed (width,
+	// height) — layout.md's composition contract.
+	return styleBox.Width(cols - 2).Height(rows - 2).Render(clipContent(content, cols-2))
 }
 
 // dockPanelView is the widescreen DOCK region: tab row + active tab body
 // (dock.md "Structure").
 func (m Model) dockPanelView(cols, rows int) string {
+	if rows < 5 { // B5: never let a starved resize drive Height() negative
+		rows = 5
+	}
 	inner := cols - 4
 	if inner < 10 {
 		inner = 10
@@ -173,12 +188,17 @@ func (m Model) dockPanelView(cols, rows int) string {
 	divider := styleDim.Render(strings.Repeat("─", inner))
 	content := m.dockTabContent(inner, rows-6)
 	body := tabRow + "\n" + divider + "\n" + content
-	return styleBox.Width(cols - 2).Height(rows - 2).Render(body)
+	// clipContent: see mapPanelView — never let a too-wide content line
+	// soft-wrap and grow the panel past its Height() budget.
+	return styleBox.Width(cols - 2).Height(rows - 2).Render(clipContent(body, cols-2))
 }
 
 // soloPanelView renders the same dock content full-width — "one
 // implementation, two widths" (pages/solo-views.md "Solo rules").
 func (m Model) soloPanelView(cols, rows int) string {
+	if rows < 5 { // B5: never let a starved resize drive Height() negative
+		rows = 5
+	}
 	inner := cols - 4
 	if inner < 10 {
 		inner = 10
@@ -186,7 +206,8 @@ func (m Model) soloPanelView(cols, rows int) string {
 	title := styleHeader.Render(m.soloTitle())
 	content := m.dockTabContent(inner, rows-4)
 	body := title + "\n" + content
-	return styleBox.Width(cols - 2).Height(rows - 2).Render(body)
+	// clipContent: see mapPanelView.
+	return styleBox.Width(cols - 2).Height(rows - 2).Render(clipContent(body, cols-2))
 }
 
 func (m Model) soloTitle() string {
@@ -427,6 +448,41 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
+// clipLine crops a single line (ANSI-safe, via lipgloss.Style.MaxWidth) to
+// at most width visible columns; a line that already fits is returned
+// unchanged (MaxWidth alone would pad it, which clipContent doesn't want).
+func clipLine(s string, width int) string {
+	if width < 1 {
+		width = 1
+	}
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	return lipgloss.NewStyle().MaxWidth(width).Render(s)
+}
+
+// clipContent crops every line of a multi-line block to fit inside a
+// styleBox/stylePanelFocus-family panel whose Width() is set to boxWidth —
+// B1. Two lipgloss facts combine into a bug otherwise: (1) Height() only
+// *pads* short content, it never truncates tall content, so one overlong
+// line silently grows the whole panel past its row budget instead of
+// erroring; (2) a style's own Padding(0,1) eats 2 of boxWidth's columns
+// *before* text renders, so the true usable width is boxWidth-2, not
+// boxWidth. A style-level .MaxWidth() does not reliably substitute for
+// this: empirically (see TASK-34 investigation notes), MaxWidth combined
+// with Height on multi-line content whose line count already meets the
+// Height budget can still double-wrap every line instead of cropping —
+// pre-clipping each line before Render() is the only combination that
+// held up under test. Callers pass the same boxWidth given to .Width().
+func clipContent(content string, boxWidth int) string {
+	usable := boxWidth - 2 // Padding(0,1)
+	lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		lines[i] = clipLine(l, usable)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // --- chronicle (panels/chronicle.md, patterns/chronicle-grammar.md) ---
 // One body renderer shared by the narrow pane, the dock tab, and the solo
 // view — differing only in (width, height, maxWrap).
@@ -477,11 +533,15 @@ func (m Model) chronicleNarratedBody(width, rows int) string {
 	if len(lines) == 0 {
 		return header + "\n\n" + styleDim.Render("no entries match these filters yet")
 	}
-	if rows < 5 {
-		rows = 5
+	// B1/B5: `rows` is this body's *entire* row budget, but header+blank
+	// above already spend 2 of it — reserve those before capping the
+	// entry list, or the returned string can run 2 lines over budget.
+	entryRows := rows - 2
+	if entryRows < 3 {
+		entryRows = 3
 	}
-	if len(lines) > rows {
-		lines = lines[len(lines)-rows:]
+	if len(lines) > entryRows {
+		lines = lines[len(lines)-entryRows:]
 	}
 	return header + "\n\n" + strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
@@ -505,35 +565,58 @@ func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 		out = append(out, renderChronicleRow(l, width, maxWrap, false))
 	}
 	all := strings.Split(strings.Join(out, "\n"), "\n")
-	if rows < 5 {
-		rows = 5
+	// B1/B5: `rows` is this body's *entire* row budget; hint+blank above
+	// already spend 2 of it (see chronicleNarratedBody).
+	entryRows := rows - 2
+	if entryRows < 3 {
+		entryRows = 3
 	}
-	if len(all) > rows {
-		all = all[len(all)-rows:]
+	if len(all) > entryRows {
+		all = all[len(all)-entryRows:]
 	}
 	return styleDim.Render(hint) + "\n\n" + strings.Join(all, "\n")
 }
 
 // chronicleInspectBody is Mode 2 (paused) — selection, expansion, the
 // stored event verbatim (patterns/chronicle-grammar.md "Inspector").
+// chronicleInspectBody windows the raw feed around the selection, bounded
+// to exactly `rows` total lines whether or not something is expanded (B2 /
+// B1: the expansion block's line count is reserved out of the row budget
+// *before* windowing the marker rows, so an expanded event can never push
+// the composite past its handed height — which was the actual cause of
+// "j/k looks like a no-op while expanded": the selection moved correctly,
+// but an unbounded expansion could grow the panel past the terminal's
+// visible rows, scrolling the moved marker out of view).
 func (m Model) chronicleInspectBody(width, rows int) string {
 	if len(m.events) == 0 {
 		return styleDim.Render("paused — no events recorded yet")
 	}
-	if rows < 5 {
-		rows = 5
+	if rows < 3 {
+		rows = 3
 	}
 	names := m.agentNames()
 	n := len(m.events)
 	sel := m.chronSelectionBase()
-	start := sel - rows/2
+
+	baseBudget := rows
+	var expBlock string
+	if m.chronExpanded && m.chronExpIdx >= 0 && m.chronExpIdx < n {
+		expBlock = indentBlock(formatInspector(m.events[m.chronExpIdx], names), "  ")
+		expLines := len(strings.Split(expBlock, "\n"))
+		baseBudget = rows - expLines
+		if baseBudget < 1 {
+			baseBudget = 1
+		}
+	}
+
+	start := sel - baseBudget/2
 	if start < 0 {
 		start = 0
 	}
-	end := start + rows
+	end := start + baseBudget
 	if end > n {
 		end = n
-		start = end - rows
+		start = end - baseBudget
 		if start < 0 {
 			start = 0
 		}
@@ -549,7 +632,7 @@ func (m Model) chronicleInspectBody(width, rows int) string {
 		}
 		out = append(out, marker+renderChronicleRow(l, width-2, 1, selected))
 		if m.chronExpanded && m.chronExpIdx == i {
-			out = append(out, indentBlock(formatInspector(e, names), "  "))
+			out = append(out, expBlock)
 		}
 	}
 	return strings.Join(out, "\n")
@@ -760,35 +843,73 @@ func (m Model) metatronView() string {
 // minibufferView renders the one-line Metatron input at its three states
 // (minibuffer.md): dormant, focused (amber border + hint), busy.
 func (m Model) minibufferView(width int) string {
-	// Total rendered width = inner + 2 (border only — Padding(0,1) is
-	// already inside inner, per lipgloss's Width semantics).
+	// Total rendered width = inner + 2 (border) — Width()'s own
+	// Padding(0,1) eats 2 *more* columns before any text renders, so the
+	// true usable text width is inner-2, not inner (B1/B3: this was the
+	// off-by-2 that let a long focused input's hint wrap the box to 4
+	// rows instead of the fixed 3).
 	inner := width - 2
 	if inner < 12 {
 		inner = 12
 	}
+	usable := inner - 2
 	switch {
 	case m.mbFocused:
 		hint := "esc release · ⏎ send"
-		left := m.mbInput + "▌"
-		pad := inner - lipgloss.Width(left) - lipgloss.Width(hint) - 1
+		hintW := lipgloss.Width(hint)
+		cursor := "▌"
+		// B3: the input text + right-aligned hint must always fit
+		// `usable` without wrapping — a wrapped hint silently grows the
+		// minibuffer past its fixed 3-row budget (and, combined with
+		// B1, is what pushed the header off the top of the terminal).
+		// The input display truncates to its visible tail (cursor
+		// glued to the right edge, like a normal terminal input line)
+		// so the box never needs to wrap; if there's no room for the
+		// hint at all, it's dropped rather than ever truncated into
+		// illegibility.
+		showHint := usable-hintW-1 >= 4
+		avail := usable
+		if showHint {
+			avail = usable - hintW - 1
+		}
+		left := truncateTail(m.mbInput, avail-lipgloss.Width(cursor)) + cursor
+		if !showHint {
+			return stylePanelFocus.Width(inner).Render(clipContent(left, inner))
+		}
+		pad := usable - lipgloss.Width(left) - hintW
 		if pad < 1 {
 			pad = 1
 		}
 		line := left + strings.Repeat(" ", pad) + styleDim.Render(hint)
-		return stylePanelFocus.Width(inner).Render(line)
+		return stylePanelFocus.Width(inner).Render(clipContent(line, inner))
 	case m.mbBusy:
 		hint := "esc to background"
 		left := "⋮ the angel is answering…"
-		pad := inner - lipgloss.Width(left) - lipgloss.Width(hint) - 1
+		pad := usable - lipgloss.Width(left) - lipgloss.Width(hint) - 1
 		if pad < 1 {
 			pad = 1
 		}
-		return styleBox.Width(inner).Render(styleDim.Render(left) + strings.Repeat(" ", pad) + styleDim.Render(hint))
+		line := styleDim.Render(left) + strings.Repeat(" ", pad) + styleDim.Render(hint)
+		return styleBox.Width(inner).Render(clipContent(line, inner))
 	case m.mbFlash != "":
-		return styleBox.Width(inner).Render(styleDim.Render(m.mbFlash))
+		return styleBox.Width(inner).Render(clipContent(styleDim.Render(m.mbFlash), inner))
 	default:
-		return styleBox.Width(inner).Render(styleDim.Render("⏎ m — speak with the angel…"))
+		return styleBox.Width(inner).Render(clipContent(styleDim.Render("⏎ m — speak with the angel…"), inner))
 	}
+}
+
+// truncateTail keeps at most max runes of s, from the end — the visible
+// window once a minibuffer input outgrows the display width, cursor glued
+// to the right edge (normal terminal input-line behavior).
+func truncateTail(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[len(r)-max:])
 }
 
 // --- souls (panels/dock.md "souls": "content unchanged", width-aware) ---
@@ -802,13 +923,11 @@ func (m Model) soulsView() string {
 // as width narrows (dock.md "souls": "wrap/condense columns; drop the
 // least important column first when narrow").
 func (m Model) soulsBody(width, height int) string {
-	var b strings.Builder
-	b.WriteString(styleHeader.Render("SOUL READER") + "\n\n")
 	if m.replica == nil || len(m.replica.Agents) == 0 {
-		b.WriteString(styleDim.Render("waiting for world state…"))
-		return strings.TrimRight(b.String(), "\n")
+		return styleHeader.Render("SOUL READER") + "\n\n" + styleDim.Render("waiting for world state…")
 	}
 	wide := width >= 40
+	var lines []string
 	for _, a := range m.replica.Agents {
 		status := "awake"
 		switch {
@@ -822,17 +941,30 @@ func (m Model) soulsBody(width, height int) string {
 			if a.Intent != nil {
 				goal = a.Intent.Goal
 			}
-			fmt.Fprintf(&b, "%-8s %s · %s · (%d,%d)\n", a.Name, status, goal, a.X, a.Y)
-			b.WriteString(styleDim.Render(fmt.Sprintf(
+			lines = append(lines, fmt.Sprintf("%-8s %s · %s · (%d,%d)", a.Name, status, goal, a.X, a.Y))
+			lines = append(lines, styleDim.Render(fmt.Sprintf(
 				"         health %s food %s rest %s warmth %s morale %s",
 				bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
-				bar(a.Needs.Warmth), bar(a.Needs.Morale))) + "\n\n")
+				bar(a.Needs.Warmth), bar(a.Needs.Morale))))
+			lines = append(lines, "")
 		} else {
 			// Narrow dock width: drop goal/position/memory, keep name + status + health.
-			fmt.Fprintf(&b, "%-8s %s health %s\n", a.Name, status, bar(a.Needs.Health))
+			lines = append(lines, fmt.Sprintf("%-8s %s health %s", a.Name, status, bar(a.Needs.Health)))
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	// B1/B5: "SOUL READER" + blank above spend 2 of `height`'s budget;
+	// drop trailing agents (rather than partial rows) if the roster
+	// doesn't fit, the same "shed content, never overflow" rule the
+	// chronicle and minibuffer follow.
+	budget := height - 2
+	if budget < 1 {
+		budget = 1
+	}
+	if len(lines) > budget {
+		lines = lines[:budget]
+	}
+	body := strings.TrimRight(strings.Join(lines, "\n"), "\n")
+	return styleHeader.Render("SOUL READER") + "\n\n" + body
 }
 
 // bar renders a 0..1000 need as a compact five-cell gauge.

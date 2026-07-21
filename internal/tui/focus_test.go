@@ -396,3 +396,88 @@ func TestInspectStateSurvivesTabSwitch(t *testing.T) {
 		t.Errorf("selection not remembered across tab switch: got %d", got)
 	}
 }
+
+// TestInspectSelectionMovesWhileExpanded is the B2 regression:
+// chronicle-grammar.md's "expanding another collapses the first" implies
+// selection moves freely while something is expanded (⏎ on the new
+// selection swaps the expansion) — j/k must never be a no-op just because
+// something is expanded (focus-contract.md rule 4, no silent swallows).
+func TestInspectSelectionMovesWhileExpanded(t *testing.T) {
+	m := pausedModel(t)
+	m.chronSelected = 2
+	var mdl tea.Model = m
+	mdl = update(mdl, "enter") // expand index 2
+	mm := mdl.(Model)
+	if !mm.chronExpanded || mm.chronExpIdx != 2 {
+		t.Fatalf("setup: want index 2 expanded, got expanded=%v idx=%d", mm.chronExpanded, mm.chronExpIdx)
+	}
+
+	mdl = update(mm, "k")
+	mm2 := mdl.(Model)
+	if mm2.chronSelected != 1 {
+		t.Fatalf("k while expanded must move the selection: chronSelected = %d, want 1", mm2.chronSelected)
+	}
+	if !mm2.chronExpanded || mm2.chronExpIdx != 2 {
+		t.Errorf("the expansion persists until enter/resume, independent of the selection: expanded=%v idx=%d", mm2.chronExpanded, mm2.chronExpIdx)
+	}
+
+	mdl = update(mm2, "j")
+	mdl = update(mdl, "j")
+	if got := mdl.(Model).chronSelected; got != 3 {
+		t.Fatalf("j while expanded must move the selection: chronSelected = %d, want 3", got)
+	}
+
+	// The real B2 failure mode was state moving correctly while an
+	// unbounded expansion pushed the rendered marker past the panel's
+	// row budget — indistinguishable from a no-op in a real terminal.
+	// Assert the bound directly at a deliberately small budget.
+	body := mm2.chronicleInspectBody(60, 8)
+	if lines := strings.Split(body, "\n"); len(lines) > 8 {
+		t.Fatalf("inspect body exceeded its row budget (8): got %d lines — this hides a moved selection off-screen:\n%s", len(lines), body)
+	}
+}
+
+// TestResizeRoundTripWhilePausedWithSelection is B5: shrinking widescreen
+// -> narrow -> back to widescreen while paused with an active selection
+// must not panic, must keep the selection valid, must clamp a pan offset
+// that would otherwise be stale, and must still render to exactly the new
+// height on the way back.
+func TestResizeRoundTripWhilePausedWithSelection(t *testing.T) {
+	m := widescreenModel(t) // 140x40
+	seedEvents(&m, 50)
+	m.connected = true
+	m.status = &ipc.StatusData{Clock: ipc.ClockStatus{Paused: true}}
+	m.chronSelected = 40
+	m.panX, m.panY = 500, 500 // pathologically large, pre-clamp
+	var mdl tea.Model = m
+
+	mdl, _ = mdl.(Model).Update(tea.WindowSizeMsg{Width: 100, Height: 30}) // -> narrow
+	mm := mdl.(Model)
+	if isWidescreen(mm.width) {
+		t.Fatal("100 cols should be narrow")
+	}
+	if v := mm.View(); v == "" {
+		t.Fatal("narrow view rendered empty after shrink")
+	}
+	if mm.chronSelected < 0 || mm.chronSelected >= len(mm.events) {
+		t.Errorf("selection out of range after shrink: %d (events=%d)", mm.chronSelected, len(mm.events))
+	}
+
+	mdl, _ = mdl.(Model).Update(tea.WindowSizeMsg{Width: 140, Height: 40}) // -> back to widescreen
+	mm = mdl.(Model)
+	if !isWidescreen(mm.width) {
+		t.Fatal("140 cols should be widescreen")
+	}
+	v := mm.View()
+	lines := strings.Split(v, "\n")
+	if len(lines) != mm.height {
+		t.Errorf("View() after resize round trip = %d lines, want %d", len(lines), mm.height)
+	}
+	if mm.chronSelected != 40 {
+		t.Errorf("selection should have survived the round trip unchanged (event count never changed): got %d, want 40", mm.chronSelected)
+	}
+	if mm.gameMap != nil && (mm.panX < -mm.gameMap.W || mm.panX > mm.gameMap.W || mm.panY < -mm.gameMap.H || mm.panY > mm.gameMap.H) {
+		t.Errorf("pan offset not clamped to the map after resize: panX=%d panY=%d (map %dx%d)",
+			mm.panX, mm.panY, mm.gameMap.W, mm.gameMap.H)
+	}
+}
