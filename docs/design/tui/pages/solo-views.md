@@ -7,7 +7,9 @@ necessity (terminal too narrow).
 
 Pressing a dock tab's key **twice** zooms that tab to full width (first press selects
 the tab in the dock; second press, while it is already selected, goes solo). The map
-is solo-able the same way with `1`.
+is never solo'd separately — it is already the primary, always-visible region of the
+home composite, so `1` has one job: return home (see patterns/keymap.md: "on home:
+map is already primary").
 
 ```
 state machine (per key k ∈ {2,3,4}):
@@ -15,7 +17,16 @@ state machine (per key k ∈ {2,3,4}):
   home, tab=k   --k-->  solo(k)
   solo(k)       --k-->  home, tab=k          (same key toggles back)
   solo(k)       --1 or esc-->  home, tab=k
+  solo(k)       --k2 (k2≠k)-->  solo(k2)     (switch which tab is solo'd,
+                                               stay solo — "same component,
+                                               two widths" holds even mid-zoom)
 ```
+
+Implementation note (TASK-34): the state machine above only specifies the *same-key*
+transitions out of `solo(k)`. A different dock-tab key pressed while solo'd switches
+which tab is zoomed rather than silently returning home — solo stays "the dock at
+full width" (dock.md), so tab-switching keeps working at every width, and only the
+same key or `1`/`esc` drops back to the composite.
 
 ### Mockup — solo chronicle (`2` `2`)
 

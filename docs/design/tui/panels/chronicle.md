@@ -35,6 +35,13 @@ covers the panel's modes.
 Entered automatically whenever the clock is paused and the chronicle is visible.
 Title row switches to show the inspect keys.
 
+Implementation note (TASK-34): inspect selects and expands over the **raw event
+feed** — selection/expansion need `seq`/`tick`/`type`/`payload`, a shape narrated
+chronicle entries (prose, no per-event payload) don't carry. `r` still records the
+raw↔narrated preference while paused (it takes effect the moment the clock resumes),
+but the inspect view itself always renders raw-formatted rows; this is why every
+inspect mockup on this page and in solo-views.md shows raw grammar, never prose.
+
 ```
 ┌─ CHRONICLE · paused — j/k select · ⏎ expand ─┐
 ├──────────────────────────────────────────────┤

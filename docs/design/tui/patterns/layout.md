@@ -10,9 +10,16 @@ width ≥ 112 cols  →  widescreen composite (pages/home.md)
 width <  112 cols →  narrow fallback: today's single-pane UI, unchanged
 ```
 
-112 ≈ a 64-col map viewport (30 tiles) + a 44-col dock + borders. Resizing across
-the breakpoint swaps layouts live without losing state. Height has no breakpoint:
-rows get scarce → panels shed their lowest-priority rows (map legend first).
+112 is the point where the dock has shrunk to its 36-col floor (see "Column budget"
+below) against a map holding its 73-col target — below that, the composite has
+nothing left to give up and the narrow fallback takes over. (Implementation note,
+TASK-34: an earlier draft of this line quoted a 64-col map + a fixed 44-col dock at
+the breakpoint; that arithmetic assumed the dock stays at its max width down to 112,
+which contradicts "shrink dock before map" below. The Column budget section is
+authoritative — the dock is what gives up columns between 118 and 112, not the map.)
+Resizing across the breakpoint swaps layouts live without losing state. Height has no
+breakpoint: rows get scarce → panels shed their lowest-priority rows (map legend
+first).
 
 ## Column budget (widescreen)
 
