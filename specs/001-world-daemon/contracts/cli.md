@@ -1,5 +1,11 @@
 # Contract: `scriptworld` CLI
 
+> **Extended** by [`specs/008-instance-manager/contracts/cli.md`](../../008-instance-manager/contracts/cli.md):
+> every `<dir>` below also accepts a world **name** (resolved against a default worlds
+> home), plus the new `ps` command — path-based invocations documented here remain
+> byte-compatible (FR-012/SC-003). This file is kept as historical record of the
+> original path-only surface; the two documents together are the current contract.
+
 Single binary. All subcommands take a save-directory path (`<dir>`). Exit code 0 on
 success; non-zero with a one-line error on stderr otherwise. Human output on stdout;
 `--json` gives machine output where noted.

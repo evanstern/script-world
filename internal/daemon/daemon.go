@@ -26,6 +26,7 @@ import (
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/store"
 	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/script-world/internal/worlds"
 )
 
 // Run is the foreground daemon primitive: recover, bind, tick until
@@ -50,6 +51,13 @@ func Run(dir string) error {
 			os.Remove(w.PidPath())
 		}
 	}()
+
+	// Advisory instance-manager registration (specs/008-instance-manager
+	// D1/D6, FR-008): only worlds living outside the worlds home need a
+	// registry entry (the home is scan-owned); registering here, not from
+	// the `start` client, means even a foreground `scriptworld daemon <dir>`
+	// run becomes visible to `ps`. Best-effort — a failure never blocks boot.
+	registerWorld(dir, w.Manifest.Name)
 
 	st, err := store.Open(w.DBPath())
 	if err != nil {
@@ -280,6 +288,24 @@ func validateMeta(w *world.World, st *store.Store) error {
 		}
 	}
 	return nil
+}
+
+// registerWorld best-effort upserts this world into the advisory
+// known-worlds registry when it lives outside the current worlds home.
+// Failures (including a broken $HOME) are logged and never fatal — the
+// registry is a pointer cache, never required for the world to run.
+func registerWorld(dir, name string) {
+	inside, err := worlds.InsideWorldsHome(dir)
+	if err != nil {
+		fmt.Printf("daemon: known-worlds registry check failed (advisory, continuing): %v\n", err)
+		return
+	}
+	if inside {
+		return // home is scan-owned; no registry entry needed
+	}
+	if err := worlds.Upsert(name, dir); err != nil {
+		fmt.Printf("daemon: known-worlds registry update failed (advisory, continuing): %v\n", err)
+	}
 }
 
 // acquirePidfile enforces one daemon per world dir, sweeping leftovers from

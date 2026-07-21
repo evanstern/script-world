@@ -135,9 +135,9 @@ func cmdCalibrate(args []string) error {
 	fs := flag.NewFlagSet("calibrate", flag.ContinueOnError)
 	tierFlag := fs.String("tier", "local", "tier(s) to calibrate: local|cloud|all (cloud spends real money)")
 	samples := fs.Int("samples", 5, "calls per reference shape")
-	dir, err := parseDirFlags(fs, args)
+	dir, err := parseWorldFlags(fs, args)
 	if err != nil {
-		return fmt.Errorf("usage: scriptworld calibrate <dir> [--tier local|cloud|all] [--samples N]: %w", err)
+		return fmt.Errorf("usage: scriptworld calibrate <world> [--tier local|cloud|all] [--samples N]: %w", err)
 	}
 	w, err := world.Open(dir)
 	if err != nil {

@@ -17,7 +17,8 @@ export SCRIPTWORLD_HOME=$(mktemp -d)   # isolated home so the walkthrough is her
 /tmp/sw new aria                        # → creates $SCRIPTWORLD_HOME/worlds/aria
 test -f "$SCRIPTWORLD_HOME/worlds/aria/world.json" && echo OK
 /tmp/sw new aria                        # → exit 1, "already exists", world untouched
-/tmp/sw new 'bad/name'; /tmp/sw new -- '-flag'   # → exit 1, validation messages
+/tmp/sw new ./elsewhere --name 'bad/name'; /tmp/sw new -- '-flag'   # → exit 1, validation messages
+# (a bare `bad/name` argument contains `/` so it is a PATH per D3 — legacy path-form, not a name error)
 /tmp/sw start aria                      # name resolves from any CWD
 /tmp/sw status aria                     # live status by name
 /tmp/sw speed aria 8x && /tmp/sw pause aria && /tmp/sw resume aria

@@ -48,19 +48,31 @@ resolving deterministically off the relationship graph, with the agreed law livi
 ```sh
 go build ./cmd/scriptworld
 
-scriptworld new ~/worlds/demo --seed 42   # create a world
-scriptworld start ~/worlds/demo           # detached daemon; the world now runs 24/7
-scriptworld status ~/worlds/demo          # tick, game time, speed
-scriptworld attach ~/worlds/demo          # watch events live; pause/resume/speed/quit
-scriptworld pause ~/worlds/demo           # pause is a player verb (detaching is not)
-scriptworld resume ~/worlds/demo          # counterpart of pause
-scriptworld speed ~/worlds/demo max       # real-time up to as-fast-as-affordable
-scriptworld tail ~/worlds/demo --follow   # stream the event log
-scriptworld ui ~/worlds/demo              # full-screen TUI: map, chronicle, metatron, souls
-scriptworld metatron ~/worlds/demo "who thrives, who struggles?"   # converse with your angel
-scriptworld stop ~/worlds/demo            # graceful stop; kill -9 also resumes lossless
+scriptworld new demo --seed 42            # create a world (lands in ~/.scriptworld/worlds/demo)
+scriptworld start demo                    # detached daemon; the world now runs 24/7
+scriptworld ps                            # every running world, machine-wide — name, state, pid,
+                                           # tick, game time, speed, LLM on/off (from any directory)
+scriptworld status demo                   # tick, game time, speed
+scriptworld attach demo                   # watch events live; pause/resume/speed/quit
+scriptworld pause demo                    # pause is a player verb (detaching is not)
+scriptworld resume demo                   # counterpart of pause
+scriptworld speed demo max                # real-time up to as-fast-as-affordable
+scriptworld tail demo --follow            # stream the event log
+scriptworld ui demo                       # full-screen TUI: map, chronicle, metatron, souls
+scriptworld metatron demo "who thrives, who struggles?"   # converse with your angel
+scriptworld stop demo                     # graceful stop; kill -9 also resumes lossless
 scriptworld help                          # full command list incl. daemon, llm, calibrate
 ```
+
+Every `<world>` argument above is a **name** — resolved against the default worlds
+home (`~/.scriptworld/worlds`, overridable with `SCRIPTWORLD_HOME`) and then a
+known-worlds list of custom-path worlds. An explicit **path** (`~/worlds/demo`,
+`./demo`, `/srv/games/demo`) still works exactly as before and remains a fully
+self-contained, copyable directory — `scriptworld new ~/worlds/demo --seed 42` and
+`scriptworld start ~/worlds/demo` are unchanged. `scriptworld ps` is what makes running
+several worlds at once safe to reason about: it answers "what's running, and is it
+using the shared LLM host?" in one command, with live-proven state (a crashed daemon
+never shows as running).
 
 Default speed is 4x: 1 game minute per 15 real seconds; the watchable ladder tops at
 32x. `go test -race ./...` covers determinism (same seed → byte-identical history),

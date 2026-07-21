@@ -38,10 +38,13 @@ tick/game time from the store.
 
 ```
 NAME      STATE     PID    TICK     GAME TIME     SPEED  LLM  PATH
-aria      running   4242   180321   d3 02:05:21   8x     on   ~/.scriptworld/worlds/aria
-harbor    paused    5150   99       d1 00:01:39   1x     off  /srv/games/harbor
-old-run   stopped   -      52100    d1 14:28:20   -      off  ~/.scriptworld/worlds/old-run
+aria      running   4242   180321   day 3 08:05   8x     on   ~/.scriptworld/worlds/aria
+harbor    paused    5150   99       day 1 06:01   1x     off  /srv/games/harbor
+old-run   stopped   -      52100    day 1 20:28   -      off  ~/.scriptworld/worlds/old-run
 ```
+
+(`GAME TIME` is whatever `internal/clock.Format` renders — the same string `status`
+has always printed; `ps` reuses it verbatim.)
 
 **`--json`**: array, one element per world; reuses the `status --json` vocabulary:
 
