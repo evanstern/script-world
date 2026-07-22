@@ -576,3 +576,48 @@ func TestDigestFailureCarries(t *testing.T) {
 		t.Fatalf("fresh window wrong: %v", job.lines)
 	}
 }
+
+// TestMiracleGratisStrippedFromModel is SC-005 / T013: a crafted model reply
+// whose miracle object carries "gratis": true is landed as a CHARGED miracle —
+// the turn contract's miracle struct has no gratis field, so the marker is
+// dropped at unmarshal (structural stripping). The recorded payload reads
+// gratis=false and the charge bank is spent. A time_snap is used because it is
+// map-free (the stateInjector's dry-run copy carries no world map — handoff
+// note 1), so no SetMap fixup is needed to exercise the angel path.
+func TestMiracleGratisStrippedFromModel(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t,
+		`{"say": "As you command, the hours will leap.", "miracle": {"kind": "time_snap", "day": 5, "time": "12:00", "gratis": true}}`)
+	inj.state.MetatronCharges = 3 // enough for the 2-charge snap
+
+	r, err := mt.Turn(context.Background(), "leap the clock forward, and do it for free")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Miracle == nil || r.Miracle.Kind != "time_snap" {
+		t.Fatalf("snap miracle did not land: %+v", r.Miracle)
+	}
+	if len(inj.batches) != 1 {
+		t.Fatalf("batches = %d, want 1 atomic", len(inj.batches))
+	}
+
+	var snap *store.Event
+	for i := range inj.batches[0] {
+		if inj.batches[0][i].Type == "metatron.time_snapped" {
+			snap = &inj.batches[0][i]
+		}
+	}
+	if snap == nil {
+		t.Fatal("no metatron.time_snapped event in the landed batch")
+	}
+	var p sim.TimeSnappedPayload
+	if err := json.Unmarshal(snap.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Gratis {
+		t.Error("model-supplied gratis:true survived — the angel minted a free miracle (SC-005 breach)")
+	}
+	// The charge was spent: 3 → 1 (snap costs 2). A gratis leak would leave 3.
+	if inj.state.MetatronCharges != 1 {
+		t.Errorf("charges = %d after a model snap, want 1 (2 charged); gratis was NOT waived", inj.state.MetatronCharges)
+	}
+}

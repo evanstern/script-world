@@ -404,9 +404,19 @@ func (c *session) handleMiracle(id int64, args MiracleArgs) {
 		}
 		params = metatron.MiracleParams{Class: args.Class, X: args.X, Y: args.Y}
 		summary = fmt.Sprintf("removed %s at (%d,%d)", args.Class, args.X, args.Y)
-	case "time_snap", "give_item":
-		// Composed by the shared builder, but the door-side wiring (day/HH:MM →
-		// tick, villager name → index) lands with US3/US4 — reject cleanly here.
+	case "time_snap":
+		// Door-side day/HH:MM → tick (spec 016 US3); the reducer enforces
+		// forward-only and the 2-charge price. Works on pure-sim worlds.
+		hour, min, perr := clock.ParseTimeOfDay(args.Time)
+		if perr != nil {
+			c.writeResponse(Response{ID: id, OK: false, Error: perr.Error()})
+			return
+		}
+		params = metatron.MiracleParams{ToTick: clock.TickAt(int64(args.Day), hour, min, 0)}
+		summary = fmt.Sprintf("snapped time to day %d %02d:%02d", args.Day, hour, min)
+	case "give_item":
+		// The shared builder composes it, but the door-side villager name → index
+		// wiring lands with US4 — reject cleanly here.
 		c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("miracle kind %q is not yet available", args.Kind)})
 		return
 	default:

@@ -256,8 +256,15 @@ func (mt *Metatron) landMiracle(reply turnReply, charges int) (*Miracle, string)
 	case "remove":
 		params = MiracleParams{Class: strings.ToLower(strings.TrimSpace(mm.Class)), X: mm.X, Y: mm.Y}
 		summary = fmt.Sprintf("removed the %s at (%d,%d)", params.Class, mm.X, mm.Y)
-	case "give_item", "time_snap":
-		// Wired to the angel in US4 (grant) / US3 (snap).
+	case "time_snap":
+		hour, min, perr := clock.ParseTimeOfDay(mm.Time)
+		if perr != nil {
+			return nil, perr.Error()
+		}
+		params = MiracleParams{ToTick: clock.TickAt(int64(mm.Day), hour, min, 0)}
+		summary = fmt.Sprintf("snapped time forward to day %d %02d:%02d", mm.Day, hour, min)
+	case "give_item":
+		// Wired to the angel in US4 (grant).
 		return nil, "that kind of miracle is not yet within my reach"
 	default:
 		return nil, fmt.Sprintf("unknown miracle %q", mm.Kind)
@@ -397,9 +404,22 @@ A nudge spends one of your banked charges — if none are banked, or the request
 is unwise, refuse and counsel instead (refusal is free). The nudge text must
 be written for the villager's world: no player, no game, no outside voice.
 
+When a nudge is too indirect for the need, you may instead work ONE miracle — a
+direct edit to the world, spent from the same charges:
+  • "move" a villager, structure, or pile to a tile (rescue the stuck) — 1 charge
+  • "remove" a structure, pile, or terrain feature — 1 charge
+  • "time_snap" — jump the world clock forward to a day and time — 2 charges
+A miracle spends its charges like a nudge and refuses in-fiction when the bank
+cannot pay (a time_snap needs two). At most ONE act per turn — a nudge OR a
+miracle, never both. You cannot work a miracle for free; you cannot remove a
+villager.
+
 Reply with ONLY this JSON:
 {"say": "<your words to the player>",
- "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null}`,
+ "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null,
+ "miracle": {"kind": "move"|"remove"|"time_snap",
+   "class": "villager"|"structure"|"pile"|"terrain", "x": 0, "y": 0, "to_x": 0, "to_y": 0,
+   "day": 2, "time": "HH:MM"} or null}`,
 		charter, strings.Join(sim.AgentNames[:], ", "))
 }
 
