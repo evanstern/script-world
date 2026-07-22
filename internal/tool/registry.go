@@ -17,13 +17,18 @@ var itemKinds = []string{
 	"food_raw", "food_cooked", "meals", "spears",
 }
 
-// storageKindParam is the shared `kind` descriptor for the four storage verbs.
-// Their `qty` integer argument has no representable ParamKind (AgentName/Text/
-// Enum) in this layer's contract, so it is not modeled here — validateKindQty
-// (internal/mind/parse.go) still validates it. Flagged for TASK-52, which
-// consumes Params for tool-call parsing.
-func storageKindParam() []Param {
-	return []Param{{Name: "kind", Kind: Enum, Required: false, Enum: itemKinds}}
+// storageParams is the shared `kind`+`qty` descriptor for the four storage
+// verbs (drop/pick_up/deposit/withdraw; build_chest takes neither). `qty` is
+// a Number param (Min 1, Max unbounded) — spec 017 R12 pays the spec-014 debt
+// this comment used to flag (qty had no representable ParamKind). Both stay
+// optional: validateKindQty (internal/mind/parse.go) remains the free-text
+// path's enforcer; these Params now also drive InputSchema (derive.go) for
+// the tool-use loop.
+func storageParams() []Param {
+	return []Param{
+		{Name: "kind", Kind: Enum, Required: false, Enum: itemKinds},
+		{Name: "qty", Kind: Number, Required: false, Min: 1},
+	}
 }
 
 // The gloss lines carried byte-exact from internal/mind/prompt.go (the prose
@@ -65,11 +70,11 @@ var registry = []Tool{
 	{Name: "craft_spear", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true},
 	{Name: "build_oven", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, PromptGloss: glossBuildOven},
 	{Name: "bathe", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true},
-	{Name: "drop", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true, PromptGloss: glossDrop},
-	{Name: "pick_up", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "drop", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true, PromptGloss: glossDrop},
+	{Name: "pick_up", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
 	{Name: "build_chest", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true, PromptGloss: glossBuildChest},
-	{Name: "deposit", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
-	{Name: "withdraw", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "deposit", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "withdraw", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
 
 	// --- Expressive tools (villager roster) ---
 	{Name: "say", Effect: Expressive, Gate: Scene,

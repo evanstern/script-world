@@ -133,6 +133,42 @@ func TestTestOnlyToolFlows(t *testing.T) {
 	}
 }
 
+// TestStorageVerbsCarryQty (spec 017 R12/T002): qty is a declared optional
+// Number param (Min 1, unbounded Max) on exactly the four storage verbs —
+// build_chest takes neither kind nor qty.
+func TestStorageVerbsCarryQty(t *testing.T) {
+	wantQty := map[string]bool{"drop": true, "pick_up": true, "deposit": true, "withdraw": true}
+
+	for _, tl := range All() {
+		var qty *Param
+		for i := range tl.Params {
+			if tl.Params[i].Name == "qty" {
+				qty = &tl.Params[i]
+			}
+		}
+		if wantQty[tl.Name] {
+			if qty == nil {
+				t.Errorf("tool %q: expected a qty param, found none", tl.Name)
+				continue
+			}
+			if qty.Kind != Number {
+				t.Errorf("tool %q: qty param Kind = %v, want Number", tl.Name, qty.Kind)
+			}
+			if qty.Required {
+				t.Errorf("tool %q: qty param must be optional", tl.Name)
+			}
+			if qty.Min != 1 {
+				t.Errorf("tool %q: qty param Min = %d, want 1", tl.Name, qty.Min)
+			}
+			if qty.Max != 0 {
+				t.Errorf("tool %q: qty param Max = %d, want 0 (unbounded)", tl.Name, qty.Max)
+			}
+		} else if qty != nil {
+			t.Errorf("tool %q: unexpected qty param (only drop/pick_up/deposit/withdraw take qty)", tl.Name)
+		}
+	}
+}
+
 // TestValidateRealRegistry: the shipped registry + rosters validate clean.
 func TestValidateRealRegistry(t *testing.T) {
 	if err := Validate(); err != nil {
