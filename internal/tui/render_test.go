@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/evanstern/script-world/internal/ipc"
+	"github.com/evanstern/script-world/internal/sim"
 )
 
 // TestWidescreenViewExactHeight is the B1 regression: the widescreen
@@ -20,7 +21,7 @@ func TestWidescreenViewExactHeight(t *testing.T) {
 		{112, 20}, {112, 30}, {113, 30}, {118, 30}, {140, 40}, {160, 50}, {200, 24},
 	}
 	for _, sz := range sizes {
-		for _, state := range []string{"home", "solo", "inspect", "inspect-solo", "souls-solo", "metatron-solo"} {
+		for _, state := range []string{"home", "solo", "inspect", "inspect-solo", "villagers-solo", "villagers-detail-solo", "metatron-solo"} {
 			t.Run(fmt.Sprintf("%dx%d/%s", sz.w, sz.h, state), func(t *testing.T) {
 				m := widescreenModel(t)
 				m.width, m.height = sz.w, sz.h
@@ -37,9 +38,19 @@ func TestWidescreenViewExactHeight(t *testing.T) {
 					m.status = &ipc.StatusData{Clock: ipc.ClockStatus{Paused: true}}
 					m.chronSelected = 5
 					m.solo = true
-				case "souls-solo":
-					m.dockTab = paneSouls
+				case "villagers-solo":
+					m.dockTab = paneVillagers
 					m.solo = true
+				case "villagers-detail-solo":
+					m.dockTab = paneVillagers
+					m.solo = true
+					m.villDetail = true
+					m.replica.Agents[0].Beliefs = []sim.Belief{{Statement: "the fire needs tending", Confidence: 80}}
+					m.replica.Agents[0].Narrative = "a long night watching the fire die and reviving it by hand."
+					for i := 0; i < 20; i++ {
+						m.replica.Agents[0].Memories = append(m.replica.Agents[0].Memories,
+							sim.Memory{Text: "chopped wood at the treeline", Salience: 3, Tick: int64(i) * 60})
+					}
 				case "metatron-solo":
 					m.dockTab = paneMetatron
 					m.solo = true

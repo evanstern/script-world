@@ -273,7 +273,7 @@ func TestResizeAcrossBreakpointPreservesState(t *testing.T) {
 	m := testModel(t) // narrow
 	m.panX, m.panY = 12, -8
 	m.chronAgent = 3
-	m.dockTab = paneSouls
+	m.dockTab = paneVillagers
 	var mdl tea.Model = m
 
 	mdl, _ = mdl.(Model).Update(tea.WindowSizeMsg{Width: 140, Height: 40})
@@ -281,7 +281,7 @@ func TestResizeAcrossBreakpointPreservesState(t *testing.T) {
 	if !isWidescreen(mm.width) {
 		t.Fatal("width should now be widescreen")
 	}
-	if mm.panX != 12 || mm.panY != -8 || mm.chronAgent != 3 || mm.dockTab != paneSouls {
+	if mm.panX != 12 || mm.panY != -8 || mm.chronAgent != 3 || mm.dockTab != paneVillagers {
 		t.Errorf("state lost crossing to widescreen: %+v", mm)
 	}
 	if v := mm.View(); v == "" {
@@ -324,7 +324,7 @@ func TestInspectModeEnteredWhenPausedAndChronicleVisible(t *testing.T) {
 	if !m.inspecting() {
 		t.Fatal("paused + chronicle tab selected must enter inspect mode")
 	}
-	m.dockTab = paneSouls
+	m.dockTab = paneVillagers
 	if m.inspecting() {
 		t.Fatal("inspect mode should not apply when chronicle is not visible")
 	}
@@ -390,7 +390,7 @@ func TestInspectStateSurvivesTabSwitch(t *testing.T) {
 	m := pausedModel(t)
 	m.chronSelected = 1
 	var mdl tea.Model = m
-	mdl = update(mdl, "4") // switch to souls
+	mdl = update(mdl, "4") // switch to villagers
 	mdl = update(mdl, "2") // back to chronicle
 	if got := mdl.(Model).chronSelected; got != 1 {
 		t.Errorf("selection not remembered across tab switch: got %d", got)
