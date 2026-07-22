@@ -415,10 +415,20 @@ func (c *session) handleMiracle(id int64, args MiracleArgs) {
 		params = metatron.MiracleParams{ToTick: clock.TickAt(int64(args.Day), hour, min, 0)}
 		summary = fmt.Sprintf("snapped time to day %d %02d:%02d", args.Day, hour, min)
 	case "give_item":
-		// The shared builder composes it, but the door-side villager name → index
-		// wiring lands with US4 — reject cleanly here.
-		c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("miracle kind %q is not yet available", args.Kind)})
-		return
+		// Door-side villager name → index (contracts §2); the reducer validates
+		// the agent is alive, the kind is known, and the grant fits the carry cap
+		// at the InjectSocial dry-run. Works on pure-sim worlds.
+		if args.Villager == "" {
+			c.writeResponse(Response{ID: id, OK: false, Error: "give_item needs a villager name"})
+			return
+		}
+		idx := sim.AgentIndexByName(args.Villager)
+		if idx < 0 {
+			c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("no villager named %q", args.Villager)})
+			return
+		}
+		params = metatron.MiracleParams{Agent: idx, Item: args.Item, Qty: args.Qty}
+		summary = fmt.Sprintf("granted %d %s to %s", args.Qty, args.Item, sim.AgentNames[idx])
 	default:
 		c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("unknown miracle kind %q", args.Kind)})
 		return

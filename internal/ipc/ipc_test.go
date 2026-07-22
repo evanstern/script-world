@@ -590,6 +590,66 @@ func TestMiracleForcedMoveZeroBank(t *testing.T) {
 	}
 }
 
+// TestMiracleGiveRoundTrip (spec 016 T022): the operator "miracle" command lands
+// a give_item over the wire on a pure-sim world, resolving the villager by NAME
+// (contracts §2), spending a charge, with the grant visible in the next state
+// fetch. The world is paused first for a deterministic before/after.
+func TestMiracleGiveRoundTrip(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	if _, err := c.Status("pause", nil); err != nil {
+		t.Fatal(err)
+	}
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before sim.State
+	if err := json.Unmarshal(sd.State, &before); err != nil {
+		t.Fatal(err)
+	}
+	beforeRaw := before.Agents[0].Inv.FoodRaw
+
+	data, err := c.Call("miracle", MiracleArgs{Kind: "give_item", Villager: sim.AgentNames[0], Item: "food_raw", Qty: 2})
+	if err != nil {
+		t.Fatalf("give_item rejected over the wire: %v", err)
+	}
+	var md MiracleData
+	if err := json.Unmarshal(data, &md); err != nil {
+		t.Fatal(err)
+	}
+	if md.Kind != "give_item" || md.Gratis {
+		t.Errorf("miracle data wrong: %+v", md)
+	}
+	if md.Charges != 0 {
+		t.Errorf("charges after a charged grant = %d, want 0 (genesis 1 spent)", md.Charges)
+	}
+	if !strings.Contains(md.Summary, "granted") {
+		t.Errorf("summary = %q, want a human rendering", md.Summary)
+	}
+
+	sd2, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after sim.State
+	if err := json.Unmarshal(sd2.State, &after); err != nil {
+		t.Fatal(err)
+	}
+	if got := after.Agents[0].Inv.FoodRaw; got != beforeRaw+2 {
+		t.Errorf("FoodRaw after grant = %d, want %d", got, beforeRaw+2)
+	}
+
+	// An unknown villager name is refused cleanly; the connection survives.
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "give_item", Villager: "Nobody", Item: "wood", Qty: 1}); err == nil {
+		t.Error("give_item to an unknown villager should be refused")
+	}
+	if _, err := c.Status("status", nil); err != nil {
+		t.Errorf("connection should survive a refused give_item: %v", err)
+	}
+}
+
 func waitForSeq(t *testing.T, c *Client, seq int64) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

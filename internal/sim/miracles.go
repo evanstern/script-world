@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/worldmap"
@@ -238,9 +239,66 @@ func rebaseTicks(s *State, delta int64) {
 	shift(&s.Meeting.GatherStart)
 }
 
-// applyItemGranted — stub (spec 016 US4, T020). Rejected cleanly until wired.
+// applyItemGranted provisions a living villager with known items, reject-never-
+// clamp at the bulk cap (spec 016 US4, FR-011). Every validation — a valid,
+// living agent, a known item kind, a positive quantity, and the cap check —
+// precedes the charge spend and the mutation, so a rejected grant spends nothing
+// and leaves no partial application (validate-not-clamp, reject-whole). The
+// grant weighs one bulk per unit, exactly as bulk() weighs a carried item: a
+// fresh spear counts one (durability lives in the slice, len(Spears) per bulk),
+// so a grant of qty items always costs qty bulk regardless of kind.
 func (s *State) applyItemGranted(e store.Event) error {
-	return fmt.Errorf("apply %s: not implemented", e.Type)
+	var p ItemGrantedPayload
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return fmt.Errorf("apply %s: %w", e.Type, err)
+	}
+	if p.Agent < 0 || p.Agent >= len(s.Agents) {
+		return fmt.Errorf("apply %s: no villager at index %d", e.Type, p.Agent)
+	}
+	if s.Agents[p.Agent].Dead {
+		return fmt.Errorf("apply %s: %s is beyond a grant now", e.Type, s.Agents[p.Agent].Name)
+	}
+	if !grantableKind(p.Kind) {
+		return fmt.Errorf("apply %s: unknown item kind %q", e.Type, p.Kind)
+	}
+	if p.Qty <= 0 {
+		return fmt.Errorf("apply %s: grant quantity must be positive (got %d)", e.Type, p.Qty)
+	}
+	inv := &s.Agents[p.Agent].Inv
+	// One bulk per granted unit (a fresh spear weighs one, like every other
+	// unit), so the grant's bulk is exactly qty — reject whole if it overflows
+	// the carry cap, never clamp to a partial delivery (FR-011).
+	if bulk(*inv)+p.Qty > bulkCap {
+		return fmt.Errorf("apply %s: granting %d %s to %s would exceed the carry cap (%d/%d already used)",
+			e.Type, p.Qty, p.Kind, s.Agents[p.Agent].Name, bulk(*inv), bulkCap)
+	}
+	if err := s.spendMiracleCharge(e.Type, p.Gratis); err != nil {
+		return err
+	}
+	if p.Kind == "spear" {
+		// Each granted unit is one fresh, full-durability spear; keep the
+		// remaining-uses slice sorted ascending (hunts spend the most-worn first).
+		for n := 0; n < p.Qty; n++ {
+			inv.Spears = append(inv.Spears, spearDurability)
+		}
+		sort.Ints(inv.Spears)
+	} else {
+		addItems(inv, []Item{{Kind: p.Kind, N: p.Qty}}, +1)
+	}
+	return nil
+}
+
+// grantableKind reports whether kind is one a grant miracle may deliver: the
+// Inventory key set plus "spear" (singular — a grant unit is one fresh spear;
+// its durability lives in Inventory.Spears, so it has no invField). The set is
+// the data-model.md item vocabulary; keyed, never iterated into state.
+func grantableKind(kind string) bool {
+	switch kind {
+	case "wood", "stone", "water", "planks", "refined_stone",
+		"food_raw", "food_cooked", "meals", "spear":
+		return true
+	}
+	return false
 }
 
 // applyEntityMoved relocates a villager, structure, or pile (spec 016 US1,
@@ -484,6 +542,21 @@ func (s *State) spillInventory(x, y int, inv *Inventory, tick int64) {
 func (s *State) VillagerAt(x, y int) int {
 	for i := range s.Agents {
 		if !s.Agents[i].Dead && s.Agents[i].X == x && s.Agents[i].Y == y {
+			return i
+		}
+	}
+	return -1
+}
+
+// AgentIndexByName resolves a villager name (case-insensitive, trimmed) to its
+// roster index, or -1 when no villager bears it. Exported for the IPC miracle
+// door, which receives a give_item's target by NAME (contracts §2); it resolves
+// against the same AgentNames roster the metatron package's own resolver walks,
+// so both doors turn a name into the same index and cannot drift. Map-free.
+func AgentIndexByName(name string) int {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for i, n := range AgentNames {
+		if strings.ToLower(n) == name {
 			return i
 		}
 	}

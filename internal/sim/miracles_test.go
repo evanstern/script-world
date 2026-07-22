@@ -1010,3 +1010,206 @@ func TestMiracleSnapReplayByteIdentity(t *testing.T) {
 		t.Fatalf("snap replay diverged:\n live:     %s\n replayed: %s", string(live.Marshal()), string(replay.Marshal()))
 	}
 }
+
+// --- US4 item grant (spec 016 T022) ---
+
+// TestMiracleGrantHappy is US4-AS1: a grant to a living villager with free
+// capacity lands the exact quantity and spends one charge.
+func TestMiracleGrantHappy(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	s.Agents[0].Inv = Inventory{} // known-empty pouch for an exact delta
+
+	if err := applyMiracleErr(s, 100, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "food_raw", Qty: 3}); err != nil {
+		t.Fatalf("grant rejected: %v", err)
+	}
+	if got := s.Agents[0].Inv.FoodRaw; got != 3 {
+		t.Errorf("FoodRaw = %d, want 3", got)
+	}
+	if bulk(s.Agents[0].Inv) != 3 {
+		t.Errorf("bulk = %d, want 3 (nothing else touched)", bulk(s.Agents[0].Inv))
+	}
+	if s.MetatronCharges != 2 {
+		t.Errorf("charges = %d, want 2 (one spent)", s.MetatronCharges)
+	}
+}
+
+// TestMiracleGrantOverCapWholeReject is US4-AS2 / FR-011: a grant that would
+// overflow the carry cap is rejected whole — no partial delivery, no charge,
+// inventory byte-identical to before.
+func TestMiracleGrantOverCapWholeReject(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	s.Agents[0].Inv = Inventory{Wood: bulkCap} // exactly full
+	before := s.Marshal()
+
+	err := applyMiracleErr(s, 40, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "wood", Qty: 1})
+	if err == nil {
+		t.Fatal("over-cap grant should be rejected whole")
+	}
+	if string(s.Marshal()) != string(before) {
+		t.Error("rejected over-cap grant mutated state (partial application or charge spent)")
+	}
+}
+
+// TestMiracleGrantUnknownKindReject is US4-AS3: an unknown item kind is rejected
+// with nothing spent.
+func TestMiracleGrantUnknownKindReject(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	before := s.Marshal()
+
+	if err := applyMiracleErr(s, 40, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "gold", Qty: 1}); err == nil {
+		t.Fatal("unknown item kind should be rejected")
+	}
+	if string(s.Marshal()) != string(before) {
+		t.Error("rejected unknown-kind grant mutated state")
+	}
+	// "spears" (plural, the storage key) is NOT the grant vocabulary — a grant
+	// names one fresh spear as "spear" (singular). The plural form is rejected.
+	if err := applyMiracleErr(s, 41, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "spears", Qty: 1}); err == nil {
+		t.Error(`"spears" (plural) should be rejected — the grant kind is "spear"`)
+	}
+}
+
+// TestMiracleGrantDeadVillagerReject is US4-AS3: a grant to a dead villager (or
+// an out-of-range index) is rejected with nothing spent.
+func TestMiracleGrantDeadVillagerReject(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	s.Agents[0].Dead = true
+	before := s.Marshal()
+
+	if err := applyMiracleErr(s, 40, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "food_raw", Qty: 1}); err == nil {
+		t.Fatal("grant to a dead villager should be rejected")
+	}
+	if string(s.Marshal()) != string(before) {
+		t.Error("rejected dead-villager grant mutated state")
+	}
+	if err := applyMiracleErr(s, 41, "metatron.item_granted", ItemGrantedPayload{
+		Agent: len(s.Agents), Kind: "food_raw", Qty: 1}); err == nil {
+		t.Error("grant to an out-of-range agent index should be rejected")
+	}
+}
+
+// TestMiracleGrantNonPositiveQtyReject: a zero or negative quantity is rejected.
+func TestMiracleGrantNonPositiveQtyReject(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	before := s.Marshal()
+
+	for _, qty := range []int{0, -5} {
+		if err := applyMiracleErr(s, 40, "metatron.item_granted", ItemGrantedPayload{
+			Agent: 0, Kind: "food_raw", Qty: qty}); err == nil {
+			t.Errorf("grant of qty %d should be rejected", qty)
+		}
+	}
+	if string(s.Marshal()) != string(before) {
+		t.Error("rejected non-positive-qty grant mutated state")
+	}
+}
+
+// TestMiracleGrantSpearShape: a spear grant appends that many fresh, full-
+// durability spears, and the slice stays sorted ascending among any it already
+// carries (hunts spend the most-worn first).
+func TestMiracleGrantSpearShape(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 3
+	s.Agents[0].Inv = Inventory{Spears: []int{1}} // one worn spear already carried
+
+	if err := applyMiracleErr(s, 100, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "spear", Qty: 2}); err != nil {
+		t.Fatalf("spear grant rejected: %v", err)
+	}
+	want := []int{1, spearDurability, spearDurability}
+	if !reflect.DeepEqual(s.Agents[0].Inv.Spears, want) {
+		t.Errorf("Spears = %v, want %v (two fresh full-use spears, ascending)", s.Agents[0].Inv.Spears, want)
+	}
+}
+
+// TestMiracleGrantGratisZeroBank is US2 over US4: a forced grant lands with an
+// empty bank (charge waived), and the bank stays at zero.
+func TestMiracleGrantGratisZeroBank(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	s.MetatronCharges = 0
+	s.Agents[0].Inv = Inventory{}
+
+	if err := applyMiracleErr(s, 40, "metatron.item_granted", ItemGrantedPayload{
+		Agent: 0, Kind: "meals", Qty: 2, Gratis: true}); err != nil {
+		t.Fatalf("gratis grant with an empty bank rejected: %v", err)
+	}
+	if s.Agents[0].Inv.Meals != 2 {
+		t.Errorf("Meals = %d, want 2", s.Agents[0].Inv.Meals)
+	}
+	if s.MetatronCharges != 0 {
+		t.Errorf("gratis grant spent a charge: bank = %d", s.MetatronCharges)
+	}
+}
+
+// TestMiracleGrantReplayByteIdentity is SC-002 over US4: a scripted grant (incl.
+// a spear grant) run replays from genesis (log only) to a byte-identical hash.
+func TestMiracleGrantReplayByteIdentity(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	const ticks = 60
+
+	genesis := func() *State {
+		s := NewState(seed, m)
+		for i := 1; i < len(s.Agents); i++ {
+			s.Agents[i].Dead = true // lone living villager keeps the run quiet
+		}
+		s.MetatronCharges = 3
+		s.Agents[0].Inv = Inventory{}
+		return s
+	}
+	commands := map[int64][]store.Event{
+		10: {{Tick: 10, Type: "metatron.item_granted", Payload: mustPayload(ItemGrantedPayload{
+			Agent: 0, Kind: "food_raw", Qty: 3})}},
+		20: {{Tick: 20, Type: "metatron.item_granted", Payload: mustPayload(ItemGrantedPayload{
+			Agent: 0, Kind: "spear", Qty: 2})}},
+	}
+
+	live := genesis()
+	log := driveTicks(t, live, m, ticks, commands)
+
+	var grants int
+	for _, e := range log {
+		if e.Type == "metatron.item_granted" {
+			grants++
+		}
+	}
+	if grants != 2 {
+		t.Fatalf("scripted grants missing from the log (saw %d, want 2)", grants)
+	}
+
+	replay := genesis()
+	for _, e := range log {
+		if err := replay.Apply(e); err != nil {
+			t.Fatalf("replay apply %s: %v", e.Type, err)
+		}
+		replay.Tick = e.Tick
+	}
+	driveTicks(t, replay, m, ticks, nil)
+	if live.Hash() != replay.Hash() {
+		t.Fatalf("grant replay diverged:\nlive:     %s\nreplayed: %s", string(live.Marshal()), string(replay.Marshal()))
+	}
+}

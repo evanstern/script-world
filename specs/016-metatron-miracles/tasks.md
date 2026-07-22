@@ -87,9 +87,9 @@ doctrine is tests alongside code.
 
 **Independent test**: quickstart Scenario D-adjacent — grant food to a villager, see inventory +qty and a memory; over-cap grant rejects whole.
 
-- [ ] T020 [US4] Implement the `metatron.item_granted` reducer arm in `internal/sim/miracles.go`: validate agent index/alive, kind against the Inventory key set (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, spear), qty > 0, reject whole when `bulk(inv)+grant > bulkCap` (FR-011); spears append fresh full-use entries (sorted ascending); charge spend via T002 helper
-- [ ] T021 [US4] Wire `give` through both doors (`landMiracle` case with villager-name resolution; IPC `give_item` kind; CLI `give <villager> <item> <qty>` verb) with the grant memory riding the T006 builder
-- [ ] T022 [P] [US4] Tests in `internal/sim/miracles_test.go`: happy grant, over-cap whole-reject (inventory unchanged), unknown-kind/dead-villager/zero-qty rejects, spear-uses shape, replay byte-identity including a grant
+- [X] T020 [US4] Implement the `metatron.item_granted` reducer arm in `internal/sim/miracles.go`: validate agent index/alive, kind against the Inventory key set (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, spear), qty > 0, reject whole when `bulk(inv)+grant > bulkCap` (FR-011); spears append fresh full-use entries (sorted ascending); charge spend via T002 helper
+- [X] T021 [US4] Wire `give` through both doors (`landMiracle` case with villager-name resolution; IPC `give_item` kind; CLI `give <villager> <item> <qty>` verb) with the grant memory riding the T006 builder
+- [X] T022 [P] [US4] Tests in `internal/sim/miracles_test.go`: happy grant, over-cap whole-reject (inventory unchanged), unknown-kind/dead-villager/zero-qty rejects, spear-uses shape, replay byte-identity including a grant
 
 **Checkpoint**: all four miracle families live behind both doors.
 

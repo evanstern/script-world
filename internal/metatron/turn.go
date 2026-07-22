@@ -264,8 +264,13 @@ func (mt *Metatron) landMiracle(reply turnReply, charges int) (*Miracle, string)
 		params = MiracleParams{ToTick: clock.TickAt(int64(mm.Day), hour, min, 0)}
 		summary = fmt.Sprintf("snapped time forward to day %d %02d:%02d", mm.Day, hour, min)
 	case "give_item":
-		// Wired to the angel in US4 (grant).
-		return nil, "that kind of miracle is not yet within my reach"
+		idx := agentIndexByName(mm.Villager)
+		if idx < 0 {
+			return nil, fmt.Sprintf("no villager named %q", mm.Villager)
+		}
+		item := strings.ToLower(strings.TrimSpace(mm.Item))
+		params = MiracleParams{Agent: idx, Item: item, Qty: mm.Qty}
+		summary = fmt.Sprintf("granted %d %s to %s", mm.Qty, item, sim.AgentNames[idx])
 	default:
 		return nil, fmt.Sprintf("unknown miracle %q", mm.Kind)
 	}
@@ -408,17 +413,19 @@ When a nudge is too indirect for the need, you may instead work ONE miracle — 
 direct edit to the world, spent from the same charges:
   • "move" a villager, structure, or pile to a tile (rescue the stuck) — 1 charge
   • "remove" a structure, pile, or terrain feature — 1 charge
+  • "give_item" — place a known item in a living villager's hands — 1 charge
   • "time_snap" — jump the world clock forward to a day and time — 2 charges
 A miracle spends its charges like a nudge and refuses in-fiction when the bank
-cannot pay (a time_snap needs two). At most ONE act per turn — a nudge OR a
-miracle, never both. You cannot work a miracle for free; you cannot remove a
-villager.
+cannot pay (a time_snap needs two, every other miracle needs one). At most ONE
+act per turn — a nudge OR a miracle, never both. You cannot work a miracle for
+free; you cannot remove a villager.
 
 Reply with ONLY this JSON:
 {"say": "<your words to the player>",
  "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null,
- "miracle": {"kind": "move"|"remove"|"time_snap",
+ "miracle": {"kind": "move"|"remove"|"give_item"|"time_snap",
    "class": "villager"|"structure"|"pile"|"terrain", "x": 0, "y": 0, "to_x": 0, "to_y": 0,
+   "villager": "<name>", "item": "<item kind>", "qty": 0,
    "day": 2, "time": "HH:MM"} or null}`,
 		charter, strings.Join(sim.AgentNames[:], ", "))
 }

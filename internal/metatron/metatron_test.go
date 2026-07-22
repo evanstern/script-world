@@ -457,13 +457,19 @@ func TestCharterFallbacks(t *testing.T) {
 		t.Errorf("empty-charter notice absent: %q", r.Reply)
 	}
 
-	// Oversized: truncated + notice.
-	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars+100)), 0o644)
+	// Oversized: truncated + notice. The charter is oversized well beyond the
+	// cap so that an untruncated prompt would blow far past the bound below —
+	// the bound sits between the truncated total (charter capped at
+	// CharterMaxChars + the fixed frame) and what a full oversized charter would
+	// produce, so it still proves truncation happened. The fixed-frame headroom
+	// is CharterMaxChars+2500 (the frame documents four miracle families as of
+	// spec 016; ~2.1 KB), leaving comfortable margin over the capped total.
+	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars*2)), 0o644)
 	r, _ = mt.Turn(context.Background(), "verbose?")
 	if !strings.Contains(r.Reply, "cap") {
 		t.Errorf("oversize notice absent: %q", r.Reply)
 	}
-	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2000 {
+	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2500 {
 		t.Error("oversized charter not truncated in prompt")
 	}
 }
