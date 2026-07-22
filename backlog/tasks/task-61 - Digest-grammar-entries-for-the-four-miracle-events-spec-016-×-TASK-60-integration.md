@@ -3,9 +3,10 @@ id: TASK-61
 title: >-
   Digest grammar entries for the four miracle events (spec 016 × TASK-60
   integration)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-22 20:32'
+updated_date: '2026-07-22 21:46'
 labels: []
 dependencies: []
 ordinal: 54000
@@ -23,7 +24,21 @@ Trivial-exemption candidate (surgical, single mechanism, diagnosis pinned): inte
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All four metatron miracle events render readable digest summaries (no raw-payload fallback)
-- [ ] #2 Gratis miracles are visibly marked in the digest line
-- [ ] #3 Grammar/digest tests cover the four new types
+- [x] #1 All four metatron miracle events render readable digest summaries (no raw-payload fallback)
+- [x] #2 Gratis miracles are visibly marked in the digest line
+- [x] #3 Grammar/digest tests cover the four new types
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Trivial exemption applies (constitution: surgical fix, single mechanism internal/tui digest summary table, diagnosis pinned digest.go:741 area, ACs on task). Tier decision (Principle V rubric): Sonnet — single-package view/rendering code with tests alongside; no doctrine surface. One PR from .worktrees/task-61 branch task-61-digest-grammar-miracles.
+
+Implemented on branch task-61-digest-grammar-miracles (commit 40198f3, Sonnet tier): four digest registry entries + gratisMark helper; per-class phrasing (payloads carry class+coords, not names — 'moved the villager at (x,y)' rather than a resolved name; terrain removal reads 'cleared'). Cured TestCatalogSweep, which is RED on main since TASK-59's wiki re-pin backticked the new event types; added 4 catalog fixture rows + 2 dedicated tests; appended the 4 template rows to specs/018 digest-grammar contract (declared enumeration, cross-spec precedent TASK-53 whitelist tripwire). Full gate green. PR #39: https://github.com/evanstern/promptworld/pull/39
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Four miracle event types render readable, per-class digest summaries with a styled (forced) marker on gratis payloads; catalog sweep cured (was red on main after TASK-59's wiki re-pin), 4 fixture rows + 2 dedicated tests added, specs/018 digest-grammar contract enumeration extended. Merged as PR #39.
+<!-- SECTION:FINAL_SUMMARY:END -->

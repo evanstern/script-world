@@ -8,7 +8,7 @@ sources:
   - internal/tui/layout.go
   - internal/tui/grammar.go
   - internal/tui/digest.go
-verified_against: e239ece0602c3be3cdcb36a93fea0fa35291aa8f
+verified_against: 94951506e8a21614b4050ed43c152a06ff59cc30
 ---
 
 # TUI client
@@ -120,7 +120,11 @@ compact `key=value` fields for the telemetry families (`cog.*`, `clock.*`,
 the narrow dock drops the tick and shortens the type to its last segment.
 Families carry color-role tints, key tokens (names, speech, amounts, causes)
 carry emphasis, and four high-salience types (`agent.died`, `gru.attacked`,
-`social.chest_taken`, `norm.violated`) render whole-line alert. Unregistered
+`social.chest_taken`, `norm.violated`) render whole-line alert. The four
+[[metatron-miracles]] types render in the metatron family voice, with a
+trailing emphasized `(forced)` annotation (`gratisMark`) whenever the
+payload's gratis flag waived the charge — an operator force is never
+indistinguishable from a charge-priced miracle in the feed. Unregistered
 future types fall back to the compact resolved-name JSON of the old grammar
 (the agent-index field table — `agentIndexFields`/`agentIndexFieldRe`,
 covering `agent`, `a`, `b`, `from`, `to`, `speaker`, `listener`, `subject`,
