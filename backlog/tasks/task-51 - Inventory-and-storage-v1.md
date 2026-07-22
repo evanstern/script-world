@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 07:40'
+updated_date: '2026-07-22 08:05'
 labels: []
 dependencies:
   - TASK-50
@@ -28,7 +28,7 @@ Spec: specs/013-inventory-storage
 - [x] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
 - [x] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
 - [x] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
-- [ ] #8 Spec phase: Migration & Format Door (Cross-Cutting)
+- [x] #8 Spec phase: Migration & Format Door (Cross-Cutting)
 - [ ] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
@@ -60,4 +60,6 @@ US3 (chests) mechanics complete: d700cbd (T023-T025) — build_chest goal (build
 US3 Sonnet + US4 complete: 77565ee (T026-T027: chest glyph U+2610 + legend inspection with owner name + fullness, planner build_chest/deposit/withdraw vocabulary + parse validation + larder guidance), 186cf62 (T028-T031 Opus: social.chest_taken routed through applySocial as effect-free record, theftCompanions batch in contract order with fixed-agent-order witnesses, salChestBuilt/salTaking=7 + chest-built memory closing US3 deferral, 6-test theft suite incl. rumor-seed TellableFor + replay byte-identity; ChestCap exported, TUI dup const removed). Full suite green both dispatches.
 
 US5 (rot + observability) complete: f10375a (T032-T033 Opus: rot sweep on minute heartbeat before per-agent execution, takeSpoiled oldest-first drain, food_rotted reducer total, 5-test suite incl. rot-vs-pickup both orderings + spoil_at snapshot round-trip), 719fee2 (T034 Sonnet audit: SC-006 verified fully answerable pre-existing; real gaps found+fixed one level down — grammar.go owner/taker agent-index resolution for withdrew/chest_taken, narrator chronicleNote case for chest_taken theft prose; 012 precedent confirmed that routine events ride the generic raw feed). Full suite green both dispatches. Phase 8 (migration 2->3) next.
+
+Phase 8 (migration) complete: 1e90f65 (T035-T037 Opus) — TransformV2State pure verbatim carry + over-cap spill (canonical order, least-nutritious-first food, most-worn-first spears), dead-agent inventory spills per v3 death invariant, mid-flight intents verbatim (no map change), no separate v2 decoder (additive omitempty decode), OpenForMigration admits v1+v2, source-format-keyed archives (world.v1.db/world.v2.db), 1->2->3 chain in one run, 8 new tests + 012 suite unweakened. Decisions recorded in research R3 (98db93c). Full suite green. Phase 9 (whole-feature replay, live smoke, PR) next.
 <!-- SECTION:NOTES:END -->
