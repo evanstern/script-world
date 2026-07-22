@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: de1ef19fa25b80bedee1923a43803631e9ce2844
 ---
 
 # Agent mind
@@ -108,7 +108,8 @@ generation, trigger seq, predicted wall-ms and landing tick from
 class is `FutureDated`, the prompt opens with `futureDated` (prompt.go): "your
 decision will take effect around <landing clock> — plan for then". Each job is
 one call (`llm.KindPlanner`, persona system prefix, situation + memory window
-suffix, MaxTokens 256); the worker emits `cog.thought` at call start and every
+suffix, MaxTokens 256, and since TASK-58 a `ResponseSchema` — see the goal
+vocabulary below); the worker emits `cog.thought` at call start and every
 job terminates in exactly one `cog.outcome` (landed, unusable, or —
 loop-owned — rejected), riding `InjectSocial` as reducer no-ops
 (telemetry.go). Spec 012 widened the situation suffix's carried-inventory line
@@ -137,6 +138,21 @@ noise. The contract now allows either one goal or a guarded plan of at most
 `planStepCap` (3) steps (parse.go) — `after_min` becomes a `GuardAfterTick`
 guard anchored at the snapshot tick, `for_min` bounds each step's window
 (`injectPlan`), and each step's Kind/Qty rides `sim.PlanStep` the same way.
+Since TASK-58 the same contract is also enforced at the sampler:
+`plannerReplySchema()` (parse.go) generates a JSON Schema from `validGoals`,
+`validKinds`, and `planStepCap` — never a hand-copied duplicate — and `runPlan`
+attaches it to the planner call as `llm.Request.ResponseSchema`
+([[llm-orchestrator]] turns it into an OpenAI-style structured-outputs
+`response_format` on the local tier). The schema requires `goal` and `reason`
+at the top level (a reason-only shape left ~1/3 of small-model replies
+goal-less, and llama.cpp's grammar converter silently ignores `anyOf`; a plan
+reply still parses as a plan because `parseReply` prefers a present `plan` and
+discards the top-level goal) and bounds the free-text fields (`reason` 200,
+`target` 80 chars) so prose can't overrun the token budget into truncated
+JSON. `parseReply` remains the final gate — the cloud tier ignores the schema,
+and the motivating failure (a 3B local model free-generating past the
+vocabulary: 8/8 planner replies unusable live) went to 0/30 in a constrained
+probe.
 Single goals are injected via `Loop.InjectIntent` — which validates, resolves
 coordinates deterministically at the tick boundary (`resolveGoal`), and
 records `agent.intent_set (source: planner)` + `agent.thought` — now carrying

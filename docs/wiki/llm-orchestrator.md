@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: de1ef19fa25b80bedee1923a43803631e9ce2844
 ---
 
 # LLM orchestrator
@@ -42,7 +42,14 @@ calls inflated to 60–120 s, enough to saturate the tier and shed every
 musing — and the compat endpoint ignores `think: false` but honors
 `reasoning_effort`. The value arrives at `newOpenAICompat` already
 resolved (`resolveReasoningEffort`); empty means the field is omitted
-from the body.
+from the body. Since TASK-58 `Request` also carries an optional
+`ResponseSchema` (`json.RawMessage`) + `SchemaName`: when set, the
+chat-completions body gains a `response_format` `{type: json_schema}`
+envelope (name defaulting to `"reply"`) so an OpenAI-compat backend that
+honors structured outputs (Ollama does) constrains the reply at the sampler;
+when unset the payload is unchanged, and the Anthropic path ignores both
+fields — the caller's parser stays the final gate. The planner is the one
+kind that sets it ([[agent-mind]]).
 
 **Concurrency** (TASK-45): each tier owns `slots` worker goroutines — N identical
 copies of the same worker loop draining the same two channels. The local tier's
