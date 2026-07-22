@@ -151,7 +151,7 @@ archive present, zero-snapshot replay byte-identical; unclean/second runs refuse
 - [X] T044 [P] Whole-feature replay test in `internal/sim`: one scripted run exercising EVERY new event type, byte-identical state hash on replay (SC-004); confirm new types no-op under unknown-type convention
 - [X] T045 Quickstart smoke: run quickstart.md §2 (deterministic, no LLM) against a fresh world; record observations on TASK-50 (§3 planner progression is out of scope here — the orchestrator runs it separately post-merge)
 - [X] T046 `go test ./...` + full determinism suite green; open TASK-50's single PR from `.worktrees/task-50`
-- [ ] T047 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots, world-save-directory, cli-scriptworld), `spec-bridge:sync`, worktree cleanup
+- [X] T047 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots, world-save-directory, cli-scriptworld), `spec-bridge:sync`, worktree cleanup
 
 ---
 
