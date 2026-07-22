@@ -505,6 +505,70 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 			emit("agent.intent_done", AgentPayload{Agent: i})
 		}
 		return events
+	case "deposit":
+		// T024 (spec 013 US3): instant on arrival at the chest. Re-validate the
+		// chest still stands (contested pattern) and truncate the move to its free
+		// space (chestCap − bulk(*Store)). Kind is required (an empty Kind, an
+		// unheld kind, or a full chest ⇒ intent_done only, no effect event). The
+		// payload carries the ACTUAL post-clamp count.
+		ch := s.chestAt(in.TargetX, in.TargetY)
+		if ch == nil || ch.Store == nil || in.Kind == "" {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		n := carriedCount(a.Inv, in.Kind)
+		if in.Qty > 0 && in.Qty < n {
+			n = in.Qty
+		}
+		if free := chestCap - bulk(*ch.Store); n > free {
+			n = free
+		}
+		if n <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.deposited", DepositedPayload{Agent: i, X: in.TargetX, Y: in.TargetY, Kind: in.Kind, N: n})
+		return events
+	case "withdraw":
+		// T024: instant on arrival. Re-validate the chest, then emit ONE
+		// agent.withdrew per kind actually moved, truncated cumulatively to the
+		// taker's free bulk and to what the chest holds. A named Kind honors Qty;
+		// Kind "" sweeps every kind in canonical field order. Owner rides the
+		// payload (the theft companion batch is US4, T029 — not emitted here).
+		// Nothing moved ⇒ intent_done only.
+		ch := s.chestAt(in.TargetX, in.TargetY)
+		if ch == nil || ch.Store == nil {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		kinds := []string{in.Kind}
+		if in.Kind == "" {
+			kinds = canonicalKinds
+		}
+		free := freeBulk(a.Inv)
+		moved := false
+		for _, kind := range kinds {
+			if free <= 0 {
+				break
+			}
+			take := carriedCount(*ch.Store, kind)
+			if in.Kind != "" && in.Qty > 0 && in.Qty < take {
+				take = in.Qty
+			}
+			if take > free {
+				take = free
+			}
+			if take <= 0 {
+				continue
+			}
+			emit("agent.withdrew", WithdrewPayload{Agent: i, X: in.TargetX, Y: in.TargetY, Kind: kind, N: take, Owner: ch.Owner})
+			free -= take
+			moved = true
+		}
+		if !moved {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+		}
+		return events
 	}
 
 	// Validity: the resource may have vanished while walking (someone else
@@ -517,7 +581,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Tree
 	case "hunt":
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
-	case "build_fire", "build_shelter", "build_oven":
+	case "build_fire", "build_shelter", "build_oven", "build_chest":
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
 	case "quarry":
 		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
@@ -611,6 +675,12 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 					"Watched %s raise an oven for the village.", a.Name))
 			}
 		}
+	case "build_chest":
+		// T023 (spec 013 US3): the first owned container. Site re-validated above
+		// (buildSite, including the pile-tile exclusion); the reducer consumes the
+		// planks and stamps Owner + an empty Store. Village-visible salience/memory
+		// is deferred to US4 (T030), matching this slice's scope.
+		emit("agent.built", BuiltPayload{Agent: i, Kind: "chest", X: in.TargetX, Y: in.TargetY})
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "collect_water":

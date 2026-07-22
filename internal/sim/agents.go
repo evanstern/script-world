@@ -564,6 +564,10 @@ func intentDuration(goal string) int64 {
 		return craftSpearTicks
 	case "build_oven":
 		return buildOvenTicks
+	case "build_chest":
+		// Spec 013 US3: fire-comparable build time (the build_chest recipe row's
+		// Duration). Timed work, unlike the instant deposit/withdraw goals.
+		return buildFireTicks
 	case "bathe":
 		return batheTicks
 	}

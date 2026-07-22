@@ -41,9 +41,10 @@ var planGoals = map[string]bool{
 	"build_fire": true, "build_shelter": true,
 	"eat": true, "sleep": true, "wander": true,
 	"goto_warmth": true, "talk_to": true,
-	// Storage goals (spec 013 US2, FR-014): planner/plan-only — never in the
+	// Storage goals (spec 013 US2/US3, FR-014): planner/plan-only — never in the
 	// reflex ladder.
 	"drop": true, "pick_up": true,
+	"build_chest": true, "deposit": true, "withdraw": true,
 }
 
 // PlanSetPayload — agent.plan_set (loop-emitted on a plan landing).

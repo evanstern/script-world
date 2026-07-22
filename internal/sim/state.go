@@ -517,6 +517,14 @@ func (s *State) Apply(e store.Event) error {
 			// fuel sweep burns it out and refuel pushes FuelUntil forward.
 			st.FuelUntil = e.Tick + 2*fireBurnPerWood
 		}
+		if p.Kind == "chest" {
+			// T023 (spec 013 US3, research R8): the builder is recorded as owner
+			// permanently (no transfer/inheritance in v1), and the chest gets an
+			// empty Store for its contents. The recipe delta above already spent
+			// the chestPlankCost planks (recipes.go stays the single source).
+			st.Owner = p.Agent
+			st.Store = &Inventory{}
+		}
 		s.Structures = append(s.Structures, st)
 	case "agent.ate":
 		// T018: outcome-payload eat — the emitter computed the
@@ -770,9 +778,103 @@ func (s *State) Apply(e store.Event) error {
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.deposited":
-		// TODO(T024, US3): Inv[kind] −= n; chest Store[kind] += n.
+		// T024 (spec 013 US3): move the recorded count of Kind from inventory into
+		// the chest's Store (chest food is plain counts — NO rot batches, FR-010).
+		// The payload carries the actual post-clamp count; the reducer clamps
+		// defensively to what is carried AND to the chest's free space, and stays
+		// total (missing chest/Store ⇒ no-op, intent still cleared).
+		var p DepositedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if ch := s.chestAt(p.X, p.Y); ch != nil && ch.Store != nil {
+			free := chestCap - bulk(*ch.Store)
+			if p.Kind == "spears" {
+				n := p.N
+				if n > len(a.Inv.Spears) {
+					n = len(a.Inv.Spears)
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					// Most-worn-first: the front of the ascending slice moves;
+					// both sides stay sorted ascending.
+					ch.Store.Spears = append(ch.Store.Spears, a.Inv.Spears[:n]...)
+					sort.Ints(ch.Store.Spears)
+					rest := append([]int(nil), a.Inv.Spears[n:]...)
+					if len(rest) == 0 {
+						a.Inv.Spears = nil
+					} else {
+						a.Inv.Spears = rest
+					}
+				}
+			} else if n := p.N; n > 0 {
+				if c := carriedCount(a.Inv, p.Kind); n > c {
+					n = c
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					addItems(ch.Store, []Item{{p.Kind, n}}, 1)
+					addItems(&a.Inv, []Item{{p.Kind, n}}, -1)
+				}
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.withdrew":
-		// TODO(T024, US3): chest Store[kind] −= n; Inv[kind] += n.
+		// T024 (spec 013 US3): move the recorded count of Kind from the chest's
+		// Store into inventory, clamped defensively to the taker's free bulk and to
+		// what the chest holds. Spears leave most-worn-first carrying their
+		// durabilities; both slices stay sorted ascending. Chest food is plain
+		// counts (no batches). The Owner field feeds the US4 theft companion batch
+		// (T029); this case only moves goods. Missing chest/Store ⇒ no-op.
+		var p WithdrewPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if ch := s.chestAt(p.X, p.Y); ch != nil && ch.Store != nil {
+			n := p.N
+			if f := freeBulk(a.Inv); n > f {
+				n = f
+			}
+			if p.Kind == "spears" {
+				if n > len(ch.Store.Spears) {
+					n = len(ch.Store.Spears)
+				}
+				if n > 0 {
+					taken := append([]int(nil), ch.Store.Spears[:n]...)
+					rest := append([]int(nil), ch.Store.Spears[n:]...)
+					if len(rest) == 0 {
+						ch.Store.Spears = nil
+					} else {
+						ch.Store.Spears = rest
+					}
+					a.Inv.Spears = append(a.Inv.Spears, taken...)
+					sort.Ints(a.Inv.Spears)
+				}
+			} else if n > 0 {
+				if c := carriedCount(*ch.Store, p.Kind); n > c {
+					n = c
+				}
+				if n > 0 {
+					addItems(ch.Store, []Item{{p.Kind, n}}, -1)
+					addItems(&a.Inv, []Item{{p.Kind, n}}, 1)
+				}
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "social.chest_taken":
 		// TODO(T028, US4): the taking record itself (chronicle/TUI material) —
 		// no state effect beyond the record; lands with the social record case.

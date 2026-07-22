@@ -100,6 +100,20 @@ func (s *State) hasStructure(kind string) bool {
 	return false
 }
 
+// chestAt returns a pointer to the chest structure on (x,y), or nil when the
+// tile holds none — the deposit/withdraw completions and reducer cases
+// re-validate the chest by coord (spec 013 US3), and Store is the mutable
+// contents pointer they move goods through.
+func (s *State) chestAt(x, y int) *Structure {
+	for i := range s.Structures {
+		st := &s.Structures[i]
+		if st.Kind == "chest" && st.X == x && st.Y == y {
+			return st
+		}
+	}
+	return nil
+}
+
 // fireStructAt returns a pointer to the fire structure on (x,y), if any
 // (T020/T021: refuel/cook re-validate the station at completion by coord).
 func fireStructAt(s *State, x, y int) (*Structure, bool) {
