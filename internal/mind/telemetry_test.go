@@ -182,27 +182,6 @@ func TestPlannerSuppressedAtHighSpeed(t *testing.T) {
 	}
 }
 
-// TestParseReplyPlan (US4): the plan form parses from the closed vocabulary
-// and every malformed shape is a model failure, never a trim.
-func TestParseReplyPlan(t *testing.T) {
-	r, err := parseReply(`{"plan":[{"goal":"chop"},{"goal":"talk_to","target":"Rowan","after_min":30,"for_min":60}],"reason":"wood then words"}`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(r.Plan) != 2 || r.Plan[1].AfterMin != 30 || r.Plan[1].ForMin != 60 || r.Goal != "" {
-		t.Errorf("parsed plan: %+v", r)
-	}
-	for _, bad := range []string{
-		`{"plan":[{"goal":"a"},{"goal":"b"},{"goal":"c"},{"goal":"d"}]}`, // over cap
-		`{"plan":[{"goal":"fly"}]}`,                                      // unknown goal
-		`{"plan":[{"goal":"chop","after_min":-5}]}`,                      // negative time
-	} {
-		if _, err := parseReply(bad); err == nil {
-			t.Errorf("parseReply(%s): expected error", bad)
-		}
-	}
-}
-
 // TestFutureDatedLine (US4): the helper states now and the landing estimate;
 // no line when there is no meaningful prediction.
 func TestFutureDatedLine(t *testing.T) {

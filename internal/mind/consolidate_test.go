@@ -34,7 +34,7 @@ func setupConsol(t *testing.T, model Submitter) (*harness, *Mind) {
 		{Text: "Cedar promised me firewood.", Salience: 5, Tick: 300, Subject: 2, Tone: 20},
 	}
 
-	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{})
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, noopLoop)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestConsolidationEmptyBufferSkips(t *testing.T) {
 	model := &scriptedModel{replies: []string{goodConsolidation()}}
 	h := newHarness(t, "")
 	state := sim.NewState(42, h.m)
-	md, err := New(model, h.loop, h.loop, h.m, 42, state.Marshal(), [sim.AgentCount]string{})
+	md, err := New(model, h.loop, h.loop, h.m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, noopLoop)
 	if err != nil {
 		t.Fatal(err)
 	}

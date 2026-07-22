@@ -22,16 +22,56 @@ import (
 	"github.com/evanstern/promptworld/internal/world"
 )
 
-// mockOpenAI answers every chat completion instantly with a fixed reply.
+// mockOpenAI answers every chat completion instantly. A request that declares
+// tools (the villager tool-use loop, spec 017) gets a native tool_call built
+// from the scripted planner goal; a request without tools (musing,
+// consolidation, …) gets the reply as plain content. reply is the legacy
+// planner JSON ({"goal":...}) the tests still script by intent.
 func mockOpenAI(t *testing.T, reply string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := map[string]any{
-			"choices": []map[string]any{{"message": map[string]any{"content": reply}}},
-			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 10},
-		}
-		json.NewEncoder(w).Encode(resp)
+		body, _ := io.ReadAll(r.Body)
+		json.NewEncoder(w).Encode(openAIReply(string(body), reply))
 	}))
+}
+
+// openAIReply builds a chat-completions response: a native tool_call when the
+// request declared tools, else plain content.
+func openAIReply(reqBody, reply string) map[string]any {
+	usage := map[string]any{"prompt_tokens": 10, "completion_tokens": 10}
+	if !strings.Contains(reqBody, `"tools"`) {
+		return map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": reply}}},
+			"usage":   usage,
+		}
+	}
+	name := goalFromReply(reply)
+	return map[string]any{
+		"choices": []map[string]any{{
+			"message": map[string]any{
+				"content": "",
+				"tool_calls": []map[string]any{{
+					"id": "call_1", "type": "function",
+					// arguments is a JSON-ENCODED STRING on the OpenAI wire.
+					"function": map[string]any{"name": name, "arguments": "{}"},
+				}},
+			},
+			"finish_reason": "tool_calls",
+		}},
+		"usage": usage,
+	}
+}
+
+// goalFromReply extracts the goal name from a legacy planner reply; defaults to
+// wander when absent so a request always produces a valid acting call.
+func goalFromReply(reply string) string {
+	var r struct {
+		Goal string `json:"goal"`
+	}
+	if json.Unmarshal([]byte(reply), &r) == nil && r.Goal != "" {
+		return r.Goal
+	}
+	return "wander"
 }
 
 func TestCognitionTelemetryAudit(t *testing.T) {
@@ -153,12 +193,11 @@ func TestCognitionStaleRejectionUnderLatency(t *testing.T) {
 	// carries no max_tokens to discriminate on, and a slow host is slow for
 	// everything anyway).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(io.Discard, r.Body)
+		body, _ := io.ReadAll(r.Body)
 		time.Sleep(45 * time.Second)
-		json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]any{"content": `{"goal":"forage","reason":"late thought"}`}}},
-			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 10},
-		})
+		// A late but valid tool call: the planner loop lands forage ~1440 ticks
+		// stale, caught at the door as a prediction-miss stale rejection.
+		json.NewEncoder(w).Encode(openAIReply(string(body), `{"goal":"forage","reason":"late thought"}`))
 	}))
 	defer srv.Close()
 

@@ -45,6 +45,7 @@ func newLoopMind(t *testing.T) *loopMind {
 		social:  loop,
 		replica: state,
 		m:       m,
+		rearm:   make(chan int, sim.AgentCount),
 	}
 	md.tick.Store(state.Tick)
 	ctx, cancel := context.WithCancel(context.Background())

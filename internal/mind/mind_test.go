@@ -14,8 +14,122 @@ import (
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/toolloop"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
+
+// testLoopRounds is the loop iteration cap harness minds run with.
+const testLoopRounds = 8
+
+// replyToCalls translates a legacy JSON planner reply (the string form the mind
+// tests script) into the tool call the tool-use loop would receive, so migrated
+// tests keep scripting behavior by intent. A {"goal":...} reply becomes one
+// world-verb (or muse, via {"muse":...}) call; a {"plan":[...]} reply becomes a
+// set_plan call; anything unparseable becomes no calls (the model answered in
+// prose — model_done, which the mind records as unusable).
+func replyToCalls(reply string) []llm.ToolCall {
+	trimmed := strings.TrimSpace(reply)
+	if !strings.HasPrefix(trimmed, "{") {
+		return nil
+	}
+	var r struct {
+		Goal   string `json:"goal"`
+		Target string `json:"target"`
+		Kind   string `json:"kind"`
+		Qty    int    `json:"qty"`
+		Muse   string `json:"muse"`
+		Plan   []struct {
+			Goal string `json:"goal"`
+			Kind string `json:"kind"`
+			Qty  int    `json:"qty"`
+		} `json:"plan"`
+	}
+	if json.Unmarshal([]byte(trimmed), &r) != nil {
+		return nil
+	}
+	switch {
+	case len(r.Plan) > 0:
+		steps := make([]map[string]any, 0, len(r.Plan))
+		for _, s := range r.Plan {
+			step := map[string]any{"goal": s.Goal}
+			if s.Kind != "" {
+				step["kind"] = s.Kind
+			}
+			if s.Qty != 0 {
+				step["qty"] = s.Qty
+			}
+			steps = append(steps, step)
+		}
+		args, _ := json.Marshal(map[string]any{"steps": steps})
+		return []llm.ToolCall{{ID: "c1", Name: "set_plan", Args: args}}
+	case r.Muse != "":
+		args, _ := json.Marshal(map[string]any{"text": r.Muse})
+		return []llm.ToolCall{{ID: "c1", Name: "muse", Args: args}}
+	case r.Goal != "":
+		m := map[string]any{}
+		if r.Target != "" {
+			m["target"] = r.Target
+		}
+		if r.Kind != "" {
+			m["kind"] = r.Kind
+		}
+		if r.Qty != 0 {
+			m["qty"] = r.Qty
+		}
+		args, _ := json.Marshal(m)
+		return []llm.ToolCall{{ID: "c1", Name: strings.ToLower(strings.TrimSpace(r.Goal)), Args: args}}
+	}
+	return nil
+}
+
+// mockLoop is the stub runLoop for harness minds: it drives the model through
+// the Submitter seam (so planGate / call counting / errors still work), then
+// dispatches the single translated tool call through the real handlers (real
+// door). It is deliberately simple — the real toolloop.Run is covered by
+// internal/toolloop and the e2e; this exercises the mind's handlers + outcome
+// mapping against a scripted reply.
+func mockLoop(model Submitter) func(context.Context, toolloop.Job) (toolloop.Result, error) {
+	return func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		resp, err := model.Submit(ctx, llm.Request{Kind: j.Kind, System: j.System, Prompt: j.Seed})
+		if err != nil {
+			term := toolloop.TermProviderError
+			if err == context.DeadlineExceeded || err == context.Canceled {
+				term = toolloop.TermCtxDone
+			}
+			return toolloop.Result{Term: term}, err
+		}
+		calls := replyToCalls(resp.Text)
+		if len(calls) == 0 {
+			return toolloop.Result{Term: toolloop.TermModelDone}, nil
+		}
+		c := calls[0]
+		h := j.Handlers[c.Name]
+		if h == nil {
+			j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: c.Name, Verdict: toolloop.VerdictRejectedUnknown})
+			return toolloop.Result{Term: toolloop.TermModelDone}, nil
+		}
+		out := h(ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: c.Name, Verdict: out.Verdict, Reason: out.ResultForModel})
+		switch {
+		case out.Err != nil:
+			return toolloop.Result{Term: toolloop.TermProviderError}, out.Err
+		case out.Verdict == toolloop.VerdictLanded:
+			cc := c
+			return toolloop.Result{Term: toolloop.TermLanded, Landed: &cc}, nil
+		default:
+			// Rejected/unknown but never landed; the simple stub does not retry.
+			return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+		}
+	}
+}
+
+// noopLoop drops every planner cognition without touching the model — installed
+// on minds whose tests never intend the planner to run (they drive
+// conversation/consolidation directly) so a stray cadence tick can't consume a
+// scripted convo reply.
+func noopLoop(context.Context, toolloop.Job) (toolloop.Result, error) {
+	return toolloop.Result{Term: toolloop.TermModelDone}, nil
+}
 
 // mockModel is a Submitter returning canned planner replies (or errors).
 // Musing calls answer musingReply; empty means the busy-drop path (the
@@ -114,7 +228,7 @@ func newHarnessAt(t *testing.T, reply string, speed clock.Speed) *harness {
 	}
 	h.loop = sim.NewLoop(state, m, st, notify)
 
-	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{})
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, mockLoop(model))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,20 +365,14 @@ func TestPlannerDrivesAgents(t *testing.T) {
 		t.Fatal("no planner-sourced intents appeared")
 	}
 
-	thoughts := h.waitEvents(t, 5*time.Second, func(e store.Event) bool {
-		return e.Type == "agent.thought"
-	})
-	if len(thoughts) == 0 {
-		t.Fatal("no agent.thought events recorded")
-	}
-	var tp sim.ThoughtPayload
-	json.Unmarshal(thoughts[0].Payload, &tp)
-	if tp.Text != "Stretching my legs." || tp.Source != "planner" {
-		t.Errorf("thought payload: %+v", tp)
-	}
 	if h.model.calls.Load() == 0 {
 		t.Fatal("model never called")
 	}
+	// Tool-era note: world-verb landings no longer carry a free-text reason
+	// (the world verbs declare no reason param — interiority is the muse tool
+	// now), so a "wander" landing emits no agent.thought(source planner). The
+	// intent landing above is the acceptance signal; musing thoughts are
+	// covered by the musing tests.
 }
 
 // TestGarbageOutputFallsToReflex: unusable model output produces no planner
@@ -343,154 +451,5 @@ func TestPromptWindowBound(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "What do you do next?") {
 		t.Error("prompt missing the ask")
-	}
-}
-
-// TestParseReply covers the JSON extraction contract.
-func TestParseReply(t *testing.T) {
-	good := []string{
-		`{"goal": "forage", "reason": "hungry"}`,
-		`Sure! Here's my choice: {"goal": "Forage", "reason": "x"} hope that helps`,
-		"```json\n{\"goal\": \"sleep\", \"reason\": \"tired\"}\n```",
-	}
-	for _, g := range good {
-		if _, err := parseReply(g); err != nil {
-			t.Errorf("parseReply(%q): %v", g, err)
-		}
-	}
-	bad := []string{
-		"", "no json here",
-		`{"goal": "fly_to_moon", "reason": "x"}`,
-		`{"goal": }`,
-	}
-	for _, b := range bad {
-		if _, err := parseReply(b); err == nil {
-			t.Errorf("parseReply(%q) should fail", b)
-		}
-	}
-	r, err := parseReply(`{"goal": "talk_to", "target": "Birch", "reason": "gossip"}`)
-	if err != nil || r.Target != "Birch" {
-		t.Errorf("talk_to parse: %+v %v", r, err)
-	}
-}
-
-// TestParseReplyDropPickUpKindQty covers spec 013 T022: drop/pick_up carry
-// Kind/Qty, validated against the sim executor's canonicalKinds so a
-// malformed kind never reaches InjectIntent (the same "reject unknown at
-// the door" discipline validGoals applies to goal strings).
-func TestParseReplyDropPickUpKindQty(t *testing.T) {
-	r, err := parseReply(`{"goal": "drop", "kind": "wood", "qty": 5, "reason": "lighten the load"}`)
-	if err != nil || r.Kind != "wood" || r.Qty != 5 {
-		t.Errorf("drop kind/qty parse: %+v %v", r, err)
-	}
-	// Case-insensitive, matching goal normalization.
-	r, err = parseReply(`{"goal": "drop", "kind": "WOOD", "reason": "x"}`)
-	if err != nil || r.Kind != "wood" {
-		t.Errorf("drop kind should normalize to lowercase: %+v %v", r, err)
-	}
-	// pick_up with no kind = everything that fits.
-	r, err = parseReply(`{"goal": "pick_up", "reason": "gather it up"}`)
-	if err != nil || r.Kind != "" {
-		t.Errorf("pick_up with no kind should parse as Kind==\"\": %+v %v", r, err)
-	}
-	// pick_up on spears (plural — matches sim.canonicalKinds, not "spear").
-	r, err = parseReply(`{"goal": "pick_up", "kind": "spears", "reason": "x"}`)
-	if err != nil || r.Kind != "spears" {
-		t.Errorf("pick_up spears kind parse: %+v %v", r, err)
-	}
-	// A goal that doesn't take kind/qty ignores whatever the model sends —
-	// not a rejection (only drop/pick_up are validated).
-	if _, err := parseReply(`{"goal": "forage", "kind": "wood", "reason": "x"}`); err != nil {
-		t.Errorf("non-storage goal should ignore kind: %v", err)
-	}
-	bad := []string{
-		`{"goal": "drop", "kind": "gold", "reason": "x"}`,     // unknown kind
-		`{"goal": "pick_up", "kind": "spear", "reason": "x"}`, // singular — not what the executor reads
-		`{"goal": "drop", "kind": "wood", "qty": -1, "reason": "x"}`,
-	}
-	for _, b := range bad {
-		if _, err := parseReply(b); err == nil {
-			t.Errorf("parseReply(%q) should reject an invalid kind/qty", b)
-		}
-	}
-	// The plan form validates each step's kind/qty too.
-	plan, err := parseReply(`{"plan": [{"goal": "drop", "kind": "stone", "qty": 3}], "reason": "x"}`)
-	if err != nil || len(plan.Plan) != 1 || plan.Plan[0].Kind != "stone" || plan.Plan[0].Qty != 3 {
-		t.Errorf("plan step kind/qty parse: %+v %v", plan, err)
-	}
-	if _, err := parseReply(`{"plan": [{"goal": "pick_up", "kind": "gold"}], "reason": "x"}`); err == nil {
-		t.Error("plan step with unknown kind should be rejected")
-	}
-}
-
-// TestParseReplyChestGoals covers spec 013 T027: build_chest/deposit/
-// withdraw join validGoals, and deposit/withdraw carry Kind/Qty validated
-// exactly like drop/pick_up (T022) — build_chest takes neither.
-func TestParseReplyChestGoals(t *testing.T) {
-	// build_chest takes no kind/qty; whatever the model sends is ignored,
-	// same as any other non-storage goal.
-	r, err := parseReply(`{"goal": "build_chest", "reason": "keep things safe"}`)
-	if err != nil || r.Goal != "build_chest" {
-		t.Errorf("build_chest parse: %+v %v", r, err)
-	}
-	if _, err := parseReply(`{"goal": "build_chest", "kind": "gold", "reason": "x"}`); err != nil {
-		t.Errorf("build_chest should ignore an invalid kind: %v", err)
-	}
-
-	// deposit carries Kind/Qty like drop; empty Kind still parses (the
-	// executor resolves it to intent_done only — not a parse-time error;
-	// the "deposit needs a kind" rule is prompt guidance, not rejection).
-	r, err = parseReply(`{"goal": "deposit", "kind": "planks", "qty": 6, "reason": "stash the surplus"}`)
-	if err != nil || r.Kind != "planks" || r.Qty != 6 {
-		t.Errorf("deposit kind/qty parse: %+v %v", r, err)
-	}
-	r, err = parseReply(`{"goal": "deposit", "reason": "x"}`)
-	if err != nil || r.Kind != "" {
-		t.Errorf("deposit with no kind should still parse as Kind==\"\": %+v %v", r, err)
-	}
-	// Case-insensitive, matching drop/pick_up normalization.
-	r, err = parseReply(`{"goal": "deposit", "kind": "PLANKS", "reason": "x"}`)
-	if err != nil || r.Kind != "planks" {
-		t.Errorf("deposit kind should normalize to lowercase: %+v %v", r, err)
-	}
-
-	// withdraw with no kind = everything that fits, matching pick_up.
-	r, err = parseReply(`{"goal": "withdraw", "reason": "take back what I need"}`)
-	if err != nil || r.Kind != "" {
-		t.Errorf("withdraw with no kind should parse as Kind==\"\": %+v %v", r, err)
-	}
-	r, err = parseReply(`{"goal": "withdraw", "kind": "spears", "qty": 1, "reason": "x"}`)
-	if err != nil || r.Kind != "spears" || r.Qty != 1 {
-		t.Errorf("withdraw kind/qty parse: %+v %v", r, err)
-	}
-
-	bad := []string{
-		`{"goal": "deposit", "kind": "gold", "reason": "x"}`,
-		`{"goal": "withdraw", "kind": "spear", "reason": "x"}`, // singular — not canonicalKinds
-		`{"goal": "deposit", "kind": "wood", "qty": -1, "reason": "x"}`,
-		`{"goal": "withdraw", "kind": "wood", "qty": -1, "reason": "x"}`,
-	}
-	for _, b := range bad {
-		if _, err := parseReply(b); err == nil {
-			t.Errorf("parseReply(%q) should reject an invalid kind/qty", b)
-		}
-	}
-
-	// The plan form validates build_chest/deposit/withdraw steps too.
-	plan, err := parseReply(`{"plan": [{"goal": "build_chest"}, {"goal": "deposit", "kind": "wood", "qty": 4}, {"goal": "withdraw", "kind": "meals"}], "reason": "x"}`)
-	if err != nil || len(plan.Plan) != 3 {
-		t.Fatalf("chest plan parse: %+v %v", plan, err)
-	}
-	if plan.Plan[0].Goal != "build_chest" {
-		t.Errorf("plan step 0 should be build_chest: %+v", plan.Plan[0])
-	}
-	if plan.Plan[1].Kind != "wood" || plan.Plan[1].Qty != 4 {
-		t.Errorf("plan step 1 deposit kind/qty parse: %+v", plan.Plan[1])
-	}
-	if plan.Plan[2].Kind != "meals" {
-		t.Errorf("plan step 2 withdraw kind parse: %+v", plan.Plan[2])
-	}
-	if _, err := parseReply(`{"plan": [{"goal": "withdraw", "kind": "gold"}], "reason": "x"}`); err == nil {
-		t.Error("plan step with unknown kind should be rejected")
 	}
 }

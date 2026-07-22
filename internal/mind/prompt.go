@@ -6,17 +6,19 @@ import (
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/sim"
-	"github.com/evanstern/promptworld/internal/tool"
 )
 
-// Prompt construction per contracts/planner-prompt.md: a stable per-agent
-// system prefix (persona + instruction block — prompt-cache friendly) and a
-// variable user suffix (situation + the bounded working-memory window).
+// Prompt construction: a stable per-agent system prefix (persona + tool-choice
+// instruction — prompt-cache friendly) and a variable user suffix (situation +
+// the bounded working-memory window).
 //
-// The goal vocabulary line and the per-verb gloss block are DERIVED from the
-// tool registry (spec 014, FR-004): tool.VocabularyLine() reproduces the old
-// goal-vocabulary line byte-for-byte, tool.PromptGlossBlock() the old
-// hand-written prose. TestGoldenPrompt pins the whole output unchanged (SC-003).
+// In the tool-use era (spec 017) the goal vocabulary and per-verb gloss are no
+// longer hand-rendered into the prompt: each tool carries its own name, gloss
+// (Description), and argument schema, declared to the model as callable tools
+// (tool.LoopRosterVillager -> the loop's Request.Tools). The system prompt now
+// only frames the choice; the tools carry the vocabulary. The spec-014 golden
+// prompt test that pinned the free-text contract retires with this change
+// (contracts/loop-api.md).
 
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
@@ -25,13 +27,13 @@ func systemPrompt(name, personaText string) string {
 		b.WriteString(personaText)
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, `You decide what %s does next. Reply with ONLY a JSON object:
-{"goal": "<goal>", "target": "<agent name, only for talk_to>", "kind": "<item kind, only for drop/pick_up/deposit/withdraw>", "qty": <amount, only for drop/pick_up/deposit/withdraw>, "reason": "<one short sentence in your voice>"}
-Goals: %s.
-%sFor a short sequence instead, reply:
-{"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "kind": "<item kind, only for drop/pick_up/deposit/withdraw>", "qty": <amount, only for drop/pick_up/deposit/withdraw>, "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
-At most %d steps; steps run in order, each waits for its time.
-`, name, tool.VocabularyLine(), tool.PromptGlossBlock(), planStepCap)
+	fmt.Fprintf(&b, "You decide what %s does next by calling exactly one acting tool. "+
+		"Each tool is an action %s can take; its description says what it does and its "+
+		"arguments what it needs. You may first call read-only tools to look something "+
+		"up, then finish by calling one acting tool: a world action, a short plan "+
+		"(set_plan), or a passing thought (muse). Musing is an action too — a beat "+
+		"spent thinking is a beat not spent doing. Choose the single action that best "+
+		"fits %s's situation and needs right now.\n", name, name, name)
 	return b.String()
 }
 

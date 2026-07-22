@@ -178,7 +178,8 @@ func Run(dir string) error {
 		}
 		fmt.Printf("daemon: llm orchestrator on (%s, cloud %s, budget $%.0f/mo)\n",
 			localDesc, cloudDesc, llmCfg.MonthlyBudgetUSD)
-		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
+		loopRounds, _ := llmCfg.Rounds()
+		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir), loopRounds)
 		if err != nil {
 			return err
 		}
