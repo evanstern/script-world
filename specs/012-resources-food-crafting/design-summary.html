@@ -208,9 +208,8 @@
     </p>
     <div class="meta">
       <span>designed 2026-07-21</span>
-      <span>spec: specs/012-resources-food-crafting</span>
-      <span>build task: TASK-50</span>
-      <span>storage: deferred to TASK-26</span>
+      <span>specs: 012-resources-food-crafting · 013-inventory-storage</span>
+      <span>build tasks: TASK-50 → TASK-51</span>
     </div>
   </header>
 
@@ -410,14 +409,47 @@
     </table>
   </div>
 
-  <h2>Scope edges</h2>
+  <h2>The storage layer <span style="font-family: var(--body); font-size: 0.9rem; font-weight: 400; color: var(--muted);">(companion spec 013, TASK-26 session)</span></h2>
+  <p class="kicker">
+    Designed the same day as its own spec — it ships second (TASK-51, after TASK-50).
+    Spec 012 launches with unbounded inventories; everything below arrives with 013.
+  </p>
 
-  <div class="callout">
-    <p><strong>Deferred to TASK-26 (inventory &amp; storage):</strong> carry capacity,
-    stacking, chests, stockpiles, ownership. This spec treats inventory as an abstract
-    "agents hold items" interface — unbounded and lost on death, as today. TASK-26's
-    spec is an input to TASK-50's plan phase.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>One bulk cap</h4>
+      <p class="recipe">24 bulk per villager · everything costs 1</p>
+      <p>Every resource unit and every item costs 1 bulk; a villager carries at most 24.
+      Gathering truncates to free space, eating frees it, and the cap is sized so the
+      degraded-mode raw loop never jams. <strong>The reflex never touches storage</strong> —
+      deposits and withdrawals are planner-only.</p>
+    </div>
+    <div class="card">
+      <h4>Emergent stockpiles</h4>
+      <p class="recipe">drop on ground → pile · adjacent piles → zone</p>
+      <p>No player zoning, ever: a drop action creates a ground pile on the villager's
+      tile; adjacent piles read as one stockpile zone. Where the village drops things
+      IS its layout. Piles are commons — anyone takes freely. A death spills the
+      carried bulk as a lootable pile where the villager fell.</p>
+    </div>
+    <div class="card">
+      <h4>Chests &amp; theft</h4>
+      <p class="recipe">build on site · 6 planks · 48 bulk · builder = owner</p>
+      <p>A chest remembers its builder. Taking from someone else's chest
+      <strong>always works</strong> — and is always recorded: the owner and witnesses
+      remember it, gossip spreads, trust drops. No permission gates; anti-theft norms
+      are governance's future business.</p>
+    </div>
+    <div class="card">
+      <h4>Rot: the larder's reason</h4>
+      <p class="recipe">ground food spoils in ~2 game days · chests preserve</p>
+      <p>Food left in ground piles rots away on an event-sourced timer; food in chests
+      keeps forever; non-food never decays. Chests thereby have a mechanical job
+      beyond ownership — the village larder.</p>
+    </div>
   </div>
+
+  <h2>Scope edges</h2>
 
   <div class="callout warn">
     <p><strong>Compatibility: this is a world-format break.</strong> Outcrops change every
@@ -431,12 +463,13 @@
   </div>
 
   <footer>
-    <p>Produced by the TASK-25 Socratic design session (three rounds: foundations,
-    per-item mechanics, cross-cutting). Decisions are recorded on the board task;
-    requirements live in the spec.</p>
+    <p>Produced by the TASK-25 and TASK-26 Socratic design sessions. Decisions are
+    recorded on the board tasks; requirements live in the specs; the implementation
+    plan (research R1–R9, data model, event &amp; recipe contracts, 42 tasks across 8
+    phases) lives alongside spec 012.</p>
     <div class="meta">
-      <span>spec: specs/012-resources-food-crafting/spec.md</span>
-      <span>board: TASK-25 (Done) → TASK-50 (implementation)</span>
+      <span>specs/012-resources-food-crafting/ · specs/013-inventory-storage/</span>
+      <span>board: TASK-25, TASK-26 (Done) → TASK-50 → TASK-51</span>
     </div>
   </footer>
 </div>
