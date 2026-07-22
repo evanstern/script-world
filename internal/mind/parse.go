@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -71,6 +72,92 @@ var validKinds = map[string]bool{
 	"wood": true, "stone": true, "water": true, "planks": true, "refined_stone": true,
 	"food_raw": true, "food_cooked": true, "meals": true, "spears": true,
 }
+
+// sortedKeys returns a map-set's keys in deterministic (sorted) order — so a
+// schema built from validGoals/validKinds is stable across runs rather than
+// reflecting Go's map iteration order.
+func sortedKeys(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// plannerReplySchema is the OpenAI/Ollama structured-output JSON Schema for a
+// planner reply, generated from validGoals + planStepCap (TASK-58) so the
+// sampler-level constraint and parseReply's gate share one source of truth —
+// the goal vocabulary and step cap are never hand-copied. kind is constrained
+// to validKinds ("" included, a legal value). The cloud tier ignores this;
+// parseReply stays the final gate.
+//
+// "goal" and "reason" are required at the top level, and each plan step
+// requires "goal". Requiring goal does NOT break the plan form: plan is an
+// optional property, the model still emits it, and parseReply prefers a
+// present plan (discarding the top-level goal) — so a plan reply parses as a
+// plan. This deviates from the original TASK-58 brief (which specified
+// required: ["reason"] only, to keep the plan form legal). Live probing of
+// cogito:3b showed that shape leaves ~1/3 of replies as reason-only objects
+// ({"reason": "..."} with neither goal nor plan) — schema-valid but unusable,
+// failing AC#5's "0 unusable". The clean goal-xor-plan encoding (anyOf) was
+// rejected empirically: llama.cpp's schema-to-grammar converter bails out on
+// anyOf and applies NO constraint at all. Requiring goal is the only shape
+// that both stays enforced and drives unusable replies to zero.
+//
+// The free-text fields (reason, target) carry maxLength bounds — also honored
+// by llama.cpp's grammar. Without them a rambling reason overruns the 256-token
+// planner budget mid-string and the reply arrives as truncated, unterminated
+// JSON (another unusable class seen live). The bounds are generous for the
+// "one short sentence" the prompt asks for; parseReply does not itself cap
+// reason, so the ceiling only exists to keep the reply inside the token budget.
+func plannerReplySchema() json.RawMessage {
+	goals := sortedKeys(validGoals)
+	kinds := sortedKeys(validKinds)
+	// reasonMaxLen/targetMaxLen bound the model's free-text fields so a reply
+	// can't blow the planner's max_tokens budget through prose (see above).
+	const reasonMaxLen, targetMaxLen = 200, 80
+	step := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"goal":      map[string]any{"type": "string", "enum": goals},
+			"target":    map[string]any{"type": "string", "maxLength": targetMaxLen},
+			"kind":      map[string]any{"type": "string", "enum": kinds},
+			"qty":       map[string]any{"type": "integer"},
+			"after_min": map[string]any{"type": "number"},
+			"for_min":   map[string]any{"type": "number"},
+		},
+		"required": []string{"goal"},
+	}
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"goal":   map[string]any{"type": "string", "enum": goals},
+			"target": map[string]any{"type": "string", "maxLength": targetMaxLen},
+			"kind":   map[string]any{"type": "string", "enum": kinds},
+			"qty":    map[string]any{"type": "integer"},
+			"reason": map[string]any{"type": "string", "maxLength": reasonMaxLen},
+			"plan": map[string]any{
+				"type":     "array",
+				"maxItems": planStepCap,
+				"items":    step,
+			},
+		},
+		"required": []string{"goal", "reason"},
+	}
+	b, err := json.Marshal(schema)
+	if err != nil {
+		// The schema is built from literal maps; marshaling cannot fail. Panic
+		// is the honest response to an impossible state at package init.
+		panic("mind: planner reply schema marshal: " + err.Error())
+	}
+	return b
+}
+
+// plannerSchema is built once — validGoals/validKinds/planStepCap are
+// compile-time constants of the package, so the schema never changes at
+// runtime.
+var plannerSchema = plannerReplySchema()
 
 // validateKindQty normalizes and validates a drop/pick_up/deposit/withdraw
 // step's Kind/Qty against what the sim executor actually accepts

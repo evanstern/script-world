@@ -370,6 +370,12 @@ func (md *Mind) runPlan(job planJob) {
 		System:    job.system,
 		Prompt:    job.prompt,
 		MaxTokens: 256,
+		// Constrain the local model to the planner reply shape (TASK-58):
+		// the goal enum + step cap are enforced at the sampler so a 3B model
+		// can't free-generate its way past parseReply. Planner-only — musing,
+		// conversation, consolidation, etc. stay unconstrained.
+		ResponseSchema: plannerSchema,
+		SchemaName:     "plan",
 	})
 	cancel()
 	if err != nil {

@@ -88,4 +88,49 @@ func TestOpenAICompatReasoningEffort(t *testing.T) {
 	}
 }
 
+// TestOpenAICompatResponseFormat: Request.ResponseSchema rides the wire as a
+// well-formed response_format {type: json_schema} envelope when set, and no
+// response_format key appears at all when unset (the byte-identical baseline
+// non-planner kinds rely on — TASK-58).
+func TestOpenAICompatResponseFormat(t *testing.T) {
+	var got map[string]any
+	srv := captureServer(t, &got)
+	o := newOpenAICompat(srv.URL, "m", "", "")
+
+	schema := json.RawMessage(`{"type":"object","properties":{"goal":{"type":"string","enum":["forage","chop"]}},"required":["reason"]}`)
+	if _, _, _, err := o.call(context.Background(),
+		Request{Prompt: "x", ResponseSchema: schema, SchemaName: "plan"}); err != nil {
+		t.Fatal(err)
+	}
+	rf, ok := got["response_format"].(map[string]any)
+	if !ok {
+		t.Fatalf("response_format missing or wrong type: %v", got["response_format"])
+	}
+	if rf["type"] != "json_schema" {
+		t.Errorf("response_format.type = %v, want json_schema", rf["type"])
+	}
+	js, ok := rf["json_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("json_schema missing or wrong type: %v", rf["json_schema"])
+	}
+	if js["name"] != "plan" {
+		t.Errorf("json_schema.name = %v, want plan", js["name"])
+	}
+	sch, ok := js["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("json_schema.schema missing or not an object: %v", js["schema"])
+	}
+	if sch["type"] != "object" {
+		t.Errorf("schema round-trip mangled: schema.type = %v, want object", sch["type"])
+	}
+
+	got = nil
+	if _, _, _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["response_format"]; ok {
+		t.Errorf("response_format present with no ResponseSchema: %v", got["response_format"])
+	}
+}
+
 func strPtr(s string) *string { return &s }

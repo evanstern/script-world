@@ -13,6 +13,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -95,6 +96,14 @@ type Request struct {
 	// cognition (musings) set this; their fairness floor is the caller's
 	// business, not the orchestrator's.
 	BestEffort bool `json:"best_effort,omitempty"`
+	// ResponseSchema, when set, constrains the reply to this JSON Schema at
+	// the sampler level via the OpenAI-compat response_format {type:
+	// json_schema} envelope (Ollama honors it; TASK-58). SchemaName names the
+	// schema in that envelope. The cloud (Anthropic) provider ignores both —
+	// the caller's parser remains the final gate — so a request never fails
+	// for carrying a schema on a tier that can't use it.
+	ResponseSchema json.RawMessage `json:"response_schema,omitempty"`
+	SchemaName     string          `json:"schema_name,omitempty"`
 }
 
 type Response struct {
