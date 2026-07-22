@@ -1,10 +1,10 @@
 ---
 id: TASK-53
 title: 'Tool registry: single source of truth for agent capabilities (Layer 1)'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 02:49'
-updated_date: '2026-07-22 17:59'
+updated_date: '2026-07-22 18:16'
 labels:
   - llm
 dependencies: []
@@ -40,12 +40,12 @@ Spec: specs/014-tool-registry
 - [x] #2 Existing capabilities (10 verbs, say, muse, gist, metatron nudge) are registry entries; behavior- and replay-identical (existing event logs reproduce identical state)
 - [x] #3 Per-agent tool rosters exist; villager and metatron rosters expressed as data; an action outside an agent's roster is rejected at the door
 - [ ] #4 Injection doors and landing-ladder validation (generation, staleness, guards) unchanged and covered by tests
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational — the registry package (blocks all stories)
-- [ ] #7 Spec phase: User Story 1 — One place to define a capability (P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — Existing capabilities migrate unchanged (P2)
-- [ ] #9 Spec phase: User Story 3 — Capability is roster membership (P3)
-- [ ] #10 Spec phase: Polish & Cross-Cutting
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational — the registry package (blocks all stories)
+- [x] #7 Spec phase: User Story 1 — One place to define a capability (P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — Existing capabilities migrate unchanged (P2)
+- [x] #9 Spec phase: User Story 3 — Capability is roster membership (P3)
+- [x] #10 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -78,4 +78,12 @@ Remaining: Phase 6 (T029 ladder audit, T030 doc reconciliation incl. FR-008/FR-0
 spec-bridge sync: Setup: 0/4 · Foundational — the registry package (blocks all stories): 0/6 · User Story 1 — One place to define a capability (P1) 🎯 MVP: 0/9 · User Story 2 — Existing capabilities migrate unchanged (P2): 0/5 · User Story 3 — Capability is roster membership (P3): 0/4 · Polish & Cross-Cutting: 0/5
 
 PR #36 opened from .worktrees/task-53 (8 commits, phases 1–6 complete incl. wiki re-pin on-branch). Awaiting merge; post-merge: re-run spec-bridge:sync (phase mirrors re-check from merged tasks.md → Done-eligible), close TASK-55, remove worktree.
+
+spec-bridge sync: Setup: 4/4 · Foundational — the registry package (blocks all stories): 6/6 · User Story 1 — One place to define a capability (P1) 🎯 MVP: 9/9 · User Story 2 — Existing capabilities migrate unchanged (P2): 5/5 · User Story 3 — Capability is roster membership (P3): 4/4 · Polish & Cross-Cutting: 5/5 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 4/4 · Foundational — the registry package (blocks all stories): 6/6 · User Story 1 — One place to define a capability (P1) 🎯 MVP: 9/9 · User Story 2 — Existing capabilities migrate unchanged (P2): 5/5 · User Story 3 — Capability is roster membership (P3): 4/4 · Polish & Cross-Cutting: 5/5). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

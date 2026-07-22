@@ -3,10 +3,10 @@ id: TASK-55
 title: >-
   planGoals drift: spec-012 verbs rejected as multi-step plan steps (violates
   spec 012 FR-020)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 05:32'
-updated_date: '2026-07-22 17:57'
+updated_date: '2026-07-22 18:16'
 labels:
   - llm
 dependencies: []
@@ -31,3 +31,9 @@ Found 2026-07-22 while grounding spec 014 (TASK-53). The three action-vocabulary
 <!-- SECTION:NOTES:BEGIN -->
 Cured by TASK-53 / spec 014 on PR #36 (branch task-53-tool-registry): the plan-step accept set is now derived from the tool registry (tool.PlanStepGoals()), so all 9 spec-012 verbs are accepted at the sim door — TestPlanStepVocabulary (internal/sim/plan_test.go) pins the cure, and TestSingleWalkInvariant (internal/tool/registry_test.go) fails if prompt vocabulary and plan-step vocabulary ever diverge again (AC #2). Verified live: a multi-step plan naming collect_water landed in the T024 smoke world. Close as Done when PR #36 merges.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Cured by TASK-53 / spec 014, merged in PR #36: plan-step accept set derives from the tool registry (tool.PlanStepGoals()) — all 9 spec-012 verbs accepted at the sim door (TestPlanStepVocabulary), never-diverge guarded by TestSingleWalkInvariant. Verified live in the T024 smoke world (plan step collect_water landed).
+<!-- SECTION:FINAL_SUMMARY:END -->
