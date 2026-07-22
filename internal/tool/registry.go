@@ -83,6 +83,61 @@ func setPlanSchema(goals []string) json.RawMessage {
 	return b
 }
 
+// miracleKinds is the metatron turn's miracle vocabulary — the four kinds the
+// angel's work_miracle tool (spec 017 T019b) and internal/metatron's landMiracle
+// / BuildMiracleBatch (spec 016 turn contract) accept. It is declared here as
+// work_miracle's Enum descriptor rather than imported: internal/tool is a leaf
+// (research R1) and cannot see internal/metatron or internal/sim, so the
+// canonical list is MIRRORED, and internal/metatron's TestMiracleKindsMirrorTool
+// pins it equal to BuildMiracleBatch's accepted set so it cannot drift.
+var miracleKinds = []string{"move", "remove", "give_item", "time_snap"}
+
+// MiracleKinds returns a copy of work_miracle's kind vocabulary, in the order
+// above. Exported for internal/metatron's drift cross-check test.
+func MiracleKinds() []string {
+	out := make([]string, len(miracleKinds))
+	copy(out, miracleKinds)
+	return out
+}
+
+// miracleParams is work_miracle's flat parameter surface (spec 017 T019b,
+// mirroring spec 016's turn contract). `kind` is the sole required argument;
+// every other field is optional because the needed set is per-kind (move:
+// class/x/y/to_x/to_y; remove: class/x/y; give_item: villager/item/qty;
+// time_snap: day/time). The reducer dry-run enforces the per-kind requirements
+// at the door (metatron.landMiracle → BuildMiracleBatch → InjectSocial), and the
+// loop feeds a rejection back for repair, so a permissive flat schema is exactly
+// right — the door is the semantic authority, this only rejects shapes the model
+// can fix (wrong scalar type, missing kind, unknown kind).
+//
+// There is deliberately NO `gratis` parameter: the angel can NEVER waive a
+// charge (spec 016 FR-007/SC-005). Structural absence — not sanitizing a field
+// out — is the guarantee, exactly as the retired turnReply.Miracle struct had no
+// gratis field. The scalar Param model expresses this whole surface
+// (kind/class/villager/item as strings, day/qty/x/y/to_x/to_y as integers), so
+// work_miracle needs NO authored InputSchemaJSON: its schema is Params-derived
+// (InputSchema, derive.go), unlike set_plan whose steps ARRAY the scalar model
+// cannot express. This is also load-bearing for the loop driver — its
+// validateArgs routes every InputSchemaJSON tool through set_plan's structural
+// validator (toolloop/loop.go), so an authored override here would be validated
+// against set_plan's `steps` shape and every work_miracle call rejected; Params
+// keeps InputSchema derivation and validateArgs in agreement.
+func miracleParams() []Param {
+	return []Param{
+		{Name: "kind", Kind: Enum, Required: true, Enum: miracleKinds},
+		{Name: "class", Kind: Text},
+		{Name: "villager", Kind: AgentName},
+		{Name: "item", Kind: Text},
+		{Name: "qty", Kind: Number, Min: 1},
+		{Name: "day", Kind: Number},
+		{Name: "time", Kind: Text},
+		{Name: "x", Kind: Number},
+		{Name: "y", Kind: Number},
+		{Name: "to_x", Kind: Number},
+		{Name: "to_y", Kind: Number},
+	}
+}
+
 // storageParams is the shared `kind`+`qty` descriptor for the four storage
 // verbs (drop/pick_up/deposit/withdraw; build_chest takes neither). `qty` is
 // a Number param (Min 1, Max unbounded) — spec 017 R12 pays the spec-014 debt
@@ -198,6 +253,32 @@ var metatronTools = []Tool{
 		Params: []Param{{Name: "text", Kind: Text, MaxBytes: 400}},
 		Cost:   Cost{Charges: 1, TextCapBytes: 400},
 		Events: []string{"metatron.nudged", "agent.memory_added"}},
+	// work_miracle is the metatron's fourth loop tool (spec 017 T019b, R13
+	// amendment): a direct, charge-priced world edit landed through the SAME
+	// InjectSocial door the nudges use (metatron.landMiracle → the shared
+	// BuildMiracleBatch → Loop.InjectSocial). It is Effect EXPRESSIVE, not World,
+	// decided by the same rule that makes the nudges Expressive: it produces an
+	// immediate, bounded batch of whitelisted events through the social door —
+	// verbatim the EffectClass Expressive contract (tool.go). A World tool would
+	// instead produce an executor-grounded Intent through InjectIntent (a miracle
+	// has no intent and no work duration), and — decisively — Validate forbids a
+	// World tool from declaring Events, which work_miracle must, so that the
+	// sim-side coverage check (ValidateToolCoverage) can pin its event set ⊆ the
+	// whitelist. Being Expressive also keeps it out of every legacy villager
+	// World surface for free (isLegacyWorldTool requires Effect World), so those
+	// stay byte-stable with no exclusion flag.
+	//
+	// Gate Charge, like the nudges: the bank must hold at least one charge, and
+	// the reducer dry-run enforces the real per-kind price (2 for time_snap, 1
+	// for the rest, keyed by event type in sim.miracleCost). Cost.Charges is 1 —
+	// the gate's minimum, not the per-kind price. Its Events are the four miracle
+	// event types plus the FR-018 perception memory, all already on
+	// injectSocialWhitelist (spec 016).
+	{Name: "work_miracle", Effect: Expressive, Gate: Charge,
+		Params: miracleParams(),
+		Cost:   Cost{Charges: 1},
+		Events: []string{"metatron.time_snapped", "metatron.item_granted",
+			"metatron.entity_moved", "metatron.entity_removed", "agent.memory_added"}},
 }
 
 // registry is the authoritative collection of every tool, in registration

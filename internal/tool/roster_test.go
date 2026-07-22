@@ -35,14 +35,81 @@ func TestLoopRosterVillagerContents(t *testing.T) {
 	}
 }
 
-// TestLoopRosterMetatronContents: the metatron loop roster is converse,
-// nudge_dream, nudge_omen — the same membership and order as RosterMetatron,
-// resolved to full Tool values.
+// TestLoopRosterMetatronContents (spec 017 T020): the metatron loop roster is
+// nudge_dream, nudge_omen, work_miracle — the DECLARED loop surface, which
+// differs from RosterMetatron: converse is excluded (it is the final-answer
+// text channel, not a callable tool) and work_miracle is included (the R13
+// post-#38 amendment).
 func TestLoopRosterMetatronContents(t *testing.T) {
-	want := append([]string{}, RosterMetatron...)
+	want := []string{"nudge_dream", "nudge_omen", "work_miracle"}
 	got := namesOf(LoopRosterMetatron())
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoopRosterMetatron() names = %v, want %v", got, want)
+	}
+	// converse must NOT be declared to the loop (it has no handler by design).
+	if OnRoster(got, "converse") {
+		t.Error("converse leaked into the metatron loop roster — it is the text channel, not a tool")
+	}
+	for _, tl := range LoopRosterMetatron() {
+		if tl.Name == "" {
+			t.Error("LoopRosterMetatron returned a zero-value Tool")
+		}
+	}
+}
+
+// TestWorkMiracleSchema (spec 017 T019b): work_miracle's schema is Params-derived
+// (no authored InputSchemaJSON, unlike set_plan): a flat object, additionalProperties
+// false, required exactly ["kind"], kind an enum of MiracleKinds(), the integer/
+// string types per the turn contract, and — critically (spec 016 FR-007/SC-005) —
+// NO gratis property.
+func TestWorkMiracleSchema(t *testing.T) {
+	tl, ok := Lookup("work_miracle")
+	if !ok {
+		t.Fatal("work_miracle not registered")
+	}
+	if len(tl.InputSchemaJSON) != 0 {
+		t.Error("work_miracle must not carry an authored InputSchemaJSON — its schema is Params-derived")
+	}
+	if tl.Effect != Expressive {
+		t.Errorf("work_miracle.Effect = %v, want Expressive", tl.Effect)
+	}
+	if tl.Gate != Charge {
+		t.Errorf("work_miracle.Gate = %v, want Charge", tl.Gate)
+	}
+	raw := InputSchema(tl)
+	var schema struct {
+		Type       string   `json:"type"`
+		Required   []string `json:"required"`
+		Properties map[string]struct {
+			Type string   `json:"type"`
+			Enum []string `json:"enum"`
+		} `json:"properties"`
+		AdditionalProperties bool `json:"additionalProperties"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("work_miracle schema did not decode: %v\nraw: %s", err, raw)
+	}
+	if schema.Type != "object" || schema.AdditionalProperties {
+		t.Errorf("top-level shape wrong: type=%q additionalProperties=%v", schema.Type, schema.AdditionalProperties)
+	}
+	if !reflect.DeepEqual(schema.Required, []string{"kind"}) {
+		t.Errorf("required = %v, want [kind]", schema.Required)
+	}
+	if _, ok := schema.Properties["gratis"]; ok {
+		t.Error("work_miracle schema declares a gratis property — the angel can never waive a charge (SC-005)")
+	}
+	if !reflect.DeepEqual(schema.Properties["kind"].Enum, MiracleKinds()) {
+		t.Errorf("kind enum = %v, want %v", schema.Properties["kind"].Enum, MiracleKinds())
+	}
+	for _, name := range []string{"day", "qty", "x", "y", "to_x", "to_y"} {
+		if schema.Properties[name].Type != "integer" {
+			t.Errorf("property %q type = %q, want integer", name, schema.Properties[name].Type)
+		}
+	}
+	for _, name := range []string{"class", "villager", "item", "time"} {
+		if schema.Properties[name].Type != "string" {
+			t.Errorf("property %q type = %q, want string", name, schema.Properties[name].Type)
+		}
 	}
 }
 

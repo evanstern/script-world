@@ -23,6 +23,14 @@ var wantWorldOrder = []string{
 // muse, gist (data-model.md / T007) — captured separately below.
 var wantExpressive = []string{"say", "gist", "muse"}
 var wantMetatron = []string{"converse", "nudge_dream", "nudge_omen"}
+
+// wantMetatronCatalog is the metatron tools' catalog membership (registration
+// order): the RosterMetatron three plus work_miracle (spec 017 T019b). It is a
+// superset of wantMetatron (the name-only DOOR roster) because work_miracle is a
+// registered capability that lands through landMiracle, not through landNudge's
+// OnRoster(RosterMetatron) check — so it belongs in the catalog and the LOOP
+// roster, but RosterMetatron (the pre-loop door roster) is left unchanged.
+var wantMetatronCatalog = []string{"converse", "nudge_dream", "nudge_omen", "work_miracle"}
 var wantVillagerExpressiveTail = []string{"say", "muse", "gist"}
 
 // TestCatalogCompleteness: every catalog row is present, nothing extra is
@@ -45,7 +53,7 @@ func TestCatalogCompleteness(t *testing.T) {
 	}
 
 	wantAll := make(map[string]bool)
-	for _, n := range append(append(append(append([]string{}, wantWorldOrder...), "set_plan"), wantExpressive...), wantMetatron...) {
+	for _, n := range append(append(append(append([]string{}, wantWorldOrder...), "set_plan"), wantExpressive...), wantMetatronCatalog...) {
 		wantAll[n] = true
 	}
 	for n := range gotAll {
@@ -160,7 +168,9 @@ func TestTestOnlyToolFlows(t *testing.T) {
 // Number param (Min 1, unbounded Max) on exactly the four storage verbs —
 // build_chest takes neither kind nor qty.
 func TestStorageVerbsCarryQty(t *testing.T) {
-	wantQty := map[string]bool{"drop": true, "pick_up": true, "deposit": true, "withdraw": true}
+	// The four storage verbs (spec 014 debt, R12) plus work_miracle's give_item
+	// (spec 017 T019b) carry an optional, Min-1, unbounded qty.
+	wantQty := map[string]bool{"drop": true, "pick_up": true, "deposit": true, "withdraw": true, "work_miracle": true}
 
 	for _, tl := range All() {
 		var qty *Param
