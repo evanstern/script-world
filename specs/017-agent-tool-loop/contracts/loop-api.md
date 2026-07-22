@@ -107,8 +107,15 @@ type Result struct {
 // Run drives the bounded loop: submit → dispatch → feed back → repeat.
 // Guarantees: terminates within MaxRounds; at most one landed acting call;
 // every model tool call produces exactly one Record; Read-effect tools never
-// consume the action; SkipObserve set on every internal Submit; exactly one
-// ObserveCognition report on return.
+// consume the action; SkipObserve set on every internal Submit; the estimator
+// is fed at most once per Run, and ONLY for completed cognitions (landed /
+// model_done / cap_exhausted — terminations that measure completed model
+// work). Refused or errored loops (admission_refused / provider_error /
+// ctx_done) feed NOTHING — the successes-only doctrine the worker path
+// documents ("a fast failure is not a latency observation of completed
+// thought"). [Amended 2026-07-22, T025 FILED-1: the original "exactly one
+// report on every return path" fed 0ms refusals into the EWMA, collapsing
+// the estimate toward zero under sustained refusal.]
 func Run(ctx context.Context, orch *llm.Orchestrator, j Job) (Result, error)
 ```
 
@@ -130,7 +137,10 @@ func InputSchema(t Tool) json.RawMessage
 
 // LoopRoster returns the ordered declared-tool list for a cognition kind.
 func LoopRosterVillager() []Tool // world verbs + set_plan + muse
-func LoopRosterMetatron() []Tool // converse, nudge_dream, nudge_omen
+func LoopRosterMetatron() []Tool // as-built (T020): nudge_dream, nudge_omen,
+                                 // work_miracle — converse is deliberately NOT
+                                 // declared; the model's final text IS the
+                                 // converse channel (model_done terminates)
 ```
 
 Catalog delta: `set_plan` entry (World, Resolvable, authored schema); `qty` Number

@@ -57,7 +57,9 @@ rows extend it. Their `kind`/`qty` argument surface is carried by
 keeps it — it is not a capability-vocabulary list). The `qty` integer argument has no
 representable `ParamKind` in the fixed contract (`AgentName`/`Text`/`Enum`), so only
 `kind` is modeled as a Param here (flagged for TASK-52, which consumes Params for
-tool-call parsing).
+tool-call parsing). **Debt paid (spec 017 / TASK-52, 2026-07-22)**: `ParamKind Number`
+(with `Min`/`Max`) now exists and `qty` is a declared optional Number param (Min 1) on
+`drop`/`pick_up`/`deposit`/`withdraw`.
 
 `PlanStep: true` across all rows IS the FR-012 delta — but post-TASK-51 the delta is the
 **9 spec-012 verbs** (`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
@@ -93,7 +95,20 @@ enforcer (R7).
 ## Read tools
 
 Zero entries. The `Read` effect class exists in the type system only (FR-002); startup
-validation rejects any roster referencing a Read tool in this layer.
+validation rejects any roster referencing a Read tool in this layer. **Superseded (spec
+017 / TASK-52, 2026-07-22)**: `Validate` now admits Read-effect roster entries — the
+tool-use loop is the consumer this restriction was reserved for. Production Read tools
+arrive with TASK-16 (journal).
+
+## Post-014 catalog extensions (registered by later specs)
+
+This catalog was the spec-014 migration contract ("nothing else may be registered") at
+migration time; later specs extend the registry under their own contracts:
+
+- `set_plan` — spec 017 (World, Resolvable, authored steps InputSchemaJSON, villager
+  loop roster only; excluded from every legacy derived surface).
+- `work_miracle` — spec 017 post-#38 amendment (Expressive, Charge, flat Params over
+  the spec-016 miracle surface, metatron loop roster; gratis structurally absent).
 
 ## Explicitly NOT in the catalog (clarified 2026-07-22)
 

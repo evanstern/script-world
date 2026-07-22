@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 23:31'
+updated_date: '2026-07-22 23:51'
 labels:
   - agent-mind
   - llm
@@ -91,4 +91,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Sonnet landed T021 (ba1dd4f: TestToolModeEquivalenceNativeVsJSON in internal/toolloop — real Orchestrator vs two scripted httptest servers; full driver-level equivalence (records/termination/final/rounds identical) with confirmed wire-level divergence; zero bugs found) and T022 (836cd27: README operator docs for loop_max_rounds + tool_mode incl when-to-flip-to-json cues; docs/wiki untouched per lifecycle). US4 complete — board AC#3 satisfied. Remaining: T014-T015 (US2), T023-T024 (US5), polish T025-T028.
 
 2026-07-22 Opus 4.8 landed the verification slice: T014 (evidence-only — git audit: whole_feature_test.go/sim_test.go byte-unchanged vs origin/main, all pre-existing replay harnesses untouched and green), T015 (8d7ad7c: TestLoopRunReplayByteIdenticalSC002 — full loop artifact set incl rejected cog.tool_call/Job-carrying intent_set+plan_set/muse thought; genesis AND snapshot replay byte-identical vs LIVE state; structural zero-invocation; paused-loop race-free fixture; -race clean), T023 (88c8480: whole-loop estimator obs exactly once w/ separable EWMA proof, SkipObserve leak-free, non-loop feeding regression-guarded; budget-exhausted mid-loop refused pre-HTTP w/ exact spend; route purity already pinned), T024 (db5f5e7: calibrate planner probe drives real toolloop.Run w/ production roster + whole-loop wall time — seed unit == observation unit; cloud probe deliberately unchanged, consolidation is single-shot by FR-014 and metatron cloud spend not invited). Full suite incl e2e green. US2+US5 complete. T025 target flagged: LoopRosterVillager() may iterate a map — tool-declaration order determinism matters for Anthropic prompt-cache prefix stability.
+
+2026-07-22 Opus 4.8 ran T025 adversarial pass (653fa68): 15 attack tests, 9/10 invariants VERIFIED outright (termination under adversarial batches/truncation, cardinality incl land-then-error and gate-reject-then-land, record density/capping/aliasing, cap off-by-ones incl mixed final batch, transcript invariant, env-round uniqueness, wire-declaration determinism pinned byte-equal x32 — the flagged map-iteration order issue does NOT exist on the branch, door atomicity, production race-cleanliness). Two FILED: (1) governor estimator fed on failure paths — 0ms refusals collapse EWMA toward zero under sustained refusal; planning tier RULED successes-only (landed/model_done/cap_exhausted feed; refusals/errors feed nothing), loop-api.md Run guarantee amended, cure = T025b (in flight); (2) pre-existing -race failure in mind test harness (T019 fixture aliases live sim state as replica) — also T025b. T026 done by planning tier: spec-014 catalog reconciled (Number/qty debt paid, Read restriction superseded, post-014 extensions section for set_plan/work_miracle), loop-api roster comment as-built.
 <!-- SECTION:NOTES:END -->

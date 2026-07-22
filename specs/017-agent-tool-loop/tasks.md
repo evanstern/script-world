@@ -210,10 +210,18 @@ live-vs-replay byte-identity on a loop-era run.
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T025 (Opus 4.8) Adversarial verification pass over the loop driver + door
+- [x] T025 (Opus 4.8) Adversarial verification pass over the loop driver + door
       handlers (cardinality races, batched-call edge cases, cap off-by-one, transcript
       growth vs MaxTokens) — findings fixed or filed
-- [ ] T026 [P] (Sonnet) Reconcile spec-014 tool-catalog contract (the recorded qty/
+- [ ] T025b (Opus 4.8) Cure the two T025 filed findings: (1) FILED-1 governor defect —
+      loop feeds estimator only on completed terminations (landed/model_done/
+      cap_exhausted), nothing on admission_refused/provider_error/ctx_done, per the
+      amended loop-api.md Run guarantee (successes-only doctrine); failing-test-first
+      in internal/toolloop, adjust T023's whole-loop tests if they pinned the old rule.
+      (2) FILED-2 pre-existing -race failure in the mind test harness
+      (internal/mind/handlers_test.go newLoopMind aliases live sim state as replica) —
+      freeze the replica snapshot so go test -race ./internal/mind/ passes.
+- [x] T026 [P] (Sonnet) Reconcile spec-014 tool-catalog contract (the recorded qty/
       ParamKind debt note) and this spec's contracts to as-shipped values, in
       specs/014-tool-registry/contracts/tool-catalog.md +
       specs/017-agent-tool-loop/contracts/
