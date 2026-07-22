@@ -29,6 +29,16 @@ func TestMain(m *testing.M) {
 	if out, err := build.CombinedOutput(); err != nil {
 		panic(fmt.Sprintf("build: %v\n%s", err, out))
 	}
+	// Package-wide hermetic home: every subprocess this package execs
+	// inherits os.Environ() at Start time (nil Env), so tests must never
+	// resolve to the developer's real ~/.promptworld registry regardless of
+	// which test forgets to isolate itself. manager_e2e_test.go's
+	// isolatedHome layers a per-test t.Setenv on top of this baseline.
+	home := filepath.Join(tmp, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		panic(err)
+	}
+	os.Setenv("PROMPTWORLD_HOME", home)
 	code := m.Run()
 	os.RemoveAll(tmp)
 	os.Exit(code)
