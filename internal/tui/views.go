@@ -831,8 +831,12 @@ func (m Model) chronicleNarratedBody(width, rows int) string {
 	return header + "\n\n" + strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
-// chronicleRawBody is the raw event feed formatted by the chronicle
-// grammar (patterns/chronicle-grammar.md), auto-following the tail.
+// chronicleRawBody is the raw event feed formatted by the chronicle digest
+// grammar (contracts/digest-grammar.md), auto-following the tail. R8:
+// window first, then format — only the tail slice of events that could
+// possibly land in the visible budget is digested, not the whole 256-event
+// ring, so per-frame cost stays O(visible rows) even at max time
+// compression (SC-005).
 func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 	narrated := m.replica != nil && len(m.replica.Chronicle) > 0
 	hint := "raw feed · no narrated entries yet — the narrator writes at day and night boundaries"
@@ -843,19 +847,32 @@ func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 		return styleDim.Render(hint) + "\n\n" +
 			styleDim.Render("no events yet this session — the chronicle fills as the world moves")
 	}
-	names := m.agentNames()
-	var out []string
-	for _, e := range m.events {
-		l := formatChronicleLine(e, names)
-		out = append(out, renderChronicleRow(l, width, maxWrap, false))
-	}
-	all := strings.Split(strings.Join(out, "\n"), "\n")
 	// B1/B5: `rows` is this body's *entire* row budget; hint+blank above
 	// already spend 2 of it (see chronicleNarratedBody).
 	entryRows := rows - 2
 	if entryRows < 3 {
 		entryRows = 3
 	}
+	// Each event contributes at least one physical line, so the tail
+	// `entryRows` events are always enough to fill (and, once wrapped,
+	// potentially overfill) the budget — the physical-line slice below
+	// trims any overshoot from dock-mode wrapping.
+	events := m.events
+	if len(events) > entryRows {
+		events = events[len(events)-entryRows:]
+	}
+	names := m.agentNames()
+	dock := maxWrap > 1
+	lines := make([]chronicleLine, len(events))
+	for i, e := range events {
+		lines[i] = formatChronicleLine(e, names)
+	}
+	cols := computeChronicleColumns(lines, dock)
+	var out []string
+	for _, l := range lines {
+		out = append(out, renderChronicleRow(l, cols, width, maxWrap, false))
+	}
+	all := strings.Split(strings.Join(out, "\n"), "\n")
 	if len(all) > entryRows {
 		all = all[len(all)-entryRows:]
 	}
@@ -906,16 +923,20 @@ func (m Model) chronicleInspectBody(width, rows int) string {
 			start = 0
 		}
 	}
+	lines := make([]chronicleLine, 0, end-start)
+	for i := start; i < end; i++ {
+		lines = append(lines, formatChronicleLine(m.events[i], names))
+	}
+	cols := computeChronicleColumns(lines, false) // inspect is always tick-shown (solo-style)
 	var out []string
 	for i := start; i < end; i++ {
-		e := m.events[i]
-		l := formatChronicleLine(e, names)
+		l := lines[i-start]
 		selected := i == sel
 		marker := "  "
 		if selected {
 			marker = styleFeedSelect.Render("▌") + " "
 		}
-		out = append(out, marker+renderChronicleRow(l, width-2, 1, selected))
+		out = append(out, marker+renderChronicleRow(l, cols, width-2, 1, selected))
 		if m.chronExpanded && m.chronExpIdx == i {
 			out = append(out, expBlock)
 		}
@@ -931,16 +952,23 @@ func indentBlock(s, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderChronicleRow styles+wraps/truncates one formatted line to width.
-func renderChronicleRow(l chronicleLine, width, maxWrap int, selected bool) string {
-	plain := plainChronicleLine(l)
+// renderChronicleRow styles+wraps/truncates one formatted line to width,
+// given the shared window's column layout (R5). Styling here is a minimal
+// placeholder — the clock family tint and the speech privilege, matching
+// today's look — until Phase 5 (T020-T022) lands the full family/role
+// palette (data-model.md "Style tokens"); it is not yet ANSI-per-segment.
+func renderChronicleRow(l chronicleLine, cols chronicleColumns, width, maxWrap int, selected bool) string {
+	plain := plainChronicleLine(l, cols)
 	lines := wrapOrTruncatePlain(plain, width, maxWrap)
 	style := styleDim
-	switch l.Class {
-	case classClock:
+	if l.Family == familyClock {
 		style = styleFeedClock
-	case classSpeech:
-		style = styleFeedSpeech
+	}
+	for _, s := range l.Summary {
+		if s.Role == segSpeech {
+			style = styleFeedSpeech
+			break
+		}
 	}
 	if selected {
 		style = style.Reverse(true)
