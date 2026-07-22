@@ -1,10 +1,10 @@
 ---
 id: TASK-50
 title: 'Resources, food, and crafting v1'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 20:54'
-updated_date: '2026-07-22 04:40'
+updated_date: '2026-07-22 04:55'
 labels: []
 dependencies: []
 ordinal: 44000
@@ -27,8 +27,8 @@ Spec: specs/012-resources-food-crafting
 - [x] #5 Spec phase: User Story 3 — Crafting chain: planks, refined stone, spear (P3)
 - [x] #6 Spec phase: User Story 4 — The oven: meals and baths (P4)
 - [x] #7 Spec phase: User Story 5 — Shelter joins the plank economy (P5)
-- [ ] #8 Spec phase: Polish & Cross-Cutting
-- [ ] #9 Spec phase: User Story 6 — An old world's people survive the new world (P6)
+- [x] #8 Spec phase: Polish & Cross-Cutting
+- [x] #9 Spec phase: User Story 6 — An old world's people survive the new world (P6)
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -59,4 +59,12 @@ Phase 9 COMPLETE (Sonnet, commit b5c6f72): T043-T045 green — fire-burnout witn
 Discoverability verified (user request): v2 binary resolves myworld-01 via every verb — ps/ps --all (clean single row), status, start/stop (live-run proven), attach (dials correct socket), ui (same resolveWorld path; TTY-only failure in headless session). Ops hygiene: backup moved OUT of the scanned worlds home to ~/.scriptworld/backups/myworld-01.backup-pre-v2 (was polluting ps --all as 'unreadable'); stale TASK-49 registry entry removed. Pre-merge caveat: the current main (v1) binary shows myworld-01 as 'unreadable' and start fails — expected, closes when PR #31 merges.
 
 T042 COMPLETE (orchestrator ops): myworld-01 migrated LIVE — precondition initially refused on a real-world shape (daemon.stopped appended after the shutdown snapshot; unsatisfiable exact-coverage), folded back as FR-024/R10 amendment (1576987) + implementation fix (e0a5eb4, Opus resume) with both tail-shape tests. Migration result: 8 souls carried at tick 269804/day 4 (Rowan 198 memories, 204 rumors, 51 relations, 64 conversations, chronicle intact; Fern's 107 legacy food → 321 meals; wood 1:1), structures/overlays reset, new log = world.created + world.migrated only, manifest v2, 114507 events archived in world.v1.db, full dir backup now at ~/.scriptworld/backups/myworld-01.backup-pre-v2. Live run under v2: ticks advance, needs decay, 0 deaths; stopped clean. PR #31 opened (T046) and MERGED. [Note re-appended on root after landing in the worktree's backlog copy by cwd accident.]
+
+spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Stone and water enter the world (P1) 🎯 MVP: 8/8 · User Story 2 — Fine-grained food and cooking at the fire (P2): 9/9 · User Story 3 — Crafting chain: planks, refined stone, spear (P3): 4/4 · User Story 4 — The oven: meals and baths (P4): 6/6 · User Story 5 — Shelter joins the plank economy (P5): 2/2 · User Story 6 — An old world's people survive the new world (P6): 5/5 · Polish & Cross-Cutting: 5/5 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 2/2 · Foundational (Blocking Prerequisites): 6/6 · User Story 1 — Stone and water enter the world (P1) 🎯 MVP: 8/8 · User Story 2 — Fine-grained food and cooking at the fire (P2): 9/9 · User Story 3 — Crafting chain: planks, refined stone, spear (P3): 4/4 · User Story 4 — The oven: meals and baths (P4): 6/6 · User Story 5 — Shelter joins the plank economy (P5): 2/2 · User Story 6 — An old world's people survive the new world (P6): 5/5 · Polish & Cross-Cutting: 5/5). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
