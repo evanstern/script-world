@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: de1ef19fa25b80bedee1923a43803631e9ce2844
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Agent mind
@@ -121,11 +121,17 @@ directly. The reply's first JSON object is parsed against the goal
 vocabulary — widened by spec 012 from the original ten goals to nineteen
 (`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
 `craft_stone`, `craft_spear`, `build_oven`, `bathe`), and by spec 013's
-storage economy to twenty-four: `validGoals` (parse.go) and the prompt's
-`goalVocabulary` constant both gained `drop`, `pick_up`, `build_chest`,
-`deposit`, and `withdraw`, each with a one-line behavior gloss appended to
+storage economy to twenty-four (`drop`, `pick_up`, `build_chest`,
+`deposit`, `withdraw`), each with a one-line behavior gloss in
 `systemPrompt` so the planner knows what it's choosing before it commits to
-a goal. The five storage goals carry an extra argument surface — `kind` (an
+a goal. Since spec 014 (TASK-53) the vocabulary has ONE source: the parser's
+accept set is `worldGoals` (parse.go), derived from the [[tool-registry]]'s
+World-class villager-roster names, and the prompt's goal line + gloss block
+come from `tool.VocabularyLine()`/`tool.PromptGlossBlock()` — the old
+hand-maintained `validGoals` map and `goalVocabulary` constant are gone
+(`prompt_golden_test.go` pins the derived prompt byte-identical to the old
+one). The expressive text caps (say 300 bytes, gist 200 bytes, muse 200
+runes) are likewise registry reads now, at identical values. The five storage goals carry an extra argument surface — `kind` (an
 inventory item key) and `qty` (a per-kind cap, 0/omitted meaning "all") on
 both `planReply` and `planStepReply` — validated by `validateKindQty`
 against `validKinds`, the same canonical item-key set the sim executor reads
@@ -139,8 +145,9 @@ noise. The contract now allows either one goal or a guarded plan of at most
 guard anchored at the snapshot tick, `for_min` bounds each step's window
 (`injectPlan`), and each step's Kind/Qty rides `sim.PlanStep` the same way.
 Since TASK-58 the same contract is also enforced at the sampler:
-`plannerReplySchema()` (parse.go) generates a JSON Schema from `validGoals`,
-`validKinds`, and `planStepCap` — never a hand-copied duplicate — and `runPlan`
+`plannerReplySchema()` (parse.go) generates a JSON Schema from `worldGoals`
+(the [[tool-registry]]-derived accept set), `validKinds`, and `planStepCap`
+— never a hand-copied duplicate — and `runPlan`
 attaches it to the planner call as `llm.Request.ResponseSchema`
 ([[llm-orchestrator]] turns it into an OpenAI-style structured-outputs
 `response_format` on the local tier). The schema requires `goal` and `reason`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 )
 
 // Metatron's world-visible surface (TASK-12): the charge economy and the
@@ -19,9 +20,16 @@ const (
 	// grace (a reign begins with one favor).
 	MetatronChargeCap      = 3
 	MetatronGenesisCharges = 1
-	// NudgeTextMax caps the villager-bound rendering.
-	NudgeTextMax = 400
 )
+
+// NudgeTextMax caps the villager-bound rendering — read from the tool registry
+// (spec 014 T021/R7): the nudge tools' TextCapBytes (400). The reducer dry-run
+// stays the enforcer; the registry is the single source of the cap, so the
+// enforcer and the metatron-side truncation can never carry divergent literals.
+var NudgeTextMax = func() int {
+	t, _ := tool.Lookup("nudge_dream")
+	return t.Cost.TextCapBytes
+}()
 
 type (
 	// MetatronNudgedPayload is the injected spend + record: form "dream"
@@ -54,6 +62,12 @@ func (s *State) applyMetatron(e store.Event) error {
 		}
 		if s.MetatronCharges <= 0 {
 			return fmt.Errorf("apply %s: no charges banked", e.Type)
+		}
+		// Roster enforcement (spec 014 US3, FR-008): only the metatron nudge
+		// forms (nudge_dream / nudge_omen) may land. The dry-run refuses anything
+		// else exactly like an unknown form — same reason string.
+		if !tool.OnRoster(tool.RosterMetatron, "nudge_"+p.Form) {
+			return fmt.Errorf("apply %s: unknown form %q", e.Type, p.Form)
 		}
 		switch p.Form {
 		case "dream":

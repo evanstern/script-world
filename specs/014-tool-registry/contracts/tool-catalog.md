@@ -2,41 +2,70 @@
 
 The complete enumeration of registry entries this layer ships. This is the migration
 contract: every row must exist as a registry entry, and NOTHING else may be registered.
-Attribute values marked "= today" are carried verbatim from the named source at
-implementation time (TASK-51 may have grown the verb set by then — the catalog extends
-to whatever `goalVocabulary` holds on main when implementation branches; the shape of
-each row is fixed here).
+Attribute values originally marked "= today" (carried verbatim from the named source at
+implementation time — TASK-51 grew the verb set first, so the catalog extended to
+whatever `goalVocabulary` held on main when implementation branched; the shape of each
+row was fixed here) are now reconciled below to the actual shipped values (T030).
 
 ## World tools (Effect: World → InjectIntent; villager roster)
 
-Registration order = today's `goalVocabulary` order (`internal/mind/prompt.go:15`) —
-this order is the byte-identity anchor for the derived prompt string (SC-003).
+Registration order = the pre-refactor `goalVocabulary` order, shipped as
+`internal/tool/registry.go`'s registry-slice order — this order is the byte-identity
+anchor for the derived prompt string, verified unchanged by
+`internal/mind/prompt_golden_test.go` (SC-003).
+
+**Reconciled 2026-07-22 (T030)**: cells below carry the actual shipped values from
+`internal/tool/registry.go` / `internal/sim/agents.go`, replacing the "= today"
+placeholders written before implementation. PromptGloss text now lives in
+`internal/tool/registry.go` as the `gloss*` constants (byte-carried from the old
+`internal/mind/prompt.go`, per T011); rows that share a gloss block with a sibling verb
+say so explicitly, matching the drop/build_chest convention below.
 
 | Name | Params | Gate | DurationTicks | PlanStep | ReflexEligible | PromptGloss |
 |---|---|---|---|---|---|---|
-| forage | — | resolvable | = today (`agents.go:255–265`) | true | true | — |
-| chop | — | resolvable | = today | true | true | — |
-| hunt | — | resolvable | = today | true | true (via foodIntent) | — |
-| build_fire | — | resolvable | = today | true | true | — |
-| build_shelter | — | resolvable | = today | true | false | — |
-| eat | — | resolvable | = today | true | true | — |
+| forage | — | resolvable | 120 (`forageTicks`) | true | true | — |
+| chop | — | resolvable | 300 (`chopTicks`) | true | true | — |
+| hunt | — | resolvable | 900 (`huntTicks`; spear override `huntTicksSpear` 600 stays executor-side) | true | true (via foodIntent) | — |
+| build_fire | — | resolvable | 600 (`buildFireTicks`) | true | true | — |
+| build_shelter | — | resolvable | 1200 (`buildShelterTicks`) | true | false | — |
+| eat | — | resolvable | 0 (instant) | true | true | — |
 | sleep | — | resolvable | 0 (instant) | true | true | — |
 | wander | — | resolvable | 0 (instant) | true | true | — |
 | goto_warmth | — | resolvable | 0 (instant) | true | true | — |
 | talk_to | target: agentName, required | resolvable (+ alive/present guards built mind-side, unchanged) | 0 (instant) | true | false | — |
-| quarry | — | resolvable | = today | true | false | = today (`prompt.go:27`) |
-| collect_water | — | resolvable | = today | true | false | = today |
-| cook | — | resolvable | = today (+ `workDuration` oven override stays executor-side) | true | false | = today (`prompt.go:28`) |
-| refuel_fire | — | resolvable | 0 (instant) | true | true (shared goal, spec 012 FR-020) | = today |
-| craft_planks | — | resolvable | = today | true | false | = today (`prompt.go:29`) |
-| craft_stone | — | resolvable | = today | true | false | = today |
-| craft_spear | — | resolvable | = today (+ spear hunt override stays executor-side) | true | false | = today |
-| build_oven | — | resolvable | = today | true | false | = today (`prompt.go:30`) |
-| bathe | — | resolvable | = today | true | false | = today |
+| quarry | — | resolvable | 400 (`quarryTicks`) | true | false | `glossQuarry` |
+| collect_water | — | resolvable | 60 (`collectWaterTicks`) | true | false | — (shares quarry's gloss line, `glossQuarry`) |
+| cook | — | resolvable | 240 (`cookFireTicks`; oven override `cookOvenTicks` 360 stays executor-side) | true | false | `glossCook` |
+| refuel_fire | — | resolvable | 0 (instant) | true | true (shared goal, spec 012 FR-020) | — (shares cook's gloss line, `glossCook`) |
+| craft_planks | — | resolvable | 180 (`craftPlanksTicks`) | true | false | `glossCraft` |
+| craft_stone | — | resolvable | 180 (`craftStoneTicks`) | true | false | — (shares craft_planks's gloss line, `glossCraft`) |
+| craft_spear | — | resolvable | 240 (`craftSpearTicks`; hunt's spear-carry override `huntTicksSpear` is a separate constant and stays executor-side) | true | false | — (shares craft_planks's gloss line, `glossCraft`) |
+| build_oven | — | resolvable | 900 (`buildOvenTicks`) | true | false | `glossBuildOven` |
+| bathe | — | resolvable | 240 (`batheTicks`) | true | false | — (shares build_oven's gloss line, `glossBuildOven`) |
+| drop | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | `glossDrop` |
+| pick_up | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares drop's gloss line, `glossDrop`) |
+| build_chest | — | resolvable | 600 (`buildFireTicks`, reused per `recipes.go`'s build_chest recipe entry) | true | false | `glossBuildChest` |
+| deposit | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares build_chest's gloss line, `glossBuildChest`) |
+| withdraw | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares build_chest's gloss line, `glossBuildChest`) |
 
-`PlanStep: true` across all rows IS the FR-012 delta (today `planGoals` admits only the
-first 10). `ReflexEligible` is declarative doctrine data mirroring `decideIntent`
-(`policy.go:24–112`), which stays hand-written.
+**T002 re-enumeration (post-TASK-51 / spec 013 merged, 2026-07-22)**: `goalVocabulary`
+now holds 24 world verbs — the 19 above plus the 5 storage verbs (`drop`, `pick_up`,
+`build_chest`, `deposit`, `withdraw`) added by spec 013. The catalog shape is fixed; these
+rows extend it. Their `kind`/`qty` argument surface is carried by
+`validateKindQty`/`validKinds` (`internal/mind/parse.go`) and `Kind`/`Qty` on
+`sim.InjectArgs`/`sim.PlanStep`; `validKinds` is NOT migrated in this layer (parse.go
+keeps it — it is not a capability-vocabulary list). The `qty` integer argument has no
+representable `ParamKind` in the fixed contract (`AgentName`/`Text`/`Enum`), so only
+`kind` is modeled as a Param here (flagged for TASK-52, which consumes Params for
+tool-call parsing).
+
+`PlanStep: true` across all rows IS the FR-012 delta — but post-TASK-51 the delta is the
+**9 spec-012 verbs** (`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
+`craft_stone`, `craft_spear`, `build_oven`, `bathe`): today's `planGoals`
+(`internal/sim/plan.go`) admits 15 — the first 10 plus the 5 spec-013 storage verbs,
+which TASK-51 added to `planGoals` correctly. Only the 9 spec-012 verbs remain missing
+from `planGoals`, so they alone are the cured drift. `ReflexEligible` is declarative
+doctrine data mirroring `decideIntent` (`policy.go:24–112`), which stays hand-written.
 
 ## Expressive tools (Effect: Expressive → InjectSocial; villager roster)
 

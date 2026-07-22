@@ -60,7 +60,7 @@ the door (was: rejected). This is the drift cure — the only behavioral differe
 ## 5. Rosters enforced (SC-005)
 
 ```sh
-go test ./internal/sim -run TestRoster
+go test ./internal/sim -run OutOfRoster
 go test ./internal/metatron
 ```
 

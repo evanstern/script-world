@@ -6,7 +6,7 @@ sources:
   - internal/sim/state.go
   - internal/sim/agents.go
   - internal/sim/recipes.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Sim state & reducer

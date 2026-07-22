@@ -11,6 +11,7 @@ import (
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -520,8 +521,14 @@ func (l *Loop) handleCommand(cmd command) error {
 				reject(OutcomeRejectedGuard, fmt.Sprintf("plan has %d steps (cap %d)", len(in.Plan), PlanStepCap))
 				break
 			}
+			// The plan-step accept set is DERIVED from the tool registry
+			// (spec 014, FR-006): names carrying PlanStep == true. This cures
+			// the shipped drift (FR-012 / TASK-55) — the 9 spec-012 verbs the
+			// old hand-maintained plan map dropped are now accepted, the sole
+			// permitted behavioral delta.
+			planStepGoals := tool.PlanStepGoals()
 			for si := range in.Plan {
-				if !planGoals[in.Plan[si].Goal] {
+				if !planStepGoals[in.Plan[si].Goal] {
 					reject(OutcomeRejectedGuard, fmt.Sprintf("plan step %d: unknown goal %q", si, in.Plan[si].Goal))
 					break
 				}
@@ -537,6 +544,17 @@ func (l *Loop) handleCommand(cmd command) error {
 			}
 			emit("agent.plan_set", PlanSetPayload{Agent: in.Agent, Job: in.JobID, Steps: in.Plan})
 		} else {
+			// Roster door check (spec 014 US3, FR-008/FR-009): capability is
+			// roster membership. The goal must be a World tool on the villager
+			// roster; an out-of-roster tool (a metatron converse/nudge) or an
+			// unknown name is rejected here — recorded, non-fatal, with the same
+			// reason and kind as an unknown goal today. Real planner traffic (the
+			// world verbs) all resolve on the roster, so its accept set is
+			// unchanged.
+			if td, ok := tool.Lookup(in.Goal); !ok || td.Effect != tool.World || !tool.OnRoster(tool.RosterVillager, in.Goal) {
+				reject(OutcomeRejectedGuard, fmt.Sprintf("unknown goal %q", in.Goal))
+				break
+			}
 			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, in.Kind, in.Qty, l.state.Tick)
 			if rerr != nil {
 				// resolveGoal is the repair path; failing here means no

@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// TestPlannerReplySchema (TASK-58): the generated structured-output schema is
-// valid JSON, its goal enum is exactly the validGoals set (not a hand-copied
+// TestPlannerReplySchema (TASK-58, updated spec 014): the generated
+// structured-output schema is valid JSON, its goal enum is exactly the
+// worldGoals set (the registry-derived door accept set, not a hand-copied
 // drift), and its plan array cap is planStepCap — the single-source-of-truth
 // guarantee that lets the sampler constraint and parseReply's gate agree.
 func TestPlannerReplySchema(t *testing.T) {
@@ -38,9 +39,9 @@ func TestPlannerReplySchema(t *testing.T) {
 		t.Fatalf("unmarshal schema: %v", err)
 	}
 
-	// Top-level goal enum == validGoals, exactly.
+	// Top-level goal enum == worldGoals, exactly.
 	assertEnumIsGoals(t, "top-level goal", schema.Properties.Goal.Enum)
-	// Plan step goal enum == validGoals, exactly (steps carry the same vocab).
+	// Plan step goal enum == worldGoals, exactly (steps carry the same vocab).
 	assertEnumIsGoals(t, "plan step goal", schema.Properties.Plan.Items.Properties.Goal.Enum)
 
 	if schema.Properties.Plan.MaxItems != planStepCap {
@@ -62,17 +63,17 @@ func TestPlannerReplySchema(t *testing.T) {
 
 func assertEnumIsGoals(t *testing.T, label string, enum []string) {
 	t.Helper()
-	if len(enum) != len(validGoals) {
-		t.Errorf("%s enum has %d values, want %d (validGoals)", label, len(enum), len(validGoals))
+	if len(enum) != len(worldGoals) {
+		t.Errorf("%s enum has %d values, want %d (worldGoals)", label, len(enum), len(worldGoals))
 	}
 	seen := make(map[string]bool, len(enum))
 	for _, g := range enum {
-		if !validGoals[g] {
-			t.Errorf("%s enum contains %q, not in validGoals", label, g)
+		if !worldGoals[g] {
+			t.Errorf("%s enum contains %q, not in worldGoals", label, g)
 		}
 		seen[g] = true
 	}
-	for g := range validGoals {
+	for g := range worldGoals {
 		if !seen[g] {
 			t.Errorf("%s enum missing validGoals entry %q", label, g)
 		}

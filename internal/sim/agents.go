@@ -4,6 +4,8 @@ package sim
 // and inventories. All values are integers on a 0..1000 scale — integer math
 // keeps decay byte-deterministic across platforms (no float rounding drift).
 
+import "github.com/evanstern/promptworld/internal/tool"
+
 // AgentCount is exported for packages that size per-agent tables.
 const AgentCount = 8
 
@@ -591,43 +593,29 @@ func Bulk(inv Inventory) int {
 	return bulk(inv)
 }
 
-func intentDuration(goal string) int64 {
-	switch goal {
-	case "forage":
-		return forageTicks
-	case "chop":
-		return chopTicks
-	case "build_fire":
-		return buildFireTicks
-	case "build_shelter":
-		return buildShelterTicks
-	case "hunt":
-		return huntTicks
-	case "quarry":
-		return quarryTicks
-	case "collect_water":
-		return collectWaterTicks
-	case "cook":
-		// Fire cooking base case; a cook intent resolved at an oven takes
-		// longer — that override happens in the executor (workDuration,
-		// T031), since the station is only known from the intent's target.
-		return cookFireTicks
-	case "craft_planks":
-		return craftPlanksTicks
-	case "craft_stone":
-		return craftStoneTicks
-	case "craft_spear":
-		return craftSpearTicks
-	case "build_oven":
-		return buildOvenTicks
-	case "build_chest":
-		// Spec 013 US3: fire-comparable build time (the build_chest recipe row's
-		// Duration). Timed work, unlike the instant deposit/withdraw goals.
-		return buildFireTicks
-	case "bathe":
-		return batheTicks
+// intentDurations is the per-world-tool base work duration, DERIVED from the
+// tool registry's Cost.DurationTicks at init (spec 014, R7). It replaces the
+// hand-written intentDuration switch — the registry now carries the declarative
+// duration for each world verb (values byte-identical to the old switch's
+// constants). Context-dependent overrides (a spear-carrying hunt is faster, an
+// oven cook is longer) stay in the executor's workDuration and are NOT registry
+// data — the station/inventory is only known at completion time.
+var intentDurations = func() map[string]int64 {
+	m := make(map[string]int64)
+	for _, t := range tool.All() {
+		if t.Effect == tool.World {
+			m[t.Name] = t.Cost.DurationTicks
+		}
 	}
-	return 0 // sleep / goto_warmth / wander / seek / refuel_fire complete on arrival
+	return m
+}()
+
+// intentDuration returns a goal's base work ticks. Goals with no registry
+// duration — the instant world verbs (sleep, goto_warmth, wander, refuel_fire,
+// the storage verbs) and the internal "seek" alias — complete on arrival (0),
+// exactly as the old switch's default did.
+func intentDuration(goal string) int64 {
+	return intentDurations[goal]
 }
 
 // --- event payloads ---

@@ -6,6 +6,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/evanstern/promptworld/internal/tool"
 )
 
 // planReply is the goal JSON contract; a reply is either one goal or a
@@ -36,26 +38,32 @@ type planStepReply struct {
 // planStepCap mirrors sim.PlanStepCap for the prompt and the parser.
 const planStepCap = 3
 
-var validGoals = map[string]bool{
-	"forage": true, "chop": true, "hunt": true,
-	"build_fire": true, "build_shelter": true,
-	"eat": true, "sleep": true, "wander": true,
-	"goto_warmth": true, "talk_to": true,
-	// spec 012 (US1): planner-only, never reflex-chosen.
-	"quarry": true, "collect_water": true,
-	// spec 012 (US2): cook is planner-only; refuel_fire is also reflex-chosen
-	// (the one shared goal, FR-020).
-	"cook": true, "refuel_fire": true,
-	// spec 012 (US3/US4): the crafting chain and the oven's actions —
-	// planner-only, never reflex-chosen (FR-020, degraded-mode doctrine).
-	"craft_planks": true, "craft_stone": true, "craft_spear": true,
-	"build_oven": true, "bathe": true,
-	// spec 013 (US2): drop/pick_up — planner/plan-only, never reflex-chosen
-	// (FR-014), mirroring internal/sim/plan.go's planGoals.
-	"drop": true, "pick_up": true,
-	// spec 013 (US3): build_chest/deposit/withdraw — planner/plan-only,
-	// never reflex-chosen, mirroring internal/sim/plan.go's planGoals.
-	"build_chest": true, "deposit": true, "withdraw": true,
+// worldGoals is the parser's accept set for goal names, DERIVED from the tool
+// registry (spec 014, FR-005): the set of World-class villager-roster names.
+// It replaces the old hand-maintained worldGoals map — the accept set is
+// identical, but it can no longer drift from the prompt vocabulary or the
+// sim-door plan-step set (all three are one walk of the registry). Cached once
+// at package init; the registry is immutable after startup.
+var worldGoals = tool.WorldGoals()
+
+// Expressive text caps are read from the tool registry (spec 014 T020/R7) so
+// the parser and the registry never carry divergent literals. Values are
+// byte-identical to the old local literals (say 300 bytes, gist 200 bytes,
+// muse 200 runes); the registry is now their single source.
+var (
+	sayCapBytes  = capBytes("say")
+	gistCapBytes = capBytes("gist")
+	museCapRunes = capRunes("muse")
+)
+
+func capBytes(name string) int {
+	t, _ := tool.Lookup(name)
+	return t.Cost.TextCapBytes
+}
+
+func capRunes(name string) int {
+	t, _ := tool.Lookup(name)
+	return t.Cost.TextCapRunes
 }
 
 // validKinds are the inventory item keys drop/pick_up/deposit/withdraw
@@ -74,7 +82,7 @@ var validKinds = map[string]bool{
 }
 
 // sortedKeys returns a map-set's keys in deterministic (sorted) order — so a
-// schema built from validGoals/validKinds is stable across runs rather than
+// schema built from worldGoals/validKinds is stable across runs rather than
 // reflecting Go's map iteration order.
 func sortedKeys(set map[string]bool) []string {
 	out := make([]string, 0, len(set))
@@ -86,7 +94,7 @@ func sortedKeys(set map[string]bool) []string {
 }
 
 // plannerReplySchema is the OpenAI/Ollama structured-output JSON Schema for a
-// planner reply, generated from validGoals + planStepCap (TASK-58) so the
+// planner reply, generated from worldGoals + planStepCap (TASK-58) so the
 // sampler-level constraint and parseReply's gate share one source of truth —
 // the goal vocabulary and step cap are never hand-copied. kind is constrained
 // to validKinds ("" included, a legal value). The cloud tier ignores this;
@@ -112,7 +120,7 @@ func sortedKeys(set map[string]bool) []string {
 // "one short sentence" the prompt asks for; parseReply does not itself cap
 // reason, so the ceiling only exists to keep the reply inside the token budget.
 func plannerReplySchema() json.RawMessage {
-	goals := sortedKeys(validGoals)
+	goals := sortedKeys(worldGoals)
 	kinds := sortedKeys(validKinds)
 	// reasonMaxLen/targetMaxLen bound the model's free-text fields so a reply
 	// can't blow the planner's max_tokens budget through prose (see above).
@@ -154,15 +162,15 @@ func plannerReplySchema() json.RawMessage {
 	return b
 }
 
-// plannerSchema is built once — validGoals/validKinds/planStepCap are
-// compile-time constants of the package, so the schema never changes at
-// runtime.
+// plannerSchema is built once — worldGoals derives from the immutable tool
+// registry at init, and validKinds/planStepCap are compile-time constants, so
+// the schema never changes at runtime.
 var plannerSchema = plannerReplySchema()
 
 // validateKindQty normalizes and validates a drop/pick_up/deposit/withdraw
 // step's Kind/Qty against what the sim executor actually accepts
 // (canonicalKinds) — the same "reject unknown at the door" discipline
-// validGoals applies to goal strings, so a malformed kind never reaches
+// worldGoals applies to goal strings, so a malformed kind never reaches
 // InjectIntent. build_chest takes no Kind/Qty (like every other goal not
 // listed here): its Kind/Qty are ignored (zero-value from a model that
 // didn't emit them).
@@ -194,9 +202,8 @@ func parseMusing(text string) (string, error) {
 	if t == "" || strings.HasPrefix(t, "{") {
 		return "", fmt.Errorf("unusable musing %q", text)
 	}
-	const museMaxRunes = 200
-	if r := []rune(t); len(r) > museMaxRunes {
-		t = string(r[:museMaxRunes])
+	if r := []rune(t); len(r) > museCapRunes {
+		t = string(r[:museCapRunes])
 	}
 	return t, nil
 }
@@ -238,8 +245,8 @@ func parseSay(text string) (string, error) {
 	if r.Say == "" {
 		return "", fmt.Errorf("empty utterance")
 	}
-	if len(r.Say) > 300 {
-		r.Say = r.Say[:300]
+	if len(r.Say) > sayCapBytes {
+		r.Say = r.Say[:sayCapBytes]
 	}
 	return r.Say, nil
 }
@@ -268,8 +275,8 @@ func parseOutcome(text string) (convoOutcome, error) {
 	if o.Gist == "" {
 		return convoOutcome{}, fmt.Errorf("empty gist")
 	}
-	if len(o.Gist) > 200 {
-		o.Gist = o.Gist[:200]
+	if len(o.Gist) > gistCapBytes {
+		o.Gist = o.Gist[:gistCapBytes]
 	}
 	clamp := func(v float64) int {
 		r := int(math.Round(v))
@@ -414,7 +421,7 @@ func parseReply(text string) (planReply, error) {
 		}
 		for i := range r.Plan {
 			r.Plan[i].Goal = strings.ToLower(strings.TrimSpace(r.Plan[i].Goal))
-			if !validGoals[r.Plan[i].Goal] {
+			if !worldGoals[r.Plan[i].Goal] {
 				return planReply{}, fmt.Errorf("plan step %d: unknown goal %q", i, r.Plan[i].Goal)
 			}
 			if r.Plan[i].AfterMin < 0 || r.Plan[i].ForMin < 0 {
@@ -430,7 +437,7 @@ func parseReply(text string) (planReply, error) {
 		return r, nil
 	}
 	r.Goal = strings.ToLower(strings.TrimSpace(r.Goal))
-	if !validGoals[r.Goal] {
+	if !worldGoals[r.Goal] {
 		return planReply{}, fmt.Errorf("unknown goal %q", r.Goal)
 	}
 	kind, kerr := validateKindQty(r.Goal, r.Kind, r.Qty)
