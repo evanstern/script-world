@@ -141,6 +141,12 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 | `chronicle.entry` | `day {day}` (+ ` · {thread}`) `: {text, truncating}` |
 | `metatron.charge_regenerated` | `a charge regenerated` |
 | `metatron.nudged` | `Metatron {form} → {targets as names}: "{text}"` |
+| `metatron.time_snapped` | `Metatron snapped time forward to {clock.Format(to_tick)}` (TASK-59/spec 016, added after this contract) |
+| `metatron.item_granted` | `Metatron granted {agent} {qty} {kind}` |
+| `metatron.entity_moved` | `Metatron moved the {class} at ({x},{y}) to ({to_x},{to_y})` (verified: payload carries no agent index or entity kind, only `class`) |
+| `metatron.entity_removed` | `Metatron removed the {class} at ({x},{y})` (`cleared` instead of `removed` when `class == "terrain"` — overlaid, not deleted) |
+
+All four miracle types append a trailing `" (forced)"` (emphasis role) when the payload's `gratis` is `true` — the operator force spec 016 SC-004 requires stay enumerable, surfaced on the digest line rather than left inferable only from the raw payload.
 
 ### cog (labeled)
 
