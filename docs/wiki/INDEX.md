@@ -8,6 +8,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 
 - [[overview]] — the system's shape: always-on daemon, attachable clients, event-sourced world
 - [[design-grounding]] — the TASK-1 grounded assumptions the code implements
+- [[project-rename]] — the 2026-07-22 rename script-world → promptworld: repo, module, binary, env var, data dir
 
 ## Time & simulation
 
