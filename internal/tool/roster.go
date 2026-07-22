@@ -16,12 +16,15 @@ package tool
 // order (say, muse, gist).
 var villagerExpressive = []string{"say", "muse", "gist"}
 
-// RosterVillager is the villager capability set: every World tool in
-// registration order, then the villager expressive tools.
+// RosterVillager is the villager capability set: every legacy World tool
+// (Effect World AND PlanStep true, isLegacyWorldTool in derive.go) in
+// registration order, then the villager expressive tools. set_plan is
+// deliberately excluded — it is Effect World but loop-only (PlanStep false);
+// it appears only in LoopRosterVillager below.
 var RosterVillager = func() []string {
 	out := make([]string, 0, len(registry))
 	for _, t := range registry {
-		if t.Effect == World {
+		if isLegacyWorldTool(t) {
 			out = append(out, t.Name)
 		}
 	}
@@ -40,4 +43,42 @@ func OnRoster(roster []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// LoopRosterVillager returns the ordered declared-tool list the villager
+// tool-use loop presents to the model (spec 017 contracts/loop-api.md,
+// data-model.md §2): every legacy World tool in registration order, then
+// set_plan, then muse. Unlike RosterVillager (name-only membership, for the
+// door's roster check), this returns full Tool values — InputSchema
+// (derive.go) needs each tool's Params/InputSchemaJSON, not just its name.
+//
+// say/gist stay scene-gated and out of the loop roster this task (data-model
+// §2): scenes remain driver-run, not model-initiated via the loop.
+func LoopRosterVillager() []Tool {
+	out := make([]Tool, 0, len(registry))
+	for _, t := range registry {
+		if isLegacyWorldTool(t) {
+			out = append(out, t)
+		}
+	}
+	if sp, ok := Lookup("set_plan"); ok {
+		out = append(out, sp)
+	}
+	if muse, ok := Lookup("muse"); ok {
+		out = append(out, muse)
+	}
+	return out
+}
+
+// LoopRosterMetatron returns the ordered declared-tool list the metatron
+// tool-use loop presents to the model: converse, nudge_dream, nudge_omen —
+// the same membership as RosterMetatron, resolved to full Tool values.
+func LoopRosterMetatron() []Tool {
+	out := make([]Tool, 0, len(RosterMetatron))
+	for _, n := range RosterMetatron {
+		if t, ok := Lookup(n); ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }

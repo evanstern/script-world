@@ -17,16 +17,50 @@ import (
 // all three walk the same World-tool set, and every World tool carries
 // PlanStep == true.
 
-// VocabularyLine returns the comma-joined World-tool names in registration
-// order — byte-identical to the old goal-vocabulary line.
-func VocabularyLine() string {
+// isLegacyWorldTool reports whether t belongs to the legacy free-text goal
+// vocabulary: Effect World AND PlanStep true.
+//
+// PlanStep is the discriminator that excludes set_plan (spec 017 R11):
+// set_plan is Effect World (it lands through the same InjectIntent path) but
+// is loop-only vocabulary, not a legacy free-text goal — it carries
+// PlanStep: false precisely so this filter (and everything built from it)
+// stays byte-stable without a separate exclusion list. Every OTHER World
+// tool already carries PlanStep: true (the TASK-55 single-walk invariant),
+// so this filter changes nothing for them.
+func isLegacyWorldTool(t Tool) bool {
+	return t.Effect == World && t.PlanStep
+}
+
+// legacyWorldNamesFrom returns the ordered names of legacy World tools in
+// tools (registration order preserved). Takes an explicit slice, rather than
+// walking the package registry, so it can be called while registry itself
+// is still being built (registry.go's setPlanTool needs this list before
+// registry exists — calling the registry-walking legacyWorldNames() there
+// would be an initialization cycle).
+func legacyWorldNamesFrom(tools []Tool) []string {
 	var names []string
-	for _, t := range registry {
-		if t.Effect == World {
+	for _, t := range tools {
+		if isLegacyWorldTool(t) {
 			names = append(names, t.Name)
 		}
 	}
-	return strings.Join(names, ", ")
+	return names
+}
+
+// legacyWorldNames returns the ordered names of legacy World tools in the
+// package registry. This is the one walk VocabularyLine and WorldGoals share
+// (both call it) — and, at init time, registry.go's setPlanTool builds the
+// identical set via legacyWorldNamesFrom(worldTools) — so the free-text
+// vocabulary and set_plan's authored `goal` enum can never drift from each
+// other even though they can't share this exact function call.
+func legacyWorldNames() []string {
+	return legacyWorldNamesFrom(registry)
+}
+
+// VocabularyLine returns the comma-joined legacy World-tool names in
+// registration order — byte-identical to the old goal-vocabulary line.
+func VocabularyLine() string {
+	return strings.Join(legacyWorldNames(), ", ")
 }
 
 // PromptGlossBlock returns the concatenated per-verb gloss lines in
@@ -44,15 +78,13 @@ func PromptGlossBlock() string {
 	return b.String()
 }
 
-// WorldGoals returns the set of World-tool names — the mind-side parse accept
-// set (replaces the mind's old hand-maintained goal map). A fresh map per call;
-// callers on a hot path cache it once.
+// WorldGoals returns the set of legacy World-tool names — the mind-side parse
+// accept set (replaces the mind's old hand-maintained goal map). A fresh map
+// per call; callers on a hot path cache it once.
 func WorldGoals() map[string]bool {
 	m := make(map[string]bool)
-	for _, t := range registry {
-		if t.Effect == World {
-			m[t.Name] = true
-		}
+	for _, n := range legacyWorldNames() {
+		m[n] = true
 	}
 	return m
 }
