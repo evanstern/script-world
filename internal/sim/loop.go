@@ -168,6 +168,13 @@ var injectSocialWhitelist = map[string]bool{
 	// Metatron nudges (TASK-12): the spend + record; the dry-run enforces
 	// charges/form/target/text validity before anything lands.
 	"metatron.nudged": true,
+	// Metatron miracles (spec 016): the four charge-priced world edits; the
+	// dry-run's reducer arms enforce presence/destination/charge before
+	// anything lands, and the whitelist is the isolation boundary.
+	"metatron.time_snapped":   true,
+	"metatron.item_granted":   true,
+	"metatron.entity_moved":   true,
+	"metatron.entity_removed": true,
 	// Governance flavor (TASK-13): the ONLY injectable governance type —
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.
