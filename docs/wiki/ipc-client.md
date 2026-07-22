@@ -4,7 +4,7 @@ description: Attach-side protocol client — dial with fast failure, request/res
 kind: component
 sources:
   - internal/ipc/client.go
-verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # IPC client

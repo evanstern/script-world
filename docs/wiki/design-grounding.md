@@ -4,7 +4,7 @@ description: The TASK-1 Socratic grounding session outcomes that the daemon subs
 kind: concept
 sources:
   - docs/design/grounded-assumptions.md
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Design grounding

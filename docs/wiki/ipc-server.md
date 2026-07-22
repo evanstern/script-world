@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # IPC server

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/store/store.go
   - internal/store/schema.go
-verified_against: 08d8c70e23c104a4c61df1749c00cb315f5c643d
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Event log

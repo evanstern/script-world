@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/promptworld/main.go
   - go.mod
-verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Overview

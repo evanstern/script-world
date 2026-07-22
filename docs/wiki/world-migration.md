@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/migrate.go
   - internal/world/migrate.go
-verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # World migration

@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: 65898835d02ec199456eb656ad9187aca3346fbf
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # IPC protocol

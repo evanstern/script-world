@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/worldmap/worldmap.go
   - internal/worldmap/noise.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # World map generation

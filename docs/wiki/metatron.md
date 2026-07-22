@@ -9,7 +9,7 @@ sources:
   - internal/metatron/digest.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: 8e7ef408d9a9866f621cb0f40a1d930e42cd0b77
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Metatron

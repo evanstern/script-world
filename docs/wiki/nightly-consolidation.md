@@ -7,7 +7,7 @@ sources:
   - internal/mind/consolidate.go
   - internal/mind/validate.go
   - internal/persona/personas.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Nightly consolidation + persona firewall

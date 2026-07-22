@@ -9,7 +9,7 @@ sources:
   - internal/cognition/route.go
   - internal/cognition/calibration.go
   - internal/sim/cognition.go
-verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # Cognition horizon

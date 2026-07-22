@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 4f045f24b04312ec55e1cb9b8ed348946e5a0f3f
+verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
 ---
 
 # LLM orchestrator
