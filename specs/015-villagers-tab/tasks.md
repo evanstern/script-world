@@ -88,7 +88,7 @@
 - [x] T020 [P] Update docs/design/tui/patterns/keymap.md: `4` label, villagers-tab key additions (j/k/g/G/⏎/esc scoped to the visible tab), footer hints block
 - [x] T021 [P] Update docs/design/tui/pages/solo-views.md and docs/design/tui/pages/home.md wherever "souls" is named
 - [x] T022 Full validation: `go build ./... && go vet ./... && go test ./...`; run quickstart.md manual steps against a live world; `grep -ri soul internal/tui docs/design/tui` shows no user-visible/tab references remaining
-- [ ] T023 Open the single PR from `.worktrees/task-<N>` (one task, one PR); after merge: `/grounding-wiki:wiki-update` for notes sourcing internal/tui/* and internal/sim/agents.go|state.go (tui-client.md, sim-state-reducer.md at minimum), worktree cleanup, root ff-pull
+- [x] T023 Open the single PR from `.worktrees/task-<N>` (one task, one PR); after merge: `/grounding-wiki:wiki-update` for notes sourcing internal/tui/* and internal/sim/agents.go|state.go (tui-client.md, sim-state-reducer.md at minimum), worktree cleanup, root ff-pull
 
 ---
 

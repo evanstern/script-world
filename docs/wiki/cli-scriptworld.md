@@ -7,7 +7,7 @@ sources:
   - cmd/scriptworld/commands.go
   - cmd/scriptworld/calibrate.go
   - cmd/scriptworld/ps.go
-verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
+verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
 ---
 
 # scriptworld CLI
@@ -76,7 +76,8 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
 - `pause` / `resume` / `speed <v>` — one-shot time controls printing the resulting
   clock line.
 - `ui <world>` — the full-screen Bubble Tea client ([[tui-client]]): map, chronicle,
-  metatron, souls panes over a live world replica; runs in the alternate screen.
+  metatron, villagers panes over a live world replica (villagers renamed from
+  souls, spec 015); runs in the alternate screen.
   If the TUI quits on an unrecoverable protocol error (`Model.FatalErr()`, e.g. a
   reply over the IPC cap — TASK-19), the command returns it as a real error and
   exits non-zero.

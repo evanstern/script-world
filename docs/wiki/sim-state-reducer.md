@@ -6,7 +6,7 @@ sources:
   - internal/sim/state.go
   - internal/sim/agents.go
   - internal/sim/recipes.go
-verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
+verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
 ---
 
 # Sim state & reducer
@@ -67,7 +67,10 @@ genesis of the same seed.
 `sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
 `agent.*` family ([[event-types]]) drives intents (`agent.intent_set` carries a
-storage goal's `Kind`/`Qty` onto the `Intent`, spec 013 R4), movement, work
+storage goal's `Kind`/`Qty` onto the `Intent`, spec 013 R4, and also stamps
+`Agent.LastGoal`/`LastGoalTick` — spec 015 R1, `omitempty`, written here and
+never cleared by any event, so the [[tui-client]] villagers tab can show an
+idle villager's most recent objective from any snapshot), movement, work
 products (inventory + overlays + structures), eating (`agent.ate`'s `AtePayload`
 sets the absolute post-eat food need and decrements each carried food form by its
 consumed count — no reducer-side arithmetic), sleep, talk, needs (absolute

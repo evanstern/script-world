@@ -7,7 +7,7 @@ sources:
   - internal/tui/views.go
   - internal/tui/layout.go
   - internal/tui/grammar.go
-verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
+verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
 ---
 
 # TUI client
@@ -85,15 +85,25 @@ The **dock** hosts three tabs — keys `2`/`3`/`4` select, the same key again
 zooms the tab solo, `1`/`esc` return to the composite: **chronicle** (default;
 see below), **metatron** (the angel transcript — replies stream here, or
 badge the tab `metatron •` when it isn't visible; charge bank and charter
-provenance as before — [[metatron]]), and **souls** (live agent bodies:
+provenance as before — [[metatron]]), and **villagers** (renamed from
+"souls", spec 015/TASK-56 — now a two-view inspector rather than a flat
+roster). The villagers **roster** shows per agent: a selection cursor,
 status, current goal, needs gauges, a leading `bulk n/24` derived-load
 reading (spec 013 T015, SC-006; `sim.Bulk`/`sim.BulkCap` — the same function
 the reducer/executor clamp gathers and crafts against, so the number never
 drifts from what an action will actually do), then the full carried-inventory
 line — wood/stone/water/planks/refined-stone counts, the food triplet
 raw/cooked/meals, and (when carried) a spear count with the most-worn spear's
-remaining uses — newest memory line; full soul.md files on disk per
-[[agent-mind]]).
+remaining uses. While the villagers tab is visible, `j`/`k`/`g`/`G` move the
+cursor and `⏎` opens the selected villager's **detail view**
+(`villagerDetailBody`): identity/vitals, an objective line (active
+`Intent.Goal` marked current; else the reducer-stamped `Agent.LastGoal` +
+tick marked `last:`; else "no objective yet" — [[sim-state-reducer]]),
+itemized inventory, beliefs/narrative when consolidation has produced them,
+and episodic memories most-recent-first, each section truncating bottom-up
+inside the pane budget. `esc` closes the detail back to the roster ahead of
+the solo-release chain; selection state survives tab switches and is clamped
+on reconnect. Full soul.md persona files stay on disk per [[agent-mind]].
 
 The **chronicle** renders the narrated story from the replica's
 snapshot-carried `State.Chronicle` ring ([[chronicle]]) or the raw feed (`r`
