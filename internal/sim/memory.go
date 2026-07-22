@@ -75,6 +75,10 @@ const (
 	salSpearBroke = 8 // US3: the spear that spent its last use
 	salBath       = 5 // US4: medium, positive tone
 	salOvenBuilt  = 7 // US4: high, village-visible (builder + nearby witnesses)
+	// salFireOut: low-salience — a fire going cold nearby is background
+	// texture, not formative (contracts/events.md: "fire burned out while
+	// agents nearby, low"). Purely personal (no gossip subject).
+	salFireOut = 3
 )
 
 // Tone constants for the spec 012 memories above (governance.go/social.go/

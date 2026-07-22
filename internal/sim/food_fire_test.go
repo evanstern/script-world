@@ -109,6 +109,76 @@ func TestFireBurnoutEmitsOnce(t *testing.T) {
 	}
 }
 
+// TestFireBurnoutWitnessMemory is the deferred Phase-4 item from
+// contracts/events.md's memorable-moments table: "fire burned out while
+// agents nearby (low salience)". A living agent within witnessRadius gets a
+// low-salience, purely personal memory (no gossip subject) on the same
+// burnout transition as sim.fire_burned_out; a dead agent within radius and a
+// living agent outside it must not.
+func TestFireBurnoutWitnessMemory(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	isolateAgents(s)
+
+	fx, fy := s.Agents[0].X, s.Agents[0].Y
+	burnout := int64(500)
+	s.Structures = append(s.Structures, Structure{Kind: "fire", X: fx, Y: fy, FuelUntil: burnout})
+
+	// Asleep (with Rest kept well under the wake threshold, per wakeReason)
+	// holds each living agent still at its planted position for the whole
+	// 500-tick window — otherwise the reflex would wander them off (Intent
+	// nil is exactly when the reflex acts), defeating the fixed distances
+	// this test depends on.
+	near := &s.Agents[1]
+	near.Dead = false
+	near.Asleep = true
+	near.Needs.Rest, near.Needs.Food = 100, 600
+	near.X, near.Y = fx+witnessRadius, fy // exactly at the radius boundary
+
+	deadNear := &s.Agents[2]
+	deadNear.Dead = true // stays dead: must never witness
+	deadNear.X, deadNear.Y = fx+1, fy
+
+	far := &s.Agents[3]
+	far.Dead = false
+	far.Asleep = true
+	far.Needs.Rest, far.Needs.Food = 100, 600
+	far.X, far.Y = fx+witnessRadius+1, fy // one step outside the radius
+
+	log := driveTicks(t, s, m, burnout+10, nil)
+
+	var sawBurnout bool
+	for _, e := range log {
+		if e.Type == "sim.fire_burned_out" {
+			var p FireBurnedOutPayload
+			mustUnmarshal(t, e.Payload, &p)
+			if p.X == fx && p.Y == fy {
+				sawBurnout = true
+			}
+		}
+	}
+	if !sawBurnout {
+		t.Fatal("no sim.fire_burned_out event emitted")
+	}
+
+	var nearMemory bool
+	for _, mem := range near.Memories {
+		if mem.Salience == salFireOut && mem.Subject == -1 && mem.Tick == burnout {
+			nearMemory = true
+		}
+	}
+	if !nearMemory {
+		t.Error("living agent within witnessRadius got no low-salience fire-out memory")
+	}
+	if len(deadNear.Memories) != 0 {
+		t.Error("a dead agent must never witness a fire burning out")
+	}
+	if len(far.Memories) != 0 {
+		t.Error("an agent outside witnessRadius must not witness the fire burning out")
+	}
+}
+
 // TestRefuelRelightsAndReArms is spec 012 US2 AC#4 + FR-009: refueling a cold
 // fire spends one wood, relights it, extends FuelUntil by the per-wood burn
 // window (absolute deadline in the payload), and re-arms the burnout sweep so

@@ -973,11 +973,19 @@ func (m Model) soulsBody(width, height int) string {
 				"         health %s food %s rest %s warmth %s morale %s",
 				bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
 				bar(a.Needs.Warmth), bar(a.Needs.Morale))))
-			// Carried inventory (spec 012 T024): wood + the food triplet,
-			// compact. T043 (Phase 9) expands to stone/water/planks/spears.
-			lines = append(lines, styleDim.Render(fmt.Sprintf(
-				"         carry %dw · food %dr/%dc/%dm",
-				a.Inv.Wood, a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)))
+			// Carried inventory (spec 012 T043, SC-006): the full raw/refined
+			// surface — wood/stone/water/planks/refined stone, the food
+			// triplet, and spear count (with the most-worn spear's
+			// remaining uses when at least one is carried — Spears is kept
+			// sorted ascending by the reducer, so Spears[0] is the one
+			// closest to breaking).
+			carry := fmt.Sprintf("carry %dw %dst %dwt %dpl %drs · food %dr/%dc/%dm",
+				a.Inv.Wood, a.Inv.Stone, a.Inv.Water, a.Inv.Planks, a.Inv.RefinedStone,
+				a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)
+			if n := len(a.Inv.Spears); n > 0 {
+				carry += fmt.Sprintf(" · spear %d(%d)", n, a.Inv.Spears[0])
+			}
+			lines = append(lines, styleDim.Render("         "+carry))
 			lines = append(lines, "")
 		} else {
 			// Narrow dock width: drop goal/position/memory, keep name + status + health.

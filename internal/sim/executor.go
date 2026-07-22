@@ -70,6 +70,20 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 	for _, st := range s.Structures {
 		if st.Kind == "fire" && st.FuelUntil > nextTick-1 && st.FuelUntil <= nextTick {
 			emit("sim.fire_burned_out", FireBurnedOutPayload{X: st.X, Y: st.Y})
+			// Deferred Phase-4 item (contracts/events.md): a fire going cold
+			// nearby is background texture, not formative — low salience,
+			// purely personal (no gossip subject), same witness-radius idiom
+			// as the oven-built/death witnessing above. Fixed agent
+			// iteration order keeps this deterministic.
+			for w := range s.Agents {
+				if s.Agents[w].Dead {
+					continue
+				}
+				if abs(s.Agents[w].X-st.X)+abs(s.Agents[w].Y-st.Y) <= witnessRadius {
+					events = append(events, memoryEvent(nextTick, w, salFireOut,
+						"Watched the fire burn out."))
+				}
+			}
 		}
 	}
 
