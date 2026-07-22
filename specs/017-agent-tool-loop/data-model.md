@@ -36,9 +36,18 @@ Derivation rules (`tool.InputSchema`):
 - **Roster semantics**: `Validate` now admits Read-effect tools on rosters (zero
   production Read entries ship in this task; test fixtures exercise the path).
 - **New derived surface**: `LoopRoster(kind)` — the ordered `[]Tool` a cognition
-  declares (villager: world verbs + `set_plan` + `muse`; metatron: `converse`,
-  `nudge_dream`, `nudge_omen`). `say`/`gist` stay scene-gated and are NOT in the
-  villager loop roster this task (scenes remain driver-run).
+  declares (villager: world verbs + `set_plan` + `muse`; metatron as-built (T020):
+  `nudge_dream`, `nudge_omen`, `work_miracle` — `converse` is deliberately NOT a
+  declared tool: the model's final text IS the converse channel, so speaking is the
+  loop's natural termination rather than a callable). `say`/`gist` stay scene-gated
+  and are NOT in the villager loop roster this task (scenes remain driver-run).
+- **`work_miracle` (T019b as-built, post-#38)**: Effect **Expressive** (lands through
+  InjectSocial via the shared miracle builder, same door/family as nudges; Expressive
+  is also what lets it declare its Events for coverage pinning), Gate Charge, flat
+  `Params` (kind enum + scalar per-kind params, gratis structurally absent) rather
+  than an authored InputSchemaJSON — the driver's validateArgs routes authored
+  schemas to the set_plan structural validator, a latent constraint to generalize
+  when a third authored-schema tool appears.
 
 ## 3. Transcript (transport-level, ephemeral)
 

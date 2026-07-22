@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 22:12'
+updated_date: '2026-07-22 22:49'
 labels:
   - agent-mind
   - llm
@@ -85,4 +85,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Sonnet landed T016 (0657530: CogToolCallPayload canonical order, whitelist entry, reducer no-op arm; updated the TestWhitelistDiffIdentical trip-wire deliberately per contract) and T017 (965dc4c: IntentSetPayload.Job last-field omitempty, populated only at the inject-landing arm; byte-stability pins incl absent-key assertion for reflex/executor paths). Full suite green, replay byte-identity unmodified. Next: T018+T019 (record landing + SC-003 correlation, Opus).
 
 2026-07-22 Opus 4.8 landed T018 (7fe3b58: CallRecords → cog.tool_call via dedicated all-or-nothing emitCog batch on every termination path, ordinal-sorted, empty-buffer guarded; conversion constructor sim.NewCogToolCallPayload placed sim-side w/ plain arg types so metatron T020 reuses it without dependency inversion; reason invariant enforced-at-emission w/ backfill+log, never fatal) and T019 (84d578f: TestToolCallCorrelationChainSC003, 8/8 under -count=8; chain-granularity refinement recorded in events.md — grounding events carry job not ordinal, so rejected-grounds-nothing is job-resolvable only for rejected-only cognitions). T019 ran on Opus for seam continuity (recorded per rubric). US3 complete — board AC#5 provable from the event log. Full suite incl e2e green. Next: T019b+T020 metatron migration (Opus, T019b rides along w/ justification: work_miracle schema must mirror landMiracle expectations the same agent studies).
+
+2026-07-22 Opus 4.8 landed T019b (2ef5477) + T020 (61d8db2): metatron on the loop. As-built decisions gated and recorded in data-model.md: work_miracle = Expressive (InjectSocial family, Events-declaration coherence) w/ flat Params not authored schema (driver validateArgs hard-routes authored schemas to the set_plan validator — latent generalization debt noted for a third authored-schema tool); converse excluded from declared roster (final text IS the reply; model_done = natural termination). Behavior upgrades vs today, intended: gate refusals feed back so the angel can correct a bad target within the cap; spec-016 nudge-over-miracle precedence dissolves into loop cardinality; no synthetic refusal suffix. turnMaxTokens 700→1024. Full suite incl e2e green. Pre-existing repo-wide gofmt discrepancy (8 untouched files, present on origin/main) noted, out of scope. US4 remaining: T021 fallback equivalence + T022 docs (Sonnet). Then US2 T014-T015, US5 T023-T024, polish.
 <!-- SECTION:NOTES:END -->

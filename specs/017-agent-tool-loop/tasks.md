@@ -165,12 +165,12 @@ live-vs-replay byte-identity on a loop-era run.
 
 **Independent Test**: quickstart §3 + §4.
 
-- [ ] T019b (Sonnet) [US4] Register `work_miracle` metatron tool (charge-gated,
+- [x] T019b (Sonnet) [US4] Register `work_miracle` metatron tool (charge-gated,
       authored InputSchemaJSON over spec 016's miracle parameter surface — kind/day/
       time/villager/item/qty/class/x/y/to_x/to_y, gratis structurally absent) and add
       it to LoopRosterMetatron, in internal/tool/registry.go + roster.go + tests
       (post-PR-#38 amendment, research R13; depends on T002–T004)
-- [ ] T020 (Opus 4.8) [US4] Migrate `Metatron.Turn` to toolloop.Run with
+- [x] T020 (Opus 4.8) [US4] Migrate `Metatron.Turn` to toolloop.Run with
       LoopRosterMetatron: converse = Final text, nudge handlers wrap `landNudge`,
       work_miracle handler wraps `landMiracle` (charge economy stays
       reducer-enforced; spec 016's one-mediated-act-per-turn rule = loop cardinality),
