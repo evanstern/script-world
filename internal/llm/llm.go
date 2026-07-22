@@ -336,6 +336,42 @@ func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
 	return cognition.SeedFor(nil, string(tierName))
 }
 
+// feedEstimate reports one completed-cognition wall time to a tier's
+// seconds-per-point estimator, normalized by the kind's registered point cost,
+// and fires the recalibrate hook (in its own goroutine) on a spike-rate breach.
+// Shared by the per-call worker path (TASK-32) and the whole-loop
+// ObserveCognition seam (TASK-52), so both feed the estimator identically.
+func (o *Orchestrator) feedEstimate(t *tier, kind Kind, millis int64) {
+	dc, ok := cognition.ClassForKind(string(kind))
+	if !ok || dc.Points <= 0 {
+		return
+	}
+	if t.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+		est, rate, _, _ := t.est.Stats()
+		o.recalMu.Lock()
+		hook := o.recalibrate
+		o.recalMu.Unlock()
+		if hook != nil {
+			go hook(t.name, est, rate)
+		}
+	}
+}
+
+// ObserveCognition reports one whole-cognition wall-time observation to the
+// tier estimator (TASK-52). It is the agent tool-use loop's replacement for
+// per-call worker feeding: the loop marks every internal Submit SkipObserve so
+// no fractional per-round samples reach the estimator, then reports the summed
+// loop duration here exactly once. Unknown kinds are ignored (no tier). Safe
+// for concurrent use — the estimator and hook lock are the same ones the
+// worker uses.
+func (o *Orchestrator) ObserveCognition(kind Kind, totalMillis int64) {
+	tierName, ok := routing[kind]
+	if !ok {
+		return
+	}
+	o.feedEstimate(o.tiers[tierName], kind, totalMillis)
+}
+
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
 // hook runs in its own goroutine and must be idempotent per breach episode
 // — the estimator already fires once per breach.
@@ -457,17 +493,14 @@ func (o *Orchestrator) worker(t *tier) {
 			// tier's seconds-per-point estimate, normalized by the kind's
 			// registered point cost. Successes only — a fast failure is not
 			// a latency observation of completed thought, and the estimator's
-			// spike rejection only guards the high side.
-			if dc, ok := cognition.ClassForKind(string(j.req.Kind)); ok && dc.Points > 0 {
-				if t.est.Sample(float64(resp.Millis) / 1000 / float64(dc.Points)) {
-					est, rate, _, _ := t.est.Stats()
-					o.recalMu.Lock()
-					hook := o.recalibrate
-					o.recalMu.Unlock()
-					if hook != nil {
-						go hook(t.name, est, rate)
-					}
-				}
+			// spike rejection only guards the high side. A loop-internal call
+			// opts out (TASK-52): the loop driver reports one whole-cognition
+			// observation via ObserveCognition instead of N per-call fractions,
+			// so per-call feeding here would skew sec/pt low and mis-arm the
+			// suppression gate. Metering, admission, and the breaker are
+			// untouched by the opt-out.
+			if !j.req.SkipObserve {
+				o.feedEstimate(t, j.req.Kind, resp.Millis)
 			}
 			if t.name == TierCloud {
 				resp.Model = o.cfg.Cloud.Model

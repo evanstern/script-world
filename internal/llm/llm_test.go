@@ -915,6 +915,100 @@ func TestMeterExactUnderConcurrency(t *testing.T) {
 	}
 }
 
+// TestSkipObserveNoEstimatorSample (TASK-52): a loop-internal call
+// (SkipObserve) feeds no per-call sample to the tier estimator and leaves the
+// estimate untouched; a normal call still feeds exactly one. Both calls reach
+// the model regardless — SkipObserve gates estimation only.
+func TestSkipObserveNoEstimatorSample(t *testing.T) {
+	var hits atomic.Int64
+	local := mockLocal(t, &hits)
+	o := newOrch(t, testConfig(local.URL, "http://unused.invalid", 100), testStore(t))
+	lt := o.tiers[TierLocal]
+
+	est0, _, samples0, _ := lt.est.Stats()
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x", SkipObserve: true}); err != nil {
+		t.Fatal(err)
+	}
+	est1, _, samples1, _ := lt.est.Stats()
+	if samples1 != samples0 {
+		t.Errorf("SkipObserve fed the estimator: samples %d -> %d", samples0, samples1)
+	}
+	if est1 != est0 {
+		t.Errorf("SkipObserve moved the estimate: %v -> %v", est0, est1)
+	}
+
+	// Regression: a normal call still feeds exactly one sample.
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, samples2, _ := lt.est.Stats(); samples2 != samples0+1 {
+		t.Errorf("normal call fed %d samples, want 1", samples2-samples0)
+	}
+	if hits.Load() != 2 {
+		t.Errorf("both calls must reach the model: hits=%d", hits.Load())
+	}
+}
+
+// TestObserveCognitionFeedsOnce (TASK-52): ObserveCognition reports exactly one
+// whole-loop sample to the routed tier's estimator, moving it exactly as a
+// direct estimator sample of the same per-point value would; unknown kinds are
+// a no-op.
+func TestObserveCognitionFeedsOnce(t *testing.T) {
+	o := newOrch(t, testConfig("http://unused.invalid", "http://unused.invalid", 100), testStore(t))
+	lt := o.tiers[TierLocal]
+	_, _, samples0, _ := lt.est.Stats()
+
+	const millis = 6000
+	const points = 3 // planner's registered point cost
+	ref := cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))
+	ref.Sample(float64(millis) / 1000 / float64(points))
+	want := ref.Estimate()
+
+	o.ObserveCognition(KindPlanner, millis)
+	est, _, samples, _ := lt.est.Stats()
+	if samples != samples0+1 {
+		t.Errorf("ObserveCognition fed %d samples, want 1", samples-samples0)
+	}
+	if est != want {
+		t.Errorf("estimate = %v, want %v (one whole-loop sample)", est, want)
+	}
+
+	// Unknown kind has no tier: no-op, no sample.
+	o.ObserveCognition("sorcery", 1000)
+	if _, _, samples2, _ := lt.est.Stats(); samples2 != samples {
+		t.Errorf("unknown kind fed the estimator: %d -> %d", samples, samples2)
+	}
+}
+
+// TestSkipObserveStillMeters (TASK-52): SkipObserve suppresses estimator
+// feeding only — a billable cloud call still records its cost in the meter, and
+// the call still reaches the API.
+func TestSkipObserveStillMeters(t *testing.T) {
+	var hits atomic.Int64
+	cloud := mockCloud(t, &hits)
+	o := newOrch(t, testConfig("http://unused.invalid", cloud.URL, 100), testStore(t))
+	ct := o.tiers[TierCloud]
+	_, _, csamples0, _ := ct.est.Stats()
+	_, spent0, _ := o.meter.Snapshot()
+
+	resp, err := o.Submit(context.Background(), Request{Kind: KindNarrator, Prompt: "x", SkipObserve: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.CostUSD <= 0 {
+		t.Errorf("SkipObserve call must still bill: cost=%v", resp.CostUSD)
+	}
+	if _, spent1, _ := o.meter.Snapshot(); spent1 <= spent0 {
+		t.Errorf("meter did not record the SkipObserve call: %v -> %v", spent0, spent1)
+	}
+	if _, _, csamples1, _ := ct.est.Stats(); csamples1 != csamples0 {
+		t.Errorf("SkipObserve fed the cloud estimator: %d -> %d", csamples0, csamples1)
+	}
+	if hits.Load() != 1 {
+		t.Errorf("call must reach the API: hits=%d", hits.Load())
+	}
+}
+
 func TestConfigRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "llm.json")
 	if cfg, err := LoadConfig(path); err != nil || cfg != nil {
