@@ -123,6 +123,28 @@ type CogToolCallPayload struct {
 	SnapshotTick int64 `json:"snapshot_tick"`
 }
 
+// NewCogToolCallPayload assembles a cog.tool_call payload from a recorded
+// call's plain fields (spec 017 T018). It lives sim-side — next to the payload
+// it builds — with only plain/std-lib argument types (no toolloop or mind
+// import), so BOTH loop consumers reach it without a shared helper package or
+// dependency inversion: the mind (T018) and metatron (T020) each unpack their
+// own toolloop.CallRecord and call this, sharing one authority for the payload's
+// field set. verdict is the toolloop.Verdict enum stringified by the caller;
+// reason must be non-empty for every rejected_* / read_error verdict — the
+// caller enforces that (contracts/events.md), this constructor only shapes.
+func NewCogToolCallPayload(job string, ordinal int, tool string, args json.RawMessage, verdict, reason, tier string, snapshotTick int64) CogToolCallPayload {
+	return CogToolCallPayload{
+		Job:          job,
+		Ordinal:      ordinal,
+		Tool:         tool,
+		Args:         args,
+		Verdict:      verdict,
+		Reason:       reason,
+		Tier:         tier,
+		SnapshotTick: snapshotTick,
+	}
+}
+
 // RecalibrationPayload — cog.recalibration_recommended: the live estimator's
 // spike rate breached the drift threshold (once per breach episode).
 type RecalibrationPayload struct {

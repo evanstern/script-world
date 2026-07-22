@@ -51,6 +51,47 @@ func (lm *loopMind) plannerIntents(t *testing.T) int {
 	return n
 }
 
+// toolCallsFor returns the cog.tool_call payloads for a job, in log order.
+func (lm *loopMind) toolCallsFor(t *testing.T, job string) []sim.CogToolCallPayload {
+	t.Helper()
+	evs, err := lm.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []sim.CogToolCallPayload
+	for _, e := range evs {
+		if e.Type != "cog.tool_call" {
+			continue
+		}
+		var p sim.CogToolCallPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Job == job {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// plannerIntentJobs returns the Job of every planner-sourced agent.intent_set —
+// the grounding events a cog.tool_call chain resolves against.
+func (lm *loopMind) plannerIntentJobs(t *testing.T) []string {
+	t.Helper()
+	evs, err := lm.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobs []string
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p sim.IntentSetPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "planner" {
+			jobs = append(jobs, p.Job)
+		}
+	}
+	return jobs
+}
+
 // outcomesFor returns the cog.outcome payloads for a job, in order.
 func (lm *loopMind) outcomesFor(t *testing.T, job string) []sim.CogOutcomePayload {
 	t.Helper()
@@ -271,5 +312,111 @@ func TestRunPlanCapAfterRejectionRearms(t *testing.T) {
 	}
 	if len(lm.md.rearm) != 1 {
 		t.Errorf("a gate-rejected cognition that landed nothing must rearm; rearm depth = %d", len(lm.md.rearm))
+	}
+}
+
+// --- T018: CallRecords land as cog.tool_call events ---
+
+// TestRunPlanEmitsToolCallChain: a read lookup (ordinal 1) precedes a landed
+// world verb (ordinal 2). Both records land as cog.tool_call events in ordinal
+// order carrying the cognition's job, correct verdicts, tier and snapshot tick;
+// and the landed agent.intent_set carries the SAME job — the AC#5 chain from
+// grounding event to its causing call resolves by identifier alone.
+func TestRunPlanEmitsToolCallChain(t *testing.T) {
+	lm := newLoopMind(t)
+	job := lm.newJob(0)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		// Ordinal 1: a read lookup grounds nothing (recorded, present).
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "recall",
+			Args: json.RawMessage(`{"q":"river"}`), Verdict: toolloop.VerdictReadOK, Tier: "local"})
+		// Ordinal 2: an acting call lands through the real door.
+		out := j.Handlers["wander"](ctx, call("wander", "{}"))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "wander",
+			Verdict: out.Verdict, Tier: "local"})
+		return toolloop.Result{Term: toolloop.TermLanded}, nil
+	}
+
+	lm.md.runPlan(job)
+
+	tcs := lm.toolCallsFor(t, job.meta.job)
+	if len(tcs) != 2 {
+		t.Fatalf("cog.tool_call count = %d, want 2 (%+v)", len(tcs), tcs)
+	}
+	if tcs[0].Ordinal != 1 || tcs[1].Ordinal != 2 {
+		t.Errorf("ordinals out of order: %d, %d", tcs[0].Ordinal, tcs[1].Ordinal)
+	}
+	if tcs[0].Verdict != "read_ok" || tcs[1].Verdict != "landed" {
+		t.Errorf("verdicts = %q, %q; want read_ok, landed", tcs[0].Verdict, tcs[1].Verdict)
+	}
+	if tcs[0].Tier != "local" || tcs[0].SnapshotTick != job.meta.snapshotTick {
+		t.Errorf("tier/snapshot_tick = %q/%d, want local/%d", tcs[0].Tier, tcs[0].SnapshotTick, job.meta.snapshotTick)
+	}
+	if string(tcs[0].Args) != `{"q":"river"}` {
+		t.Errorf("args = %s, want the recorded lookup args", tcs[0].Args)
+	}
+	// The chain: the landed intent_set carries the same job as the landed call.
+	var chained bool
+	for _, j := range lm.plannerIntentJobs(t) {
+		if j == job.meta.job && j == tcs[1].Job {
+			chained = true
+		}
+	}
+	if !chained {
+		t.Errorf("landed intent_set does not carry job %q — the chain is broken", job.meta.job)
+	}
+}
+
+// TestRunPlanEmitsToolCallsOnRejectionNoGrounding: every acting call is
+// gate-rejected to the cap. The rejected call is still recorded as a
+// cog.tool_call with its reason (present and queryable), and NO grounding
+// event (agent.intent_set) carries the job — a never-grounded call, recorded.
+func TestRunPlanEmitsToolCallsOnRejectionNoGrounding(t *testing.T) {
+	lm := newLoopMind(t)
+	target := 1
+	tname := lm.md.replica.Agents[target].Name
+	lm.md.replica.Agents[target].Dead = true
+	job := lm.newJob(0)
+
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		out := j.Handlers["talk_to"](ctx, call("talk_to", `{"target":"`+tname+`"}`))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "talk_to",
+			Args: json.RawMessage(`{"target":"` + tname + `"}`),
+			Verdict: out.Verdict, Reason: out.ResultForModel, Tier: "local"})
+		return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+	}
+
+	lm.md.runPlan(job)
+
+	tcs := lm.toolCallsFor(t, job.meta.job)
+	if len(tcs) != 1 {
+		t.Fatalf("cog.tool_call count = %d, want 1 (%+v)", len(tcs), tcs)
+	}
+	if tcs[0].Verdict != "rejected_gate" {
+		t.Errorf("verdict = %q, want rejected_gate", tcs[0].Verdict)
+	}
+	if tcs[0].Reason == "" {
+		t.Error("a rejected cog.tool_call must carry a non-empty reason (AC#5)")
+	}
+	// No grounding event shares the job — it grounded nothing.
+	for _, j := range lm.plannerIntentJobs(t) {
+		if j == job.meta.job {
+			t.Errorf("a rejected-only cognition must not have an intent_set carrying its job %q", job.meta.job)
+		}
+	}
+}
+
+// TestRunPlanNoToolCallsWhenBufferEmpty: a cognition that records nothing (the
+// model produced no tool call) emits no cog.tool_call events — no empty batch.
+func TestRunPlanNoToolCallsWhenBufferEmpty(t *testing.T) {
+	lm := newLoopMind(t)
+	job := lm.newJob(0)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		return toolloop.Result{Term: toolloop.TermModelDone}, nil
+	}
+
+	lm.md.runPlan(job)
+
+	if n := lm.countByType(t)["cog.tool_call"]; n != 0 {
+		t.Errorf("cog.tool_call count = %d, want 0 (empty buffer emits no batch)", n)
 	}
 }

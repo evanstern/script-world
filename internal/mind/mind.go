@@ -401,10 +401,14 @@ func (md *Mind) runPlan(job planJob) {
 	})
 	cancel()
 
-	// TODO(T018): land d.records as cog.tool_call events through the telemetry
-	// door (internal/mind/telemetry.go). Held only for the loop's duration for
-	// now — no durable call artifact yet.
-	_ = d.records
+	// Land every buffered CallRecord as a cog.tool_call event (spec 017
+	// FR-007, T018), unconditional on termination path — the AC#5 scenario
+	// requires rejected / never-grounded calls recorded even when nothing
+	// landed. Emitted here, before the terminal-outcome switch: the door
+	// already emitted any grounding + cog.outcome during the loop, and the
+	// default case's terminal outcome follows the switch, so this dedicated
+	// batch reorders neither.
+	md.emitToolCalls(d.records, job.meta.snapshotTick)
 
 	// Termination -> outcome + rearm, mirroring the pre-loop paths:
 	//   - landed: the landing door (world/set_plan) or the muse social batch

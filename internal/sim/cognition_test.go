@@ -147,6 +147,26 @@ func TestCogToolCallInjectableAndNoOp(t *testing.T) {
 	}
 }
 
+// TestNewCogToolCallPayload: the sim-side constructor (spec 017 T018, option c)
+// assembles the canonical payload from plain fields, so both loop consumers
+// (mind, metatron) build cog.tool_call the same way without importing toolloop
+// here. It is a pure shaper — the reason invariant is the caller's to enforce.
+func TestNewCogToolCallPayload(t *testing.T) {
+	args := json.RawMessage(`{"steps":[{"goal":"chop"}]}`)
+	got := NewCogToolCallPayload("planner-3-412800", 2, "set_plan", args,
+		"rejected_malformed", `unknown param "qty"`, "local", 412800)
+	want := CogToolCallPayload{
+		Job: "planner-3-412800", Ordinal: 2, Tool: "set_plan", Args: args,
+		Verdict: "rejected_malformed", Reason: `unknown param "qty"`,
+		Tier: "local", SnapshotTick: 412800,
+	}
+	if got.Job != want.Job || got.Ordinal != want.Ordinal || got.Tool != want.Tool ||
+		string(got.Args) != string(want.Args) || got.Verdict != want.Verdict ||
+		got.Reason != want.Reason || got.Tier != want.Tier || got.SnapshotTick != want.SnapshotTick {
+		t.Errorf("NewCogToolCallPayload = %+v, want %+v", got, want)
+	}
+}
+
 // --- US3: the landing ladder ---
 
 // ladderHarness: a paused loop at a preset tick — staleness is fully
