@@ -1,10 +1,12 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -960,6 +962,140 @@ func TestLocalWorkersNormalization(t *testing.T) {
 	// Absent field on a struct with no Parallel set is byte-identical to 0.
 	if n, warn := (LocalConfig{}).Workers(); n != 1 || warn != "" {
 		t.Errorf("absent parallel → (%d,%q), want (1,\"\")", n, warn)
+	}
+}
+
+// TestRoundsNormalization (TASK-52): loop_max_rounds normalizes to an
+// effective cap and warns exactly on out-of-range values — absent/0 is the
+// silent default (8), the cap is 16, negatives fall back to the default, and
+// nothing errors (mirrors LocalConfig.Workers()).
+func TestRoundsNormalization(t *testing.T) {
+	cases := []struct {
+		rounds   int
+		wantN    int
+		wantWarn bool
+	}{
+		{0, 8, false},   // absent / explicit 0 → default 8, silent
+		{1, 1, false},   // floor, verbatim
+		{8, 8, false},   // default value set explicitly, verbatim
+		{16, 16, false}, // cap, verbatim, no warning
+		{-3, 8, true},   // negative → default 8 with warning
+		{17, 16, true},  // one past the cap → clamped with warning
+		{999, 16, true}, // far above cap → clamped with warning
+	}
+	for _, c := range cases {
+		n, warn := Config{LoopMaxRounds: c.rounds}.Rounds()
+		if n != c.wantN {
+			t.Errorf("Rounds(loop_max_rounds=%d) n=%d, want %d", c.rounds, n, c.wantN)
+		}
+		if (warn != "") != c.wantWarn {
+			t.Errorf("Rounds(loop_max_rounds=%d) warn=%q, wantWarn=%v", c.rounds, warn, c.wantWarn)
+		}
+	}
+	if n, warn := (Config{}).Rounds(); n != 8 || warn != "" {
+		t.Errorf("absent loop_max_rounds → (%d,%q), want (8,\"\")", n, warn)
+	}
+}
+
+// TestToolModeNormalization (TASK-52): tool_mode resolves "" and "native" to
+// native and "json" to json, all silently; any unknown value falls back to
+// native with an operator warning (never an error). Both tiers share the
+// resolver; the warning names the scope.
+func TestToolModeNormalization(t *testing.T) {
+	cases := []struct {
+		raw      string
+		wantMode string
+		wantWarn bool
+	}{
+		{"", ToolModeNative, false},       // absent → native, silent (compat)
+		{"native", ToolModeNative, false}, // explicit native, silent
+		{"json", ToolModeJSON, false},     // fallback, silent
+		{"grammar", ToolModeNative, true}, // unknown → native with warning
+		{"NATIVE", ToolModeNative, true},  // case-sensitive: unknown → native + warn
+	}
+	for _, c := range cases {
+		lm, lw := LocalConfig{ToolMode: c.raw}.ToolModeResolved()
+		if lm != c.wantMode || (lw != "") != c.wantWarn {
+			t.Errorf("local ToolModeResolved(%q) = (%q,%q), want mode %q warn=%v", c.raw, lm, lw, c.wantMode, c.wantWarn)
+		}
+		cm, cw := CloudConfig{ToolMode: c.raw}.ToolModeResolved()
+		if cm != c.wantMode || (cw != "") != c.wantWarn {
+			t.Errorf("cloud ToolModeResolved(%q) = (%q,%q), want mode %q warn=%v", c.raw, cm, cw, c.wantMode, c.wantWarn)
+		}
+	}
+	// The scope appears in the warning so an operator knows which tier to fix.
+	if _, lw := (LocalConfig{ToolMode: "x"}).ToolModeResolved(); !strings.Contains(lw, "local.tool_mode") {
+		t.Errorf("local warning missing scope: %q", lw)
+	}
+	if _, cw := (CloudConfig{ToolMode: "x"}).ToolModeResolved(); !strings.Contains(cw, "cloud.tool_mode") {
+		t.Errorf("cloud warning missing scope: %q", cw)
+	}
+}
+
+// TestNilToolsByteIdentity (TASK-52, provider-wire.md §5c): a Request that
+// leaves the new transport fields (Tools/Turns) nil produces a chat-completions
+// request body byte-for-byte identical to the pre-feature payload — the
+// regression pin protecting every untouched single-shot kind. The expected
+// body is rebuilt from the exact pre-feature payload shape (deterministic:
+// json.Marshal sorts map keys).
+func TestNilToolsByteIdentity(t *testing.T) {
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	// preFeatureBody reproduces exactly what openaiCompat.call marshaled before
+	// TASK-52 for the given request fields.
+	preFeatureBody := func(system, prompt string, maxTokens int64, reasoning string) []byte {
+		type msg struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}
+		var msgs []msg
+		if system != "" {
+			msgs = append(msgs, msg{Role: "system", Content: system})
+		}
+		msgs = append(msgs, msg{Role: "user", Content: prompt})
+		payload := map[string]any{"model": "m", "messages": msgs, "stream": false}
+		if maxTokens > 0 {
+			payload["max_tokens"] = maxTokens
+		}
+		if reasoning != "" {
+			payload["reasoning_effort"] = reasoning
+		}
+		b, _ := json.Marshal(payload)
+		return b
+	}
+
+	cases := []struct {
+		name      string
+		reasoning string
+		req       Request
+	}{
+		{"plain", "", Request{Prompt: "hello"}},
+		{"system+maxtokens", "", Request{System: "sys", Prompt: "hello", MaxTokens: 256}},
+		{"reasoning", "none", Request{Prompt: "hello"}},
+		// New fields present but empty must not perturb the wire at all.
+		{"empty-new-fields", "", Request{Prompt: "hello", Tools: nil, Turns: nil, SkipObserve: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			raw = nil
+			o := newOpenAICompat(srv.URL, "m", "", c.reasoning)
+			if _, err := o.call(context.Background(), c.req); err != nil {
+				t.Fatal(err)
+			}
+			want := preFeatureBody(c.req.System, c.req.Prompt, c.req.MaxTokens, c.reasoning)
+			if !bytes.Equal(bytes.TrimSpace(raw), want) {
+				t.Errorf("body drifted from pre-feature:\n got: %s\nwant: %s", raw, want)
+			}
+		})
 	}
 }
 

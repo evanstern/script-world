@@ -104,6 +104,21 @@ type Request struct {
 	// for carrying a schema on a tier that can't use it.
 	ResponseSchema json.RawMessage `json:"response_schema,omitempty"`
 	SchemaName     string          `json:"schema_name,omitempty"`
+	// --- agent tool-use loop transport (TASK-52; all additive) ---
+	// Tools declares the tools the model may call this round. nil = no tools
+	// parameter is sent on the wire (today's behavior for every single-shot
+	// kind, byte-identical).
+	Tools []ToolDecl `json:"tools,omitempty"`
+	// Turns is the multi-turn transcript. nil = the single Prompt user message
+	// is sent (today's behavior, byte-identical); non-nil replaces Prompt as
+	// the message source. The transcript is ephemeral — never persisted, never
+	// replayed.
+	Turns []Turn `json:"turns,omitempty"`
+	// SkipObserve marks a loop-internal call: the worker feeds NO per-call
+	// sample to the tier estimator (the loop reports one whole-cognition
+	// observation via Orchestrator.ObserveCognition instead). Metering,
+	// admission, and the circuit breaker are unaffected.
+	SkipObserve bool `json:"skip_observe,omitempty"`
 }
 
 type Response struct {
@@ -114,7 +129,80 @@ type Response struct {
 	OutputTokens int64   `json:"output_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
 	Millis       int64   `json:"ms"`
+	// --- agent tool-use loop transport (TASK-52; additive) ---
+	// ToolCalls holds the calls the model emitted this round, in emission
+	// order; nil for a plain-text reply. Stop is the provider's stop reason,
+	// letting the loop driver tell "model finished" from "model wants results".
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Stop      StopReason `json:"stop,omitempty"`
 }
+
+// --- tool-call transport model (TASK-52) ---
+//
+// These types are the wire-agnostic currency between the loop driver and the
+// per-tier callers: a caller translates Request{Tools,Turns} out to its
+// provider's shape and Response{ToolCalls,Stop} back. They are transport-only
+// and ephemeral — never persisted and never replayed (data-model §3).
+
+// Role labels a transcript turn.
+type Role string
+
+const (
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+)
+
+// Turn is one message in the transcript: a role and its content blocks.
+type Turn struct {
+	Role   Role    `json:"role"`
+	Blocks []Block `json:"blocks"`
+}
+
+// Block is one content block in a turn — exactly one of the three is set.
+type Block struct {
+	Text       string           `json:"text,omitempty"`
+	ToolUse    *ToolUseBlock    `json:"tool_use,omitempty"`    // assistant-side call echo
+	ToolResult *ToolResultBlock `json:"tool_result,omitempty"` // user-side outcome
+}
+
+// ToolUseBlock echoes a prior assistant tool call in the transcript.
+type ToolUseBlock struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+// ToolResultBlock carries a tool's outcome back to the model, tied to the
+// call it answers by ForID.
+type ToolResultBlock struct {
+	ForID   string `json:"for_id"`
+	Content string `json:"content"`
+	IsError bool   `json:"is_error,omitempty"`
+}
+
+// ToolDecl is one declared tool on a Request: the schema the model calls against.
+type ToolDecl struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema object
+}
+
+// ToolCall is one call parsed from a Response.
+type ToolCall struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+// StopReason is why the model stopped this round.
+type StopReason string
+
+const (
+	StopEndTurn   StopReason = "end_turn"   // model reached a natural stop
+	StopToolUse   StopReason = "tool_use"   // model wants tool results to continue
+	StopMaxTokens StopReason = "max_tokens" // output token budget hit
+	StopOther     StopReason = "other"      // any other/unmapped reason
+)
 
 // TierStatus and Status feed the protocol status shape and the TUI.
 type TierStatus struct {
@@ -342,7 +430,7 @@ func (o *Orchestrator) worker(t *tier) {
 			// Worker-side hard cap: no single call may wedge the tier,
 			// regardless of the caller's context or transport behavior.
 			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
-			text, inTok, outTok, err := t.caller.call(callCtx, j.req)
+			cr, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
 				// The circuit counts the model's failures, never the
@@ -356,10 +444,12 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 			t.health.succeed()
 			resp := Response{
-				Text:         text,
+				Text:         cr.text,
+				ToolCalls:    cr.toolCalls,
+				Stop:         cr.stop,
 				Tier:         t.name,
-				InputTokens:  inTok,
-				OutputTokens: outTok,
+				InputTokens:  cr.inTok,
+				OutputTokens: cr.outTok,
 				Millis:       time.Since(start).Milliseconds(),
 			}
 			// Cognition-horizon sampling (TASK-32): completed calls feed the
@@ -380,8 +470,8 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 			if t.name == TierCloud {
 				resp.Model = o.cfg.Cloud.Model
-				resp.CostUSD = float64(inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
-					float64(outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
+				resp.CostUSD = float64(cr.inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
+					float64(cr.outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
 				if merr := o.meter.Add(resp.CostUSD); merr != nil {
 					// Metering must never lose money silently: surface it.
 					j.reply <- result{err: fmt.Errorf("spend meter: %w", merr)}

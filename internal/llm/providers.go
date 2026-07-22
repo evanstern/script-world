@@ -14,9 +14,22 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// caller is one tier's transport.
+// caller is one tier's transport. It returns the fields a transport owns for
+// one provider call (text, any tool calls, stop reason, token counts); the
+// worker completes the Response with tier/model/cost/millis (TASK-52).
 type caller interface {
-	call(ctx context.Context, req Request) (text string, inTok, outTok int64, err error)
+	call(ctx context.Context, req Request) (callResult, error)
+}
+
+// callResult is one provider call's transport-owned output. Its zero value is
+// a valid empty reply (no text, no tool calls, StopReason ""), so the
+// single-shot path never has to reason about tool fields.
+type callResult struct {
+	text      string
+	toolCalls []ToolCall
+	stop      StopReason
+	inTok     int64
+	outTok    int64
 }
 
 // --- OpenAI-compatible chat completions (Ollama, 9router, et al.) ---
@@ -43,7 +56,7 @@ func newOpenAICompat(endpoint, model, apiKey, reasoningEffort string) *openaiCom
 	}
 }
 
-func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, int64, error) {
+func (o *openaiCompat) call(ctx context.Context, req Request) (callResult, error) {
 	type msg struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
@@ -85,12 +98,12 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", 0, 0, err
+		return callResult{}, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		o.endpoint+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", 0, 0, err
+		return callResult{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if o.apiKey != "" {
@@ -99,12 +112,12 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 
 	resp, err := o.client.Do(httpReq)
 	if err != nil {
-		return "", 0, 0, err
+		return callResult{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", 0, 0, fmt.Errorf("chat-completions HTTP %d: %s", resp.StatusCode, snippet)
+		return callResult{}, fmt.Errorf("chat-completions HTTP %d: %s", resp.StatusCode, snippet)
 	}
 
 	var out struct {
@@ -119,12 +132,16 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 		} `json:"usage"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", 0, 0, fmt.Errorf("chat-completions response: %w", err)
+		return callResult{}, fmt.Errorf("chat-completions response: %w", err)
 	}
 	if len(out.Choices) == 0 {
-		return "", 0, 0, fmt.Errorf("chat-completions returned no choices")
+		return callResult{}, fmt.Errorf("chat-completions returned no choices")
 	}
-	return out.Choices[0].Message.Content, out.Usage.PromptTokens, out.Usage.CompletionTokens, nil
+	return callResult{
+		text:   out.Choices[0].Message.Content,
+		inTok:  out.Usage.PromptTokens,
+		outTok: out.Usage.CompletionTokens,
+	}, nil
 }
 
 // --- cloud tier: Anthropic Messages API via the official SDK ---
@@ -154,7 +171,7 @@ func newCloudCaller(cfg CloudConfig) caller {
 	return newAnthropicCaller(cfg)
 }
 
-func (a *anthropicCaller) call(ctx context.Context, req Request) (string, int64, int64, error) {
+func (a *anthropicCaller) call(ctx context.Context, req Request) (callResult, error) {
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = 1024
@@ -162,9 +179,7 @@ func (a *anthropicCaller) call(ctx context.Context, req Request) (string, int64,
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: maxTokens,
-		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(req.Prompt)),
-		},
+		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(req.Prompt))},
 	}
 	if req.System != "" {
 		// Stable system prompts (agent souls, the narrator charter) are the
@@ -177,7 +192,7 @@ func (a *anthropicCaller) call(ctx context.Context, req Request) (string, int64,
 	}
 	resp, err := a.client.Messages.New(ctx, params)
 	if err != nil {
-		return "", 0, 0, err
+		return callResult{}, err
 	}
 	var text strings.Builder
 	for _, block := range resp.Content {
@@ -185,5 +200,9 @@ func (a *anthropicCaller) call(ctx context.Context, req Request) (string, int64,
 			text.WriteString(b.Text)
 		}
 	}
-	return text.String(), resp.Usage.InputTokens, resp.Usage.OutputTokens, nil
+	return callResult{
+		text:   text.String(),
+		inTok:  resp.Usage.InputTokens,
+		outTok: resp.Usage.OutputTokens,
+	}, nil
 }
