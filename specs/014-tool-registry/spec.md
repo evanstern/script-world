@@ -211,10 +211,12 @@ are expressed as data listing registry names.
 
 - **FR-010**: All existing capabilities MUST become registry entries: the world
   verbs as they exist at integration time (19 as of this writing: the original 10
-  plus the 9 added by spec 012), say, muse, conversation gist, and the metatron
-  nudges. Each entry MUST carry the capability's existing parameter shape, gate,
-  effect class, and cost unchanged (e.g., intent durations, metatron charges,
-  musing and utterance text caps).
+  plus the 9 added by spec 012), say, muse, conversation gist, converse, and the
+  metatron nudges. Each entry MUST carry the capability's existing parameter
+  shape, gate, effect class, and cost unchanged (e.g., intent durations, metatron
+  charges, musing and utterance text caps). Converse is a registry entry
+  classified Expressive with an empty Events set (transcript-only; it lands no
+  world event), consistent with FR-008's roster membership.
 - **FR-011**: Behavior MUST be identical after migration: same prompts (FR-004),
   same validation outcomes (FR-005, FR-012), same event types and payload shapes,
   same costs. Replay of event logs recorded before this feature MUST reproduce

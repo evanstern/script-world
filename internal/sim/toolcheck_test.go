@@ -86,3 +86,64 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		t.Errorf("whitelist size = %d, want %d", len(injectSocialWhitelist), len(want))
 	}
 }
+
+// TestWorldToolDurationsMatchSimConstants (ratified addition, TASK-53 polish
+// phase, ADR-equivalent decision recorded on the board): every World tool's
+// registry Cost.DurationTicks must equal the sim duration constant it was
+// hand-carried from at migration time (R7 accepted this as intentional
+// duplication, not a derivation, because internal/tool is a leaf package that
+// cannot import internal/sim). This test is the trip-wire against that
+// duplication silently drifting — it lives in internal/sim (not internal/tool)
+// precisely because only this package can see both sides: the registry via
+// tool.All() and the unexported *Ticks constants in agents.go.
+func TestWorldToolDurationsMatchSimConstants(t *testing.T) {
+	want := map[string]int64{
+		"forage":        forageTicks,
+		"chop":          chopTicks,
+		"hunt":          huntTicks,
+		"build_fire":    buildFireTicks,
+		"build_shelter": buildShelterTicks,
+		"eat":           0, // no constant pre-refactor either — instant, like sleep/wander
+		"sleep":         0,
+		"wander":        0,
+		"goto_warmth":   0,
+		"talk_to":       0,
+		"quarry":        quarryTicks,
+		"collect_water": collectWaterTicks,
+		"cook":          cookFireTicks, // base fire-cook duration; oven override is executor-side (workDuration)
+		"refuel_fire":   0,
+		"craft_planks":  craftPlanksTicks,
+		"craft_stone":   craftStoneTicks,
+		"craft_spear":   craftSpearTicks, // hunt's spear-carry override (huntTicksSpear) is a separate constant
+		"build_oven":    buildOvenTicks,
+		"bathe":         batheTicks,
+		"drop":          0,
+		"pick_up":       0,
+		"build_chest":   buildFireTicks, // recipes.go's build_chest recipe entry reuses buildFireTicks (600)
+		"deposit":       0,
+		"withdraw":      0,
+	}
+
+	seen := make(map[string]bool, len(want))
+	for _, tl := range tool.All() {
+		if tl.Effect != tool.World {
+			continue
+		}
+		seen[tl.Name] = true
+		wantTicks, ok := want[tl.Name]
+		if !ok {
+			t.Errorf("world tool %q has no entry in this test's expected-duration table — add one so a new tool can't drift unnoticed", tl.Name)
+			continue
+		}
+		if tl.Cost.DurationTicks != wantTicks {
+			t.Errorf("%s: registry Cost.DurationTicks = %d, want %d (sim constant)", tl.Name, tl.Cost.DurationTicks, wantTicks)
+		}
+	}
+	// The reverse check: every name in want must be a real World tool, so a
+	// renamed or removed tool can't leave a stale, silently-passing entry.
+	for name := range want {
+		if !seen[name] {
+			t.Errorf("expected-duration table names %q, which is not a registered World tool", name)
+		}
+	}
+}
