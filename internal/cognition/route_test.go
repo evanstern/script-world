@@ -15,7 +15,6 @@ func TestRouteSanityTable(t *testing.T) {
 		{"planner", 4, true},
 		{"planner", 16, true},      // 816 <= 1200
 		{"planner", 32, false},     // 1632 > 1200
-		{"musing", 32, true},       // 544 <= 3600
 		{"conversation", 32, true}, // 7072 <= 7200
 		{"meeting", 32, true},      // 1088 <= 3600
 		{"consolidation", 32, true},
@@ -59,7 +58,7 @@ func TestRouteSuppressionCarriesArithmetic(t *testing.T) {
 }
 
 func TestRouteUncappedSuppresses(t *testing.T) {
-	dc, _ := ClassFor("musing")
+	dc, _ := ClassFor("planner")
 	if v := Route(dc, 0, 1.0); v.Allow {
 		t.Error("uncapped speed must suppress")
 	}

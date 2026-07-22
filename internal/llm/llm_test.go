@@ -586,10 +586,12 @@ func TestParallelOverflowPreservesOrderAndPrio(t *testing.T) {
 	}
 }
 
-// TestMusingBestEffort (TASK-21): musings route local and succeed on a quiet
-// tier, but are refused immediately (ErrTierBusy) the moment anything is
-// waiting — they may never displace real cognition.
-func TestMusingBestEffort(t *testing.T) {
+// TestBestEffortAdmission (TASK-21): a best-effort call succeeds on a quiet
+// tier but is refused immediately (ErrTierBusy) the moment anything is waiting
+// — best-effort work may never displace real cognition. Scheduled musing was
+// the first user of this mechanism (retired in spec 017); it remains doctrine
+// for any future drop-when-busy kind, exercised here with a planner call.
+func TestBestEffortAdmission(t *testing.T) {
 	release := make(chan struct{})
 	first := true
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -616,14 +618,14 @@ func TestMusingBestEffort(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
 		t.Fatalf("busy tier must drop best-effort musings: got %v", err)
 	}
 	// A starved musing (fairness floor) drops BestEffort and queues like
 	// any other call — admission must not refuse it.
 	done := make(chan error, 1)
 	go func() {
-		_, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "starved musing"})
+		_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "starved"})
 		done <- err
 	}()
 
@@ -644,7 +646,7 @@ func TestMusingBestEffort(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("starved musing never completed")
 	}
-	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	resp, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if err != nil {
 		t.Fatalf("quiet tier must serve best-effort musings: %v", err)
 	}
@@ -692,7 +694,7 @@ func TestBestEffortSlotAware(t *testing.T) {
 	// One slot busy, three free, queues empty → the musing is served (today's
 	// serial tier would have refused it the instant anything was in flight).
 	occupy(1)
-	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	resp, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if err != nil {
 		t.Fatalf("best-effort musing with a free slot must be served: %v", err)
 	}
@@ -703,7 +705,7 @@ func TestBestEffortSlotAware(t *testing.T) {
 	// Occupy the remaining three slots → all four busy, queues still empty.
 	occupy(slots - 1)
 	start := time.Now()
-	_, err = o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	_, err = o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if !errors.Is(err, ErrTierBusy) {
 		t.Fatalf("all slots busy must drop the best-effort musing: got %v", err)
 	}

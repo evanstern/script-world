@@ -36,9 +36,6 @@ const (
 	// KindMetatron is the gatekeeper angel (TASK-12): console turns,
 	// nudge judgment, and digests — premium cognition, tiny volume.
 	KindMetatron Kind = "metatron"
-	// KindMusing is best-effort interiority (TASK-21): admitted only when a
-	// local worker slot is free, dropped without retry when every slot is busy.
-	KindMusing Kind = "musing"
 	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
 	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
 	KindMeeting Kind = "meeting"
@@ -60,7 +57,6 @@ var routing = map[Kind]Tier{
 	KindNarrator:      TierCloud,
 	KindDrama:         TierCloud,
 	KindMetatron:      TierCloud,
-	KindMusing:        TierLocal,
 	KindMeeting:       TierLocal,
 }
 
@@ -93,8 +89,10 @@ type Request struct {
 	// BestEffort requests drop-when-busy admission: the call is refused
 	// with ErrTierBusy when no worker slot is free — any queued work, or all
 	// N slots in flight (TASK-45). Callers that may not displace real
-	// cognition (musings) set this; their fairness floor is the caller's
-	// business, not the orchestrator's.
+	// cognition set this; their fairness floor is the caller's business, not
+	// the orchestrator's. (Scheduled musing was its first user until spec 017
+	// folded musing into the planner loop; the mechanism stays doctrine for any
+	// future drop-when-busy kind.)
 	BestEffort bool `json:"best_effort,omitempty"`
 	// ResponseSchema, when set, constrains the reply to this JSON Schema at
 	// the sampler level via the OpenAI-compat response_format {type:
@@ -402,7 +400,7 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// Conversations are interactive — a turn mid-dialogue must not wait
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
-	// Best-effort work (musings) is the opposite extreme: admitted only
+	// Best-effort work is the opposite extreme: admitted only
 	// when a slot is free, refused instantly otherwise. With N local
 	// workers, "free slot" means no queued work AND at least one idle
 	// worker (inflight < slots) — a non-empty queue already implies every

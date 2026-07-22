@@ -48,21 +48,10 @@ const (
 	// the window opens.
 	planDebounceTicks = 300 // 5 game-minutes
 
-	// Musings (TASK-21): best-effort interiority between planner calls.
-	// The cadence is per agent; drops (busy tier, bad reply) cost a beat
-	// of silence and nothing else — musings are never queued or retried.
-	// museTimeout matches the planner's callTimeout: admission (not the
-	// deadline) is what keeps musings from displacing real work — once a
-	// quiet tier accepts one, a slow local model may take its time.
-	museCadenceTicks = 900 // 15 game-minutes
-	museTimeout      = callTimeout
-	museMaxTokens    = 48
-	// museStarveWindow is the fairness floor: best-effort admission loses
-	// every race on a saturated tier (live finding: back-to-back planner
-	// calls at ~50s each admit zero musings), so a musing starved this
-	// long rides the normal queue like any other call. Worst-case cost:
-	// one 48-token call per window.
-	museStarveWindow = 2 * time.Minute
+	// Musing is no longer a scheduled channel (spec 017 R10): a villager muses
+	// only by choosing the muse tool inside its planner tool-use loop, so it
+	// carries the same opportunity cost as any other action. The cadence-fired
+	// best-effort musing path (its queue, stagger, and fairness floor) is gone.
 )
 
 type Mind struct {
@@ -102,11 +91,6 @@ type Mind struct {
 	// Nightly consolidation (TASK-9): FIFO queue + per-agent in-flight guard.
 	consolQ        chan consolJob
 	consolInFlight [sim.AgentCount]atomic.Bool
-
-	// Musings (TASK-21): best-effort interiority, single-flight.
-	museDue    [sim.AgentCount]int64
-	museBusy   atomic.Bool  // one musing in flight at a time
-	lastMuseOK atomic.Int64 // wall unix-nano of the last landed musing
 
 	// Chronicle narrator (TASK-11): absorb-owned chapter buffer + FIFO queue
 	// to the single-flight cloud worker; narrRetry (cap 1) carries a failed
@@ -172,9 +156,6 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 	}
 	for i := range md.nextDue {
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
-		// Musing stagger sits half a slot off the planner stagger so the
-		// two cadences interleave instead of colliding.
-		md.museDue[i] = replica.Tick + museCadenceTicks/2 + int64(i)*(museCadenceTicks/sim.AgentCount)
 	}
 	go md.run()
 	go md.planWorker()
@@ -203,7 +184,6 @@ func (md *Mind) run() {
 		case batch := <-md.events:
 			md.absorb(batch)
 			md.plan()
-			md.muse()
 		case idx := <-md.rearm:
 			// A landing rejection: the agent noticed the plan failed and
 			// re-thinks at the next open debounce window.
@@ -498,90 +478,6 @@ func nextPhasePreservingDue(due, tick, cadence int64) int64 {
 		return due
 	}
 	return due + (tick-due)/cadence*cadence + cadence
-}
-
-// muse fires at most one best-effort interior thought per batch (TASK-21):
-// pure flavor with no goal effect, run detached so it never blocks the
-// absorb loop, and dropped — never queued — whenever the tier is busy or
-// the reply is unusable. Snapshot strings are built synchronously; only the
-// model call and injection leave this goroutine.
-func (md *Mind) muse() {
-	if md.social == nil || !md.museBusy.CompareAndSwap(false, true) {
-		return
-	}
-	tick := md.replica.Tick
-	pick := -1
-	for i := range md.replica.Agents {
-		a := &md.replica.Agents[i]
-		if a.Dead || a.Asleep || tick < md.museDue[i] || sim.AtMeeting(md.replica, i) {
-			continue
-		}
-		if pick < 0 || md.museDue[i] < md.museDue[pick] {
-			pick = i // most overdue first
-		}
-	}
-	if pick < 0 {
-		md.museBusy.Store(false)
-		return
-	}
-	// Re-arm before the call: a dropped musing is silence, not a debt.
-	// Phase-preserving (TASK-44): step forward from this agent's own due,
-	// not from tick, so a shared stall that leaves several agents overdue
-	// at once doesn't collapse their boot-staggered phases together.
-	md.museDue[pick] = nextPhasePreservingDue(md.museDue[pick], tick, museCadenceTicks)
-	// Router gate (FR-007): musings survive far higher speeds than planners
-	// (1 point vs 3), but the horizon still applies.
-	if v := md.routeVerdict("musing", llm.KindMusing); !v.Allow {
-		md.emitSuppressed("musing", pick, tick, v)
-		md.museBusy.Store(false)
-		return
-	}
-	name := md.replica.Agents[pick].Name
-	system := musingSystemPrompt(name, md.personas[pick])
-	prompt := userPrompt(md.replica, pick, md.k)
-	meta := md.newMeta("musing", pick, tick, 0, llm.KindMusing)
-	// The fairness floor stands down while a conversation runs — a scene
-	// is already the tier's most expensive tenant, and a queued musing
-	// behind it only starves planners further.
-	starved := !md.convoBusy.Load() &&
-		time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
-	go func() {
-		defer md.museBusy.Store(false)
-		md.emitCog(cogThoughtEvent(meta))
-		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)
-		resp, err := md.orch.Submit(ctx, llm.Request{
-			Kind: llm.KindMusing, System: system, Prompt: prompt, MaxTokens: museMaxTokens,
-			BestEffort: !starved,
-		})
-		cancel()
-		if err != nil {
-			// Best effort: busy or degraded tiers cost only silence — but
-			// recorded silence (FR-015).
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "call: "+err.Error(),
-				time.Since(start).Milliseconds()))
-			return
-		}
-		text, err := parseMusing(resp.Text)
-		if err != nil {
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "parse: "+err.Error(), resp.Millis))
-			return
-		}
-		payload, err := json.Marshal(sim.ThoughtPayload{Agent: pick, Text: text, Source: "musing"})
-		if err != nil {
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "marshal: "+err.Error(), resp.Millis))
-			return
-		}
-		// The musing and its terminal record land atomically.
-		if err := md.social.InjectSocial([]store.Event{
-			{Type: "agent.thought", Payload: payload},
-			md.cogOutcomeEvent(meta, sim.OutcomeLanded, "", resp.Millis),
-		}); err != nil {
-			log.Printf("mind: %s musing rejected: %v", name, err)
-			return
-		}
-		md.lastMuseOK.Store(time.Now().UnixNano())
-	}()
 }
 
 func (md *Mind) agentIndexByName(name string) int {

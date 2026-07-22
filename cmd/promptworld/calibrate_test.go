@@ -35,13 +35,13 @@ func TestCalibrateTierMedian(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.calls != 6 { // 2 shapes × 3 samples
-		t.Errorf("calls = %d, want 6", f.calls)
+	if f.calls != 3 { // 1 local shape (planner-3pt) × 3 samples (musing retired, spec 017)
+		t.Errorf("calls = %d, want 3", f.calls)
 	}
 	if tp.SecondsPerPoint < 16.9 || tp.SecondsPerPoint > 17.1 {
 		t.Errorf("seconds_per_point = %g, want ~17", tp.SecondsPerPoint)
 	}
-	if len(tp.Samples) != 2 || len(tp.Samples[0].WallMs) != 3 {
+	if len(tp.Samples) != 1 || len(tp.Samples[0].WallMs) != 3 {
 		t.Errorf("audit samples incomplete: %+v", tp.Samples)
 	}
 }
@@ -55,12 +55,12 @@ func TestCalibrateTierAllFailed(t *testing.T) {
 
 func TestHorizonSummary(t *testing.T) {
 	// At 17 s/pt the contract's sanity table: planner suppressed above 16x,
-	// musing/conversation/meeting OK at 32x.
+	// conversation/meeting OK at 32x.
 	s := horizonSummary(17.0)
 	if !strings.Contains(s, "planner suppressed above 16x") {
 		t.Errorf("summary = %q", s)
 	}
-	if !strings.Contains(s, "musing OK at 32x") {
+	if !strings.Contains(s, "conversation OK at 32x") {
 		t.Errorf("summary = %q", s)
 	}
 }

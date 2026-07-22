@@ -2,8 +2,6 @@ package mind
 
 import (
 	"testing"
-
-	"github.com/evanstern/promptworld/internal/sim"
 )
 
 // TestNextPhasePreservingDue is TASK-44: nextPhasePreservingDue is the
@@ -42,49 +40,6 @@ func TestNextPhasePreservingDue(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// TestMusingCadenceSurvivesSharedStall is TASK-44 AC#1: reproduces the
-// reported collapse — a shared stall (busy tier) leaves every agent overdue
-// at the identical tick. Draining and re-arming each agent (as muse's pick
-// loop does, one per call) must leave every due pairwise distinct and must
-// preserve each agent's boot offset (due mod cadence) — never collapse them
-// onto the same schedule the way `tick + cadence` did.
-func TestMusingCadenceSurvivesSharedStall(t *testing.T) {
-	const cadence = museCadenceTicks
-
-	// Mirrors New()'s boot stagger: museDue[i] = tick0 + cadence/2 +
-	// i*(cadence/AgentCount), with tick0 == 0 here.
-	boot := make([]int64, sim.AgentCount)
-	for i := range boot {
-		boot[i] = cadence/2 + int64(i)*(cadence/sim.AgentCount)
-	}
-
-	due := append([]int64(nil), boot...)
-	tick := int64(50_000) // deep past every agent's original due: the stall
-
-	for i := range due {
-		if due[i] > tick {
-			t.Fatalf("test setup: agent %d due %d is not overdue at tick %d", i, due[i], tick)
-		}
-		due[i] = nextPhasePreservingDue(due[i], tick, cadence)
-	}
-
-	seen := map[int64]int{}
-	for i, d := range due {
-		if d <= tick {
-			t.Errorf("agent %d re-armed due %d must land after tick %d", i, d, tick)
-		}
-		if mod := (d - boot[i]) % cadence; mod != 0 {
-			t.Errorf("agent %d due %d lost its boot phase %d (mod %d != 0)", i, d, boot[i], mod)
-		}
-		seen[d]++
-	}
-	for d, n := range seen {
-		if n > 1 {
-			t.Errorf("due %d shared by %d agents — phase collapse reproduced", d, n)
-		}
 	}
 }
 

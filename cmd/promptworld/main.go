@@ -33,7 +33,7 @@ Usage:
   promptworld miracle <world> <snap-time|give|move|remove> ... [--force]
                                                    land a Metatron miracle (--force waives the charge)
   promptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon
-                                                   (kinds: planner, conversation, musing,
+                                                   (kinds: planner, conversation,
                                                     consolidation, narrator, drama)
   promptworld calibrate <world> [--tier local|cloud|all] [--samples N]
                                                    benchmark seconds-per-point, write calibration.json

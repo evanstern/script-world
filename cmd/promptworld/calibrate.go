@@ -45,12 +45,6 @@ func refShapes(tier llm.Tier) []refShape {
 	}
 	return []refShape{
 		{
-			name: "musing-1pt", kind: llm.KindMusing, points: 1,
-			system:    "Reply with one plain sentence of inner thought.",
-			prompt:    situation + " What crosses your mind?",
-			maxTokens: 48,
-		},
-		{
 			name: "planner-3pt", kind: llm.KindPlanner, points: 3,
 			system:    "You decide a villager's next goal. Reply with a JSON object {\"goal\": \"...\", \"reason\": \"...\"}.",
 			prompt:    situation + " Recent memories: gathered wood yesterday; shared food with Rowan; slept poorly. What do you do next?",
@@ -100,7 +94,7 @@ func calibrateTier(orch submitter, tier llm.Tier, samples int) (cognition.TierPr
 func horizonSummary(secPerPt float64) string {
 	ladder := []float64{1, 4, 8, 16, 32}
 	parts := []string{}
-	for _, class := range []string{"planner", "musing", "conversation", "meeting"} {
+	for _, class := range []string{"planner", "conversation", "meeting"} {
 		dc, ok := cognition.ClassFor(class)
 		if !ok {
 			continue

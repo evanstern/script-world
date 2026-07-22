@@ -16,8 +16,9 @@ import (
 // envelope), validated by the loop driver against the registry's derived
 // schemas, and dispatched to handlers. What remains here is the conversation
 // and consolidation parsing, which keep their pre-loop mechanics (spec 017
-// FR-014). parseMusing survives only for the scheduled musing channel until
-// T013 deletes it; the muse TOOL receives structured args, not free text.
+// FR-014). parseMusing survives as the shared one-plain-line parser the meeting
+// rephraser consumes (the scheduled musing channel it was named for is gone;
+// the muse TOOL receives structured args, not free text).
 
 // Expressive text caps are read from the tool registry (spec 014 T020/R7) so
 // the parser and the registry never carry divergent literals. Values are
@@ -39,9 +40,11 @@ func capRunes(name string) int {
 	return t.Cost.TextCapRunes
 }
 
-// parseMusing accepts one plain line of interiority (TASK-21): first line,
-// quotes and whitespace stripped, rune-capped. Empty or JSON-shaped replies
-// are model failures, not thoughts.
+// parseMusing accepts one plain line of model output: first line, quotes and
+// whitespace stripped, rune-capped. Empty or JSON-shaped replies are model
+// failures. Named for its original caller (scheduled musing, retired in spec
+// 017); it survives as the shared one-plain-line parser the meeting rephraser
+// consumes (meeting.go — "same shape: one plain line").
 func parseMusing(text string) (string, error) {
 	t := strings.TrimSpace(text)
 	if i := strings.IndexByte(t, '\n'); i >= 0 {
@@ -49,7 +52,7 @@ func parseMusing(text string) (string, error) {
 	}
 	t = strings.Trim(t, "\"' ")
 	if t == "" || strings.HasPrefix(t, "{") {
-		return "", fmt.Errorf("unusable musing %q", text)
+		return "", fmt.Errorf("unusable line %q", text)
 	}
 	if r := []rune(t); len(r) > museCapRunes {
 		t = string(r[:museCapRunes])

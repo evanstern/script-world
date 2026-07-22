@@ -105,50 +105,12 @@ func TestPlannerTelemetryUnusable(t *testing.T) {
 	}
 }
 
-// TestMusingTelemetryLandsAtomically (US1): a landed musing's agent.thought
-// and its cog.outcome arrive in the same batch (same tick, adjacent seqs).
-func TestMusingTelemetryLandsAtomically(t *testing.T) {
-	h := newHarness(t, `{"goal":"rest","reason":"tired"}`)
-	h.model.mu.Lock()
-	h.model.musingReply = "The fire needs tending before the frost."
-	h.model.mu.Unlock()
-	outcomes := h.waitEvents(t, 20*time.Second, func(e store.Event) bool {
-		if e.Type != "cog.outcome" {
-			return false
-		}
-		var p sim.CogOutcomePayload
-		return json.Unmarshal(e.Payload, &p) == nil &&
-			p.Class == "musing" && p.Outcome == sim.OutcomeLanded
-	})
-	if len(outcomes) == 0 {
-		t.Fatal("no landed musing outcome recorded")
-	}
-	// The batch partner: an agent.thought at the same tick, adjacent seq.
-	evs, err := h.st.EventsSince(outcomes[0].Seq-2, 3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundThought := false
-	for _, e := range evs {
-		if e.Type == "agent.thought" && e.Tick == outcomes[0].Tick {
-			foundThought = true
-		}
-	}
-	if !foundThought {
-		t.Error("landed musing outcome not batched with its agent.thought")
-	}
-}
-
 // TestPlannerSuppressedAtHighSpeed (US2): at 32x under bootstrap calibration
 // (20 s/pt), a planner thought's predicted drift (1920 ticks) exceeds its
 // budget (1200) — no model call is made, the reflex floor covers, and the
-// suppression is recorded with its arithmetic. Musings (1 point, 640 ticks
-// vs 3600) still think.
+// suppression is recorded with its arithmetic.
 func TestPlannerSuppressedAtHighSpeed(t *testing.T) {
 	h := newHarnessAt(t, `{"goal":"forage","reason":"hungry"}`, "32x")
-	h.model.mu.Lock()
-	h.model.musingReply = "The wind is turning."
-	h.model.mu.Unlock()
 
 	suppressed := h.waitEvents(t, 30*time.Second, func(e store.Event) bool {
 		if e.Type != "cog.outcome" {
@@ -173,13 +135,6 @@ func TestPlannerSuppressedAtHighSpeed(t *testing.T) {
 		}
 	}
 	h.model.mu.Unlock()
-
-	musings := h.waitEvents(t, 30*time.Second, func(e store.Event) bool {
-		return e.Type == "agent.thought" && strings.Contains(string(e.Payload), "musing")
-	})
-	if len(musings) == 0 {
-		t.Error("musings should survive 32x (1 point rides under its budget)")
-	}
 }
 
 // TestFutureDatedLine (US4): the helper states now and the landing estimate;
@@ -276,15 +231,12 @@ func TestPauseInFlightThoughtLandsAtFrozenTick(t *testing.T) {
 }
 
 // TestPauseStartsNoNewThoughts: scheduling is tick-driven — once a paused
-// world quiesces, no new planner/musing jobs start no matter how much wall
-// time passes. (A landing batch arriving mid-pause may first settle one
+// world quiesces, no new planner jobs start no matter how much wall time
+// passes. (A landing batch arriving mid-pause may first settle one
 // debounce-bounded catch-up round at zero staleness — FR-018 as refined by
 // the live validation run; this test drains before measuring.)
 func TestPauseStartsNoNewThoughts(t *testing.T) {
 	h := newHarnessAt(t, `{"goal":"wander","reason":"stretching"}`, "16x")
-	h.model.mu.Lock()
-	h.model.musingReply = "Quiet day."
-	h.model.mu.Unlock()
 	if _, err := h.loop.Do("pause", ""); err != nil {
 		t.Fatal(err)
 	}
