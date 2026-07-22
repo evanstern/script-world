@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 23:00'
+updated_date: '2026-07-22 23:31'
 labels:
   - agent-mind
   - llm
@@ -89,4 +89,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Opus 4.8 landed T019b (2ef5477) + T020 (61d8db2): metatron on the loop. As-built decisions gated and recorded in data-model.md: work_miracle = Expressive (InjectSocial family, Events-declaration coherence) w/ flat Params not authored schema (driver validateArgs hard-routes authored schemas to the set_plan validator — latent generalization debt noted for a third authored-schema tool); converse excluded from declared roster (final text IS the reply; model_done = natural termination). Behavior upgrades vs today, intended: gate refusals feed back so the angel can correct a bad target within the cap; spec-016 nudge-over-miracle precedence dissolves into loop cardinality; no synthetic refusal suffix. turnMaxTokens 700→1024. Full suite incl e2e green. Pre-existing repo-wide gofmt discrepancy (8 untouched files, present on origin/main) noted, out of scope. US4 remaining: T021 fallback equivalence + T022 docs (Sonnet). Then US2 T014-T015, US5 T023-T024, polish.
 
 2026-07-22 Sonnet landed T021 (ba1dd4f: TestToolModeEquivalenceNativeVsJSON in internal/toolloop — real Orchestrator vs two scripted httptest servers; full driver-level equivalence (records/termination/final/rounds identical) with confirmed wire-level divergence; zero bugs found) and T022 (836cd27: README operator docs for loop_max_rounds + tool_mode incl when-to-flip-to-json cues; docs/wiki untouched per lifecycle). US4 complete — board AC#3 satisfied. Remaining: T014-T015 (US2), T023-T024 (US5), polish T025-T028.
+
+2026-07-22 Opus 4.8 landed the verification slice: T014 (evidence-only — git audit: whole_feature_test.go/sim_test.go byte-unchanged vs origin/main, all pre-existing replay harnesses untouched and green), T015 (8d7ad7c: TestLoopRunReplayByteIdenticalSC002 — full loop artifact set incl rejected cog.tool_call/Job-carrying intent_set+plan_set/muse thought; genesis AND snapshot replay byte-identical vs LIVE state; structural zero-invocation; paused-loop race-free fixture; -race clean), T023 (88c8480: whole-loop estimator obs exactly once w/ separable EWMA proof, SkipObserve leak-free, non-loop feeding regression-guarded; budget-exhausted mid-loop refused pre-HTTP w/ exact spend; route purity already pinned), T024 (db5f5e7: calibrate planner probe drives real toolloop.Run w/ production roster + whole-loop wall time — seed unit == observation unit; cloud probe deliberately unchanged, consolidation is single-shot by FR-014 and metatron cloud spend not invited). Full suite incl e2e green. US2+US5 complete. T025 target flagged: LoopRosterVillager() may iterate a map — tool-declaration order determinism matters for Anthropic prompt-cache prefix stability.
 <!-- SECTION:NOTES:END -->

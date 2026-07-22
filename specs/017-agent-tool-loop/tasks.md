@@ -119,11 +119,11 @@ local-tier smoke where planner cognitions land intents/plans/musings via tool ca
 **Independent Test**: quickstart §1 + §5 — pre-feature fixtures pass unmodified;
 live-vs-replay byte-identity on a loop-era run.
 
-- [ ] T014 (Opus 4.8) [US2] Run the full pre-existing replay/byte-identity suite
+- [x] T014 (Opus 4.8) [US2] Run the full pre-existing replay/byte-identity suite
       UNMODIFIED (whole_feature_test.go, sim_test.go, per-capability replay tests);
       fix any regression in the migration (never the fixtures) — evidence recorded in
       the PR (depends on T013)
-- [ ] T015 (Opus 4.8) [US2] Add live-vs-replay determinism test for a loop-era run:
+- [x] T015 (Opus 4.8) [US2] Add live-vs-replay determinism test for a loop-era run:
       scripted stub-model run in internal/sim or internal/mind integration test —
       genesis replay and snapshot replay byte-identical, zero handler/model invocations
       during replay (depends on T013)
@@ -194,12 +194,12 @@ live-vs-replay byte-identity on a loop-era run.
 
 **Independent Test**: quickstart §6.
 
-- [ ] T023 (Opus 4.8) [US5] Estimator/budget tests: whole-loop observations converge
+- [x] T023 (Opus 4.8) [US5] Estimator/budget tests: whole-loop observations converge
       (no per-call samples when SkipObserve), budget-exhausted mid-loop refuses
       pre-spend → `admission_refused` termination + failure cog.outcome, route verdict
       arithmetic unchanged, in internal/llm + internal/cognition tests (depends on
       T008, T009)
-- [ ] T024 (Opus 4.8) [US5] Update `promptworld calibrate` to probe a representative
+- [x] T024 (Opus 4.8) [US5] Update `promptworld calibrate` to probe a representative
       loop cognition (whole-loop sec/pt seeding) and reconcile the calibration profile
       docs, in the calibrate command + internal/cognition/calibration.go (depends on
       T023)
