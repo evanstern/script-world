@@ -1,13 +1,13 @@
 ---
 name: cli-scriptworld
-description: The single scriptworld binary — subcommand dispatch, world management, daemon control, observation commands, v1→v2 migration, exit discipline
+description: The single scriptworld binary — subcommand dispatch, world management, daemon control, observation commands, v1→v2→v3 migration, exit discipline
 kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
   - cmd/scriptworld/calibrate.go
   - cmd/scriptworld/ps.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # scriptworld CLI
@@ -43,16 +43,19 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   [[metatron]]), and
   appends the tick-0 secret events ([[social-fabric]]). Random default seed (crypto-random,
   right-shifted 12 bits to stay comfortably printable).
-- `migrate <world>` — the one-time v1→v2 upgrade (spec 012 US6 —
+- `migrate <world>` — the one-time upgrade of an older world (v1 or v2) to the
+  current format (spec 012 US6 for v1→v2, spec 013 for v2→v3 —
   [[world-migration]]): resolves `<world>` via `resolveWorldForMigrate`, which
-  unlike `resolveWorld`/`worlds.Resolve` must reach v1 worlds that this v2 build
-  cannot `world.Open` — a path argument passes through verbatim, a bare name
+  unlike `resolveWorld`/`worlds.Resolve` must reach older-format worlds that this
+  build cannot `world.Open` — a path argument passes through verbatim, a bare name
   resolves against the worlds home then the known-worlds registry by manifest
   *presence* alone, never the version gate. Hands the whole
   archive/transform/rewrite ceremony to `world.Migrate`
-  ([[world-save-directory]]) and prints a human summary (seed, villagers carried,
-  continuation tick, source event count, archive path, and the `start` command to
-  run next).
+  ([[world-save-directory]]), which admits a v1 or v2 source (a v1 world chains
+  1→2→3 in one run; an already-current world is refused outright) and archives the
+  original database under a name keyed to the source format (`world.v1.db` or
+  `world.v2.db`). Prints a human summary (seed, villagers carried, continuation
+  tick, source event count, archive path, and the `start` command to run next).
 - `ps [--all] [--json]` — machine-wide listing of worlds with live-proven state
   ([[instance-manager]]): discovery over the worlds home + registry, concurrent
   bounded probes, `NAME STATE PID TICK GAME TIME SPEED LLM PATH` table or a JSON

@@ -8,7 +8,7 @@ sources:
   - internal/sim/plan.go
   - internal/sim/terrain.go
   - internal/sim/recipes.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Executor
@@ -20,7 +20,9 @@ the executor is what makes goals physically happen — and it must keep bodies a
 with no planner at all (the degraded-mode contract from the grounding session).
 Spec 012 (resources/food/crafting v2) widened the body's economy substantially:
 finer-grained resources, a crafting chain, fire fuel with burnout, spear-armed
-hunts, and a shelter rest bonus — this note covers that v2 shape.
+hunts, and a shelter rest bonus. Spec 013 (inventory & storage v1) added a carried
+bulk cap, ground piles, builder-owned chests, and food rot — this note covers
+that v3 shape.
 
 ## How it works
 
@@ -119,6 +121,55 @@ plus the absolute post-eat food need, so the reducer never re-derives arithmetic
 not just raw. `canGive` (the give-to-starving social rule) checks `Inv.FoodRaw`
 specifically — raw is deliberately the form a subsistence village shares.
 
+**Carried bulk & the v1 storage economy** (spec 013): every kind of carried good
+counts toward a per-villager `bulk` — one unit per inventory count, one per
+carried spear — capped at `bulkCap` (24), derived via `bulk()`/`freeBulk()` and
+never stored. Every gather completion (`forage`/`chop`/`hunt`/`quarry`/
+`collect_water`) clamps its yield to the taker's pre-event free bulk and is
+skipped entirely — no event at all, so no depletion — when free bulk is already
+zero (US1-AS1/AS2); a hand-craft's completion additionally re-validates its net
+output-minus-input bulk delta the same way (only `craft_planks` is net-positive;
+crafts don't truncate, they simply don't happen if the net won't fit). The
+give-to-starving social rule (`repayable`/`giveable`) likewise requires the
+receiver have free bulk before a give is offered.
+
+Ground goods live as `State.Piles`, one per tile (event-sourced overlay state,
+like `Quarried`). `drop`/`pick_up` are instant-on-arrival, planner/plan-only
+goals (never in the reflex ladder, FR-014): `drop` moves a named `Kind`/`Qty`
+(`Qty` 0 = all carried) from inventory onto the agent's own tile, creating or
+merging the tile's pile; `pick_up` targets the nearest pile (on or adjacent) and
+moves goods in, truncated to free bulk, emitting one `agent.picked_up` per kind
+actually moved — `Kind` "" sweeps every kind in canonical field order (wood,
+stone, water, planks, refined_stone, food_raw, food_cooked, meals, spears). Food
+on the ground is batch-tracked (`FoodBatch{Kind, N, SpoilAt}`, drop order, same
+`(Kind, SpoilAt)` merges); every non-food kind is a flat count; spears carry
+their remaining uses, always sorted ascending so the most-worn moves first on
+either side of a transfer. `agent.died` additionally spills the dead agent's
+entire inventory onto a pile at the death tile (reducer-internal, no new event —
+research R7's debt-opening precedent), and `buildSite` (`terrain.go`) rejects any
+tile already holding a pile (FR-007 — goods aren't buried).
+
+**Builder-owned chests** (`build_chest`, spec 013 US3): a fifth structure kind
+alongside fire/shelter/oven, gated on `chestPlankCost` (6) planks with a
+fire-comparable build duration. The builder is recorded as the chest's `Owner`
+permanently (no transfer or inheritance in v1) and the chest gets an empty
+`Store`, capped at `chestCap` (48, the same derived `bulk()`). `deposit`/
+`withdraw` are instant-on-arrival, planner/plan-only goals resolving to the
+nearest chest (`withdraw` with a named `Kind` targets the nearest chest actually
+holding it); their completions re-validate the chest still stands and truncate
+the move to whichever side is tighter — the chest's free space on deposit, the
+taker's free bulk on withdraw. A non-owner `withdraw` is theft: never blocked,
+always marked — the executor co-emits a companion batch in the same tick
+(`social.chest_taken`, a reason-`"theft"` `social.relation_changed`, the owner's
+gossip-seed memory, and witness memories for nearby villagers — [[social-fabric]]
+has the full mechanics).
+
+**Food rot** (spec 013 US5): on the same per-game-minute boundary the needs
+heartbeat uses, `stepEvents` also sweeps every pile's food batches for ones whose
+`SpoilAt` has arrived, emitting one `sim.food_rotted` per (pile, kind) with
+same-kind spoiled batches merged — a pure function of (state, tick), the
+fuel-sweep pattern. Chest food carries no batches and never rots (FR-010).
+
 **Guarded plans** (TASK-32, `plan.go`): a planner reply may land as a short
 conditional plan — up to `PlanStepCap` (3) `PlanStep`s, each with a goal, an
 optional `When` guard, and an `Until` validity deadline (default window
@@ -190,10 +241,12 @@ the substrate hold unchanged over the whole layer.
 [[reflex-policy]] decides what idle agents do (including the v2 fuel/craft/eat
 ladder); [[sim-loop]] drives the tick; [[event-types]] catalogs the event families;
 the [[gru]] preys on the bodies at night; [[tui-client]] renders bodies, needs
-gauges, structures, and fire lit/cold state; [[worldmap-generation]] supplies the
-Rock kind quarry sites overlay onto; [[world-migration]] re-places carried souls on
-a fresh v2 map with empty overlays. TASK-7 replaces goal *selection*, never
-execution.
+gauges, structures, fire lit/cold state, ground piles, and chest contents;
+[[worldmap-generation]] supplies the Rock kind quarry sites overlay onto;
+[[social-fabric]] carries the theft companion batch a non-owner withdrawal
+triggers; [[world-migration]] re-places carried souls on a fresh v2 map with empty
+overlays (v1→v2) and, for the v2→v3 cut, spills any over-cap carry to a pile in
+place with no land reset. TASK-7 replaces goal *selection*, never execution.
 
 ## Operational notes
 
@@ -204,4 +257,6 @@ Event volume: ~8 needs events/game-minute (one per living agent) plus movement b
 a two-day run is ~100k events. The v2 economy adds a full crafting chain (wood/stone
 → planks/refined_stone → spears/shelter/oven) and a fire that must be refueled or it
 goes cold — `whole_feature_test.go` and `food_fire_test.go` exercise the chain and
-the fuel sweep end-to-end.
+the fuel sweep end-to-end. The v3 storage economy (spec 013) is exercised by its own
+suite — `bulk_cap_test.go`, `ground_pile_test.go`, `chest_test.go`, `theft_test.go`,
+`rot_test.go`, `migrate_test.go` — plus an extended `whole_feature_test.go` pass.

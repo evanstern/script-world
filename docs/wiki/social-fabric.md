@@ -1,11 +1,11 @@
 ---
 name: social-fabric
-description: The conflict engine — directed relation edges, debt ledger with computed reputation, rumors with provenance and mutation, authored secrets, and model-driven conversations injected atomically
+description: The conflict engine — directed relation edges, debt ledger with computed reputation, rumors with provenance and mutation, authored secrets, chest-theft consequences, and model-driven conversations injected atomically
 kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Social fabric
@@ -26,7 +26,12 @@ creditor→debtor), rumor tone/4 listener→subject, conversation tones ×12/×2
 giver→receiver (spec 012 widened the single `Food` field to a raw/cooked/meals
 triplet; giving stays denominated in the least-nutritious raw form) — opens
 `Debt{due +2 game days}` (reducer-internal on `social.gave`); a matching
-give-back settles it kept; the
+give-back settles it kept. Spec 013 (US1) added a carried-bulk guard: the
+executor's `repayable`/`giveable` checks additionally require the receiver have
+free bulk (`freeBulk(Inv) > 0`) before offering a give — a starving villager
+already at the cap is carrying food and would eat rather than receive — and the
+reducer clamps the receive defensively at `bulkCap`, so even a forged over-cap
+`social.gave` can't push a recipient over it. The
 executor's hourly due-check breaks overdue debts permanently — with the trust
 penalty and a gossip-seed memory ("X never repaid…"). `Reputation` is computed
 (500 +100·kept −200·broken), never stored.
@@ -43,6 +48,25 @@ event). `TellableFor` never surfaces secrets.
 tick-0 events; only the conversation driver may pass one — owner→listener trust ≥
 `SecretTrustGate` (700) plus a seeded 1-in-3 roll — after which it spreads like
 any rumor.
+
+**Theft** (spec 013 US4, FR-011/012, research R5): a non-owner withdrawing from a
+builder-owned chest ([[executor]]) is never blocked — the goods already moved —
+but always marked, through a companion batch the executor co-emits in the same
+tick as the `agent.withdrew`: `social.chest_taken{owner, taker, x, y}` is the
+distinct taking record itself (reducer-effect-free, chronicle/TUI material, same
+idiom as `social.conversation_turn`); a `social.relation_changed` owner→taker
+moves the edge through the same fixed-rule machinery as talk/give/broken-promise,
+reason `"theft"`, at `theftTrustDelta` (−120) trust and `theftAffectionDelta`
+(−40) affection; the owner (if living) gets a subject-tagged memory of the taker
+at `theftMemoryTone` (−60) regardless of distance — a `TellableFor` gossip seed,
+the same any-distance exemption a chest owner's "my things were taken" grievance
+needs to travel; and every living, awake villager within `witnessRadius` (8) of
+the chest, excluding the taker and the owner (who already has the stronger
+any-distance memory), gets its own witness memory at the same tone. A
+dead owner still gets the record, the relation delta, and the witness memories —
+only the owner's own memory is skipped (the dead don't remember; the village
+does). Owner withdrawing from their own chest emits `agent.withdrew` alone, no
+companion batch (FR-011).
 
 **Conversations** (`mind/convo.go`, scenes in TASK-22): on the executor's
 `agent.talked` beat, the driver (slot = 1, immutable snapshot, 10-min deadline —
@@ -95,7 +119,7 @@ serve it back to prompts — planner prompts carry a "Last conversation, with X:
 
 ## Connections
 
-[[executor]] runs the deterministic acts (give/repay/talk/due-check);
+[[executor]] runs the deterministic acts (give/repay/talk/due-check/theft);
 [[sim-state-reducer]] carries all social state; [[sim-loop]]'s `inject_social` is
 the second injection door beside `inject_intent`; the [[llm-orchestrator]]'s
 priority lane keeps dialogue turns from starving behind planner traffic;

@@ -7,7 +7,7 @@ sources:
   - internal/tui/views.go
   - internal/tui/layout.go
   - internal/tui/grammar.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # TUI client
@@ -57,18 +57,43 @@ static tile) — a quarried-out rock outcrop renders as a faint `,` ahead of the
 static terrain check — with the replica's agents on top (by initial,
 lowercase asleep, † dead) plus built structures: fires render lit ▲ while the
 current tick is before the structure's `FuelUntil` and fall back to a faint,
-hollow cold glyph △ once fuel runs out, shelters ⌂, ovens ▣, and the [[gru]]
-as a red G while it is abroad; the camera follows the living agents'
-centroid, arrow keys pan, `c` recenters. The **dock** hosts
-three tabs — keys `2`/`3`/`4` select, the same key again zooms the tab solo,
-`1`/`esc` return to the composite: **chronicle** (default; see below),
-**metatron** (the angel transcript — replies stream here, or badge the tab
-`metatron •` when it isn't visible; charge bank and charter provenance as
-before — [[metatron]]), and **souls** (live agent bodies: status, current
-goal, needs gauges, a full carried-inventory line — wood/stone/water/planks/
-refined-stone counts, the food triplet raw/cooked/meals, and (when carried) a
-spear count with the most-worn spear's remaining uses — newest memory line;
-full soul.md files on disk per [[agent-mind]]).
+hollow cold glyph △ once fuel runs out, shelters ⌂, ovens ▣, chests ☐ (spec
+013 US3), and the [[gru]] as a red G while it is abroad; ground piles (spec
+013 US2, `Model.replica.Piles`) render as a dedicated overlay `%`, layered
+like structures rather than folded into them so a coincidental tile overlap
+loses neither glyph's priority silently; the camera follows the living
+agents' centroid, arrow keys pan, `c` recenters.
+
+Inspection (spec 013 T021/T026, SC-006): the map legend — its one designated
+inspection surface, content grows the line rather than adding a second row —
+appends, for whatever's currently in view, a stockpile-zone summary per pile
+cluster and an owner+contents+fullness entry per chest. Piles in view are
+grouped into **stockpile zones** by 4-neighbor Manhattan adjacency
+(`pileZones`, a render-side-only flood fill — no zone state, matching
+spec.md's "an observability grouping of adjacent piles, not a state entity");
+each zone renders as `pile(x,y) contents` (single pile) or
+`zone[n](x0,y0)-(x1,y1) contents` (multi-pile, bounding box + count), where
+contents (`summarizePileContents`) is non-food resource counts plus a spear
+count plus a `food Nr/Nc/Nm` batch total when any food is held. Each visible
+chest renders as `chest(x,y) [Owner] contents n/48` (`describeChest`, owner
+resolved through the same `agentName` helper the chronicle grammar uses,
+contents via `summarizeInventoryContents`, capacity `sim.ChestCap`) — a
+chest's `Store` is a plain counts inventory rather than dated batches,
+because chests preserve food indefinitely (no rot deadlines to track).
+
+The **dock** hosts three tabs — keys `2`/`3`/`4` select, the same key again
+zooms the tab solo, `1`/`esc` return to the composite: **chronicle** (default;
+see below), **metatron** (the angel transcript — replies stream here, or
+badge the tab `metatron •` when it isn't visible; charge bank and charter
+provenance as before — [[metatron]]), and **souls** (live agent bodies:
+status, current goal, needs gauges, a leading `bulk n/24` derived-load
+reading (spec 013 T015, SC-006; `sim.Bulk`/`sim.BulkCap` — the same function
+the reducer/executor clamp gathers and crafts against, so the number never
+drifts from what an action will actually do), then the full carried-inventory
+line — wood/stone/water/planks/refined-stone counts, the food triplet
+raw/cooked/meals, and (when carried) a spear count with the most-worn spear's
+remaining uses — newest memory line; full soul.md files on disk per
+[[agent-mind]]).
 
 The **chronicle** renders the narrated story from the replica's
 snapshot-carried `State.Chronicle` ring ([[chronicle]]) or the raw feed (`r`
@@ -77,7 +102,12 @@ cycle agent/thread filters). Raw lines follow the grammar in grammar.go
 (pure functions): agent indices resolve to names, speech events
 (`social.conversation_turn`, `social.rumor_told`) render bright as
 `{"Speaker"→"Listener"} "utterance"`, scene summaries and default events dim,
-`clock.*` yellow. Pausing puts the visible chronicle into **inspect mode**:
+`clock.*` yellow. The agent-index field table driving that resolution
+(`agentIndexFields`/`agentIndexFieldRe`) covers `agent`, `a`, `b`, `from`,
+`to`, `speaker`, `listener`, `subject`, and — since spec 013 — `owner` and
+`taker`, so `agent.withdrew` and the chest-theft record `social.chest_taken`
+resolve to names in both the raw feed and the inspector instead of rendering
+bare integers. Pausing puts the visible chronicle into **inspect mode**:
 `j`/`k`/`g`/`G` select, `⏎` expands the stored event verbatim —
 pretty-printed with `// name` annotations beside integer agent indices.
 

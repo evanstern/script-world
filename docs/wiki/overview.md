@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Overview
@@ -62,9 +62,11 @@ a default worlds home (`~/.scriptworld/worlds`, where `new <name>` creates) and 
 advisory known-worlds pointer cache — both strictly optional: every command still
 takes a plain path, and a world runs and copies with no manager state present.
 `scriptworld ps` enumerates every running world machine-wide from live evidence.
-The save format has broken once so far: spec 012 (resources/food/crafting) bumped
-`format_version` to 2, and `scriptworld migrate <world>` ([[world-migration]]) is
-the door a stopped v1 world walks through to keep running under a newer binary.
+The save format has broken twice so far: spec 012 (resources/food/crafting) bumped
+`format_version` to 2, and spec 013 (inventory & storage) bumped it again to 3;
+`scriptworld migrate <world>` ([[world-migration]]) is the door a stopped older
+(v1 or v2) world walks through to keep running under a newer binary, chaining
+both steps in one run for a v1 source.
 
 ## Connections
 

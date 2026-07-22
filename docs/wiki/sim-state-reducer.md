@@ -6,7 +6,7 @@ sources:
   - internal/sim/state.go
   - internal/sim/agents.go
   - internal/sim/recipes.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Sim state & reducer
@@ -17,9 +17,16 @@ inventories (the v2 resource set, spec 012 — [[executor]])/memories (with
 `IdleSince` for the reflex grace, a `NearDeath`
 latch, a `Generation` interrupt counter and pending `Plan` steps for the
 [[cognition]] horizon — both `omitempty` so pre-TASK-32 snapshots stay
-byte-stable), structures (`fire`/`shelter`/`oven`, fires carrying a `FuelUntil`),
-cleared trees, harvested forage, den cooldowns, `Quarried` depleted rock outcrops
-(spec 012, permanent, `omitempty`), the social
+byte-stable), structures (`fire`/`shelter`/`oven`/`chest`, fires carrying a
+`FuelUntil`; chests (spec 013 US3) carrying a permanent `Owner` — the builder's
+agent index, zero-value round-tripping unambiguously since every chest has one —
+and a `Store *Inventory` capped at `chestCap` via the same derived `bulk()` used
+for agents), cleared trees, harvested forage, den cooldowns, `Quarried` depleted
+rock outcrops (spec 012, permanent, `omitempty`), `Piles []Pile` — the per-tile
+ground commons of dropped/spilled goods (spec 013 US2): event-sourced overlay
+state like `Quarried`, one pile per tile (a reducer invariant), non-food a flat
+count, food batch-tracked (`FoodBatch{Kind, N, SpoilAt}`, same `(Kind,SpoilAt)`
+merges), spears sorted ascending, `omitempty` — the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
 variants and the bounded conversation-record ring ([[social-fabric]]) — the
 consolidated inner life: per-agent beliefs, self-narrative, and the
@@ -40,10 +47,12 @@ lawless village) (executor types in `agents.go`; memories belong to
 [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
-live execution. Spec 012 bumped the save format to v2 ([[world-save-directory]]); a
-v1 world's `Inventory` (just `wood`/`food`) cannot decode under this build at all —
-[[world-migration]] is the one-time bridge, landing as a single wholesale-replace
-event rather than incremental `Apply` calls (below).
+live execution. Spec 012 bumped the save format to v2, and spec 013 (inventory &
+storage — bulk cap, piles, chests, theft, rot) bumped it again to **v3**
+([[world-save-directory]]); a v1 world's `Inventory` (just `wood`/`food`) cannot
+decode under this build at all — [[world-migration]] is the bridge, chaining 1→2→3
+in one run and landing as a single wholesale-replace event rather than incremental
+`Apply` calls (below).
 
 ## How it works
 
@@ -57,15 +66,29 @@ genesis of the same seed.
 `Apply` switches on event type: `clock.*` maintain pause/speed/degradation;
 `sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
-`agent.*` family ([[event-types]]) drives intents, movement, work products
-(inventory + overlays + structures), eating (`agent.ate`'s `AtePayload` sets the
-absolute post-eat food need and decrements each carried food form by its consumed
-count — no reducer-side arithmetic), sleep, talk, needs (absolute values), and
-death; the v2 resource/crafting events (`agent.quarried`/`collected_water`/
-`crafted`/`cooked`/`bathed`/`refueled`/`spear_broke`, `sim.fire_burned_out`) apply
-inventory deltas and structure/overlay changes, several by re-deriving the recipe
-from `recipes.go` (the single source for craft/build magnitudes — a duplicated
-number here would drift from the contract table); the `gru.*` family dispatches to
+`agent.*` family ([[event-types]]) drives intents (`agent.intent_set` carries a
+storage goal's `Kind`/`Qty` onto the `Intent`, spec 013 R4), movement, work
+products (inventory + overlays + structures), eating (`agent.ate`'s `AtePayload`
+sets the absolute post-eat food need and decrements each carried food form by its
+consumed count — no reducer-side arithmetic), sleep, talk, needs (absolute
+values), and death; the v2 resource/crafting events (`agent.quarried`/
+`collected_water`/`crafted`/`cooked`/`bathed`/`refueled`/`spear_broke`,
+`sim.fire_burned_out`) apply inventory deltas and structure/overlay changes,
+several by re-deriving the recipe from `recipes.go` (the single source for
+craft/build magnitudes — a duplicated number here would drift from the contract
+table), and — since spec 013 — clamp their gather yields to the taker's free
+bulk (`bulkCap − bulk(Inv)`); the v3 storage events (spec 013 US2/US3/US5)
+move goods between an agent's `Inv` and a `Pile`/chest `Store`:
+`agent.dropped`/`agent.picked_up` create-or-merge or drain a tile's pile
+(food oldest-batch-first, spears most-worn-first), `agent.deposited`/
+`agent.withdrew` do the same against a chest's `Store`, and `sim.food_rotted`
+drains a pile's spoiled food batches (`SpoilAt ≤ tick`) — every one of these
+defensively re-clamps to what's actually carried/held/available, so the reducer
+stays total even against a contested or forged event, and an emptied pile is
+removed in the same application; `social.chest_taken` is an effect-free record
+(its consequences — the reason-`"theft"` `social.relation_changed` and the
+owner/witness `agent.memory_added` events — ride the same companion batch,
+[[social-fabric]]); the `gru.*` family dispatches to
 `applyGru` in `gru.go` ([[gru]]);
 the `meeting.*`/`norm.*` families — plus `meeting.convention_established` and
 the `sim.gathering_observed` watch event (TASK-36) — dispatch to
@@ -84,7 +107,10 @@ not resumed). The hail family (TASK-47) maintains `Agent.Hail *AgentHail`
 (`{By, Until}`, `omitempty` so pre-TASK-47 snapshots and un-hailed agents stay
 byte-stable): `social.hailed` sets it, `social.hail_met`/`social.hail_expired`
 clear it, and `agent.died`/`agent.slept` also clear it (the dead and the
-sleeping shed hails). The cognition telemetry types — `cog.thought`, `cog.outcome`,
+sleeping shed hails). `agent.died` also spills the dying agent's entire carried
+`Inv` onto a pile at its own tile (create-or-merge, food batches stamped
+`tick + rotWindowTicks`), emptying `Inv` — reducer-internal, no new event (spec
+013 US2, FR-006, research R7's debt-opening precedent). The cognition telemetry types — `cog.thought`, `cog.outcome`,
 `cog.recalibration_recommended`, `agent.intent_rejected` — are explicit
 reducer no-ops: recorded observability with zero state effect.
 Unknown types — including `daemon.*` and `world.created` — are recorded

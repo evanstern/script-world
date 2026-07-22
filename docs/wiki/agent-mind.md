@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Agent mind
@@ -41,10 +41,19 @@ cold fire nearby is background texture, not formative) — all, like the
 pre-existing `SalDream` (8), kept below `GenerationBumpSalience` (9,
 [[cognition]]) on purpose: memorable enough to surface in the working window,
 never so high they'd interrupt an in-flight generation the way near-death or
-exile do. It also added `memoryEventToned`, a `memoryEvent` variant for a
-personal (non-gossip, `Subject: -1`) memory that still carries an explicit tone
-— `toneBath` (40) and `toneOvenBuilt` (30) are its two spec-012 tones, both
-positive. `SelectMemories` is the deterministic working
+exile do. Spec 013's storage economy added two more on the same band:
+`salChestBuilt` (7, village-visible, the oven precedent) and `salTaking` (7,
+a non-owner withdrawal from a chest — suffered by the owner and witnessed by
+neighbors, above the rumor-eligibility floor so the owner's subject-tagged
+memory seeds gossip). It also added `memoryEventToned`, a `memoryEvent`
+variant for a personal (non-gossip, `Subject: -1`) memory that still carries
+an explicit tone — `toneBath` (40), `toneOvenBuilt` (30), and spec 013's
+`toneChestBuilt` (20) are positive; the taking itself is recorded through
+`memoryAboutEvent` with `theftMemoryTone` (−60, negative) for both the owner
+and nearby witnesses, alongside a trust/affection hit on the owner→taker
+relationship edge — the existing gossip and relation machinery carries a
+chest theft the same way it carries any other trust violation ([[social-fabric]]).
+`SelectMemories` is the deterministic working
 window: salience halved per game-day of age, top K−2, plus 2 seeded serendipity
 picks from the oldest half (bucketed to the planner cadence), presented
 reverse-chronologically. K = `WindowK` (10). Prompts never see the whole soul.
@@ -108,22 +117,34 @@ wood, stone, water, planks, refined stone, the food triplet (raw/cooked/meals),
 and, when any are held, a spear count with the most-worn's remaining uses — so
 the planner can reason about the crafting chain and the oven's consumers
 directly. The reply's first JSON object is parsed against the goal
-vocabulary — also widened by spec 012, from the original ten goals to
-nineteen: both `validGoals` (parse.go) and the prompt's `goalVocabulary`
-constant gained `quarry`, `collect_water`, `cook`, `refuel_fire`,
-`craft_planks`, `craft_stone`, `craft_spear`, `build_oven`, and `bathe`, each
-with a one-line behavior gloss appended to `systemPrompt` so the planner knows
-what it's choosing before it commits to a goal — the contract now allows
-either one goal or a guarded plan of at
-most `planStepCap` (3) steps (parse.go) — `after_min` becomes a
-`GuardAfterTick` guard anchored at the snapshot tick, `for_min` bounds each
-step's window (`injectPlan`). Single goals are injected via `Loop.InjectIntent`
-— which validates, resolves coordinates deterministically at the tick boundary
-(`resolveGoal`), and records `agent.intent_set (source: planner)` +
-`agent.thought` — now carrying the landing metadata (`sim.InjectArgs`: Class,
-JobID, SnapshotTick, Generation, Predicted/ActualWallMs) and, for `talk_to`,
-`GuardTargetAlive` + `GuardTargetPresent` guards built from the job's world
-snapshot; the loop owns the landing verdict and its outcome telemetry. A
+vocabulary — widened by spec 012 from the original ten goals to nineteen
+(`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
+`craft_stone`, `craft_spear`, `build_oven`, `bathe`), and by spec 013's
+storage economy to twenty-four: `validGoals` (parse.go) and the prompt's
+`goalVocabulary` constant both gained `drop`, `pick_up`, `build_chest`,
+`deposit`, and `withdraw`, each with a one-line behavior gloss appended to
+`systemPrompt` so the planner knows what it's choosing before it commits to
+a goal. The five storage goals carry an extra argument surface — `kind` (an
+inventory item key) and `qty` (a per-kind cap, 0/omitted meaning "all") on
+both `planReply` and `planStepReply` — validated by `validateKindQty`
+against `validKinds`, the same canonical item-key set the sim executor reads
+counts by (`wood`, `stone`, `water`, `planks`, `refined_stone`, `food_raw`,
+`food_cooked`, `meals`, and the plural `spears`, since durability lives in a
+slice with no singular field); an empty kind is valid too (pick_up/withdraw
+default to "everything that fits", drop/deposit resolve to a no-op rather
+than a parse error). Every other goal ignores a stray kind/qty as zero-value
+noise. The contract now allows either one goal or a guarded plan of at most
+`planStepCap` (3) steps (parse.go) — `after_min` becomes a `GuardAfterTick`
+guard anchored at the snapshot tick, `for_min` bounds each step's window
+(`injectPlan`), and each step's Kind/Qty rides `sim.PlanStep` the same way.
+Single goals are injected via `Loop.InjectIntent` — which validates, resolves
+coordinates deterministically at the tick boundary (`resolveGoal`), and
+records `agent.intent_set (source: planner)` + `agent.thought` — now carrying
+the landing metadata (`sim.InjectArgs`: Class, JobID, SnapshotTick,
+Generation, Predicted/ActualWallMs, and since spec 013 Kind/Qty) and, for
+`talk_to`, `GuardTargetAlive` + `GuardTargetPresent` guards built from the
+job's world snapshot; the loop owns the landing verdict and its outcome
+telemetry. A
 landing rejection sends the agent index over the `rearm` channel back to the
 absorb goroutine — the agent noticed the plan failed and re-thinks at the next
 open debounce window, promptly but never hotly. Call and parse failures emit

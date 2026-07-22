@@ -6,7 +6,7 @@ sources:
   - internal/sim/chronicle.go
   - internal/mind/narrate.go
   - internal/scribe/scribe.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Chronicle
@@ -33,7 +33,10 @@ deliver narrated history with no extra protocol — that IS the catch-up.
 [[agent-mind]] Mind): `chronicleNote` (absorb goroutine, replica already
 current) turns notable events into pre-named factual log lines — deaths,
 builds, [[gru]] emergence/sightings/attacks, conversations with gist+topics,
-rumors told, gifts, broken promises, musings, and (TASK-13) the whole
+rumors told, gifts, broken promises, chest thefts (spec 013's
+`social.chest_taken`, rendered "X took from Y's chest without asking" — the
+same narrative weight as a broken promise, a trust violation), musings, and
+(TASK-13) the whole
 [[governance]] arc: assemblies with attendance named (meeting hours rendered
 from the convention since TASK-36, including the birth of an emergent
 convention), grievances raised, proposals tabled/passed/voted down with

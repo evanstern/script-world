@@ -10,7 +10,7 @@ sources:
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Event types
@@ -20,9 +20,16 @@ struct in `internal/sim` (structs, never maps, so bytes are deterministic; core
 payloads live in `state.go`, families note their own file below).
 This catalog is the contract downstream consumers (chronicle, Metatron digests, the
 TUI) will read. Spec 012 (resources/food/crafting) bumped the world save format to
-**v2** ([[world-save-directory]]): a widened `Inventory`, a new `agent.ate` payload
-shape, and nine new event types below. A v1 world cannot boot under a v2 build — it
-must run `scriptworld migrate` first ([[world-migration]]), whose sole output event,
+v2 ([[world-save-directory]]): a widened `Inventory`, a new `agent.ate` payload
+shape, and nine new event types. Spec 013 (inventory & storage — bulk cap, ground
+piles, builder-owned chests, theft, food rot) bumped it again to **v3**: six more
+event types below (drop/pick_up/deposit/withdraw completions, a theft record, and
+the food-rot sweep), plus changed semantics on several existing event types (no new
+types for these — yield clamping on gathers, net-bulk re-validation on crafts, a
+zero-bulk give guard, inventory death-spill) that a v2 replay under this build would
+get wrong; the format gate shields old logs from the new semantics. A v1 world
+cannot boot under this build — it must run `scriptworld migrate` first
+([[world-migration]]), chaining 1→2→3 in one run; its sole output event,
 `world.migrated`, is also cataloged here.
 
 ## How it works
@@ -40,11 +47,16 @@ must run `scriptworld migrate` first ([[world-migration]]), whose sole output ev
 | `agent.work_started` | `WorkStartedPayload{agent, tick}` | executor at target | `WorkStart` stamped |
 | `agent.intent_done` | `AgentPayload{agent}` | executor (done/invalid/unreachable) | intent cleared |
 | `agent.moved` | `AgentMovedPayload{agent, x, y}` | executor pathing | position updated |
-| `agent.foraged` / `agent.chopped` / `agent.hunted` | `HarvestPayload{agent, x, y}` | work completion | +FoodRaw (forage `forageYieldV2`; hunt `huntYieldBare`, or `huntYieldSpear` + spends `Spears[0]`'s last use if carrying one) / +wood, overlay (harvest/cleared/den cooldown), intent cleared |
-| `agent.quarried` | `HarvestPayload{agent, x, y}` | work completion (rock outcrop) | +`quarryYield` Stone; `(x,y)` appended to `State.Quarried` (permanent — [[worldmap-generation]], [[executor]]), intent cleared |
-| `agent.collected_water` | `HarvestPayload{agent, x, y}` | work completion (any water tile) | +`collectWaterYield` Water, intent cleared (no overlay — water never depletes) |
-| `agent.crafted` | `CraftedPayload{agent, kind}` (kind ∈ planks\|refined_stone\|spear) | work completion (hand-craft) | recipe delta from `recipes.go` by goal (re-derived from `kind`); a fresh spear appends `spearDurability` (3) to `Spears`, kept sorted ascending, intent cleared |
-| `agent.built` | `BuiltPayload{agent, kind, x, y}` (kind ∈ fire\|shelter\|oven) | work completion | structure added, recipe's inputs spent (via `recipes.go`'s `build_<kind>`); a fresh fire also gets `FuelUntil = tick + 2×fireBurnPerWood`, intent cleared |
+| `agent.foraged` / `agent.chopped` / `agent.hunted` | `HarvestPayload{agent, x, y}` | work completion (spec 013: skipped entirely — no event — when the taker's free bulk is zero, US1-AS1, so depletion never happens with no room to carry the take) | +FoodRaw (forage `forageYieldV2`; hunt `huntYieldBare`, or `huntYieldSpear` + spends `Spears[0]`'s last use if carrying one) / +wood, each clamped to the taker's pre-event free bulk (`bulkCap − bulk(Inv)`, spec 013 US1-AS2 — the forfeited remainder is lost, not refunded); overlay (harvest/cleared/den cooldown) applies regardless of the clamp, intent cleared |
+| `agent.quarried` | `HarvestPayload{agent, x, y}` | work completion (rock outcrop; same zero-free-bulk skip as above) | +`quarryYield` Stone clamped to free bulk; `(x,y)` appended to `State.Quarried` regardless (permanent — [[worldmap-generation]], [[executor]] — the outcrop depletes even when the yield is forfeit), intent cleared |
+| `agent.collected_water` | `HarvestPayload{agent, x, y}` | work completion (any water tile; same zero-free-bulk skip) | +`collectWaterYield` Water clamped to free bulk, intent cleared (no overlay — water never depletes) |
+| `agent.crafted` | `CraftedPayload{agent, kind}` (kind ∈ planks\|refined_stone\|spear) | work completion (hand-craft; completion re-validation extends to the net output−input bulk delta, spec 013 US1 — a craft whose net wouldn't fit is not emitted, `agent.intent_done` only; only `craft_planks` has a positive net) | recipe delta from `recipes.go` by goal (re-derived from `kind`); a fresh spear appends `spearDurability` (3) to `Spears`, kept sorted ascending, intent cleared |
+| `agent.built` | `BuiltPayload{agent, kind, x, y}` (kind ∈ fire\|shelter\|oven\|chest) | work completion (site pre-validated as buildable; since spec 013, `buildSite` additionally rejects a tile holding a pile — FR-007) | structure added, recipe's inputs spent (via `recipes.go`'s `build_<kind>`); a fresh fire also gets `FuelUntil = tick + 2×fireBurnPerWood`; a fresh chest (spec 013 US3) gets `Owner = agent` (permanent, no transfer in v1) and an empty `Store`, intent cleared |
+| `agent.dropped` | `DroppedPayload{agent, x, y, kind, n}` | executor, `drop` completion (instant, agent's current tile — spec 013 US2, planner/plan-only) | `Inv[kind] −= n`; the tile's pile created-or-merged `+= n` (food becomes/merges a batch stamped `spoil_at = tick + rotWindowTicks`; spears move most-worn-first with their durabilities), intent cleared |
+| `agent.picked_up` | `PickedUpPayload{agent, x, y, kind, n}` | executor, `pick_up` completion (instant on arrival at a pile on/adjacent tile; one event per kind moved in the batch) | pile `−= n` (food oldest-batch-first), `Inv[kind] += n`; an emptied pile is removed; intent cleared on the last event of the batch |
+| `agent.deposited` | `DepositedPayload{agent, x, y, kind, n}` | executor, `deposit` completion at a chest (instant on arrival — spec 013 US3) | `Inv[kind] −= n`, chest `Store[kind] += n`, both clamped to the chest's free space (`chestCap − bulk(*Store)`); intent cleared |
+| `agent.withdrew` | `WithdrewPayload{agent, x, y, kind, n, owner}` | executor, `withdraw` completion at a chest (instant on arrival) | chest `Store[kind] −= n`, `Inv[kind] += n`, clamped to the taker's free bulk; intent cleared; a non-owner taker co-emits the theft companion batch (`social.chest_taken` + a reason-`"theft"` `social.relation_changed` + owner/witness `agent.memory_added`, all in the same batch — [[social-fabric]]) |
+| `sim.food_rotted` | `FoodRottedPayload{x, y, kind, n}` | executor, per-game-minute rot sweep (spec 013 US5; same-kind spoiled batches merged per pile per sweep) | pile's food batches with `spoil_at ≤ tick` matching `kind` removed (up to `n`, oldest first); an emptied pile is removed; chest food never batches, so chests are never reached (FR-010) |
 | `agent.cooked` | `CookedPayload{agent, station, consumed, produced, kind}` (station ∈ fire\|oven; kind ∈ food_cooked\|meals) | work completion (cook) | −FoodRaw(consumed), +kind(produced); an oven cook also −1 Wood, intent cleared |
 | `agent.bathed` | `BathedPayload{agent, morale_after, warmth_after}` | work completion (bathe, oven only) | −1 Water, −1 Wood, Morale/Warmth set to the absolute post-cap values, intent cleared |
 | `agent.refueled` | `RefueledPayload{agent, x, y, fuel_until}` | reflex/planner (instant on arrival) | −1 Wood, the fire at `(x,y)`'s `FuelUntil` set to the absolute (already-capped) deadline, intent cleared |
@@ -53,12 +65,13 @@ must run `scriptworld migrate` first ([[world-migration]]), whose sole output ev
 | `agent.ate` | `AtePayload{agent, meals, cooked, raw, food_after}` | reflex/planner (instant), most-nutritious-first (Meals→FoodCooked→FoodRaw) to satiety (`eatOutcome`) | −Meals/−FoodCooked/−FoodRaw by the consumed counts, Food need set to the absolute `food_after` |
 | `agent.slept` / `agent.woke` | `AgentPayload{agent}` | executor | sleep flag (slept clears intent) |
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
-| `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared |
+| `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared; spec 013 (US2, FR-006, research R7): the agent's entire carried inventory spills into a pile at the death tile (created/merged, food batches stamped `tick + rotWindowTicks`), emptying `Inv` — reducer-internal, no new event |
 | `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent pair (chat-while-working) | +morale both, talk cooldown; both remember |
 | `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone}` | executor heuristics; convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds ([[agent-mind]], [[social-fabric]]) |
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command (planner); `inject_social` (musing) | none (chronicle material) |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
-| `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets; `social.conversation` appends the bounded record ring (TASK-22, [[social-fabric]]) |
+| `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets; `social.conversation` appends the bounded record ring (TASK-22, [[social-fabric]]); `social.gave` (spec 013 US1) is additionally skipped by the executor when the receiver has zero free bulk and the reducer clamps defensively (never over `bulkCap`) |
+| `social.chest_taken` | `ChestTakenPayload{owner, taker, x, y}` (`social.go`) | executor, same batch as a non-owner `agent.withdrew` (spec 013 US4, FR-011) | none beyond the record itself — the distinct taking happening; chronicle/TUI material ([[social-fabric]]) |
 | consolidation family: `agent.memory_promoted` / `agent.memory_faded` / `agent.belief_revised` / `agent.narrative_set` / `agent.consolidated` | payload structs in `internal/sim/consolidate.go`; contract in `specs/004-nightly-consolidation/contracts/` | consolidation driver (injected) | salience boost / memory removal / belief create-or-revise / narrative replace / once-per-night ledger ([[nightly-consolidation]]); all reducer-total (vanished targets no-op) |
 | `gru.emerged` / `gru.moved` / `gru.sighted` / `gru.attacked` / `gru.withdrew` | payload structs in `internal/sim/gru.go` | `gruStep` (executor tick) | `State.Gru` lifecycle/position; sighting latch; attack sets absolute post-wound health, wakes victim, clears intent ([[gru]]); reducer-total (vanished gru no-ops) |
 | `chronicle.entry` | `ChronicleEntryPayload{day, from_tick, to_tick, text, thread, agents}` in `internal/sim/chronicle.go` | narrator driver (injected, TASK-11) | appends the bounded `State.Chronicle` ring ([[chronicle]]) |

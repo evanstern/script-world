@@ -1,11 +1,11 @@
 ---
 name: reflex-policy
-description: Deterministic survival decisions for idle agents (eat → food → night warmth/fire-refuel → rest → prep → wander) plus BFS pathfinding with fixed neighbor order; resolveGoal resolves the full spec-012 planner goal vocabulary (quarry, water, crafting, stations, refuel, cook, bathe) to coordinates
+description: Deterministic survival decisions for idle agents (eat → food → night warmth/fire-refuel → rest → prep → wander) plus BFS pathfinding with fixed neighbor order; resolveGoal resolves the full spec-012 planner goal vocabulary (quarry, water, crafting, stations, refuel, cook, bathe) plus spec-013's storage goals (build_chest, drop, pick_up, deposit, withdraw) to coordinates
 kind: component
 sources:
   - internal/sim/policy.go
   - internal/sim/path.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Reflex policy & pathfinding
@@ -19,7 +19,11 @@ the exact same nearest-X helpers the reflex uses. Spec 012 widened `resolveGoal`
 goal set considerably (quarrying, water, crafting, an oven, refueling, cooking,
 bathing) while trimming the reflex ladder itself down to one addition — refueling
 a dying fire — and one removal — shelter-building dropped out of the reflex
-entirely once it was re-costed in planks.
+entirely once it was re-costed in planks. Spec 013 (inventory & storage v1) widened
+`resolveGoal` again — a chest to build, goods to drop/pick up/deposit/withdraw —
+and left the reflex ladder itself completely untouched: all five new goals are
+planner/plan-only (FR-014), added to `resolveGoal` and `planGoals`
+([[executor]]'s guarded-plan validation) but never reachable from `decideIntent`.
 
 ## How it works
 
@@ -94,6 +98,20 @@ reflex uses:
   determines the output and duration (`food_cooked` vs. `meals`) at the executor.
 - **`bathe`** is new and oven-only, gated on `recipeFor("bathe")`'s water/wood
   inputs — water's only v1 consumer.
+- **`build_chest`** (spec 013 US3) is planner/plan-only, gated on
+  `chestPlankCost` (6) planks and resolved to the nearest `buildSite` — the same
+  pattern as `build_fire`/`build_oven` (the pile-tile exclusion, FR-007, already
+  lives in `buildSite`).
+- **`drop`**, **`pick_up`**, **`deposit`**, and **`withdraw`** (spec 013 US2/US3)
+  are the storage goals, all planner/plan-only and instant-on-arrival (like
+  `eat`): `drop` targets the agent's own tile; `pick_up` targets the nearest
+  tile holding a pile; `deposit` targets the nearest chest (any owner — deposit
+  has no ownership gate); `withdraw` targets the nearest chest whose `Store`
+  holds `Kind` (or, with `Kind` "", the nearest chest holding anything). All
+  four carry `Kind`/`Qty` (`Qty` 0 = all of kind, or as much as fits) onto the
+  resolved `Intent`, threaded through to the completion at [[executor]] — see
+  there for the truncation/re-validation rules and the theft consequences of a
+  non-owner `withdraw`.
 - `sleep`, `goto_warmth`, `wander`, and `talk_to`/`seek` are unchanged.
 
 Pathfinding (`path.go`, unchanged by spec 012): breadth-first search with **fixed

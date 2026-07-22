@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Sim loop
@@ -55,9 +55,11 @@ state reflects, which is what makes client-side replicas gapless.
 ([[agent-mind]]). `InjectArgs` now carries cognition-horizon landing metadata
 ([[cognition]]): `Class`, `JobID`, `SnapshotTick`, `Generation`,
 `PredictedWallMs`/`ActualWallMs`, `Guards`, and an optional `Plan` (mutually
-exclusive with `Goal`). An empty `Class` means an unmetered caller (tests,
-tooling): the ladder below is skipped and no telemetry is emitted — the
-pre-TASK-32 contract.
+exclusive with `Goal`), plus `Kind`/`Qty` (spec 013 R4) arguing a storage goal
+(`drop`/`pick_up`/`deposit`/`withdraw`) when `Goal` is one of them — additive and
+ignored otherwise, so pre-013 callers leave them zero. An empty `Class` means an
+unmetered caller (tests, tooling): the ladder below is skipped and no telemetry
+is emitted — the pre-TASK-32 contract.
 
 At the boundary, a metered intent climbs the **landing ladder** against the
 world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):

@@ -10,7 +10,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
+verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 ---
 
 # Testing strategy
@@ -30,17 +30,38 @@ suites — multi-step intent chains with zero input (AC#1), needs decay + self-f
 and starvation death with recorded cause (AC#2), night warmth mechanics and exposure
 death (AC#3), and a two-day unattended village survival run on multiple seeds.
 (Terrain generation has its own determinism/AC suite in `internal/worldmap`, covered
-by [[worldmap-generation]].) Spec 012 added its own fixture suite spanning both
-save-format packages — `internal/sim/migrate_test.go` and `internal/world/migrate_test.go`
-build representative v1 states and prove the transform's carry/reset/re-place rules
-([[world-migration]]) — plus `whole_feature_test.go`, a single scripted-agent run
-chaining every new resources/food/crafting event kind (quarrying, water, the full
-craft chain, both cook stations, bathing, refueling, a spear breaking, a fire burning
-out) that replays from genesis to a byte-identical state hash (SC-004). Proves: same
-seed + same command timeline over 30k ticks → byte-identical
-event sequences and equal state hashes; different seeds diverge; replaying the logged
-events over genesis (then re-living the quiet tail) reproduces the live state hash
-exactly; the day/night cycle behaves (nobody moves at night).
+by [[worldmap-generation]].)
+
+Spec 012 and spec 013 each added their own fixture suite spanning both save-format
+packages, all in [[world-migration]]'s territory: `internal/sim/migrate_test.go`
+builds representative v1 and v2 states and proves both pure transforms'
+carry/reset/re-place/spill rules directly, including a v1 fixture that chains both
+transforms (1→2→3) in one call; `internal/world/migrate_test.go` drives the full
+`Migrate(dir)` ceremony end-to-end against on-disk v1 and v2 fixture worlds (happy
+path, replay-from-zero-snapshots determinism, the already-migrated and
+already-current guards, uncovered/tolerated event tails, a running-daemon refusal)
+for both the v1→v2 and v2→v3 steps.
+
+`internal/sim/whole_feature_test.go` carries two byte-identity suites (SC-004/SC-005):
+the original spec-012 run, a single scripted-agent script chaining every
+resources/food/crafting event kind (quarrying, water, the full craft chain, both
+cook stations, bathing, refueling, a spear breaking, a fire burning out) — rebalanced
+under spec 013's bulk cap (24) to consume-as-it-goes rather than hoard a large seeded
+larder — that replays from genesis to a byte-identical state hash; and a spec-013
+storage suite (`TestReplayByteIdentityWholeFeatureStorage`) exercising every new
+013 event type in one run — `agent.dropped`, `agent.picked_up`, `agent.deposited`,
+`agent.withdrew` (both an owner fetch and a non-owner theft with its full companion
+batch: `social.chest_taken`, a reason-`theft` `social.relation_changed`, and owner +
+witness `agent.memory_added`), `sim.food_rotted`, `agent.built{kind: chest}`, and a
+death spill — that also replays to a byte-identical hash. The same file also proves
+every new 013 event type no-ops under a pre-013 reducer stub (the unknown-type
+convention: an event type the reducer's switch doesn't match falls through to a
+total no-op, never an error), so old logs stay safely replayable by builds that
+predate a given event kind. Together these prove: same seed + same command timeline
+over 30k ticks → byte-identical event sequences and equal state hashes; different
+seeds diverge; replaying the logged events over genesis (then re-living the quiet
+tail) reproduces the live state hash exactly; the day/night cycle behaves (nobody
+moves at night).
 
 **IPC integration** (`internal/ipc/ipc_test.go`): a real loop + server + store on a
 temp world. Proves: status round trip <2 s; subscribe-from-zero delivers strictly
