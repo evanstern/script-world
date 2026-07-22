@@ -208,6 +208,21 @@ func (s *State) pileAt(x, y int) *Pile {
 	return nil
 }
 
+// pileOnOrAdjacent returns the pile on (x,y) or, failing that, on a
+// Manhattan-adjacent tile (neighbor order fixed for determinism) — the pile a
+// pick_up completion may access (spec US2-AS3: on/adjacent). nil when none.
+func (s *State) pileOnOrAdjacent(x, y int) *Pile {
+	if p := s.pileAt(x, y); p != nil {
+		return p
+	}
+	for _, d := range neighborOrder {
+		if p := s.pileAt(x+d[0], y+d[1]); p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
 // pileFor returns the pile on (x,y), creating an empty one in creation order
 // (slice append) when the tile has none — the create-or-merge target of a drop
 // or a death spill.
@@ -674,11 +689,86 @@ func (s *State) Apply(e store.Event) error {
 	// (contracts/events.md). The format bump (2→3, T008) shields v2 logs from
 	// these changed semantics.
 	case "agent.dropped":
-		// TODO(T016, US2): Inv[kind] −= n; pile at (x,y) create-or-merge += n
-		// (food batch stamped tick + rotWindowTicks; spears most-worn-first).
+		// T016 (spec 013 US2): move the recorded count of Kind from inventory
+		// to the tile's pile (create-or-merge). The payload carries the actual
+		// post-clamp count; the reducer clamps defensively to what is carried
+		// and stays total (a missing kind ⇒ no-op, intent still cleared).
+		var p DroppedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if p.Kind == "spears" {
+			n := p.N
+			if n > len(a.Inv.Spears) {
+				n = len(a.Inv.Spears)
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				// Most-worn-first: the front of the agent's ascending slice
+				// moves; both sides stay sorted ascending.
+				pile.Spears = append(pile.Spears, a.Inv.Spears[:n]...)
+				sort.Ints(pile.Spears)
+				rest := append([]int(nil), a.Inv.Spears[n:]...)
+				if len(rest) == 0 {
+					a.Inv.Spears = nil
+				} else {
+					a.Inv.Spears = rest
+				}
+			}
+		} else if n := p.N; n > 0 {
+			if c := carriedCount(a.Inv, p.Kind); n > c {
+				n = c
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				if isFoodKind(p.Kind) {
+					pile.addFood(p.Kind, n, e.Tick+rotWindowTicks)
+				} else {
+					pile.addNonFood(p.Kind, n)
+				}
+				addItems(&a.Inv, []Item{{p.Kind, n}}, -1)
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.picked_up":
-		// TODO(T017, US2): pile −= n (food oldest-batch-first); Inv[kind] += n;
-		// emptied pile removed.
+		// T017 (spec 013 US2): move the recorded count of Kind from the tile's
+		// pile into inventory (food drained oldest-batch-first), clamped
+		// defensively to free bulk and to what the pile holds (contested
+		// re-validation: a second same-tick taker finds only the remainder).
+		// An emptied pile is removed; intent is cleared.
+		var p PickedUpPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if pile := s.pileAt(p.X, p.Y); pile != nil {
+			n := p.N
+			if f := freeBulk(a.Inv); n > f {
+				n = f
+			}
+			switch {
+			case p.Kind == "spears":
+				if taken := pile.takeSpears(n); len(taken) > 0 {
+					a.Inv.Spears = append(a.Inv.Spears, taken...)
+					sort.Ints(a.Inv.Spears)
+				}
+			case isFoodKind(p.Kind):
+				addItems(&a.Inv, []Item{{p.Kind, pile.takeFood(p.Kind, n)}}, 1)
+			default:
+				addItems(&a.Inv, []Item{{p.Kind, pile.takeNonFood(p.Kind, n)}}, 1)
+			}
+			s.removeEmptyPileAt(p.X, p.Y)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.deposited":
 		// TODO(T024, US3): Inv[kind] −= n; chest Store[kind] += n.
 	case "agent.withdrew":
@@ -769,6 +859,27 @@ func (s *State) Apply(e store.Event) error {
 		// The dead shed any hail (TASK-47); the hailer's seek proceeds or
 		// fails exactly as today.
 		a.Hail = nil
+		// T018 (spec 013 US2, FR-006, research R7): the agent's entire carried
+		// inventory spills as a ground pile at the death tile (create-or-merge),
+		// food batches stamped with a fresh rot deadline, spears riding along
+		// with their durabilities. Reducer-internal — no new event. An agent
+		// carrying nothing leaves no pile.
+		if bulk(a.Inv) > 0 {
+			pile := s.pileFor(a.X, a.Y)
+			pile.addNonFood("wood", a.Inv.Wood)
+			pile.addNonFood("stone", a.Inv.Stone)
+			pile.addNonFood("water", a.Inv.Water)
+			pile.addNonFood("planks", a.Inv.Planks)
+			pile.addNonFood("refined_stone", a.Inv.RefinedStone)
+			pile.addFood("food_raw", a.Inv.FoodRaw, e.Tick+rotWindowTicks)
+			pile.addFood("food_cooked", a.Inv.FoodCooked, e.Tick+rotWindowTicks)
+			pile.addFood("meals", a.Inv.Meals, e.Tick+rotWindowTicks)
+			if len(a.Inv.Spears) > 0 {
+				pile.Spears = append(pile.Spears, a.Inv.Spears...)
+				sort.Ints(pile.Spears)
+			}
+			a.Inv = Inventory{}
+		}
 
 	case "social.hailed":
 		var p HailedPayload

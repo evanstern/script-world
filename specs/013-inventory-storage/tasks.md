@@ -75,11 +75,11 @@ adjacent piles read as one zone in the TUI.
 adjacent drops cluster on the map, a death spills a lootable pile (quickstart
 §Automated gates 1).
 
-- [ ] T016 [US2] `drop` goal in `internal/sim/policy.go` (target = current tile, instant) + `planGoals`/inject_intent validation in `internal/sim/plan.go` + `internal/sim/loop.go`; executor completion emits `agent.dropped{agent,x,y,kind,n}` with clamped actual counts in `internal/sim/executor.go`; reducer case (pile create-or-merge; food batch stamped `tick + rotWindowTicks`; spears most-worn-first) in `internal/sim/state.go`
-- [ ] T017 [US2] `pick_up` goal in `internal/sim/policy.go` (target = nearest pile on/adjacent, instant): executor emits one `agent.picked_up` per kind moved (truncated to free bulk; Kind "" = all kinds canonical order, food oldest-batch-first) in `internal/sim/executor.go`; reducer case incl. emptied-pile removal in `internal/sim/state.go`
-- [ ] T018 [US2] Death spill: reducer-internal on `agent.died` in `internal/sim/state.go` — entire `Inv` moves to the death-tile pile (created/merged; food stamped), `Inv` emptied (research R7, FR-006)
-- [ ] T019 [US2] Build-site validation in `internal/sim/policy.go`/`internal/sim/executor.go`: all `build_*` goals reject tiles holding a pile (FR-007)
-- [ ] T020 [US2] Tests in `internal/sim`: drop/merge one-pile-per-tile, pickup truncation, same-tick contested pickup (deterministic agent-order arbitration, second taker finds remainder), death spill incl. spear durabilities, build-on-pile refused, replay byte-identity over a drop/pickup/death run
+- [X] T016 [US2] `drop` goal in `internal/sim/policy.go` (target = current tile, instant) + `planGoals`/inject_intent validation in `internal/sim/plan.go` + `internal/sim/loop.go`; executor completion emits `agent.dropped{agent,x,y,kind,n}` with clamped actual counts in `internal/sim/executor.go`; reducer case (pile create-or-merge; food batch stamped `tick + rotWindowTicks`; spears most-worn-first) in `internal/sim/state.go`
+- [X] T017 [US2] `pick_up` goal in `internal/sim/policy.go` (target = nearest pile on/adjacent, instant): executor emits one `agent.picked_up` per kind moved (truncated to free bulk; Kind "" = all kinds canonical order, food oldest-batch-first) in `internal/sim/executor.go`; reducer case incl. emptied-pile removal in `internal/sim/state.go`
+- [X] T018 [US2] Death spill: reducer-internal on `agent.died` in `internal/sim/state.go` — entire `Inv` moves to the death-tile pile (created/merged; food stamped), `Inv` emptied (research R7, FR-006)
+- [X] T019 [US2] Build-site validation in `internal/sim/policy.go`/`internal/sim/executor.go`: all `build_*` goals reject tiles holding a pile (FR-007)
+- [X] T020 [US2] Tests in `internal/sim`: drop/merge one-pile-per-tile, pickup truncation, same-tick contested pickup (deterministic agent-order arbitration, second taker finds remainder), death spill incl. spear durabilities, build-on-pile refused, replay byte-identity over a drop/pickup/death run
 - [ ] T021 [P] [US2] TUI: pile glyph, adjacent-pile stockpile-zone grouping (render-side flood fill, no state), pile contents inspection in `internal/tui/views.go` (US2-AS5, SC-006; Sonnet-ok)
 - [ ] T022 [P] [US2] Planner vocabulary: `drop`, `pick_up` with kind/qty syntax guidance in `internal/mind/prompt.go` (Sonnet-ok)
 

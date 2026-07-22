@@ -451,6 +451,60 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// Assembled: stand at the meeting place until it closes (the
 		// executor clears the pin once the meeting ends).
 		return events
+	case "drop":
+		// T016 (spec 013 US2): instant on the agent's current tile. Emit
+		// agent.dropped with the ACTUAL post-clamp count — min(Qty-or-all,
+		// carried). Kind is required; an empty Kind or nothing carried resolves
+		// via intent_done only (no pile is touched, contested-resource pattern).
+		n := carriedCount(a.Inv, in.Kind)
+		if in.Qty > 0 && in.Qty < n {
+			n = in.Qty
+		}
+		if in.Kind == "" || n <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.dropped", DroppedPayload{Agent: i, X: a.X, Y: a.Y, Kind: in.Kind, N: n})
+		return events
+	case "pick_up":
+		// T017 (spec 013 US2): instant on arrival. Re-validate a pile on/
+		// adjacent (it may have been drained while walking over) and emit ONE
+		// agent.picked_up per kind actually moved, truncated cumulatively to
+		// free bulk. Kind "" sweeps every kind in canonical field order (the
+		// reducer drains food oldest-batch-first). Nothing moved ⇒ intent_done.
+		pile := s.pileOnOrAdjacent(a.X, a.Y)
+		if pile == nil {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		kinds := []string{in.Kind}
+		if in.Kind == "" {
+			kinds = canonicalKinds
+		}
+		free := freeBulk(a.Inv)
+		moved := false
+		for _, kind := range kinds {
+			if free <= 0 {
+				break
+			}
+			take := pile.avail(kind)
+			if in.Kind != "" && in.Qty > 0 && in.Qty < take {
+				take = in.Qty
+			}
+			if take > free {
+				take = free
+			}
+			if take <= 0 {
+				continue
+			}
+			emit("agent.picked_up", PickedUpPayload{Agent: i, X: pile.X, Y: pile.Y, Kind: kind, N: take})
+			free -= take
+			moved = true
+		}
+		if !moved {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+		}
+		return events
 	}
 
 	// Validity: the resource may have vanished while walking (someone else

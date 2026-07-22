@@ -156,7 +156,7 @@ func foodIntent(s *State, m *worldmap.Map, a *Agent, tick int64) (*Intent, bool)
 // resolveGoal turns a planner-chosen goal into a concrete, deterministic
 // intent at the tick boundary (research R5). The model steers; the sim
 // drives. Errors mean the goal is impossible right now — nothing is emitted.
-func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent int, tick int64) (*Intent, string, error) {
+func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
 	a := &s.Agents[idx]
 	switch goal {
 	case "eat":
@@ -285,6 +285,22 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return &Intent{Goal: "bathe", TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no oven reachable to bathe at")
+	case "drop":
+		// Planner/plan-only (FR-014). Instant on the agent's current tile; the
+		// completion emits agent.dropped with the actual post-clamp counts. An
+		// empty Kind or nothing carried resolves via intent_done at completion
+		// (executor) — resolveGoal creates the intent regardless (the goal is
+		// possible; the re-validation is where it may become a no-op).
+		return &Intent{Goal: "drop", TargetX: a.X, TargetY: a.Y, Kind: kind, Qty: qty}, "", nil
+	case "pick_up":
+		// Planner/plan-only. Target the nearest pile tile — piles sit on
+		// passable ground, so the agent walks onto it; the completion
+		// re-validates a pile on/adjacent and moves goods truncated to free
+		// bulk (Kind "" sweeps every kind in canonical order).
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return s.pileAt(x, y) != nil }); ok {
+			return &Intent{Goal: "pick_up", TargetX: p.X, TargetY: p.Y, Kind: kind, Qty: qty}, "", nil
+		}
+		return nil, "", fmt.Errorf("no pile reachable")
 	case "sleep":
 		return &Intent{Goal: "sleep", TargetX: a.X, TargetY: a.Y}, "", nil
 	case "goto_warmth":

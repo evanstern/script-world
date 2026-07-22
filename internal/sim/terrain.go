@@ -53,6 +53,13 @@ func buildSite(m *worldmap.Map, s *State, x, y int) bool {
 			return false
 		}
 	}
+	// T019 (spec 013 US2, FR-007): goods aren't buried — a tile holding a pile
+	// is not buildable. buildSite backs both the resolveGoal buildable search
+	// and the executor's completion re-validation, so every build_* goal
+	// rejects pile tiles at both the search and the landing.
+	if s.pileAt(x, y) != nil {
+		return false
+	}
 	return true
 }
 

@@ -201,6 +201,152 @@ func (p *Pile) addFood(kind string, n int, spoilAt int64) {
 	p.Food = append(p.Food, FoodBatch{Kind: kind, N: n, SpoilAt: spoilAt})
 }
 
+// canonicalKinds is the fixed iteration order for "all kinds" storage transfers
+// (data-model.md): the Inventory field order. Determinism depends on it — a
+// Kind-empty pick_up/withdraw walks these in this exact order (spec 013 US2).
+var canonicalKinds = []string{
+	"wood", "stone", "water", "planks", "refined_stone",
+	"food_raw", "food_cooked", "meals", "spears",
+}
+
+// isFoodKind reports whether a kind is one of the batch-tracked food forms
+// (the only kinds that rot in ground piles).
+func isFoodKind(kind string) bool {
+	return kind == "food_raw" || kind == "food_cooked" || kind == "meals"
+}
+
+// carriedCount is how many units of a kind an agent carries: spears counted
+// (durability lives in the slice), every other kind its flat inventory field.
+func carriedCount(inv Inventory, kind string) int {
+	if kind == "spears" {
+		return len(inv.Spears)
+	}
+	return invField(inv, kind)
+}
+
+// avail is how many units of a kind the pile holds — food summed across
+// batches, spears counted, non-food the flat field. The executor reads it to
+// size a pick_up; the reducer to clamp defensively (staying total).
+func (p *Pile) avail(kind string) int {
+	switch kind {
+	case "wood":
+		return p.Wood
+	case "stone":
+		return p.Stone
+	case "water":
+		return p.Water
+	case "planks":
+		return p.Planks
+	case "refined_stone":
+		return p.RefinedStone
+	case "spears":
+		return len(p.Spears)
+	case "food_raw", "food_cooked", "meals":
+		n := 0
+		for _, b := range p.Food {
+			if b.Kind == kind {
+				n += b.N
+			}
+		}
+		return n
+	}
+	return 0
+}
+
+// addNonFood adds n units of a flat (non-food, non-spear) kind. Food rides
+// addFood (batches + rot deadlines); spears carry durabilities and are
+// appended directly by the caller. A non-positive count is a no-op.
+func (p *Pile) addNonFood(kind string, n int) {
+	if n <= 0 {
+		return
+	}
+	switch kind {
+	case "wood":
+		p.Wood += n
+	case "stone":
+		p.Stone += n
+	case "water":
+		p.Water += n
+	case "planks":
+		p.Planks += n
+	case "refined_stone":
+		p.RefinedStone += n
+	}
+}
+
+// takeNonFood removes up to n of a flat kind, returning the actual amount
+// removed (clamped to what the pile holds — the reducer stays total).
+func (p *Pile) takeNonFood(kind string, n int) int {
+	if a := p.avail(kind); n > a {
+		n = a
+	}
+	if n <= 0 {
+		return 0
+	}
+	switch kind {
+	case "wood":
+		p.Wood -= n
+	case "stone":
+		p.Stone -= n
+	case "water":
+		p.Water -= n
+	case "planks":
+		p.Planks -= n
+	case "refined_stone":
+		p.RefinedStone -= n
+	}
+	return n
+}
+
+// takeFood removes up to n units of a food kind from the OLDEST matching
+// batches first (drop order = creation order = oldest), returning the actual
+// amount removed. Emptied batches are compacted out, preserving drop order.
+func (p *Pile) takeFood(kind string, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	taken := 0
+	out := p.Food[:0]
+	for _, b := range p.Food {
+		if b.Kind == kind && taken < n {
+			t := b.N
+			if t > n-taken {
+				t = n - taken
+			}
+			b.N -= t
+			taken += t
+		}
+		if b.N > 0 {
+			out = append(out, b)
+		}
+	}
+	if len(out) == 0 {
+		p.Food = nil
+	} else {
+		p.Food = out
+	}
+	return taken
+}
+
+// takeSpears removes the n most-worn spears (front of the ascending-sorted
+// slice) and returns their durabilities; the pile stays sorted ascending.
+func (p *Pile) takeSpears(n int) []int {
+	if n > len(p.Spears) {
+		n = len(p.Spears)
+	}
+	if n <= 0 {
+		return nil
+	}
+	taken := append([]int(nil), p.Spears[:n]...)
+	rest := append([]int(nil), p.Spears[n:]...)
+	if len(rest) == 0 {
+		p.Spears = nil
+	} else {
+		p.Spears = rest
+	}
+	return taken
+}
+
 // Harvest marks a foraged tile regrowing at Regrow.
 type Harvest struct {
 	X      int   `json:"x"`

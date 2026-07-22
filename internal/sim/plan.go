@@ -41,6 +41,9 @@ var planGoals = map[string]bool{
 	"build_fire": true, "build_shelter": true,
 	"eat": true, "sleep": true, "wander": true,
 	"goto_warmth": true, "talk_to": true,
+	// Storage goals (spec 013 US2, FR-014): planner/plan-only — never in the
+	// reflex ladder.
+	"drop": true, "pick_up": true,
 }
 
 // PlanSetPayload — agent.plan_set (loop-emitted on a plan landing).
@@ -77,7 +80,7 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 			return nil // holding — deterministically re-checked next tick
 		}
 	}
-	intent, direct, err := resolveGoal(s, m, idx, st.Goal, st.Target, tick)
+	intent, direct, err := resolveGoal(s, m, idx, st.Goal, st.Target, st.Kind, st.Qty, tick)
 	if err != nil {
 		return []store.Event{ev("agent.plan_expired", PlanStepPayload{
 			Agent: idx, Job: st.Job, Step: st.Goal, Reason: err.Error()})}
@@ -94,6 +97,7 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 			Agent: idx, Goal: intent.Goal,
 			TargetX: intent.TargetX, TargetY: intent.TargetY,
 			ResX: intent.ResX, ResY: intent.ResY,
+			Kind: intent.Kind, Qty: intent.Qty,
 			Source: "plan",
 		}))
 	}
