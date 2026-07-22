@@ -17,7 +17,7 @@ doctrine is tests alongside code.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create worktree: `git fetch origin && git pull --ff-only` in root, then `git worktree add .worktrees/task-59 -b task-59-metatron-miracles origin/main`; all subsequent work happens inside `.worktrees/task-59`
+- [x] T001 Create worktree: `git fetch origin && git pull --ff-only` in root, then `git worktree add .worktrees/task-59 -b task-59-metatron-miracles origin/main`; all subsequent work happens inside `.worktrees/task-59`
 
 ---
 
@@ -99,7 +99,7 @@ doctrine is tests alongside code.
 
 - [X] T023 [P] Run the full quickstart (scenarios A–F) against a throwaway world per `specs/016-metatron-miracles/quickstart.md`; fix anything it surfaces; `go build ./... && go vet ./... && go test ./...` green
 - [X] T024 [P] Reconcile help/usage text in `cmd/promptworld/main.go` (top-level help lists `miracle`), and the metatron system prompt's cost table wording in `internal/metatron/turn.go`
-- [ ] T025 Record the tier choice + rubric justification on TASK-59 (`backlog task edit 59 --append-notes ...`), run `spec-bridge:sync` to mirror phase progress, open the PR from `.worktrees/task-59` (one PR for the whole TASK); post-merge lifecycle: `/grounding-wiki:wiki-update` for notes sourcing `internal/sim`, `internal/metatron`, `internal/ipc`, `cmd/promptworld`
+- [x] T025 Record the tier choice + rubric justification on TASK-59 (`backlog task edit 59 --append-notes ...`), run `spec-bridge:sync` to mirror phase progress, open the PR from `.worktrees/task-59` (one PR for the whole TASK); post-merge lifecycle: `/grounding-wiki:wiki-update` for notes sourcing `internal/sim`, `internal/metatron`, `internal/ipc`, `cmd/promptworld`
 
 ---
 

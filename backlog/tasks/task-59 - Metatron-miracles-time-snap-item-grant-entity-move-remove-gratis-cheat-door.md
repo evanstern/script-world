@@ -3,10 +3,10 @@ id: TASK-59
 title: >-
   Metatron miracles: time-snap, item grant, entity move/remove + gratis (cheat)
   door
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 16:58'
-updated_date: '2026-07-22 20:28'
+updated_date: '2026-07-22 20:44'
 labels: []
 dependencies: []
 ordinal: 52000
@@ -39,13 +39,13 @@ Spec: specs/016-metatron-miracles
 - [ ] #4 Angel turn surface exposes the miracles charge-gated; a player console command lands the same events with --force
 - [ ] #5 entity_removed cannot target agents in v1
 - [ ] #6 Spec Kit spec authored and linked to this task via spec-bridge:link before implementation starts
-- [ ] #7 Spec phase: Setup
-- [ ] #8 Spec phase: Foundational (blocking prerequisites for all stories)
-- [ ] #9 Spec phase: User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP
-- [ ] #10 Spec phase: User Story 2 — Operator force door: gratis miracles (P2)
-- [ ] #11 Spec phase: User Story 3 — Time snap with shift semantics (P2)
-- [ ] #12 Spec phase: User Story 4 — Item grant (P3)
-- [ ] #13 Spec phase: Polish & Cross-Cutting
+- [x] #7 Spec phase: Setup
+- [x] #8 Spec phase: Foundational (blocking prerequisites for all stories)
+- [x] #9 Spec phase: User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP
+- [x] #10 Spec phase: User Story 2 — Operator force door: gratis miracles (P2)
+- [x] #11 Spec phase: User Story 3 — Time snap with shift semantics (P2)
+- [x] #12 Spec phase: User Story 4 — Item grant (P3)
+- [x] #13 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -60,4 +60,14 @@ Execute specs/016-metatron-miracles/tasks.md in .worktrees/task-59 on branch tas
 Tier decision (constitution V rubric): Opus 4.8 for implementation — doctrine-adjacent (injectSocialWhitelist isolation boundary + charge economy in reducer), cross-package (internal/sim, internal/metatron, internal/ipc, cmd/promptworld), and rebaseTicks touches replay determinism. Spec Kit complete: spec (5 clarifications) → plan (Constitution Check PASS ×2) → tasks (25, T001–T025). MVP = Phases 1–3 (US1 move/remove).
 
 Implementation complete: T001–T024 done on branch task-59-metatron-miracles (13 commits, rebased onto origin/main post tool-registry merge; miracles deliberately registry-free — coverage doctrine is directional, roster is nudge-form-scoped). Full gate green (build/vet/test, 18 pkgs); quickstart A–E validated live, F covered by unit tests (SC-005 adversarial gratis strip). PR #38 opened: https://github.com/evanstern/promptworld/pull/38. Phase ACs sync to Done post-merge when root spec artifacts prove it; then /grounding-wiki:wiki-update (sim, metatron, ipc, clock, cmd).
+
+spec-bridge sync: Setup: 0/1 · Foundational (blocking prerequisites for all stories): 5/5 · User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP: 5/5 · User Story 2 — Operator force door: gratis miracles (P2): 3/3 · User Story 3 — Time snap with shift semantics (P2): 5/5 · User Story 4 — Item grant (P3): 3/3 · Polish & Cross-Cutting: 2/3
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking prerequisites for all stories): 5/5 · User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP: 5/5 · User Story 2 — Operator force door: gratis miracles (P2): 3/3 · User Story 3 — Time snap with shift semantics (P2): 5/5 · User Story 4 — Item grant (P3): 3/3 · Polish & Cross-Cutting: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocking prerequisites for all stories): 5/5 · User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP: 5/5 · User Story 2 — Operator force door: gratis miracles (P2): 3/3 · User Story 3 — Time snap with shift semantics (P2): 5/5 · User Story 4 — Item grant (P3): 3/3 · Polish & Cross-Cutting: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
