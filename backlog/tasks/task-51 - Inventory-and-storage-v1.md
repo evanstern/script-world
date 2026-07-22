@@ -1,10 +1,10 @@
 ---
 id: TASK-51
 title: Inventory and storage v1
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 08:23'
+updated_date: '2026-07-22 12:47'
 labels: []
 dependencies:
   - TASK-50
@@ -29,7 +29,7 @@ Spec: specs/013-inventory-storage
 - [x] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
 - [x] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
 - [x] #8 Spec phase: Migration & Format Door (Cross-Cutting)
-- [ ] #9 Spec phase: Polish & Cross-Cutting
+- [x] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -66,4 +66,12 @@ Phase 8 (migration) complete: 1e90f65 (T035-T037 Opus) — TransformV2State pure
 Phase 9 T038-T039 complete: 384430f — whole-feature storage replay test (every 013 event type + theft companion batch + death spill, byte-identical replay, unknown-type no-op assertion) alongside intact 012 test; deterministic quickstart smoke in scratch SCRIPTWORLD_HOME: fresh v3 world boots reflex-only at speed max (tick 6778, clean stop, well-formed log); v2 fixture correctly refused by format gate then migrated ('8 villagers carried across the break at tick 300000', world.v2.db archived); over-cap spill pile verified at (5,5) with SpoilAt 472800 = migration tick + rotWindow, agent clamped 24/24; death spill at (9,9) incl. spear durability; SC-006 surfaces readable headless. SC-002 planner-driven observation DEFERRED to post-merge live run per 012/T045 precedent. T040 (PR) next.
 
 T040 done: PR #33 open (https://github.com/evanstern/script-world/pull/33), 17 commits, all gates green, T040 ticked on the branch (5344cf8). PR merge is permission-blocked for this session — awaiting human merge. Post-merge tail (T041) then remains: /grounding-wiki:wiki-update (re-pin list in quickstart.md §Post-merge), spec-bridge:sync (moves phases/status from merged artifacts), worktree cleanup (.worktrees/task-51 + branch), root ff-pull, and the deferred SC-002 planner-driven live observation (012 precedent).
+
+spec-bridge sync: Setup: 2/2 · Foundational (Blocking Prerequisites): 7/7 · User Story 1 — Villagers can only carry so much (P1) 🎯 MVP: 6/6 · User Story 2 — Ground piles and emergent stockpiles (P2): 7/7 · User Story 3 — Chests: the village learns to keep things (P3): 5/5 · User Story 4 — Theft is a story, not an error (P4): 4/4 · User Story 5 — Rot: the ground is not a larder (P5): 3/3 · Migration & Format Door (Cross-Cutting): 3/3 · Polish & Cross-Cutting: 4/4 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 2/2 · Foundational (Blocking Prerequisites): 7/7 · User Story 1 — Villagers can only carry so much (P1) 🎯 MVP: 6/6 · User Story 2 — Ground piles and emergent stockpiles (P2): 7/7 · User Story 3 — Chests: the village learns to keep things (P3): 5/5 · User Story 4 — Theft is a story, not an error (P4): 4/4 · User Story 5 — Rot: the ground is not a larder (P5): 3/3 · Migration & Format Door (Cross-Cutting): 3/3 · Polish & Cross-Cutting: 4/4). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
