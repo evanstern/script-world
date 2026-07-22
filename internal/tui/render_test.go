@@ -82,25 +82,25 @@ func TestWidescreenViewExactHeightWithLongMinibufferInput(t *testing.T) {
 	}
 }
 
-// TestWidescreenViewExactHeightDenseChronicleExpanded is B1+B2+B5 together:
-// a chronicle with far more events than fit (600 in a 30-row terminal),
-// paused with a mid-ring event expanded — the composite must still render
-// to exactly m.height lines, and the map panel (unrelated to how busy the
-// dock is) must stay at its budgeted height.
-func TestWidescreenViewExactHeightDenseChronicleExpanded(t *testing.T) {
+// TestWidescreenViewExactHeightDenseChronicle is B1+B2+B5 together (spec
+// 018: the always-on detail pane replaces the old ⏎-triggered expansion,
+// but the row-budget invariant it guarded is the same one): a chronicle
+// with far more events than fit (600 in a 30-row terminal), paused with a
+// mid-ring selection — the composite must still render to exactly
+// m.height lines, and the map panel (unrelated to how busy the dock is)
+// must stay at its budgeted height.
+func TestWidescreenViewExactHeightDenseChronicle(t *testing.T) {
 	m := widescreenModel(t)
 	m.width, m.height = 112, 30
 	seedEvents(&m, 600)
 	m.connected = true
 	m.status = &ipc.StatusData{Clock: ipc.ClockStatus{Paused: true}}
 	m.chronSelected = 300
-	m.chronExpanded = true
-	m.chronExpIdx = 300
 
 	v := m.View()
 	lines := strings.Split(v, "\n")
 	if len(lines) != m.height {
-		t.Fatalf("View() with 600 events + an expansion = %d lines, want exactly %d:\n%s", len(lines), m.height, v)
+		t.Fatalf("View() with 600 events, paused mid-ring = %d lines, want exactly %d:\n%s", len(lines), m.height, v)
 	}
 
 	cols := computeColumns(m.width)

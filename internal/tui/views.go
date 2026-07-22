@@ -8,6 +8,7 @@ import (
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -113,7 +114,7 @@ func (m Model) footerView() string {
 	case m.mbFocused:
 		return styleDim.Render("esc release · ⏎ send · ↑↓ history")
 	case m.inspecting():
-		return styleDim.Render("j/k select · ⏎ expand · space resume · m ask")
+		return styleDim.Render("j/k select · J/K scroll detail · space resume · m ask")
 	case m.villagersVisible() && m.villDetail:
 		return styleDim.Render("esc back · space pause · q quit")
 	case m.villagersVisible():
@@ -223,7 +224,7 @@ func (m Model) soloTitle() string {
 			if !m.chronRaw && m.replica != nil && len(m.replica.Chronicle) > 0 {
 				mode = "narrated"
 			}
-			return fmt.Sprintf("%s · %s · paused — j/k select · ⏎ expand · r narrated", name, mode)
+			return fmt.Sprintf("%s · %s · paused — j/k select · J/K scroll detail · r narrated", name, mode)
 		}
 		return name + " · r narrated ↔ raw · a/t filter"
 	}
@@ -879,46 +880,55 @@ func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 	return styleDim.Render(hint) + "\n\n" + strings.Join(all, "\n")
 }
 
-// chronicleInspectBody is Mode 2 (paused) — selection, expansion, the
-// stored event verbatim (patterns/chronicle-grammar.md "Inspector").
-// chronicleInspectBody windows the raw feed around the selection, bounded
-// to exactly `rows` total lines whether or not something is expanded (B2 /
-// B1: the expansion block's line count is reserved out of the row budget
-// *before* windowing the marker rows, so an expanded event can never push
-// the composite past its handed height — which was the actual cause of
-// "j/k looks like a no-op while expanded": the selection moved correctly,
-// but an unbounded expansion could grow the panel past the terminal's
-// visible rows, scrolling the moved marker out of view).
+// chronicleInspectBody is Mode 2 (paused) — panels/chronicle.md "Mode 2",
+// contracts/digest-grammar.md §5. The body splits into the entry list (top)
+// and an always-on detail pane (bottom) separated by a rule line: no
+// keypress required to see the selected event's verbatim payload (FR-008,
+// R6) — the ⏎-triggered inline inspector this replaced is gone (R7).
+// Bounded to exactly `rows` total lines regardless of payload size (B1/B2):
+// the pane's row budget is reserved *before* windowing the list, and the
+// pane itself windows the annotated payload by chronDetailScroll rather
+// than ever emitting it in full — the actual cause of the old inline
+// inspector's unbounded-growth bug (see the historical comment this
+// replaced) for oversized payloads like world.migrated (FR-011).
 func (m Model) chronicleInspectBody(width, rows int) string {
 	if len(m.events) == 0 {
 		return styleDim.Render("paused — no events recorded yet")
 	}
-	if rows < 3 {
-		rows = 3
+	// Minimum viable split: list(5) + rule(1) — the floor every other body
+	// in this package clamps to (B5); paneRows may shrink to 0 below this
+	// only in a starved-terminal degenerate case.
+	if rows < 6 {
+		rows = 6
 	}
 	names := m.agentNames()
 	n := len(m.events)
 	sel := m.chronSelectionBase()
 
-	baseBudget := rows
-	var expBlock string
-	if m.chronExpanded && m.chronExpIdx >= 0 && m.chronExpIdx < n {
-		expBlock = indentBlock(formatInspector(m.events[m.chronExpIdx], names), "  ")
-		expLines := len(strings.Split(expBlock, "\n"))
-		baseBudget = rows - expLines
-		if baseBudget < 1 {
-			baseBudget = 1
+	// R6: paneRows = min(rows/2, 14); list keeps the remainder, floored at 5.
+	paneRows := rows / 2
+	if paneRows > 14 {
+		paneRows = 14
+	}
+	const ruleRows = 1
+	listRows := rows - paneRows - ruleRows
+	if listRows < 5 {
+		listRows = 5
+		paneRows = rows - listRows - ruleRows
+		if paneRows < 0 {
+			paneRows = 0
 		}
 	}
 
-	start := sel - baseBudget/2
+	// --- entry list (unchanged windowing discipline, minus expansion) ---
+	start := sel - listRows/2
 	if start < 0 {
 		start = 0
 	}
-	end := start + baseBudget
+	end := start + listRows
 	if end > n {
 		end = n
-		start = end - baseBudget
+		start = end - listRows
 		if start < 0 {
 			start = 0
 		}
@@ -928,7 +938,7 @@ func (m Model) chronicleInspectBody(width, rows int) string {
 		lines = append(lines, formatChronicleLine(m.events[i], names))
 	}
 	cols := computeChronicleColumns(lines, false) // inspect is always tick-shown (solo-style)
-	var out []string
+	listOut := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		l := lines[i-start]
 		selected := i == sel
@@ -936,12 +946,72 @@ func (m Model) chronicleInspectBody(width, rows int) string {
 		if selected {
 			marker = styleFeedSelect.Render("▌") + " "
 		}
-		out = append(out, marker+renderChronicleRow(l, cols, width-2, 1, selected))
-		if m.chronExpanded && m.chronExpIdx == i {
-			out = append(out, expBlock)
-		}
+		listOut = append(listOut, marker+renderChronicleRow(l, cols, width-2, 1, selected))
+	}
+
+	// --- rule + detail pane (contract §5) ---
+	e := m.events[sel]
+	rule := styleDim.Render(fmt.Sprintf("DETAIL · seq %d", e.Seq))
+	out := append([]string{}, listOut...)
+	out = append(out, rule)
+	if paneRows > 0 {
+		out = append(out, chronicleDetailPane(e, names, m.chronDetailScroll, width, paneRows)...)
 	}
 	return strings.Join(out, "\n")
+}
+
+// chronicleDetailPane windows formatInspector's verbatim-payload output to
+// exactly paneRows lines (contract §5): scroll clamps to content so J past
+// the end (or K before the start) is a no-op rather than drifting the view
+// blank; a footer replaces the last row with a remaining-line count plus
+// the [future: actions] slot (FR-009) whenever content overflows the pane.
+// Oversized payloads (world.migrated) are never processed beyond this
+// slice — the annotated string is built once, then only the visible lines
+// are touched, satisfying FR-011 structurally rather than by a size cap.
+func chronicleDetailPane(e store.Event, names []string, scroll, width, paneRows int) []string {
+	content := strings.Split(formatInspector(e, names), "\n")
+
+	contentRows := paneRows
+	footerNeeded := len(content) > paneRows
+	if footerNeeded {
+		contentRows = paneRows - 1
+		if contentRows < 1 {
+			contentRows = 1
+		}
+	}
+	maxScroll := len(content) - contentRows
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	visEnd := scroll + contentRows
+	if visEnd > len(content) {
+		visEnd = len(content)
+	}
+
+	out := make([]string, 0, paneRows)
+	for _, ln := range content[scroll:visEnd] {
+		out = append(out, indentBlock(ln, "  "))
+	}
+	if footerNeeded {
+		remaining := len(content) - visEnd
+		footer := fmt.Sprintf("… (+%d more — J to scroll)", remaining)
+		actions := "[future: actions]" // detailActions' attachment slot (FR-009)
+		gap := width - len([]rune(footer)) - len([]rune(actions)) - 4
+		if gap < 2 {
+			gap = 2
+		}
+		out = append(out, styleDim.Render("  "+footer+strings.Repeat(" ", gap)+actions))
+	}
+	for len(out) < paneRows { // pad so the composite height is fixed (B1)
+		out = append(out, "")
+	}
+	return out
 }
 
 func indentBlock(s, prefix string) string {

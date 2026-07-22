@@ -58,10 +58,10 @@
 
 **Independent Test**: pause, move selection with j/k/g/G — full verbatim detail visible at every step with zero extra keypresses; J/K scroll long payloads; ⏎ does nothing.
 
-- [ ] T016 [US2] Model state changes in internal/tui/tui.go: remove `chronExpanded`/`chronExpIdx` and `chronToggleExpand`; add `chronDetailScroll int` reset on selection move, pause exit, and reconnect (data-model "Interaction state")
-- [ ] T017 [US2] Keymap changes in internal/tui/tui.go `handleInspectKey`: ⏎ → reserved no-op (comment cites contract §5 extension point); `J`/`K` → detail pane scroll; title-row hint string updated to `j/k select · J/K scroll detail`
-- [ ] T018 [US2] Rework `chronicleInspectBody` in internal/tui/views.go per contract §5: bottom detail pane `paneRows = min(rows/2, 14)` with rule line `DETAIL · seq N`, list keeps ≥5 rows, pane renders `formatInspector` windowed by `chronDetailScroll` with `… (+N more — J to scroll)` footer, oversized payloads styled only for the visible slice (FR-011); add the `detailActions(e store.Event) []detailAction` stub returning nil with the `[future: actions]` slot (FR-009)
-- [ ] T019 [US2] Inspect-mode tests in internal/tui/tui_test.go + internal/tui/render_test.go: pane present immediately on pause, follows selection, scroll clamps to content, selection move resets scroll, `world.migrated`-sized payload stays within row budget, ⏎ is a no-op
+- [X] T016 [US2] Model state changes in internal/tui/tui.go: remove `chronExpanded`/`chronExpIdx` and `chronToggleExpand`; add `chronDetailScroll int` reset on selection move, pause exit, and reconnect (data-model "Interaction state")
+- [X] T017 [US2] Keymap changes in internal/tui/tui.go `handleInspectKey`: ⏎ → reserved no-op (comment cites contract §5 extension point); `J`/`K` → detail pane scroll; title-row hint string updated to `j/k select · J/K scroll detail`
+- [X] T018 [US2] Rework `chronicleInspectBody` in internal/tui/views.go per contract §5: bottom detail pane `paneRows = min(rows/2, 14)` with rule line `DETAIL · seq N`, list keeps ≥5 rows, pane renders `formatInspector` windowed by `chronDetailScroll` with `… (+N more — J to scroll)` footer, oversized payloads styled only for the visible slice (FR-011); add the `detailActions(e store.Event) []detailAction` stub returning nil with the `[future: actions]` slot (FR-009)
+- [X] T019 [US2] Inspect-mode tests in internal/tui/tui_test.go + internal/tui/render_test.go: pane present immediately on pause, follows selection, scroll clamps to content, selection move resets scroll, `world.migrated`-sized payload stays within row budget, ⏎ is a no-op
 
 **Checkpoint**: US2 shippable independently on top of Phase 2 (works with fallback digests too).
 
