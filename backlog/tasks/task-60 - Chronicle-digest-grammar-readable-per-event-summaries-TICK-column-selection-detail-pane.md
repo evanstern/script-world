@@ -3,10 +3,10 @@ id: TASK-60
 title: >-
   Chronicle digest grammar: readable per-event summaries, TICK column, selection
   detail pane
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 18:53'
-updated_date: '2026-07-22 20:25'
+updated_date: '2026-07-22 20:33'
 labels:
   - events
   - tui
@@ -28,19 +28,31 @@ Spec: specs/018-chronicle-digest
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every event type in the catalog (docs/wiki/event-types.md) renders a structured readable digest line TICK | timestamp | event.name | summary — raw-JSON fallthrough remains only for unknown/future types
-- [ ] #2 Digest lines use aligned columns and per-family styling (color, bold/underline emphasis on key tokens) so the feed is parseable as it flies by
-- [ ] #3 Paused inspect mode navigates entries item by item (up/down, first/last) — existing j/k/g/G behavior preserved or improved
-- [ ] #4 The selected entry shows its full detail view (all logged fields, pretty JSON, resolved names) on selection, no extra keypress required
-- [ ] #5 Detail view leaves a documented extension point for jump-off actions to other menus/controls (no actions need to ship in this task)
-- [ ] #6 chronicle-grammar.md and panels/chronicle.md design docs updated to match the shipped grammar and interaction
-- [ ] #7 Spec phase: Setup
-- [ ] #8 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #9 Spec phase: User Story 1 — Reading the live feed without decoding JSON (P1) 🎯 MVP
-- [ ] #10 Spec phase: User Story 2 — Inspecting an entry in full on pause (P2)
-- [ ] #11 Spec phase: User Story 3 — Scanning the feed by eye at speed (P3)
-- [ ] #12 Spec phase: Polish & Cross-Cutting
+- [x] #1 Every event type in the catalog (docs/wiki/event-types.md) renders a structured readable digest line TICK | timestamp | event.name | summary — raw-JSON fallthrough remains only for unknown/future types
+- [x] #2 Digest lines use aligned columns and per-family styling (color, bold/underline emphasis on key tokens) so the feed is parseable as it flies by
+- [x] #3 Paused inspect mode navigates entries item by item (up/down, first/last) — existing j/k/g/G behavior preserved or improved
+- [x] #4 The selected entry shows its full detail view (all logged fields, pretty JSON, resolved names) on selection, no extra keypress required
+- [x] #5 Detail view leaves a documented extension point for jump-off actions to other menus/controls (no actions need to ship in this task)
+- [x] #6 chronicle-grammar.md and panels/chronicle.md design docs updated to match the shipped grammar and interaction
+- [x] #7 Spec phase: Setup
+- [x] #8 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #9 Spec phase: User Story 1 — Reading the live feed without decoding JSON (P1) 🎯 MVP
+- [x] #10 Spec phase: User Story 2 — Inspecting an entry in full on pause (P2)
+- [x] #11 Spec phase: User Story 3 — Scanning the feed by eye at speed (P3)
+- [x] #12 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Implementation Notes
 
@@ -50,4 +62,12 @@ Tier decision (constitution V rubric): Sonnet — routine slice: single-package 
 Slice 1 (T002-T015) gated and accepted 2026-07-22: registry (~86 entries incl. companion types), v2 line shape + column assembly, sweep test green both directions, full suite green, gate-proves-itself check passed. 7 contract template rows reconciled to verified payload fields (commit e8a1c52 on task branch). Implementer decisions accepted: intent_set target-presence heuristic, %.2f telemetry floats, doc cross-check filters file-path backticks.
 
 Slice 2 (T016-T026) gated and accepted 2026-07-22: detail pane (bottom split, J/K scroll, ⏎ reserved as extension point), family palette recorded in chronicle-grammar.md, segment-wise styling with plain-equivalence regression test (caught+fixed a dock ellipsis bug pre-ship), 3 design docs reconciled, full suite green. Live PTY walkthrough (expect-driven, throwaway world): digest feed, inspect selection, DETAIL pane, resume/quit verified end-to-end; colors/alignment eyeball deferred to PR review. PR #37 open: https://github.com/evanstern/promptworld/pull/37. Post-merge remaining: wiki-update re-pin (T027), spec-bridge sync, worktree cleanup.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — Reading the live feed without decoding JSON (P1) 🎯 MVP: 10/10 · User Story 2 — Inspecting an entry in full on pause (P2): 4/4 · User Story 3 — Scanning the feed by eye at speed (P3): 3/3 · Polish & Cross-Cutting: 5/5 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — Reading the live feed without decoding JSON (P1) 🎯 MVP: 10/10 · User Story 2 — Inspecting an entry in full on pause (P2): 4/4 · User Story 3 — Scanning the feed by eye at speed (P3): 3/3 · Polish & Cross-Cutting: 5/5). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
