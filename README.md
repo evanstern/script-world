@@ -107,3 +107,35 @@ Read the trail: `sqlite3 world.db "SELECT * FROM events WHERE type LIKE 'cog.%'"
 — every thought terminates in exactly one recorded outcome, chained to its
 stimulus (`trigger_seq`), so `stimulus → thought → intent → action` is walkable
 from the log alone.
+
+## Tool-calling knobs (`llm.json`, TASK-52)
+
+Cognitions act by calling tools instead of the model replying with free text a mind
+hand-parses: the loop presents a roster, dispatches whatever the model calls, and
+feeds results back until an action lands or a hard cap trips. Two `llm.json` knobs
+tune it:
+
+- **`loop_max_rounds`** — the hard cap on provider rounds a single cognition may
+  spend before the driver terminates it. Absent/0 defaults to 8; 1–16 is honored
+  verbatim; anything outside that range clamps to it with an operator warning at
+  boot — never a boot failure, the same warn-not-error convention as
+  `local.parallel`.
+- **`local.tool_mode` / `cloud.tool_mode`** — `"native"` (the default) speaks the
+  transport's first-class function-calling wire: OpenAI-compatible `tool_calls`
+  locally, Anthropic `tools` on cloud. `"json"` engages a provider-agnostic,
+  schema-constrained fallback for models whose native function-calling is
+  unreliable: tool declarations move into the system prompt and every round is
+  grammar-constrained to a small `{tool, args, say}` envelope emulating one tool
+  call. Anthropic cloud calls are always native and ignore the knob; `tool_mode`
+  is honored only by the `openai_compat` transport (the local tier, or the cloud
+  tier when `cloud.provider` is `openai_compat`).
+
+Flip a model's `tool_mode` to `"json"` when you see the symptoms of unreliable
+native function-calling: a run of `rejected_malformed` verdicts in the event log
+(the model can't hit the declared argument schema), or the model answering in
+plain prose instead of emitting a call at all. Both are the documented cue to
+switch that tier's knob — not a code change.
+
+Doctrine, unchanged by which wire shape is in play: a tool call is a request, never
+a fact; switching `tool_mode` changes how the request is transported, never what
+gets recorded as an event.
