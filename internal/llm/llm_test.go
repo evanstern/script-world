@@ -1087,7 +1087,7 @@ func TestNilToolsByteIdentity(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			raw = nil
-			o := newOpenAICompat(srv.URL, "m", "", c.reasoning)
+			o := newOpenAICompat(srv.URL, "m", "", c.reasoning, "")
 			if _, err := o.call(context.Background(), c.req); err != nil {
 				t.Fatal(err)
 			}

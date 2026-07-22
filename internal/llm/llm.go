@@ -288,13 +288,14 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
 	// at one worker (FR-008).
 	localSlots, _ := cfg.Local.Workers()
+	localToolMode, _ := cfg.Local.ToolModeResolved()
 	o := &Orchestrator{
 		cfg:   cfg,
 		meter: meter,
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
-				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none")),
+				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none"), localToolMode),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
 				slots: localSlots,
 				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},

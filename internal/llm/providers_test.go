@@ -31,7 +31,7 @@ func captureServer(t *testing.T, body *map[string]any) *httptest.Server {
 func TestOpenAICompatMaxTokens(t *testing.T) {
 	var got map[string]any
 	srv := captureServer(t, &got)
-	o := newOpenAICompat(srv.URL, "m", "", "")
+	o := newOpenAICompat(srv.URL, "m", "", "", "")
 
 	if _, err := o.call(context.Background(), Request{Prompt: "x", MaxTokens: 256}); err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestOpenAICompatReasoningEffort(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var got map[string]any
 			srv := captureServer(t, &got)
-			o := newOpenAICompat(srv.URL, "m", "", c.resolved)
+			o := newOpenAICompat(srv.URL, "m", "", c.resolved, "")
 			if _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
 				t.Fatal(err)
 			}
@@ -95,7 +95,7 @@ func TestOpenAICompatReasoningEffort(t *testing.T) {
 func TestOpenAICompatResponseFormat(t *testing.T) {
 	var got map[string]any
 	srv := captureServer(t, &got)
-	o := newOpenAICompat(srv.URL, "m", "", "")
+	o := newOpenAICompat(srv.URL, "m", "", "", "")
 
 	schema := json.RawMessage(`{"type":"object","properties":{"goal":{"type":"string","enum":["forage","chop"]}},"required":["reason"]}`)
 	if _, err := o.call(context.Background(),

@@ -161,6 +161,17 @@ func Run(dir string) error {
 		if workersWarn != "" {
 			fmt.Printf("daemon: %s\n", workersWarn)
 		}
+		// Agent tool-use loop knobs (TASK-52): surface any clamp/unknown-value
+		// warning the same way as the concurrency knob — warn, never fatal.
+		if _, roundsWarn := llmCfg.Rounds(); roundsWarn != "" {
+			fmt.Printf("daemon: %s\n", roundsWarn)
+		}
+		if _, tmWarn := llmCfg.Local.ToolModeResolved(); tmWarn != "" {
+			fmt.Printf("daemon: %s\n", tmWarn)
+		}
+		if _, tmWarn := llmCfg.Cloud.ToolModeResolved(); tmWarn != "" {
+			fmt.Printf("daemon: %s\n", tmWarn)
+		}
 		localDesc := fmt.Sprintf("local %s @ %s", llmCfg.Local.Model, llmCfg.Local.Endpoint)
 		if localWorkers > 1 {
 			localDesc += fmt.Sprintf(", parallel %d", localWorkers)
