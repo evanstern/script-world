@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 08:05'
+updated_date: '2026-07-22 08:23'
 labels: []
 dependencies:
   - TASK-50
@@ -21,8 +21,8 @@ Spec: specs/013-inventory-storage
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Spec phase: Setup
-- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #1 Spec phase: Setup
+- [x] #2 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #3 Spec phase: User Story 1 — Villagers can only carry so much (P1) 🎯 MVP
 - [x] #4 Spec phase: User Story 2 — Ground piles and emergent stockpiles (P2)
 - [x] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
@@ -62,4 +62,8 @@ US3 Sonnet + US4 complete: 77565ee (T026-T027: chest glyph U+2610 + legend inspe
 US5 (rot + observability) complete: f10375a (T032-T033 Opus: rot sweep on minute heartbeat before per-agent execution, takeSpoiled oldest-first drain, food_rotted reducer total, 5-test suite incl. rot-vs-pickup both orderings + spoil_at snapshot round-trip), 719fee2 (T034 Sonnet audit: SC-006 verified fully answerable pre-existing; real gaps found+fixed one level down — grammar.go owner/taker agent-index resolution for withdrew/chest_taken, narrator chronicleNote case for chest_taken theft prose; 012 precedent confirmed that routine events ride the generic raw feed). Full suite green both dispatches. Phase 8 (migration 2->3) next.
 
 Phase 8 (migration) complete: 1e90f65 (T035-T037 Opus) — TransformV2State pure verbatim carry + over-cap spill (canonical order, least-nutritious-first food, most-worn-first spears), dead-agent inventory spills per v3 death invariant, mid-flight intents verbatim (no map change), no separate v2 decoder (additive omitempty decode), OpenForMigration admits v1+v2, source-format-keyed archives (world.v1.db/world.v2.db), 1->2->3 chain in one run, 8 new tests + 012 suite unweakened. Decisions recorded in research R3 (98db93c). Full suite green. Phase 9 (whole-feature replay, live smoke, PR) next.
+
+Phase 9 T038-T039 complete: 384430f — whole-feature storage replay test (every 013 event type + theft companion batch + death spill, byte-identical replay, unknown-type no-op assertion) alongside intact 012 test; deterministic quickstart smoke in scratch SCRIPTWORLD_HOME: fresh v3 world boots reflex-only at speed max (tick 6778, clean stop, well-formed log); v2 fixture correctly refused by format gate then migrated ('8 villagers carried across the break at tick 300000', world.v2.db archived); over-cap spill pile verified at (5,5) with SpoilAt 472800 = migration tick + rotWindow, agent clamped 24/24; death spill at (9,9) incl. spear durability; SC-006 surfaces readable headless. SC-002 planner-driven observation DEFERRED to post-merge live run per 012/T045 precedent. T040 (PR) next.
+
+T040 done: PR #33 open (https://github.com/evanstern/script-world/pull/33), 17 commits, all gates green, T040 ticked on the branch (5344cf8). PR merge is permission-blocked for this session — awaiting human merge. Post-merge tail (T041) then remains: /grounding-wiki:wiki-update (re-pin list in quickstart.md §Post-merge), spec-bridge:sync (moves phases/status from merged artifacts), worktree cleanup (.worktrees/task-51 + branch), root ff-pull, and the deferred SC-002 planner-driven live observation (012 precedent).
 <!-- SECTION:NOTES:END -->
