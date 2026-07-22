@@ -441,6 +441,215 @@ func TestOversizedRawLineFailsFastNotForever(t *testing.T) {
 	}
 }
 
+// TestMiracleMoveRoundTrip (spec 016 T011): the operator "miracle" command
+// lands a villager move over the wire on a pure-sim world (no LLM/angel), spends
+// a charge, and the move is visible in the next state fetch. The world is paused
+// first so the villagers hold still for a deterministic before/after.
+func TestMiracleMoveRoundTrip(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	if _, err := c.Status("pause", nil); err != nil {
+		t.Fatal(err)
+	}
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before sim.State
+	if err := json.Unmarshal(sd.State, &before); err != nil {
+		t.Fatal(err)
+	}
+	ax, ay := before.Agents[0].X, before.Agents[0].Y
+	// Another villager's tile is a guaranteed-passable destination (villagers
+	// may share a tile), so the test needs no map to pick a valid target.
+	var bx, by int
+	found := false
+	for i := 1; i < len(before.Agents); i++ {
+		if before.Agents[i].X != ax || before.Agents[i].Y != ay {
+			bx, by = before.Agents[i].X, before.Agents[i].Y
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Skip("all villagers share agent 0's tile")
+	}
+
+	data, err := c.Call("miracle", MiracleArgs{Kind: "move", Class: "villager", X: ax, Y: ay, ToX: bx, ToY: by})
+	if err != nil {
+		t.Fatalf("miracle move rejected over the wire: %v", err)
+	}
+	var md MiracleData
+	if err := json.Unmarshal(data, &md); err != nil {
+		t.Fatal(err)
+	}
+	if md.Kind != "move" || md.Gratis {
+		t.Errorf("miracle data wrong: %+v", md)
+	}
+	if md.Charges != 0 {
+		t.Errorf("charges after a charged move = %d, want 0 (genesis 1 spent)", md.Charges)
+	}
+	if !strings.Contains(md.Summary, "moved") {
+		t.Errorf("summary = %q, want a human rendering", md.Summary)
+	}
+
+	// The move is visible in the next state fetch.
+	sd2, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after sim.State
+	if err := json.Unmarshal(sd2.State, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Agents[0].X != bx || after.Agents[0].Y != by {
+		t.Errorf("villager at (%d,%d) after move, want (%d,%d)", after.Agents[0].X, after.Agents[0].Y, bx, by)
+	}
+
+	// Unknown kinds are refused cleanly; the connection survives.
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "smite", X: ax, Y: ay}); err == nil {
+		t.Error("unknown miracle kind should be refused")
+	}
+	if _, err := c.Status("status", nil); err != nil {
+		t.Errorf("connection should survive a refused miracle: %v", err)
+	}
+}
+
+// TestMiracleForcedMoveZeroBank is US2-AS1 / T012: the operator "--force" door
+// lands a miracle with an empty charge bank (gratis waives the cost) and leaves
+// the bank untouched at zero, while validation and recording are unchanged. The
+// world is paused for a deterministic before/after.
+func TestMiracleForcedMoveZeroBank(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	if _, err := c.Status("pause", nil); err != nil {
+		t.Fatal(err)
+	}
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before sim.State
+	if err := json.Unmarshal(sd.State, &before); err != nil {
+		t.Fatal(err)
+	}
+	// Empty the bank via a charged move so no charges remain (genesis is 1).
+	ax, ay := before.Agents[0].X, before.Agents[0].Y
+	var bx, by int
+	found := false
+	for i := 1; i < len(before.Agents); i++ {
+		if before.Agents[i].X != ax || before.Agents[i].Y != ay {
+			bx, by = before.Agents[i].X, before.Agents[i].Y
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Skip("all villagers share agent 0's tile")
+	}
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "move", Class: "villager", X: ax, Y: ay, ToX: bx, ToY: by}); err != nil {
+		t.Fatalf("first (charged) move rejected: %v", err)
+	}
+
+	// Bank is now 0; a non-forced move must be refused for want of a charge.
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "move", Class: "villager", X: bx, Y: by, ToX: ax, ToY: ay}); err == nil {
+		t.Fatal("a charged move with an empty bank should be refused")
+	}
+
+	// The forced move lands anyway, and the bank stays at zero.
+	data, err := c.Call("miracle", MiracleArgs{Kind: "move", Class: "villager", X: bx, Y: by, ToX: ax, ToY: ay, Gratis: true})
+	if err != nil {
+		t.Fatalf("forced move with an empty bank rejected: %v", err)
+	}
+	var md MiracleData
+	if err := json.Unmarshal(data, &md); err != nil {
+		t.Fatal(err)
+	}
+	if !md.Gratis {
+		t.Errorf("forced move data should report gratis=true: %+v", md)
+	}
+	if md.Charges != 0 {
+		t.Errorf("bank after a forced move = %d, want 0 (untouched)", md.Charges)
+	}
+
+	sd2, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after sim.State
+	if err := json.Unmarshal(sd2.State, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.MetatronCharges != 0 {
+		t.Errorf("state bank = %d after forced move, want 0", after.MetatronCharges)
+	}
+	if after.Agents[0].X != ax || after.Agents[0].Y != ay {
+		t.Errorf("forced move did not land: agent 0 at (%d,%d), want (%d,%d)", after.Agents[0].X, after.Agents[0].Y, ax, ay)
+	}
+}
+
+// TestMiracleGiveRoundTrip (spec 016 T022): the operator "miracle" command lands
+// a give_item over the wire on a pure-sim world, resolving the villager by NAME
+// (contracts §2), spending a charge, with the grant visible in the next state
+// fetch. The world is paused first for a deterministic before/after.
+func TestMiracleGiveRoundTrip(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	if _, err := c.Status("pause", nil); err != nil {
+		t.Fatal(err)
+	}
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before sim.State
+	if err := json.Unmarshal(sd.State, &before); err != nil {
+		t.Fatal(err)
+	}
+	beforeRaw := before.Agents[0].Inv.FoodRaw
+
+	data, err := c.Call("miracle", MiracleArgs{Kind: "give_item", Villager: sim.AgentNames[0], Item: "food_raw", Qty: 2})
+	if err != nil {
+		t.Fatalf("give_item rejected over the wire: %v", err)
+	}
+	var md MiracleData
+	if err := json.Unmarshal(data, &md); err != nil {
+		t.Fatal(err)
+	}
+	if md.Kind != "give_item" || md.Gratis {
+		t.Errorf("miracle data wrong: %+v", md)
+	}
+	if md.Charges != 0 {
+		t.Errorf("charges after a charged grant = %d, want 0 (genesis 1 spent)", md.Charges)
+	}
+	if !strings.Contains(md.Summary, "granted") {
+		t.Errorf("summary = %q, want a human rendering", md.Summary)
+	}
+
+	sd2, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after sim.State
+	if err := json.Unmarshal(sd2.State, &after); err != nil {
+		t.Fatal(err)
+	}
+	if got := after.Agents[0].Inv.FoodRaw; got != beforeRaw+2 {
+		t.Errorf("FoodRaw after grant = %d, want %d", got, beforeRaw+2)
+	}
+
+	// An unknown villager name is refused cleanly; the connection survives.
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "give_item", Villager: "Nobody", Item: "wood", Qty: 1}); err == nil {
+		t.Error("give_item to an unknown villager should be refused")
+	}
+	if _, err := c.Status("status", nil); err != nil {
+		t.Errorf("connection should survive a refused give_item: %v", err)
+	}
+}
+
 func waitForSeq(t *testing.T, c *Client, seq int64) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

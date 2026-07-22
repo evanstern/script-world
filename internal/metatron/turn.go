@@ -42,6 +42,7 @@ var ErrTurnBusy = errors.New("the angel is attending another matter")
 type TurnResult struct {
 	Reply   string   `json:"reply"`
 	Nudge   *Nudge   `json:"nudge,omitempty"`
+	Miracle *Miracle `json:"miracle,omitempty"`
 	Charges int      `json:"charges"`
 	Moments []string `json:"moments,omitempty"`
 }
@@ -53,7 +54,17 @@ type Nudge struct {
 	Text    string   `json:"text"`
 }
 
-// turnReply is the model's output contract.
+// Miracle reports a landed miracle (spec 016) — the kind and a one-line human
+// rendering. Never carries gratis: the angel cannot work a free miracle.
+type Miracle struct {
+	Kind    string `json:"kind"`
+	Summary string `json:"summary"`
+}
+
+// turnReply is the model's output contract. The miracle member has NO gratis
+// field by design (contracts §1, FR-007/SC-005): any "gratis":true in model
+// output is dropped at unmarshal, so a model-driven miracle is always charged —
+// structural stripping, nothing to forget to sanitize.
 type turnReply struct {
 	Say   string `json:"say"`
 	Nudge *struct {
@@ -61,6 +72,19 @@ type turnReply struct {
 		Target string `json:"target"`
 		Text   string `json:"text"`
 	} `json:"nudge"`
+	Miracle *struct {
+		Kind     string `json:"kind"`
+		Day      int    `json:"day"`
+		Time     string `json:"time"`
+		Villager string `json:"villager"`
+		Item     string `json:"item"`
+		Qty      int    `json:"qty"`
+		Class    string `json:"class"`
+		X        int    `json:"x"`
+		Y        int    `json:"y"`
+		ToX      int    `json:"to_x"`
+		ToY      int    `json:"to_y"`
+	} `json:"miracle"`
 }
 
 // Turn runs one mediated console turn. Serialized: a second concurrent call
@@ -115,11 +139,19 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		result.Reply = "(" + notice + ")\n\n" + result.Reply
 	}
 
+	// At most one mediated act per turn (the existing "one mediated act" rule):
+	// a nudge takes the turn if present, otherwise a miracle may land.
 	if reply.Nudge != nil && perr == nil {
 		if nudge, why := mt.landNudge(reply, charges, alive); nudge != nil {
 			result.Nudge = nudge
 		} else if why != "" {
 			result.Reply += "\n\n(No nudge landed: " + why + ")"
+		}
+	} else if reply.Miracle != nil && perr == nil {
+		if miracle, why := mt.landMiracle(reply, charges); miracle != nil {
+			result.Miracle = miracle
+		} else if why != "" {
+			result.Reply += "\n\n(No miracle landed: " + why + ")"
 		}
 	}
 
@@ -202,12 +234,80 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 	return &Nudge{Form: form, Targets: names, Text: text}, ""
 }
 
+// landMiracle validates the model's miracle and lands it as one atomic batch
+// through the same door and shared builder the operator console uses (spec 016
+// R6), so the two channels cannot drift. The angel can NEVER waive a charge:
+// gratis is passed false unconditionally and does not exist on the turn contract
+// (SC-005). Returns the landed miracle, or ("" is a silent skip) an in-fiction
+// refusal reason reported in the reply suffix, exactly like landNudge.
+func (mt *Metatron) landMiracle(reply turnReply, charges int) (*Miracle, string) {
+	mm := reply.Miracle
+	if charges <= 0 {
+		return nil, "no charges are banked"
+	}
+	kind := strings.ToLower(strings.TrimSpace(mm.Kind))
+
+	var params MiracleParams
+	var summary string
+	switch kind {
+	case "move":
+		params = MiracleParams{Class: strings.ToLower(strings.TrimSpace(mm.Class)), X: mm.X, Y: mm.Y, ToX: mm.ToX, ToY: mm.ToY}
+		summary = fmt.Sprintf("moved the %s at (%d,%d) to (%d,%d)", params.Class, mm.X, mm.Y, mm.ToX, mm.ToY)
+	case "remove":
+		params = MiracleParams{Class: strings.ToLower(strings.TrimSpace(mm.Class)), X: mm.X, Y: mm.Y}
+		summary = fmt.Sprintf("removed the %s at (%d,%d)", params.Class, mm.X, mm.Y)
+	case "time_snap":
+		hour, min, perr := clock.ParseTimeOfDay(mm.Time)
+		if perr != nil {
+			return nil, perr.Error()
+		}
+		params = MiracleParams{ToTick: clock.TickAt(int64(mm.Day), hour, min, 0)}
+		summary = fmt.Sprintf("snapped time forward to day %d %02d:%02d", mm.Day, hour, min)
+	case "give_item":
+		idx := agentIndexByName(mm.Villager)
+		if idx < 0 {
+			return nil, fmt.Sprintf("no villager named %q", mm.Villager)
+		}
+		item := strings.ToLower(strings.TrimSpace(mm.Item))
+		params = MiracleParams{Agent: idx, Item: item, Qty: mm.Qty}
+		summary = fmt.Sprintf("granted %d %s to %s", mm.Qty, item, sim.AgentNames[idx])
+	default:
+		return nil, fmt.Sprintf("unknown miracle %q", mm.Kind)
+	}
+
+	// Resolve the perception-memory recipients (which villager stands on a move's
+	// source tile) from the absorb-mirrored positions, so the turn worker never
+	// races the replica the absorb goroutine owns; the shared builder reads only
+	// agent positions/liveness.
+	mt.stateMu.Lock()
+	probe := &sim.State{Agents: make([]sim.Agent, len(mt.agentXY))}
+	for i := range mt.agentXY {
+		probe.Agents[i] = sim.Agent{X: mt.agentXY[i][0], Y: mt.agentXY[i][1], Dead: !mt.alive[i]}
+	}
+	mt.stateMu.Unlock()
+
+	batch, err := BuildMiracleBatch(probe, kind, params, false)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if err := mt.social.InjectSocial(batch); err != nil {
+		log.Printf("metatron: miracle rejected at the door: %v", err)
+		return nil, "the world refused it (" + err.Error() + ")"
+	}
+	mt.appendFile(mt.soulPath(), fmt.Sprintf("\n- %s — I worked a miracle: %s\n",
+		clock.Format(mt.replicaTickSafe()), summary))
+	return &Miracle{Kind: kind, Summary: summary}, ""
+}
+
 // recordTurn appends the exchange to the transcript.
 func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n[%s]\n> %s\n\nmetatron: %s\n", clock.Format(tick), playerText, r.Reply)
 	if r.Nudge != nil {
 		fmt.Fprintf(&b, "⚡ %s → %s: %q\n", r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text)
+	}
+	if r.Miracle != nil {
+		fmt.Fprintf(&b, "✨ miracle: %s\n", r.Miracle.Summary)
 	}
 	mt.appendFile(mt.transcriptPath(), b.String())
 }
@@ -226,7 +326,7 @@ func (mt *Metatron) Status() Status {
 	return Status{Charges: c, CharterDefault: charterIsDefault(mt.worldDir), SoulTail: mt.soulTail()}
 }
 
-func (mt *Metatron) soulTail() string       { return tailOfFile(mt.soulPath(), soulTailBytes) }
+func (mt *Metatron) soulTail() string { return tailOfFile(mt.soulPath(), soulTailBytes) }
 func (mt *Metatron) transcriptTail() string {
 	t := tailOfFile(mt.transcriptPath(), 3000)
 	// Trim to whole turns, newest-last.
@@ -309,9 +409,24 @@ A nudge spends one of your banked charges — if none are banked, or the request
 is unwise, refuse and counsel instead (refusal is free). The nudge text must
 be written for the villager's world: no player, no game, no outside voice.
 
+When a nudge is too indirect for the need, you may instead work ONE miracle — a
+direct edit to the world, spent from the same charges:
+  • "move" a villager, structure, or pile to a tile (rescue the stuck) — 1 charge
+  • "remove" a structure, pile, or terrain feature — 1 charge
+  • "give_item" — place a known item in a living villager's hands — 1 charge
+  • "time_snap" — jump the world clock forward to a day and time — 2 charges
+A miracle spends its charges like a nudge and refuses in-fiction when the bank
+cannot pay (a time_snap needs two, every other miracle needs one). At most ONE
+act per turn — a nudge OR a miracle, never both. You cannot work a miracle for
+free; you cannot remove a villager.
+
 Reply with ONLY this JSON:
 {"say": "<your words to the player>",
- "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null}`,
+ "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null,
+ "miracle": {"kind": "move"|"remove"|"give_item"|"time_snap",
+   "class": "villager"|"structure"|"pile"|"terrain", "x": 0, "y": 0, "to_x": 0, "to_y": 0,
+   "villager": "<name>", "item": "<item kind>", "qty": 0,
+   "day": 2, "time": "HH:MM"} or null}`,
 		charter, strings.Join(sim.AgentNames[:], ", "))
 }
 

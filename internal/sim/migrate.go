@@ -128,6 +128,7 @@ func MigrateState(v1 *legacyState, m *worldmap.Map) *State {
 		Degraded:      false,
 		EffectiveRate: v1.Speed.TicksPerSecond(),
 		Seed:          v1.Seed,
+		m:             m,
 		Agents:        make([]Agent, len(v1.Agents)),
 		// Social fabric — carried verbatim.
 		Relations:    v1.Relations,

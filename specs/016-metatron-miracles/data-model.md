@@ -73,16 +73,27 @@ The single authority for shift semantics (FR-009). Every tick-anchored field in 
 state tree is classified; the guard test fails on any unclassified field.
 
 **SHIFT (+delta)** — remaining duration preserved:
-`Intent.WorkStart` (when ≠ 0) · `Agent.IdleSince` · `Agent.LastTalk` · `Agent.LastGive`
-· `AgentHail.Until` · `Structure.FuelUntil` · pile `FoodBatch.SpoilAt` ·
-`Harvest.Regrow` · `DenUse` ready/cooldown ticks · `Gru.LastAttack` ·
-`Meeting.OpenedTick` / `Meeting.GatherStart` (in-flight meeting) · `Debt.Due`
+`Intent.WorkStart` (when ≠ 0) · `Agent.IdleSince` (unconditional — its zero is
+genesis-idle, a real tick, not a sentinel) · `Agent.LastTalk` / `Agent.LastGive`
+(when ≠ 0; zero is a "never" sentinel) · `AgentHail.Until` · `PlanStep.Until`
+(when > 0; zero = no expiry) · `Guard.Tick` (when ≠ 0; timed-guard boundary) ·
+`Structure.FuelUntil` (when ≠ 0) · pile `FoodBatch.SpoilAt` · `Harvest.Regrow` ·
+`DenUse.Ready` · `Gru.LastAttack` (when ≠ 0, gru present) ·
+`Meeting.OpenedTick` / `Meeting.GatherStart` (when ≠ 0, in-flight meeting) · `Debt.Due`
+
+*(`PlanStep.Until` and `Guard.Tick` were added during implementation under FR-009's
+catch-all — both are genuine future deadlines reachable from `State` via `Agent.Plan`;
+left unshifted, a snap would expire pending plan steps / fire timed guards instantly.
+General rule proven out in review: any SHIFT field whose zero value means "unset/never"
+shifts only when non-zero.)*
 
 **KEEP** — history and identity, never rewritten:
-`Memory.Tick` · `Rumor.OriginTick` · `ConvoRecord.Conv` (identity!) / `.Tick` ·
-`Chronicle` tick/day fields · `Agent.LastGoalTick` · `LastConsolidatedNight` /
-`ConsolidatedUpTo` / `LastConsolidateMark` · day-denominated governance fields
-(`DayPassed`, `DayRepealed`, `DayAmended`, `EstablishedDay`, `LastMeetingDay`)
+`Memory.Tick` · `Belief.Tick` · `KnownRumor.Tick` · `Rumor.OriginTick` ·
+`ConvoRecord.Conv` (identity!) / `.Tick` · `Chronicle` tick/day fields ·
+`Agent.LastGoalTick` · `Agent.Generation` / `Guard.Generation` (counters, not ticks) ·
+`LastConsolidatedNight` / `ConsolidatedUpTo` / `LastConsolidateMark` ·
+day-denominated governance fields (`DayPassed`, `DayRepealed`, `DayAmended`,
+`EstablishedDay`, `LastMeetingDay`) · `NormViolation.Tick`
 
 **PHASE-ANCHORED** — pure functions of the absolute clock, no stored state, follow the
 new time by construction: night/day, meeting-convention times of day,

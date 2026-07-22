@@ -80,3 +80,41 @@ func TestFormat(t *testing.T) {
 		t.Errorf("Format = %q, want %q", got, "day 1 22:01")
 	}
 }
+
+func TestTickAtInvertsGameTime(t *testing.T) {
+	// TickAt is the exact inverse of GameTime for the display resolution
+	// (day/hour/minute; seconds round-trip too).
+	for _, tick := range []int64{0, 59, 60, 16 * 3600, 18 * 3600, 24 * 3600, 106200} {
+		day, h, m, s := GameTime(tick)
+		if got := TickAt(day, h, m, s); got != tick {
+			t.Errorf("TickAt(GameTime(%d)) = %d, want %d", tick, got, tick)
+		}
+	}
+	// Known coordinates: genesis and "day 2 11:30" (the quickstart target).
+	if got := TickAt(1, 6, 0, 0); got != 0 {
+		t.Errorf("TickAt(day1 06:00) = %d, want 0 (genesis)", got)
+	}
+	if got := TickAt(2, 11, 30, 0); got != 106200 {
+		t.Errorf("TickAt(day2 11:30) = %d, want 106200", got)
+	}
+}
+
+func TestParseTimeOfDay(t *testing.T) {
+	cases := []struct {
+		in   string
+		h, m int
+	}{
+		{"11:30", 11, 30}, {"00:00", 0, 0}, {"23:59", 23, 59}, {"6:05", 6, 5},
+	}
+	for _, c := range cases {
+		h, m, err := ParseTimeOfDay(c.in)
+		if err != nil || h != c.h || m != c.m {
+			t.Errorf("ParseTimeOfDay(%q) = %d:%d, %v; want %d:%d", c.in, h, m, err, c.h, c.m)
+		}
+	}
+	for _, bad := range []string{"", "1130", "24:00", "11:60", "-1:00", "noon", "11:"} {
+		if _, _, err := ParseTimeOfDay(bad); err == nil {
+			t.Errorf("ParseTimeOfDay(%q): expected error", bad)
+		}
+	}
+}

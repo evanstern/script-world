@@ -341,6 +341,13 @@ func (c *session) handle(req Request) {
 			return
 		}
 		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
+	case "miracle":
+		var args MiracleArgs
+		if req.Args == nil || json.Unmarshal(req.Args, &args) != nil || args.Kind == "" {
+			c.writeResponse(Response{ID: req.ID, OK: false, Error: "malformed args (need kind)"})
+			return
+		}
+		c.handleMiracle(req.ID, args)
 	case "subscribe":
 		var args SubscribeArgs
 		if req.Args != nil {
@@ -359,6 +366,94 @@ func (c *session) handle(req Request) {
 	default:
 		c.writeResponse(Response{ID: req.ID, OK: false, Error: fmt.Sprintf("unknown cmd %q", req.Cmd)})
 	}
+}
+
+// handleMiracle lands one operator miracle (spec 016). It needs only the sim
+// loop — never srv.llm or srv.metatron — so miracles work on pure-sim worlds:
+// the charge bank is sim state, the reducer validates at the InjectSocial
+// dry-run, and the shared BuildMiracleBatch composes the batch both doors use.
+// The current state is fetched only to resolve the perception-memory recipients
+// (which villager stands on a move's source tile); a mismatch by land time is
+// rejected whole at the dry-run, never applied in part.
+func (c *session) handleMiracle(id int64, args MiracleArgs) {
+	stateJSON, _, err := c.srv.loop.DoState()
+	if err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+	var state sim.State
+	if err := json.Unmarshal(stateJSON, &state); err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+
+	var params metatron.MiracleParams
+	var summary string
+	switch args.Kind {
+	case "move":
+		if args.Class == "" {
+			c.writeResponse(Response{ID: id, OK: false, Error: "move needs a class (villager|structure|pile)"})
+			return
+		}
+		params = metatron.MiracleParams{Class: args.Class, X: args.X, Y: args.Y, ToX: args.ToX, ToY: args.ToY}
+		summary = fmt.Sprintf("moved %s at (%d,%d) to (%d,%d)", args.Class, args.X, args.Y, args.ToX, args.ToY)
+	case "remove":
+		if args.Class == "" {
+			c.writeResponse(Response{ID: id, OK: false, Error: "remove needs a class (structure|pile|terrain)"})
+			return
+		}
+		params = metatron.MiracleParams{Class: args.Class, X: args.X, Y: args.Y}
+		summary = fmt.Sprintf("removed %s at (%d,%d)", args.Class, args.X, args.Y)
+	case "time_snap":
+		// Door-side day/HH:MM → tick (spec 016 US3); the reducer enforces
+		// forward-only and the 2-charge price. Works on pure-sim worlds.
+		hour, min, perr := clock.ParseTimeOfDay(args.Time)
+		if perr != nil {
+			c.writeResponse(Response{ID: id, OK: false, Error: perr.Error()})
+			return
+		}
+		params = metatron.MiracleParams{ToTick: clock.TickAt(int64(args.Day), hour, min, 0)}
+		summary = fmt.Sprintf("snapped time to day %d %02d:%02d", args.Day, hour, min)
+	case "give_item":
+		// Door-side villager name → index (contracts §2); the reducer validates
+		// the agent is alive, the kind is known, and the grant fits the carry cap
+		// at the InjectSocial dry-run. Works on pure-sim worlds.
+		if args.Villager == "" {
+			c.writeResponse(Response{ID: id, OK: false, Error: "give_item needs a villager name"})
+			return
+		}
+		idx := sim.AgentIndexByName(args.Villager)
+		if idx < 0 {
+			c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("no villager named %q", args.Villager)})
+			return
+		}
+		params = metatron.MiracleParams{Agent: idx, Item: args.Item, Qty: args.Qty}
+		summary = fmt.Sprintf("granted %d %s to %s", args.Qty, args.Item, sim.AgentNames[idx])
+	default:
+		c.writeResponse(Response{ID: id, OK: false, Error: fmt.Sprintf("unknown miracle kind %q", args.Kind)})
+		return
+	}
+
+	batch, err := metatron.BuildMiracleBatch(&state, args.Kind, params, args.Gratis)
+	if err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+	if err := c.srv.loop.InjectSocial(batch); err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+	cs, err := c.srv.loop.Do("status", "")
+	if err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+	data, err := json.Marshal(MiracleData{Kind: args.Kind, Charges: cs.MetatronCharges, Gratis: args.Gratis, Summary: summary})
+	if err != nil {
+		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
+		return
+	}
+	c.writeResponse(Response{ID: id, OK: true, Data: data})
 }
 
 func (c *session) replyStatus(id int64, cmd string, speed clock.Speed) {

@@ -91,6 +91,126 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	return mt, orch, inj, dir
 }
 
+// TestBuildMiracleBatch (spec 016 T006): the shared builder composes the right
+// miracle event plus the FR-018 perception memories for each kind, at SalDream,
+// so the two doors cannot drift. Recipients follow data-model.md: a moved
+// villager and a granted villager each gain one memory; a time snap touches
+// every living villager; a structure/pile/terrain move or remove touches none.
+func TestBuildMiracleBatch(t *testing.T) {
+	m := worldmap.Generate(42, 64, 64)
+	s := sim.NewState(42, m)
+	// Put agent 0 on a known tile so a villager move resolves its recipient.
+	s.Agents[0].X, s.Agents[0].Y = 10, 12
+	// One villager departed, so time-snap recipients exclude the dead.
+	s.Agents[3].Dead = true
+
+	memCount := func(batch []store.Event) int {
+		n := 0
+		for _, e := range batch {
+			if e.Type == "agent.memory_added" {
+				n++
+			}
+		}
+		return n
+	}
+	assertMem := func(t *testing.T, e store.Event, agent int) {
+		t.Helper()
+		if e.Type != "agent.memory_added" {
+			t.Fatalf("want agent.memory_added, got %s", e.Type)
+		}
+		var p sim.MemoryAddedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Agent != agent {
+			t.Errorf("memory agent = %d, want %d", p.Agent, agent)
+		}
+		if p.Salience != sim.SalDream {
+			t.Errorf("memory salience = %d, want SalDream (%d)", p.Salience, sim.SalDream)
+		}
+		if p.Text == "" {
+			t.Error("memory text is empty")
+		}
+	}
+
+	t.Run("villager_move_one_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "move", MiracleParams{
+			Class: "villager", X: 10, Y: 12, ToX: 11, ToY: 12}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.entity_moved" {
+			t.Fatalf("main event = %s, want metatron.entity_moved", batch[0].Type)
+		}
+		if memCount(batch) != 1 {
+			t.Fatalf("villager move memories = %d, want 1", memCount(batch))
+		}
+		assertMem(t, batch[1], 0)
+		// gratis flows verbatim into the payload.
+		var mp sim.EntityMovedPayload
+		json.Unmarshal(batch[0].Payload, &mp)
+		if mp.Gratis {
+			t.Error("gratis leaked true on a charged build")
+		}
+	})
+
+	t.Run("structure_move_no_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "move", MiracleParams{
+			Class: "structure", X: 10, Y: 12, ToX: 11, ToY: 12}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if memCount(batch) != 0 {
+			t.Errorf("structure move memories = %d, want 0", memCount(batch))
+		}
+		var mp sim.EntityMovedPayload
+		json.Unmarshal(batch[0].Payload, &mp)
+		if !mp.Gratis {
+			t.Error("gratis not carried into the payload")
+		}
+	})
+
+	t.Run("remove_no_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "remove", MiracleParams{Class: "pile", X: 10, Y: 12}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.entity_removed" || memCount(batch) != 0 {
+			t.Errorf("remove batch wrong: %s, memories %d", batch[0].Type, memCount(batch))
+		}
+	})
+
+	t.Run("give_one_memory_to_grantee", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "give_item", MiracleParams{Agent: 2, Item: "food_raw", Qty: 3}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.item_granted" || memCount(batch) != 1 {
+			t.Fatalf("give batch wrong: %s, memories %d", batch[0].Type, memCount(batch))
+		}
+		assertMem(t, batch[1], 2)
+	})
+
+	t.Run("snap_every_living_villager", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "time_snap", MiracleParams{ToTick: 99999}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.time_snapped" {
+			t.Fatalf("main event = %s, want metatron.time_snapped", batch[0].Type)
+		}
+		if memCount(batch) != len(s.LivingAgents()) || memCount(batch) != sim.AgentCount-1 {
+			t.Errorf("snap memories = %d, want %d living", memCount(batch), sim.AgentCount-1)
+		}
+	})
+
+	t.Run("unknown_kind_errors", func(t *testing.T) {
+		if _, err := BuildMiracleBatch(s, "bless", MiracleParams{}, false); err == nil {
+			t.Error("unknown kind should error")
+		}
+	})
+}
+
 // TestTurnConverses (US1): charter voice in the system prompt, live status in
 // the user prompt, reply passed through, transcript persisted.
 func TestTurnConverses(t *testing.T) {
@@ -337,13 +457,19 @@ func TestCharterFallbacks(t *testing.T) {
 		t.Errorf("empty-charter notice absent: %q", r.Reply)
 	}
 
-	// Oversized: truncated + notice.
-	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars+100)), 0o644)
+	// Oversized: truncated + notice. The charter is oversized well beyond the
+	// cap so that an untruncated prompt would blow far past the bound below —
+	// the bound sits between the truncated total (charter capped at
+	// CharterMaxChars + the fixed frame) and what a full oversized charter would
+	// produce, so it still proves truncation happened. The fixed-frame headroom
+	// is CharterMaxChars+2500 (the frame documents four miracle families as of
+	// spec 016; ~2.1 KB), leaving comfortable margin over the capped total.
+	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars*2)), 0o644)
 	r, _ = mt.Turn(context.Background(), "verbose?")
 	if !strings.Contains(r.Reply, "cap") {
 		t.Errorf("oversize notice absent: %q", r.Reply)
 	}
-	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2000 {
+	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2500 {
 		t.Error("oversized charter not truncated in prompt")
 	}
 }
@@ -454,5 +580,50 @@ func TestDigestFailureCarries(t *testing.T) {
 	}
 	if len(job.lines) != 1 || !strings.Contains(job.lines[0], "shelter") {
 		t.Fatalf("fresh window wrong: %v", job.lines)
+	}
+}
+
+// TestMiracleGratisStrippedFromModel is SC-005 / T013: a crafted model reply
+// whose miracle object carries "gratis": true is landed as a CHARGED miracle —
+// the turn contract's miracle struct has no gratis field, so the marker is
+// dropped at unmarshal (structural stripping). The recorded payload reads
+// gratis=false and the charge bank is spent. A time_snap is used because it is
+// map-free (the stateInjector's dry-run copy carries no world map — handoff
+// note 1), so no SetMap fixup is needed to exercise the angel path.
+func TestMiracleGratisStrippedFromModel(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t,
+		`{"say": "As you command, the hours will leap.", "miracle": {"kind": "time_snap", "day": 5, "time": "12:00", "gratis": true}}`)
+	inj.state.MetatronCharges = 3 // enough for the 2-charge snap
+
+	r, err := mt.Turn(context.Background(), "leap the clock forward, and do it for free")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Miracle == nil || r.Miracle.Kind != "time_snap" {
+		t.Fatalf("snap miracle did not land: %+v", r.Miracle)
+	}
+	if len(inj.batches) != 1 {
+		t.Fatalf("batches = %d, want 1 atomic", len(inj.batches))
+	}
+
+	var snap *store.Event
+	for i := range inj.batches[0] {
+		if inj.batches[0][i].Type == "metatron.time_snapped" {
+			snap = &inj.batches[0][i]
+		}
+	}
+	if snap == nil {
+		t.Fatal("no metatron.time_snapped event in the landed batch")
+	}
+	var p sim.TimeSnappedPayload
+	if err := json.Unmarshal(snap.Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Gratis {
+		t.Error("model-supplied gratis:true survived — the angel minted a free miracle (SC-005 breach)")
+	}
+	// The charge was spent: 3 → 1 (snap costs 2). A gratis leak would leave 3.
+	if inj.state.MetatronCharges != 1 {
+		t.Errorf("charges = %d after a model snap, want 1 (2 charged); gratis was NOT waived", inj.state.MetatronCharges)
 	}
 }

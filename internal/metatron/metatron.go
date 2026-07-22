@@ -62,6 +62,10 @@ type Metatron struct {
 	charges int
 	clockAt int64
 	alive   map[int]bool
+	// agentXY mirrors each villager's tile (absorb-owned, refreshed per batch)
+	// so a console turn can resolve a tile-addressed miracle's perception-memory
+	// recipient without racing the replica the absorb goroutine owns (spec 016).
+	agentXY [][2]int
 	moments []string // queued, surfaced oldest-first at the next turn
 	story   []string // recent chronicle entries (TASK-11), prompt grounding
 
@@ -120,9 +124,9 @@ func (mt *Metatron) Observe(events []store.Event) {
 
 func (mt *Metatron) Close() { close(mt.done) }
 
-func (mt *Metatron) metatronDir() string     { return filepath.Join(mt.worldDir, "metatron") }
-func (mt *Metatron) soulPath() string        { return filepath.Join(mt.metatronDir(), "soul.md") }
-func (mt *Metatron) transcriptPath() string  { return filepath.Join(mt.metatronDir(), "transcript.md") }
+func (mt *Metatron) metatronDir() string    { return filepath.Join(mt.worldDir, "metatron") }
+func (mt *Metatron) soulPath() string       { return filepath.Join(mt.metatronDir(), "soul.md") }
+func (mt *Metatron) transcriptPath() string { return filepath.Join(mt.metatronDir(), "transcript.md") }
 
 func (mt *Metatron) run() {
 	for {
@@ -150,8 +154,12 @@ func (mt *Metatron) mirrorState() {
 	defer mt.stateMu.Unlock()
 	mt.charges = mt.replica.MetatronCharges
 	mt.clockAt = mt.replica.Tick
+	if len(mt.agentXY) != len(mt.replica.Agents) {
+		mt.agentXY = make([][2]int, len(mt.replica.Agents))
+	}
 	for i := range mt.replica.Agents {
 		mt.alive[i] = !mt.replica.Agents[i].Dead
+		mt.agentXY[i] = [2]int{mt.replica.Agents[i].X, mt.replica.Agents[i].Y}
 	}
 	// The narrated chronicle (TASK-11) is the village's own story — the
 	// angel reads its tail so conversation is grounded even before its

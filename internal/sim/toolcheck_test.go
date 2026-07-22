@@ -67,6 +67,15 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		"agent.thought":                 true,
 		"chronicle.entry":               true,
 		"metatron.nudged":               true,
+		// Spec 016 (metatron miracles) deliberately widens the isolation
+		// boundary by four recorded miracle event types (contracts §4). They
+		// land through the same InjectSocial door as the nudge; they are NOT
+		// registry-tool events (see the registry-doctrine note below), so they
+		// appear only here in the whitelist, not in any tool's Events set.
+		"metatron.time_snapped":         true,
+		"metatron.item_granted":         true,
+		"metatron.entity_moved":         true,
+		"metatron.entity_removed":       true,
 		"meeting.proposal_rephrased":    true,
 		"cog.thought":                   true,
 		"cog.outcome":                   true,

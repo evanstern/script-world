@@ -67,6 +67,35 @@ type MetatronChatArgs struct {
 	Text string `json:"text"`
 }
 
+// MiracleArgs carries the "miracle" command (spec 016) — the operator door for
+// Metatron's world edits. kind selects the miracle; the remaining fields are the
+// kind-specific arguments (contracts §2). This is the ONLY surface that accepts
+// gratis: --force sets it, waiving the charge; the angel path has no equivalent.
+// The handler needs only the sim loop — no LLM / angel presence (pure-sim ok).
+type MiracleArgs struct {
+	Kind     string `json:"kind"`
+	Day      int    `json:"day,omitempty"`      // time_snap
+	Time     string `json:"time,omitempty"`     // time_snap "HH:MM"
+	Villager string `json:"villager,omitempty"` // give_item
+	Item     string `json:"item,omitempty"`     // give_item inventory kind
+	Qty      int    `json:"qty,omitempty"`      // give_item
+	Class    string `json:"class,omitempty"`    // move / remove
+	X        int    `json:"x,omitempty"`        // move / remove source
+	Y        int    `json:"y,omitempty"`
+	ToX      int    `json:"to_x,omitempty"` // move destination
+	ToY      int    `json:"to_y,omitempty"`
+	Gratis   bool   `json:"gratis,omitempty"`
+}
+
+// MiracleData is the "miracle" response: the miracle kind, the charge bank after
+// landing, whether the charge was waived, and a one-line human rendering.
+type MiracleData struct {
+	Kind    string `json:"kind"`
+	Charges int    `json:"charges"`
+	Gratis  bool   `json:"gratis"`
+	Summary string `json:"summary"`
+}
+
 // StateData answers the "state" command: the full canonical sim.State JSON
 // plus the log position it reflects — subscribe with since=last_seq for a
 // gapless live replica.

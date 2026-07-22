@@ -168,6 +168,13 @@ var injectSocialWhitelist = map[string]bool{
 	// Metatron nudges (TASK-12): the spend + record; the dry-run enforces
 	// charges/form/target/text validity before anything lands.
 	"metatron.nudged": true,
+	// Metatron miracles (spec 016): the four charge-priced world edits; the
+	// dry-run's reducer arms enforce presence/destination/charge before
+	// anything lands, and the whitelist is the isolation boundary.
+	"metatron.time_snapped":   true,
+	"metatron.item_granted":   true,
+	"metatron.entity_moved":   true,
+	"metatron.entity_removed": true,
 	// Governance flavor (TASK-13): the ONLY injectable governance type —
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.
@@ -400,6 +407,11 @@ func (l *Loop) handleCommand(cmd command) error {
 			err = uerr
 			break
 		}
+		// The probe is reconstructed from bytes and so carries no map
+		// (unexported, unserialized); attach the loop's map so miracle
+		// arms validate the terrain vocabulary in the dry-run exactly as
+		// the real apply and replay will (spec 016).
+		probe.SetMap(l.m)
 		for _, e := range batch {
 			if aerr := probe.Apply(e); aerr != nil {
 				err = fmt.Errorf("social batch rejected: %w", aerr)
