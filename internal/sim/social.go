@@ -257,7 +257,14 @@ func (s *State) applySocial(e store.Event) error {
 			return fmt.Errorf("apply %s: %s has no food", e.Type, giver.Name)
 		}
 		giver.Inv.FoodRaw--
-		recv.Inv.FoodRaw++
+		// T012: clamp the receiver at the bulk cap defensively — FR-001 says
+		// carried bulk MUST never exceed the cap, even against a forged event.
+		// The executor never emits a give into a full pouch (repayable/giveable
+		// guard on the receiver's free bulk), so legit logs always have room and
+		// this is a no-op there; the clamp only bites on an injected over-cap give.
+		if bulk(recv.Inv) < bulkCap {
+			recv.Inv.FoodRaw++
+		}
 		giver.LastGive = e.Tick
 		// Ledger transition (reducer-internal): repayment first, else debt.
 		for i := range s.Debts {

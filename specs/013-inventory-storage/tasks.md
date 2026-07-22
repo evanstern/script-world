@@ -55,11 +55,11 @@ jams.
 depletes nothing; partial space truncates with forfeit; eating frees bulk; a
 planner-less village survives 3+ game days (quickstart §Automated gates 2–3).
 
-- [ ] T010 [US1] Reducer yield clamps in `internal/sim/state.go`: `agent.foraged`/`agent.chopped`/`agent.hunted`/`agent.quarried`/`agent.collected_water` truncate to `bulkCap − bulk(Inv)` (overlay/depletion still applies — remainder forfeit, US1-AS2)
-- [ ] T011 [US1] Executor zero-space guard in `internal/sim/executor.go`: gather completions with zero free bulk emit `agent.intent_done` only — no harvest event, no depletion (US1-AS1, contested-resource pattern)
-- [ ] T012 [US1] Craft/give cap rules in `internal/sim/executor.go` + `internal/sim/state.go`: craft completion re-validation extends to net bulk delta (no fit ⇒ no event, intent cleared); give rule skips a full receiver, reducer clamps `social.gave` defensively (research R2)
-- [ ] T013 [US1] Bulk-audit table test in `internal/sim`: every edge from the R2 table — truncation at partial space, zero-space no-event/no-depletion, craft no-fit ⇒ `intent_done`, give skipped at full receiver, eat frees bulk, cook/bathe/build asserted net ≤ 0
-- [ ] T014 [US1] Degraded-mode regression test in `internal/sim`: 8 agents, no planner, ≥3 game days — all alive, ZERO storage events in the log, cap never deadlocks the raw loop (SC-001, FR-003) — the doctrine gate for this feature
+- [X] T010 [US1] Reducer yield clamps in `internal/sim/state.go`: `agent.foraged`/`agent.chopped`/`agent.hunted`/`agent.quarried`/`agent.collected_water` truncate to `bulkCap − bulk(Inv)` (overlay/depletion still applies — remainder forfeit, US1-AS2)
+- [X] T011 [US1] Executor zero-space guard in `internal/sim/executor.go`: gather completions with zero free bulk emit `agent.intent_done` only — no harvest event, no depletion (US1-AS1, contested-resource pattern)
+- [X] T012 [US1] Craft/give cap rules in `internal/sim/executor.go` + `internal/sim/state.go`: craft completion re-validation extends to net bulk delta (no fit ⇒ no event, intent cleared); give rule skips a full receiver, reducer clamps `social.gave` defensively (research R2)
+- [X] T013 [US1] Bulk-audit table test in `internal/sim`: every edge from the R2 table — truncation at partial space, zero-space no-event/no-depletion, craft no-fit ⇒ `intent_done`, give skipped at full receiver, eat frees bulk, cook/bathe/build asserted net ≤ 0
+- [X] T014 [US1] Degraded-mode regression test in `internal/sim`: 8 agents, no planner, ≥3 game days — all alive, ZERO storage events in the log, cap never deadlocks the raw loop (SC-001, FR-003) — the doctrine gate for this feature
 - [ ] T015 [P] [US1] TUI: carried bulk `n/24` per villager in the agent pane in `internal/tui/views.go` (SC-006; Sonnet-ok)
 
 **Checkpoint**: the cap is real and provably survival-safe — MVP demonstrable.

@@ -44,13 +44,16 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		// Below satietyAt so the very first scripted step (a direct agent.ate
 		// injection, mirroring the eatOutcome-then-Apply idiom already used by
 		// food_fire_test.go's TestEatOrderingSatietyAbsolute) has something to
-		// do; FoodRaw is generously seeded to also cover both cook batches
-		// later. Wood is sized to the exact sum this script consumes (craft_
-		// planks x3 + craft_spear + build_fire + cook_oven fuel + bathe fuel =
-		// 3+1+2+1+1 = 8) so it lands at exactly 0 right after the bath — no
-		// wood left for the reflex to (re)refuel with during the burnout wait.
+		// do. Under the spec-013 bulk cap (24) the agent can no longer hoard
+		// everything at once, so this seed is deliberately lean: 8 FoodRaw
+		// (entirely eaten by the opening step) and 8 Wood — sized to the exact
+		// sum this consume-as-you-go script spends (craft_spear 1 + craft_planks
+		// x3 + build_fire 2 + cook_oven 1 + bathe 1 = 8), so wood lands at
+		// exactly 0 right after the bath and the reflex can never (re)refuel
+		// during the burnout wait. The raw food each cook batch needs is earned
+		// from the spear hunts, not seeded — the cap makes gathering the source.
 		a.Needs.Food = 300
-		a.Inv = Inventory{Wood: 8, FoodRaw: 40}
+		a.Inv = Inventory{Wood: 8, FoodRaw: 8}
 		return s
 	}
 
@@ -118,7 +121,14 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatal("genesis agent should have something to eat")
 	}
 
-	// --- agent.quarried x3 (US1) ------------------------------------------
+	// NOTE (spec 013 US1): the bulk cap (24) forbids hoarding, so this script
+	// consumes-as-it-goes — builds spend their inputs before more are made, cook
+	// batches are earned from the spear hunts rather than a big seeded larder,
+	// and no single moment exceeds the cap (peak is exactly 24, at the hunts).
+	// Every spec-012 event type is still exercised; only the ordering and the
+	// batch sizes changed to fit under the cap.
+
+	// --- agent.quarried x3 (US1) — 6 stone for the refining chain -----------
 	for i := 0; i < 3; i++ {
 		stand, res, ok := nearestAdjacentTo(m, live, a.X, a.Y, func(x, y int) bool {
 			return m.InBounds(x, y) && effectiveKind(m, live, x, y) == worldmap.Rock
@@ -133,7 +143,7 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatalf("Stone after 3 quarries = %d, want %d", a.Inv.Stone, 3*quarryYield)
 	}
 
-	// --- agent.crafted{refined_stone} x5 (US3) -----------------------------
+	// --- agent.crafted{refined_stone} x5 (US3) — 4 for the oven, 1 for a spear -
 	for i := 0; i < 5; i++ {
 		log = append(log, setIntent("craft_stone", a.X, a.Y, 0, 0))
 		log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.crafted"))...)
@@ -142,7 +152,7 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatalf("RefinedStone after 5 craft_stone = %d, want 5", a.Inv.RefinedStone)
 	}
 
-	// --- agent.collected_water (US1) ---------------------------------------
+	// --- agent.collected_water (US1) — 1 for the bath ----------------------
 	{
 		stand, res, ok := nearestAdjacentTo(m, live, a.X, a.Y, func(x, y int) bool {
 			return m.InBounds(x, y) && effectiveKind(m, live, x, y) == worldmap.Water
@@ -157,20 +167,22 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatalf("Water after collect = %d, want 1", a.Inv.Water)
 	}
 
-	// --- agent.crafted{planks} x3 (US3) -------------------------------------
-	for i := 0; i < 3; i++ {
-		log = append(log, setIntent("craft_planks", a.X, a.Y, 0, 0))
-		log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.crafted"))...)
-	}
-	if a.Inv.Planks != 3*plankYield {
-		t.Fatalf("Planks after 3 craft_planks = %d, want %d", a.Inv.Planks, 3*plankYield)
-	}
-
-	// --- agent.crafted{spear} (US3) ------------------------------------------
+	// --- agent.crafted{spear} (US3) — before the planks pile up, so the
+	// refined-stone bulk is spent down early (keeps the peak under the cap) ---
 	log = append(log, setIntent("craft_spear", a.X, a.Y, 0, 0))
 	log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.crafted"))...)
 	if len(a.Inv.Spears) != 1 || a.Inv.Spears[0] != spearDurability {
 		t.Fatalf("Spears after craft_spear = %v, want [%d]", a.Inv.Spears, spearDurability)
+	}
+
+	// --- agent.crafted{planks} x2 (US3) — 8 planks: 2 for the oven now, the
+	// rest toward the shelter (a third batch is crafted after the oven) -------
+	for i := 0; i < 2; i++ {
+		log = append(log, setIntent("craft_planks", a.X, a.Y, 0, 0))
+		log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.crafted"))...)
+	}
+	if a.Inv.Planks != 2*plankYield {
+		t.Fatalf("Planks after 2 craft_planks = %d, want %d", a.Inv.Planks, 2*plankYield)
 	}
 
 	// --- agent.built{fire} (US2) ---------------------------------------------
@@ -185,7 +197,23 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatal("no fire structure at the build site")
 	}
 
-	// --- agent.built{oven} (US4) -----------------------------------------
+	// --- agent.hunted #1 (spear) — the raw food for the fire-cook, gathered
+	// under the cap rather than seeded (US1: the cap makes gathering the source) -
+	log = append(log, setIntent("hunt", m.Dens[0].X, m.Dens[0].Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.hunted"))...)
+
+	// --- agent.cooked{fire} (US2) — the fire is still freshly lit ------------
+	log = append(log, setIntent("cook", fireSite.X, fireSite.Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+stepBudget, func(e store.Event) bool {
+		if e.Type != "agent.cooked" {
+			return false
+		}
+		var p CookedPayload
+		mustUnmarshal(t, e.Payload, &p)
+		return p.Station == "fire"
+	})...)
+
+	// --- agent.built{oven} (US4) — spends the 4 refined stone + 2 planks -----
 	ovenSite, ok := nearest(m, live, a.X, a.Y, func(x, y int) bool { return buildSite(m, live, x, y) })
 	if !ok {
 		t.Fatal("no build site reachable for the oven")
@@ -195,6 +223,10 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 	if !live.structureAt("oven", ovenSite.X, ovenSite.Y) {
 		t.Fatal("no oven structure at the build site")
 	}
+
+	// --- agent.crafted{planks} x1 (US3) — top up to 10 planks for the shelter -
+	log = append(log, setIntent("craft_planks", a.X, a.Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.crafted"))...)
 
 	// --- agent.built{shelter} (US5, plank-costed) --------------------------
 	shelterSite, ok := nearest(m, live, a.X, a.Y, func(x, y int) bool { return buildSite(m, live, x, y) })
@@ -210,16 +242,9 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatalf("after oven+shelter: refined_stone=%d planks=%d, want 0/2", a.Inv.RefinedStone, a.Inv.Planks)
 	}
 
-	// --- agent.cooked{fire} (US2) -------------------------------------------
-	log = append(log, setIntent("cook", fireSite.X, fireSite.Y, 0, 0))
-	log = append(log, stepUntil(live.Tick+stepBudget, func(e store.Event) bool {
-		if e.Type != "agent.cooked" {
-			return false
-		}
-		var p CookedPayload
-		mustUnmarshal(t, e.Payload, &p)
-		return p.Station == "fire"
-	})...)
+	// --- agent.hunted #2 (spear) — the raw food for the oven-cook ------------
+	log = append(log, setIntent("hunt", m.Dens[1].X, m.Dens[1].Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.hunted"))...)
 
 	// --- agent.cooked{oven} (US4) --------------------------------------------
 	log = append(log, setIntent("cook", ovenSite.X, ovenSite.Y, 0, 0))
@@ -239,12 +264,10 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		t.Fatalf("after bathe: water=%d wood=%d, want 0/0 (exact budget)", a.Inv.Water, a.Inv.Wood)
 	}
 
-	// --- agent.hunted x3 with a spear + agent.spear_broke (US3) --------------
-	dens := m.Dens[:3]
-	for _, den := range dens {
-		log = append(log, setIntent("hunt", den.X, den.Y, 0, 0))
-		log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.hunted"))...)
-	}
+	// --- agent.hunted #3 (spear) + agent.spear_broke (US3) — the third hunt
+	// spends the spear's last use (durability 3), breaking it ----------------
+	log = append(log, setIntent("hunt", m.Dens[2].X, m.Dens[2].Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.hunted"))...)
 	if len(a.Inv.Spears) != 0 {
 		t.Fatalf("Spears after 3 hunts = %v, want empty (broke on the third)", a.Inv.Spears)
 	}

@@ -360,29 +360,33 @@ func rumorTellEvent(tick int64, from, to int, tell Tellable) store.Event {
 		})}
 }
 
-// repayable: one of the pair owes the other and can spare a meal.
+// repayable: one of the pair owes the other and can spare a meal — and the
+// creditor has bulk to receive it (T012: a gift into a full pouch is skipped
+// under the cap, research R2; the debt simply stays open until there's room).
 func repayable(s *State, i, j int, tick int64) (debtor, creditor int, ok bool) {
 	for _, d := range s.Debts {
 		if d.Status != "open" || d.Kind != "food" {
 			continue
 		}
-		if d.Debtor == i && d.Creditor == j && canGive(&s.Agents[i], tick) {
+		if d.Debtor == i && d.Creditor == j && canGive(&s.Agents[i], tick) && freeBulk(s.Agents[j].Inv) > 0 {
 			return i, j, true
 		}
-		if d.Debtor == j && d.Creditor == i && canGive(&s.Agents[j], tick) {
+		if d.Debtor == j && d.Creditor == i && canGive(&s.Agents[j], tick) && freeBulk(s.Agents[i].Inv) > 0 {
 			return j, i, true
 		}
 	}
 	return 0, 0, false
 }
 
-// giveable: one is starving, the other has spare food.
+// giveable: one is starving, the other has spare food — and the starving
+// receiver has free bulk (T012: never over the cap; a starving villager at the
+// cap is carrying food already and would eat rather than receive).
 func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
 	a, b := &s.Agents[i], &s.Agents[j]
-	if a.Needs.Food < giveNeedBelow && canGive(b, tick) {
+	if a.Needs.Food < giveNeedBelow && canGive(b, tick) && freeBulk(a.Inv) > 0 {
 		return j, i, true
 	}
-	if b.Needs.Food < giveNeedBelow && canGive(a, tick) {
+	if b.Needs.Food < giveNeedBelow && canGive(a, tick) && freeBulk(b.Inv) > 0 {
 		return i, j, true
 	}
 	return 0, 0, false
@@ -490,6 +494,19 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		return events // still working
 	}
 
+	// US1-AS1 zero-space guard (T011): a gather whose taker has no free bulk
+	// does not happen — no harvest event and, crucially, no depletion (the
+	// tree/den/outcrop/forage tile is left untouched for later). The intent
+	// simply resolves. Same contested-resource re-validation as the vanished-
+	// resource case above, keyed on the pouch instead of the world (research R2).
+	switch in.Goal {
+	case "forage", "chop", "hunt", "quarry", "collect_water":
+		if freeBulk(a.Inv) == 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+	}
+
 	switch in.Goal {
 	case "forage":
 		emit("agent.foraged", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
@@ -552,6 +569,15 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// applies uniformly with every other completion.
 		r, _ := recipeFor(in.Goal)
 		if !hasItems(a.Inv, r.Inputs) {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		// US1 (T012): a craft doesn't truncate — it either fits or it doesn't
+		// happen. The completion re-validation extends to the net bulk delta
+		// (outputs − inputs, the inputs freeing their own space first); if the
+		// net won't fit, no agent.crafted, intent cleared. Only craft_planks
+		// has a positive net (research R2).
+		if craftNetBulk(r) > freeBulk(a.Inv) {
 			emit("agent.intent_done", AgentPayload{Agent: i})
 			return events
 		}

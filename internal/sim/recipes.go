@@ -145,6 +145,23 @@ func addItems(inv *Inventory, items []Item, sign int) {
 	}
 }
 
+// craftNetBulk is a hand-craft's net change in carried bulk: outputs minus
+// inputs, one bulk per unit (a spear output counts 1, like every other unit —
+// its Outputs entry {spear, 1} sums the same way). Only craft_planks is
+// positive (+3 at plankYield 4); the executor requires this much free bulk at
+// completion or the craft does not happen (research R2, T012). Pure over the
+// compile-time recipe table, never serialized state.
+func craftNetBulk(r Recipe) int {
+	net := 0
+	for _, it := range r.Outputs {
+		net += it.N
+	}
+	for _, it := range r.Inputs {
+		net -= it.N
+	}
+	return net
+}
+
 // craftKindFor maps a hand-craft goal to its CraftedPayload.Kind, and
 // craftGoalFor is its inverse (the reducer only sees the kind, and re-derives
 // the recipe by goal — recipes.go stays the single source).

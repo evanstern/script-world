@@ -417,7 +417,12 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.FoodRaw += forageYieldV2
+		// US1-AS2 (T010): the yield truncates to the taker's free bulk; the
+		// remainder is forfeit, but the overlay/depletion still applies (the
+		// forage tile is marked harvested regardless). A full pouch never
+		// reaches here — the executor emits intent_done only at zero space
+		// (T011), so depletion-at-zero-space never occurs.
+		a.Inv.FoodRaw += minInt(forageYieldV2, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
@@ -430,7 +435,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Wood += chopWood
+		// US1-AS2 (T010): yield truncates to free bulk; the tree still clears.
+		a.Inv.Wood += minInt(chopWood, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Cleared = append(s.Cleared, Point{X: p.X, Y: p.Y})
@@ -450,11 +456,18 @@ func (s *State) Apply(e store.Event) error {
 		// state-derived, not payload-carried). A companion agent.spear_broke,
 		// if any, applies right after this in the same batch and removes the
 		// now-zero spear.
+		// US1-AS2 (T010): the food yield truncates to pre-event free bulk; the
+		// spear spend frees no bulk mid-event (decrementing a use leaves
+		// len(Spears) — and thus bulk — unchanged), and the spear's removal on
+		// break rides its own companion agent.spear_broke. So free space is
+		// read once, before the food is added, with the spear still counted.
+		yield := huntYieldBare
 		if len(a.Inv.Spears) > 0 {
-			a.Inv.FoodRaw += huntYieldSpear
+			yield = huntYieldSpear
+		}
+		a.Inv.FoodRaw += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Spears) > 0 {
 			a.Inv.Spears[0]--
-		} else {
-			a.Inv.FoodRaw += huntYieldBare
 		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
@@ -522,7 +535,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Stone += quarryYield
+		// US1-AS2 (T010): yield truncates to free bulk; the outcrop still depletes.
+		a.Inv.Stone += minInt(quarryYield, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
@@ -535,7 +549,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Water += collectWaterYield
+		// US1-AS2 (T010): yield truncates to free bulk (water sources never deplete).
+		a.Inv.Water += minInt(collectWaterYield, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.crafted":

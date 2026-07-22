@@ -365,6 +365,19 @@ func bulk(inv Inventory) int {
 		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears)
 }
 
+// freeBulk is the remaining carry capacity under the cap: bulkCap − bulk(inv),
+// floored at zero (a defensively over-cap inventory reports no free space, never
+// a negative). The reducer yield clamps (US1-AS2) and the executor completion
+// re-validation (US1-AS1) share it: a full pouch reports zero, a partially full
+// one the exact remainder (research R2). Pure function of pre-event Inv, so
+// replay is byte-identical.
+func freeBulk(inv Inventory) int {
+	if f := bulkCap - bulk(inv); f > 0 {
+		return f
+	}
+	return 0
+}
+
 func intentDuration(goal string) int64 {
 	switch goal {
 	case "forage":
