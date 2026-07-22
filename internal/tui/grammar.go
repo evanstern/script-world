@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/store"
@@ -255,19 +256,239 @@ func padType(t string, cols chronicleColumns) string {
 	return string(r)
 }
 
+// chronicleLinePrefix is the tick/time/type portion of a feed line, shared
+// by plainChronicleLine (concatenated with the summary) and the styled
+// path (styleWrapLine, R4) which needs the prefix and summary kept separate
+// so it can tag each rune's source role before wrap/truncate ever runs.
+func chronicleLinePrefix(l chronicleLine, cols chronicleColumns) string {
+	typ := padType(l.Type, cols)
+	if cols.Dock {
+		return fmt.Sprintf("%s %s  ", l.Time, typ)
+	}
+	tick := fmt.Sprintf("%*d", cols.TickWidth, l.Tick)
+	return fmt.Sprintf("%s %s  %s  ", tick, l.Time, typ)
+}
+
 // plainChronicleLine assembles a formatChronicleLine result plus its
 // window's column layout into one plain (unstyled) text line (contract §1):
 // solo shows `<TICK> <HH:MM>  <type>  <summary>`, right-aligned tick; dock
 // drops the tick column entirely. The result is the shape wrap/truncate
 // operate on, without any lipgloss/ANSI concerns.
 func plainChronicleLine(l chronicleLine, cols chronicleColumns) string {
-	typ := padType(l.Type, cols)
-	summary := plainSegs(l.Summary)
-	if cols.Dock {
-		return fmt.Sprintf("%s %s  %s", l.Time, typ, summary)
+	return chronicleLinePrefix(l, cols) + plainSegs(l.Summary)
+}
+
+// --- segment-wise styling after wrap (R4, T021) ---
+//
+// The pure layer never touches lipgloss, but wrapping/truncating must still
+// happen on plain text (never mid-ANSI) while leaving enough information
+// for the view layer to paint each physical line's characters by their
+// source segment. styleRole is the paint-time role — a superset of segRole
+// that also covers the prefix (family tint) and default/untagged summary
+// text — and styleWrapLine produces styledLine values (plain runes + a
+// parallel per-rune role array) that views.go's paintStyledLine renders.
+
+// styleRole is the view layer's per-rune paint tag.
+type styleRole int
+
+const (
+	styleRoleText   styleRole = iota // default summary prose, no color
+	styleRoleFamily                  // the prefix: tick/time/type columns
+	styleRoleName
+	styleRoleSpeech
+	styleRoleEmphasis
+)
+
+// styleRoleForSeg maps a digest seg's role to its paint-time role.
+func styleRoleForSeg(r segRole) styleRole {
+	switch r {
+	case segName:
+		return styleRoleName
+	case segSpeech:
+		return styleRoleSpeech
+	case segEmphasis:
+		return styleRoleEmphasis
+	default:
+		return styleRoleText
 	}
-	tick := fmt.Sprintf("%*d", cols.TickWidth, l.Tick)
-	return fmt.Sprintf("%s %s  %s  %s", tick, l.Time, typ, summary)
+}
+
+// styledLine is one physical output line: plain runes plus a parallel
+// per-rune role array (len(Roles) may be shorter than len(Runes) — any
+// rune past the end of Roles, e.g. a truncation ellipsis, paints as
+// styleRoleText).
+type styledLine struct {
+	Runes []rune
+	Roles []styleRole
+}
+
+// flattenLineRoles concatenates the prefix (family-tinted) and the
+// digest's summary segs into one plain string with a parallel per-rune
+// role array — the source styleWrapLine re-attributes after wrapping.
+func flattenLineRoles(prefix string, summary []seg) (string, []styleRole) {
+	var b strings.Builder
+	var roles []styleRole
+	b.WriteString(prefix)
+	for range []rune(prefix) {
+		roles = append(roles, styleRoleFamily)
+	}
+	for _, s := range summary {
+		if s.Text == "" {
+			continue
+		}
+		b.WriteString(s.Text)
+		role := styleRoleForSeg(s.Role)
+		for range []rune(s.Text) {
+			roles = append(roles, role)
+		}
+	}
+	return b.String(), roles
+}
+
+// fieldSpan is one whitespace-delimited token plus its rune offset in the
+// source string it was found in — strings.Fields with offsets kept, so
+// wrapText's own greedy word-wrap decision can be replayed against
+// role-tagged runes instead of the plain string it normally wraps.
+type fieldSpan struct {
+	Text  string
+	Start int // rune offset in the source
+}
+
+func fieldsWithOffsets(s string) []fieldSpan {
+	var spans []fieldSpan
+	r := []rune(s)
+	i := 0
+	for i < len(r) {
+		for i < len(r) && unicode.IsSpace(r[i]) {
+			i++
+		}
+		if i >= len(r) {
+			break
+		}
+		start := i
+		for i < len(r) && !unicode.IsSpace(r[i]) {
+			i++
+		}
+		spans = append(spans, fieldSpan{Text: string(r[start:i]), Start: start})
+	}
+	return spans
+}
+
+// styleWrapLine is the segment-wise counterpart of wrapOrTruncatePlain:
+// solo (maxWrap<=1) yields exactly one styledLine, truncated the same way
+// wrapOrTruncatePlain does (a plain prefix of the source, so per-rune roles
+// carry over exactly — there is no whitespace-collapsing in this path).
+// Dock (maxWrap>1) replays wrapText's own greedy word-wrap decision
+// (byte-length budgeted, matching wrapText precisely so wrap points don't
+// shift) over role-tagged fields, so a role boundary that falls mid-word
+// (e.g. a resolved name immediately followed by "'s") still styles
+// correctly across the rejoin. Either way, wrapping/truncating always
+// happens on plain runes first — a physical line is built, THEN painted —
+// so truncation can never land mid-ANSI-escape (R4).
+func styleWrapLine(prefix string, summary []seg, width, maxWrap int) []styledLine {
+	full, roles := flattenLineRoles(prefix, summary)
+
+	if maxWrap <= 1 {
+		lines := wrapOrTruncatePlain(full, width, 1)
+		r := []rune(lines[0])
+		lr := make([]styleRole, len(r))
+		for i := range r {
+			if i < len(roles) {
+				lr[i] = roles[i]
+			} else {
+				lr[i] = styleRoleText // the trailing "…" — no source role
+			}
+		}
+		return []styledLine{{Runes: r, Roles: lr}}
+	}
+
+	if width < 10 {
+		width = 10
+	}
+	if maxWrap < 1 {
+		maxWrap = 1
+	}
+	fields := fieldsWithOffsets(full)
+	type group struct{ fields []fieldSpan }
+	var groups []group
+	var cur []fieldSpan
+	curLen := 0
+	for _, f := range fields {
+		wl := len(f.Text) // byte length — matches wrapText's own budgeting
+		if curLen > 0 && curLen+1+wl > width {
+			groups = append(groups, group{cur})
+			cur = nil
+			curLen = 0
+		}
+		if curLen > 0 {
+			curLen++
+		}
+		cur = append(cur, f)
+		curLen += wl
+	}
+	if len(cur) > 0 {
+		groups = append(groups, group{cur})
+	}
+	if len(groups) == 0 {
+		return []styledLine{{}}
+	}
+
+	truncated := len(groups) > maxWrap
+	if truncated {
+		groups = groups[:maxWrap]
+	}
+	out := make([]styledLine, len(groups))
+	for gi, g := range groups {
+		var lineRunes []rune
+		var lineRoles []styleRole
+		for fi, f := range g.fields {
+			if fi > 0 {
+				lineRunes = append(lineRunes, ' ')
+				lineRoles = append(lineRoles, styleRoleText)
+			}
+			fr := []rune(f.Text)
+			lineRunes = append(lineRunes, fr...)
+			for k := range fr {
+				lineRoles = append(lineRoles, roles[f.Start+k])
+			}
+		}
+		// Mirrors wrapOrTruncatePlain's dock branch exactly: once the group
+		// count overflows maxWrap, the LAST line always gets an ellipsis
+		// appended — content is only pre-trimmed to width-1 runes first if
+		// it's actually longer than that (T005/T021 plain-equivalence).
+		if truncated && gi == len(groups)-1 {
+			if len(lineRunes) > width-1 {
+				lineRunes = lineRunes[:width-1:width-1]
+				lineRoles = lineRoles[:width-1]
+			}
+			lineRunes = append(lineRunes, '…')
+			lineRoles = append(lineRoles, styleRoleText)
+		}
+		out[gi] = styledLine{Runes: lineRunes, Roles: lineRoles}
+	}
+	return out
+}
+
+// isAlertType is the digest-grammar contract's four high-salience types
+// (§2/§4) — rendered whole-line in the alert role regardless of family.
+func isAlertType(eventType string) bool {
+	switch eventType {
+	case "agent.died", "gru.attacked", "social.chest_taken", "norm.violated":
+		return true
+	}
+	return false
+}
+
+// isLabeledVoiceFamily reports whether a family renders as labeled
+// key=value fields with the family tint applied to the whole line (type
+// column + summary), vs. natural-phrase families where the tint applies to
+// the type column only and the summary is styled segment-wise (contract §2).
+func isLabeledVoiceFamily(f eventFamily) bool {
+	switch f {
+	case familyCog, familyClock, familyDaemon:
+		return true
+	}
+	return false
 }
 
 // wrapOrTruncatePlain implements chronicle-grammar.md's "Width overflow"

@@ -73,9 +73,9 @@
 
 **Independent Test**: mixed ≥50-event window — columns aligned, families distinguishable by treatment alone, deaths/attacks/thefts/violations pop without reading.
 
-- [ ] T020 [US3] Add family/emphasis/alert style tokens to the token block in internal/tui/views.go per data-model "Style tokens" (roles not raw colors; `styleFeedClock` becomes the clock family tint; palette recorded for T023)
-- [ ] T021 [US3] Rework `renderChronicleRow` in internal/tui/views.go to style segment-wise after wrap (R4): family tint on type column, segName/segSpeech/segEmphasis/segLabel roles, whole-line alert style for the four alert types, selection reverse preserved
-- [ ] T022 [US3] Style-role tests in internal/tui/render_test.go: role→token mapping per family, alert lines styled whole, pure layer asserted ANSI-free (no `\x1b` in any digest output)
+- [X] T020 [US3] Add family/emphasis/alert style tokens to the token block in internal/tui/views.go per data-model "Style tokens" (roles not raw colors; `styleFeedClock` becomes the clock family tint; palette recorded for T023)
+- [X] T021 [US3] Rework `renderChronicleRow` in internal/tui/views.go to style segment-wise after wrap (R4): family tint on type column, segName/segSpeech/segEmphasis/segLabel roles, whole-line alert style for the four alert types, selection reverse preserved
+- [X] T022 [US3] Style-role tests in internal/tui/render_test.go: role→token mapping per family, alert lines styled whole, pure layer asserted ANSI-free (no `\x1b` in any digest output)
 
 **Checkpoint**: all three stories complete.
 

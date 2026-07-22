@@ -291,7 +291,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.status
 		m.replica = msg.replica
 		m.lastSeq = msg.lastSeq
-		m.clampVillSelected()  // R5: connectedMsg swaps the replica wholesale
+		m.clampVillSelected()   // R5: connectedMsg swaps the replica wholesale
 		m.chronDetailScroll = 0 // data-model.md: detail pane scroll resets on reconnect
 		return m, listen(m.client)
 

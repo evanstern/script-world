@@ -35,6 +35,28 @@ var (
 	styleFeedSpeech  = lipgloss.NewStyle().Bold(true)
 	styleFeedClock   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	styleFeedSelect  = lipgloss.NewStyle().Reverse(true)
+
+	// Family color roles (contracts/digest-grammar.md §4, TASK-60 Phase 5):
+	// applied to the type column for natural-phrase families, and to the
+	// whole line for labeled-voice families (clock/cog/daemon — §2). The
+	// palette (recorded in patterns/chronicle-grammar.md's Color roles
+	// section): clock keeps its existing yellow (contract §4 says so
+	// explicitly); the rest are chosen to stay distinguishable from each
+	// other and from the name/speech/emphasis/alert roles below.
+	styleFamilyWorld      = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))            // blue — foundational/world
+	styleFamilySim        = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))            // green — environment (plain, vs. name's bold green)
+	styleFamilyAgent      = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))            // cyan — the plurality of events (today's default type color)
+	styleFamilySocial     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))            // magenta — relationships/conversation
+	styleFamilyGovernance = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))          // amber — meeting/norm proceedings
+	styleFamilyGru        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")) // bold red — predator threat
+	styleFamilyChronicle  = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))           // bright magenta — the narrator's voice
+	styleFamilyMetatron   = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))           // violet — the angel, otherworldly
+	styleFamilyCog        = lipgloss.NewStyle().Faint(true)                                // muted — telemetry noise
+	// daemon has no distinct tint in data-model.md's token list (process
+	// bookkeeping, low salience) — familyTint falls back to styleDim.
+
+	styleFeedEmphasis = lipgloss.NewStyle().Underline(true)                            // amounts/kinds/causes/coords
+	styleFeedAlert    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")) // whole-line: died/attacked/chest_taken/violated
 )
 
 func (m Model) View() string {
@@ -1022,24 +1044,123 @@ func indentBlock(s, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderChronicleRow styles+wraps/truncates one formatted line to width,
-// given the shared window's column layout (R5). Styling here is a minimal
-// placeholder — the clock family tint and the speech privilege, matching
-// today's look — until Phase 5 (T020-T022) lands the full family/role
-// palette (data-model.md "Style tokens"); it is not yet ANSI-per-segment.
-func renderChronicleRow(l chronicleLine, cols chronicleColumns, width, maxWrap int, selected bool) string {
-	plain := plainChronicleLine(l, cols)
-	lines := wrapOrTruncatePlain(plain, width, maxWrap)
-	style := styleDim
-	if l.Family == familyClock {
-		style = styleFeedClock
+// familyTint resolves a family to its color-role token (contract §4).
+// Roles, never raw colors, at the call site — this is the one place a
+// family maps to an actual lipgloss.Style.
+func familyTint(f eventFamily) lipgloss.Style {
+	switch f {
+	case familyWorld:
+		return styleFamilyWorld
+	case familyClock:
+		return styleFeedClock // existing token; contract §4: "clock keeps yellow"
+	case familySim:
+		return styleFamilySim
+	case familyAgent:
+		return styleFamilyAgent
+	case familySocial:
+		return styleFamilySocial
+	case familyGovernance:
+		return styleFamilyGovernance
+	case familyGru:
+		return styleFamilyGru
+	case familyChronicle:
+		return styleFamilyChronicle
+	case familyMetatron:
+		return styleFamilyMetatron
+	case familyCog:
+		return styleFamilyCog
+	default: // familyDaemon, familyUnknown — no distinct tint (see token block)
+		return styleDim
 	}
-	for _, s := range l.Summary {
-		if s.Role == segSpeech {
-			style = styleFeedSpeech
-			break
+}
+
+// styleForRole maps one styled rune's paint-time role to a style, given the
+// row's family tint (used for styleRoleFamily — the prefix — since it's the
+// one role whose color varies per line rather than being fixed).
+func styleForRole(role styleRole, fam lipgloss.Style) lipgloss.Style {
+	switch role {
+	case styleRoleFamily:
+		return fam
+	case styleRoleName:
+		return styleFeedName
+	case styleRoleSpeech:
+		return styleFeedSpeech
+	case styleRoleEmphasis:
+		return styleFeedEmphasis
+	default:
+		return lipgloss.NewStyle() // default terminal foreground
+	}
+}
+
+// paintStyledLine renders one already-wrapped/truncated styledLine
+// (grammar.go's styleWrapLine) by walking its per-rune roles and emitting
+// one Render() call per contiguous same-role run — R4's "style segment-wise
+// after wrap": the wrapping/truncation that produced l already happened on
+// plain runes, so this can never split an ANSI escape.
+func paintStyledLine(l styledLine, fam lipgloss.Style, selected bool) string {
+	var b strings.Builder
+	i := 0
+	for i < len(l.Runes) {
+		role := styleRoleText
+		if i < len(l.Roles) {
+			role = l.Roles[i]
 		}
+		j := i + 1
+		for j < len(l.Runes) {
+			r := styleRoleText
+			if j < len(l.Roles) {
+				r = l.Roles[j]
+			}
+			if r != role {
+				break
+			}
+			j++
+		}
+		st := styleForRole(role, fam)
+		if selected {
+			st = st.Reverse(true)
+		}
+		b.WriteString(st.Render(string(l.Runes[i:j])))
+		i = j
 	}
+	return b.String()
+}
+
+// renderChronicleRow styles+wraps/truncates one formatted line to width,
+// given the shared window's column layout (R5) — contract §2/§4/T021:
+//   - alert types (agent.died, gru.attacked, social.chest_taken,
+//     norm.violated) render the whole line in the alert role, regardless
+//     of family, so they pop without reading.
+//   - labeled-voice families (cog, clock, daemon) tint the whole line with
+//     the family color — the summary IS already "key=value", no further
+//     per-segment treatment applies.
+//   - every other family tints only the type column, and the summary
+//     renders segment-wise (name/speech/emphasis roles pop against
+//     default-color connective prose) via styleWrapLine + paintStyledLine.
+//
+// Selection reverse is preserved in all three paths.
+func renderChronicleRow(l chronicleLine, cols chronicleColumns, width, maxWrap int, selected bool) string {
+	if isAlertType(l.Type) {
+		return styleWholeLine(plainChronicleLine(l, cols), width, maxWrap, styleFeedAlert, selected)
+	}
+	if isLabeledVoiceFamily(l.Family) {
+		return styleWholeLine(plainChronicleLine(l, cols), width, maxWrap, familyTint(l.Family), selected)
+	}
+	prefix := chronicleLinePrefix(l, cols)
+	fam := familyTint(l.Family)
+	styledLines := styleWrapLine(prefix, l.Summary, width, maxWrap)
+	out := make([]string, len(styledLines))
+	for i, sl := range styledLines {
+		out[i] = paintStyledLine(sl, fam, selected)
+	}
+	return strings.Join(out, "\n")
+}
+
+// styleWholeLine wraps/truncates the plain line then renders every
+// physical line with one uniform style — the alert and labeled-voice paths
+// don't need per-segment attribution (contract §2).
+func styleWholeLine(plain string, width, maxWrap int, style lipgloss.Style, selected bool) string {
+	lines := wrapOrTruncatePlain(plain, width, maxWrap)
 	if selected {
 		style = style.Reverse(true)
 	}

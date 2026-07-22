@@ -301,3 +301,96 @@ func anyRole(segs []seg, role segRole) bool {
 	}
 	return false
 }
+
+// --- styleWrapLine (T021/R4): segment-wise styling must never change what
+// gets displayed, only how it's colored — these tests strip the role
+// attribution back to plain text and compare against wrapOrTruncatePlain's
+// own output for the identical source line, across the whole catalog.
+
+// plainOf concatenates a []styledLine's runes, one physical line per output
+// entry — the "what would render on screen, ignoring color" projection.
+func plainOf(lines []styledLine) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = string(l.Runes)
+	}
+	return out
+}
+
+// TestStyleWrapLinePlainEquivalence: for every catalog fixture type, at
+// both solo (maxWrap=1) and dock (maxWrap=3, narrow width) geometry,
+// styleWrapLine's plain-text projection must exactly match
+// wrapOrTruncatePlain(plainChronicleLine(...)) — the pre-existing,
+// already-tested wrap/truncate behavior (T005) must be bit-for-bit
+// unchanged by the styling rework.
+func TestStyleWrapLinePlainEquivalence(t *testing.T) {
+	names := []string{"Ash", "Birch", "Cedar", "Rowan"}
+	widths := []struct {
+		width, maxWrap int
+		dock           bool
+	}{
+		{60, 1, false}, // solo
+		{18, 3, true},  // dock: narrow enough to force wraps on most digests
+	}
+	for typ, fx := range catalogFixture {
+		e := store.Event{Seq: 1, Tick: 12345, Type: typ, Payload: json.RawMessage(fx.payload)}
+		l := formatChronicleLine(e, names)
+		for _, w := range widths {
+			cols := computeChronicleColumns([]chronicleLine{l}, w.dock)
+			plain := wrapOrTruncatePlain(plainChronicleLine(l, cols), w.width, w.maxWrap)
+			prefix := chronicleLinePrefix(l, cols)
+			styled := plainOf(styleWrapLine(prefix, l.Summary, w.width, w.maxWrap))
+			if len(styled) != len(plain) {
+				t.Fatalf("%s (width=%d dock=%v): styleWrapLine produced %d lines, wrapOrTruncatePlain produced %d\nstyled: %v\nplain:  %v",
+					typ, w.width, w.dock, len(styled), len(plain), styled, plain)
+			}
+			for i := range plain {
+				if styled[i] != plain[i] {
+					t.Errorf("%s (width=%d dock=%v) line %d:\nstyled: %q\nplain:  %q", typ, w.width, w.dock, i, styled[i], plain[i])
+				}
+			}
+		}
+	}
+}
+
+// TestStyleWrapLineMidWordRoleBoundary: a role boundary that falls
+// mid-word (agent.spear_broke: name "Ash" immediately followed by
+// "'s spear broke", no space) must keep "Ash's" as one unbroken word — not
+// split into "Ash" and "'s" by a spuriously inserted wrap-space — while
+// still carrying the correct role per half (name, then plain text). This is
+// exactly the case a naive per-seg-independent word split (instead of
+// flattening to one string before finding word boundaries) would corrupt.
+func TestStyleWrapLineMidWordRoleBoundary(t *testing.T) {
+	e := store.Event{Seq: 1, Tick: 1, Type: "agent.spear_broke", Payload: json.RawMessage(`{"agent":0}`)}
+	l := formatChronicleLine(e, testNames)
+	if want := "Ash's spear broke"; plainSegs(l.Summary) != want {
+		t.Fatalf("setup: summary = %q, want %q", plainSegs(l.Summary), want)
+	}
+	cols := computeChronicleColumns([]chronicleLine{l}, true)
+	prefix := chronicleLinePrefix(l, cols)
+	lines := styleWrapLine(prefix, l.Summary, 12, 3)
+
+	full := strings.Join(plainOf(lines), " ")
+	if !strings.Contains(full, "Ash's") {
+		t.Fatalf("mid-word boundary corrupted across wrap — \"Ash's\" split apart: %v", plainOf(lines))
+	}
+	for _, ln := range lines {
+		idx := strings.Index(string(ln.Runes), "Ash's")
+		if idx < 0 {
+			continue
+		}
+		r := []rune(string(ln.Runes))
+		// "Ash" (3 runes at idx) must be styleRoleName; "'s" (2 runes right
+		// after) must NOT be — the seg boundary must not leak past "Ash".
+		for i := idx; i < idx+3 && i < len(ln.Roles); i++ {
+			if ln.Roles[i] != styleRoleName {
+				t.Errorf("rune %q at %d (\"Ash\") = role %v, want styleRoleName", r[i], i, ln.Roles[i])
+			}
+		}
+		for i := idx + 3; i < idx+5 && i < len(ln.Roles); i++ {
+			if ln.Roles[i] == styleRoleName {
+				t.Errorf("rune %q at %d (\"'s\") incorrectly carries styleRoleName", r[i], i)
+			}
+		}
+	}
+}
