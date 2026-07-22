@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/toolloop"
@@ -380,7 +381,7 @@ func TestRunPlanEmitsToolCallsOnRejectionNoGrounding(t *testing.T) {
 	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
 		out := j.Handlers["talk_to"](ctx, call("talk_to", `{"target":"`+tname+`"}`))
 		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "talk_to",
-			Args: json.RawMessage(`{"target":"` + tname + `"}`),
+			Args:    json.RawMessage(`{"target":"` + tname + `"}`),
 			Verdict: out.Verdict, Reason: out.ResultForModel, Tier: "local"})
 		return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
 	}
@@ -418,5 +419,169 @@ func TestRunPlanNoToolCallsWhenBufferEmpty(t *testing.T) {
 
 	if n := lm.countByType(t)["cog.tool_call"]; n != 0 {
 		t.Errorf("cog.tool_call count = %d, want 0 (empty buffer emits no batch)", n)
+	}
+}
+
+// --- T019: SC-003 correlation gate ---
+
+// groundingJobs returns every job carried by a grounding event (agent.intent_set
+// / agent.plan_set) — the events a tool-call chain resolves back to.
+func (lm *loopMind) groundingJobs(t *testing.T) map[string]bool {
+	t.Helper()
+	evs, err := lm.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs := map[string]bool{}
+	for _, e := range evs {
+		switch e.Type {
+		case "agent.intent_set":
+			var p sim.IntentSetPayload
+			if json.Unmarshal(e.Payload, &p) == nil && p.Job != "" {
+				jobs[p.Job] = true
+			}
+		case "agent.plan_set":
+			var p sim.PlanSetPayload
+			if json.Unmarshal(e.Payload, &p) == nil && p.Job != "" {
+				jobs[p.Job] = true
+			}
+		}
+	}
+	return jobs
+}
+
+// awaitReflexIntentSet returns the raw payload of the running loop's first
+// reflex-authored agent.intent_set — the negative control for the chain. The
+// loop runs at max speed over idle agents, so a reflex fires within the window.
+func (lm *loopMind) awaitReflexIntentSet(t *testing.T) json.RawMessage {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		evs, err := lm.st.EventsSince(0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range evs {
+			if e.Type != "agent.intent_set" {
+				continue
+			}
+			var p sim.IntentSetPayload
+			if json.Unmarshal(e.Payload, &p) == nil && p.Source == "reflex" {
+				return e.Payload
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("no reflex agent.intent_set appeared within the deadline")
+	return nil
+}
+
+// TestToolCallCorrelationChainSC003 is the spec 017 SC-003 gate: for every tool
+// call the call artifact + verdict resolve from the event log by identifier
+// (job+ordinal) alone, and every tool-caused grounding event reaches its causing
+// call the same way — with ZERO adjacency inference. Fixture: one landed
+// cognition with a preceding rejection, one rejected-only cognition, and the
+// running loop's reflex intent_set (no job, the negative control).
+func TestToolCallCorrelationChainSC003(t *testing.T) {
+	lm := newLoopMind(t)
+	// Kill agent 1 so a talk_to to it is gate-rejected by the alive guard.
+	target := 1
+	tname := lm.md.replica.Agents[target].Name
+	lm.md.replica.Agents[target].Dead = true
+
+	// Cognition A (agent 0): a gate-rejected call (ordinal 1) precedes a landed
+	// world verb (ordinal 2) — a landing whose job has a preceding rejection.
+	jobA := lm.newJob(0)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		o1 := j.Handlers["talk_to"](ctx, call("talk_to", `{"target":"`+tname+`"}`))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "talk_to",
+			Verdict: o1.Verdict, Reason: o1.ResultForModel, Tier: "local"})
+		o2 := j.Handlers["wander"](ctx, call("wander", "{}"))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "wander",
+			Verdict: o2.Verdict, Tier: "local"})
+		return toolloop.Result{Term: toolloop.TermLanded}, nil
+	}
+	lm.md.runPlan(jobA)
+
+	// Cognition B (agent 2): a single gate-rejected call, nothing lands.
+	jobB := lm.newJob(2)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		o := j.Handlers["talk_to"](ctx, call("talk_to", `{"target":"`+tname+`"}`))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "talk_to",
+			Verdict: o.Verdict, Reason: o.ResultForModel, Tier: "local"})
+		return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+	}
+	lm.md.runPlan(jobB)
+
+	// Index every cog.tool_call by {job, ordinal} — the ONLY correlation key.
+	// Resolution below never inspects log position or neighbors.
+	byJobOrdinal := map[string]map[int]sim.CogToolCallPayload{}
+	evs, err := lm.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range evs {
+		if e.Type != "cog.tool_call" {
+			continue
+		}
+		var p sim.CogToolCallPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if byJobOrdinal[p.Job] == nil {
+			byJobOrdinal[p.Job] = map[int]sim.CogToolCallPayload{}
+		}
+		byJobOrdinal[p.Job][p.Ordinal] = p
+	}
+
+	// (a) From the landed grounding event, extract .job and resolve the causing
+	// landed call + its sibling records purely by job+ordinal.
+	var landedJob string
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p sim.IntentSetPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Source == "planner" && p.Job != "" {
+			landedJob = p.Job
+		}
+	}
+	if landedJob != jobA.meta.job {
+		t.Fatalf("landed grounding job = %q, want cognition A's job %q", landedJob, jobA.meta.job)
+	}
+	siblings := byJobOrdinal[landedJob]
+	if len(siblings) != 2 {
+		t.Fatalf("job %q resolves %d tool calls, want 2 (the rejection + the landing)", landedJob, len(siblings))
+	}
+	if siblings[2].Verdict != "landed" {
+		t.Errorf("ordinal 2 verdict = %q, want landed (the causing call)", siblings[2].Verdict)
+	}
+	if siblings[1].Verdict != "rejected_gate" || siblings[1].Reason == "" {
+		t.Errorf("ordinal 1 sibling = %q/%q, want a rejected_gate with a reason", siblings[1].Verdict, siblings[1].Reason)
+	}
+
+	// (b) A rejected call resolves to its cog.tool_call, and NO grounding event
+	// shares its job — present, queryable, grounding nothing.
+	rej := byJobOrdinal[jobB.meta.job]
+	if len(rej) != 1 || rej[1].Verdict != "rejected_gate" {
+		t.Fatalf("rejected-only job %q resolves %+v, want one rejected_gate", jobB.meta.job, rej)
+	}
+	if lm.groundingJobs(t)[jobB.meta.job] {
+		t.Errorf("a grounding event carries the rejected-only job %q — it should ground nothing", jobB.meta.job)
+	}
+	// Sanity: the landed job IS grounded (the positive half of the same check).
+	if !lm.groundingJobs(t)[landedJob] {
+		t.Errorf("landed job %q has no grounding event", landedJob)
+	}
+
+	// (c) Negative control: the reflex intent_set has no job key, so it is
+	// outside the chain — unreachable from any cog.tool_call.
+	reflex := lm.awaitReflexIntentSet(t)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(reflex, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["job"]; ok {
+		t.Errorf("reflex agent.intent_set carries a job key, joining the chain: %s", reflex)
 	}
 }
