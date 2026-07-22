@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 07:18'
+updated_date: '2026-07-22 07:40'
 labels: []
 dependencies:
   - TASK-50
@@ -27,7 +27,7 @@ Spec: specs/013-inventory-storage
 - [x] #4 Spec phase: User Story 2 — Ground piles and emergent stockpiles (P2)
 - [x] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
 - [x] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
-- [ ] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
+- [x] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
 - [ ] #8 Spec phase: Migration & Format Door (Cross-Cutting)
 - [ ] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
@@ -58,4 +58,6 @@ US2 (piles) complete: a5c6ffd mechanics (T016-T020: drop/pick_up goals with Kind
 US3 (chests) mechanics complete: d700cbd (T023-T025) — build_chest goal (build_oven pattern, buildFireTicks duration), deposit/withdraw instant goals with double-clamped total reducers, chestAt helper, spears most-worn-first through chests, 6-test suite incl. owner-survives-death, full-rot-window chest-food immortality, replay byte-identity. Full suite green. Chest-built salience memory deliberately deferred to T030 (US4 salience table) per tasks.md scope. T026/T027 (TUI + vocab, Sonnet) next.
 
 US3 Sonnet + US4 complete: 77565ee (T026-T027: chest glyph U+2610 + legend inspection with owner name + fullness, planner build_chest/deposit/withdraw vocabulary + parse validation + larder guidance), 186cf62 (T028-T031 Opus: social.chest_taken routed through applySocial as effect-free record, theftCompanions batch in contract order with fixed-agent-order witnesses, salChestBuilt/salTaking=7 + chest-built memory closing US3 deferral, 6-test theft suite incl. rumor-seed TellableFor + replay byte-identity; ChestCap exported, TUI dup const removed). Full suite green both dispatches.
+
+US5 (rot + observability) complete: f10375a (T032-T033 Opus: rot sweep on minute heartbeat before per-agent execution, takeSpoiled oldest-first drain, food_rotted reducer total, 5-test suite incl. rot-vs-pickup both orderings + spoil_at snapshot round-trip), 719fee2 (T034 Sonnet audit: SC-006 verified fully answerable pre-existing; real gaps found+fixed one level down — grammar.go owner/taker agent-index resolution for withdrew/chest_taken, narrator chronicleNote case for chest_taken theft prose; 012 precedent confirmed that routine events ride the generic raw feed). Full suite green both dispatches. Phase 8 (migration 2->3) next.
 <!-- SECTION:NOTES:END -->
