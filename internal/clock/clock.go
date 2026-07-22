@@ -92,3 +92,26 @@ func Format(tick int64) string {
 func FormatTOD(sec int) string {
 	return fmt.Sprintf("%02d:%02d", sec/secondsPerHour, sec%secondsPerHour/secondsPerMinute)
 }
+
+// TickAt is the inverse of GameTime: the tick ordinal for game-calendar
+// coordinates (1-based day, hour, minute, second). The miracle snap doors use
+// it to translate an operator/angel "day N HH:MM" target into the tick the
+// reducer snaps to (spec 016 US3). It does not judge direction — the clock is
+// monotonic and forward-only, and the reducer rejects a non-forward target.
+func TickAt(day int64, hour, min, sec int) int64 {
+	abs := (day-1)*secondsPerDay + int64(hour)*secondsPerHour + int64(min)*secondsPerMinute + int64(sec)
+	return (abs - EpochSecondOfDay) / TickGameSeconds
+}
+
+// ParseTimeOfDay parses a "HH:MM" clock label into hour and minute, validating
+// the 24-hour range. The miracle snap door pairs it with a day number and TickAt.
+func ParseTimeOfDay(s string) (hour, min int, err error) {
+	var h, m int
+	if n, serr := fmt.Sscanf(s, "%d:%d", &h, &m); serr != nil || n != 2 {
+		return 0, 0, fmt.Errorf("invalid time %q (want HH:MM)", s)
+	}
+	if h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, fmt.Errorf("invalid time %q (hour 0-23, minute 0-59)", s)
+	}
+	return h, m, nil
+}
