@@ -172,6 +172,21 @@ func newCloudCaller(cfg CloudConfig) caller {
 }
 
 func (a *anthropicCaller) call(ctx context.Context, req Request) (callResult, error) {
+	resp, err := a.client.Messages.New(ctx, a.buildParams(req))
+	if err != nil {
+		return callResult{}, err
+	}
+	return parseAnthropicMessage(resp), nil
+}
+
+// buildParams translates a Request into Anthropic Messages params (TASK-52,
+// provider-wire.md §1). Turns become the messages transcript (assistant
+// tool_use echoes, user tool_result outcomes); nil Turns falls back to the
+// single Prompt user message, byte-identical to the pre-feature request. Tools
+// become the native tools parameter; nil Tools sends no tools field. The
+// system prompt keeps its ephemeral cache breakpoint so per-kind-stable tool
+// declarations ride the cached prefix across rounds.
+func (a *anthropicCaller) buildParams(req Request) anthropic.MessageNewParams {
 	maxTokens := req.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = 1024
@@ -179,7 +194,15 @@ func (a *anthropicCaller) call(ctx context.Context, req Request) (callResult, er
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: maxTokens,
-		Messages:  []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(req.Prompt))},
+	}
+	if len(req.Turns) > 0 {
+		msgs := make([]anthropic.MessageParam, 0, len(req.Turns))
+		for _, turn := range req.Turns {
+			msgs = append(msgs, anthropicTurn(turn))
+		}
+		params.Messages = msgs
+	} else {
+		params.Messages = []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(req.Prompt))}
 	}
 	if req.System != "" {
 		// Stable system prompts (agent souls, the narrator charter) are the
@@ -190,19 +213,111 @@ func (a *anthropicCaller) call(ctx context.Context, req Request) (callResult, er
 			CacheControl: anthropic.NewCacheControlEphemeralParam(),
 		}}
 	}
-	resp, err := a.client.Messages.New(ctx, params)
-	if err != nil {
-		return callResult{}, err
+	if len(req.Tools) > 0 {
+		tools := make([]anthropic.ToolUnionParam, 0, len(req.Tools))
+		for _, td := range req.Tools {
+			tp := anthropic.ToolParam{
+				Name:        td.Name,
+				InputSchema: anthropicInputSchema(td.InputSchema),
+			}
+			if td.Description != "" {
+				tp.Description = anthropic.String(td.Description)
+			}
+			tools = append(tools, anthropic.ToolUnionParam{OfTool: &tp})
+		}
+		params.Tools = tools
 	}
+	return params
+}
+
+// anthropicTurn maps one transcript Turn to an Anthropic message. A block is
+// exactly one of tool_use (assistant call echo), tool_result (user outcome),
+// or text.
+func anthropicTurn(turn Turn) anthropic.MessageParam {
+	blocks := make([]anthropic.ContentBlockParamUnion, 0, len(turn.Blocks))
+	for _, b := range turn.Blocks {
+		switch {
+		case b.ToolUse != nil:
+			blocks = append(blocks, anthropic.NewToolUseBlock(b.ToolUse.ID, b.ToolUse.Args, b.ToolUse.Name))
+		case b.ToolResult != nil:
+			blocks = append(blocks, anthropic.NewToolResultBlock(b.ToolResult.ForID, b.ToolResult.Content, b.ToolResult.IsError))
+		default:
+			blocks = append(blocks, anthropic.NewTextBlock(b.Text))
+		}
+	}
+	if turn.Role == RoleAssistant {
+		return anthropic.NewAssistantMessage(blocks...)
+	}
+	return anthropic.NewUserMessage(blocks...)
+}
+
+// anthropicInputSchema decodes a derived JSON Schema object (tool.InputSchema)
+// into the SDK's typed input_schema param, preserving every keyword — including
+// additionalProperties — via ExtraFields, which the SDK's own UnmarshalJSON
+// drops. The properties/required/type keys map to the typed fields; anything
+// else rides ExtraFields.
+func anthropicInputSchema(raw json.RawMessage) anthropic.ToolInputSchemaParam {
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &m)
+	var is anthropic.ToolInputSchemaParam
+	if p, ok := m["properties"]; ok {
+		var v any
+		_ = json.Unmarshal(p, &v)
+		is.Properties = v
+	}
+	if r, ok := m["required"]; ok {
+		var v []string
+		_ = json.Unmarshal(r, &v)
+		is.Required = v
+	}
+	extra := map[string]any{}
+	for k, v := range m {
+		switch k {
+		case "type", "properties", "required":
+			continue
+		}
+		var val any
+		_ = json.Unmarshal(v, &val)
+		extra[k] = val
+	}
+	if len(extra) > 0 {
+		is.ExtraFields = extra
+	}
+	return is
+}
+
+// parseAnthropicMessage extracts text, tool calls (in emission order), token
+// usage, and the mapped stop reason from an Anthropic response.
+func parseAnthropicMessage(resp *anthropic.Message) callResult {
 	var text strings.Builder
+	var calls []ToolCall
 	for _, block := range resp.Content {
-		if b, ok := block.AsAny().(anthropic.TextBlock); ok {
+		switch b := block.AsAny().(type) {
+		case anthropic.TextBlock:
 			text.WriteString(b.Text)
+		case anthropic.ToolUseBlock:
+			calls = append(calls, ToolCall{ID: b.ID, Name: b.Name, Args: json.RawMessage(b.Input)})
 		}
 	}
 	return callResult{
-		text:   text.String(),
-		inTok:  resp.Usage.InputTokens,
-		outTok: resp.Usage.OutputTokens,
-	}, nil
+		text:      text.String(),
+		toolCalls: calls,
+		stop:      mapAnthropicStop(resp.StopReason),
+		inTok:     resp.Usage.InputTokens,
+		outTok:    resp.Usage.OutputTokens,
+	}
+}
+
+// mapAnthropicStop collapses the SDK's stop_reason enum onto our StopReason.
+func mapAnthropicStop(r anthropic.StopReason) StopReason {
+	switch r {
+	case anthropic.StopReasonToolUse:
+		return StopToolUse
+	case anthropic.StopReasonEndTurn:
+		return StopEndTurn
+	case anthropic.StopReasonMaxTokens:
+		return StopMaxTokens
+	default:
+		return StopOther
+	}
 }
