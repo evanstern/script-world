@@ -79,6 +79,17 @@ at the agent's tile (R2). Migration of a v1 world chains 1→2→3.
 expensive property (land reset) is simply not triggered because no map inputs
 changed.
 
+**Decisions taken at implementation (v3-invariant principle)**: (a) over-cap
+spill removes goods in canonical kind order — within food, least-nutritious
+first (food_raw → food_cooked → meals) so a capped villager keeps its best
+food; spears spill most-worn-first, mirroring the transfer idiom; (b) dead
+agents' entire frozen inventory spills to a pile at their tile — v3's death
+invariant carried forward, so a migrated world matches what v3 would have
+produced; (c) mid-flight intents carry verbatim (unlike 1→2's wipe) — no map
+inputs changed, so targets stay valid and the cap simply applies at completion;
+(d) no separate v2 decoder — v3's additions are all additive omitempty, so
+`sim.State` decodes v2 JSON exactly.
+
 **Alternatives**: no bump, cap applies only to new acquisitions (rejected:
 FR-001 says carried bulk MUST never exceed the cap, and old-log replay under new
 reducer code would still diverge on death spills); land reset for symmetry with
