@@ -642,6 +642,13 @@ type (
 		// omitempty keeps pre-013 and non-storage intent_set payloads byte-identical.
 		Kind string `json:"kind,omitempty"`
 		Qty  int    `json:"qty,omitempty"`
+		// Job (spec 017, TASK-32 pattern): the planner-loop job that landed
+		// this intent, set ONLY at the inject-landing emission site (from
+		// InjectArgs.JobID). Reflex-authored (decideIntent) and executor-
+		// authored (adapt/continue) intent_set events carry no job — field
+		// omitted, so pre-feature logs and reflex/executor emissions marshal
+		// byte-identically to today. LAST field, omitempty.
+		Job string `json:"job,omitempty"`
 	}
 	WorkStartedPayload struct {
 		Agent int   `json:"agent"`

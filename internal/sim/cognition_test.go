@@ -317,6 +317,122 @@ func TestLadderUnmeteredCallersKeepOldContract(t *testing.T) {
 	}
 }
 
+// --- T017 (spec 017): agent.intent_set gains Job on planner-loop landings ---
+
+// TestIntentSetPayloadJobByteStability pins IntentSetPayload's marshaled
+// output without Job to the pre-feature encoding (TASK-32 pattern): Job is
+// the LAST field, omitempty, so every payload that doesn't set it — every
+// payload emitted before spec 017, and every reflex/executor emission after
+// it — marshals byte-identically to today.
+func TestIntentSetPayloadJobByteStability(t *testing.T) {
+	p := IntentSetPayload{
+		Agent: 1, Goal: "chop", TargetX: 5, TargetY: 6,
+		ResX: 7, ResY: 8, Source: "planner", Kind: "wood", Qty: 2,
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"agent":1,"goal":"chop","target_x":5,"target_y":6,"res_x":7,"res_y":8,"source":"planner","kind":"wood","qty":2}`
+	if string(b) != want {
+		t.Errorf("IntentSetPayload marshal changed:\n got  %s\n want %s", b, want)
+	}
+}
+
+// TestInjectLandingCarriesJob: the planner-inject landing arm (loop.go)
+// stamps agent.intent_set with in.JobID — the correlation key a
+// cog.tool_call chain resolves against (contracts/events.md).
+func TestInjectLandingCarriesJob(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	args := meteredArgs(0, "wander")
+	args.JobID = "planner-0-10000"
+	if err := h.loop.InjectIntent(args); err != nil {
+		t.Fatalf("landing rejected: %v", err)
+	}
+	if p, ok := h.lastOutcome(t); !ok || p.Outcome != OutcomeLanded {
+		t.Fatalf("outcome = %+v, want landed", p)
+	}
+	evs, err := h.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p IntentSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Job != args.JobID {
+			t.Errorf("intent_set.job = %q, want %q", p.Job, args.JobID)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("inject-landing produced no agent.intent_set")
+	}
+}
+
+// TestReflexAndPlanIntentSetOmitJob: the reflex fallback (executor.go's
+// decideIntent path) and executor-fired plan steps (plan.go) have no job to
+// carry — the field must be ABSENT from the wire payload, not present as an
+// empty string, so pre-feature logs (and every non-planner-inject emission
+// after this feature) stay byte-identical.
+func TestReflexAndPlanIntentSetOmitJob(t *testing.T) {
+	assertNoJobKey := func(t *testing.T, payload json.RawMessage) {
+		t.Helper()
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := raw["job"]; ok {
+			t.Errorf("agent.intent_set carries a job key: %s", payload)
+		}
+	}
+
+	// Reflex (executor.go's decideIntent fallback mind).
+	m := testMap(42)
+	s := NewState(42, m)
+	log := driveTicks(t, s, m, reflexGraceTicks+40, nil)
+	var reflexSeen bool
+	for _, e := range log {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p IntentSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Source == "reflex" {
+			reflexSeen = true
+			assertNoJobKey(t, e.Payload)
+		}
+	}
+	if !reflexSeen {
+		t.Fatal("reflex never fired after the grace window")
+	}
+
+	// Executor/plan-step firing (plan.go): a guarded plan step's intent_set,
+	// like TestPlanActsAtTickT's landing.
+	s2 := NewState(42, m)
+	s2.Tick = 1000
+	s2.Agents[0].Plan = []PlanStep{{Job: "planner-0-1000", Goal: "wander", Until: 3000}}
+	evs := planStepEvents(s2, m, 0, 1001)
+	var planSeen bool
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		planSeen = true
+		assertNoJobKey(t, e.Payload)
+	}
+	if !planSeen {
+		t.Fatal("plan step never fired an agent.intent_set")
+	}
+}
+
 func TestGenerationBumpsOnHighSalience(t *testing.T) {
 	s := NewState(42, testMap(42))
 	add := func(sal int) {

@@ -593,7 +593,7 @@ func (l *Loop) handleCommand(cmd command) error {
 					TargetX: intent.TargetX, TargetY: intent.TargetY,
 					ResX: intent.ResX, ResY: intent.ResY,
 					Kind: intent.Kind, Qty: intent.Qty,
-					Source: "planner",
+					Source: "planner", Job: in.JobID,
 				})
 			}
 			// The hail (TASK-47): a talk_to landing pauses a hailable
