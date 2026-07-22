@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/tool"
@@ -12,6 +13,21 @@ import (
 func TestToolCoverageClean(t *testing.T) {
 	if err := ValidateToolCoverage(); err != nil {
 		t.Fatalf("tool coverage failed: %v", err)
+	}
+}
+
+// TestCoverageRejectsMissingResolver (T028, US3 scenario 3): a World tool with
+// no resolver arm (and no duration) is caught by the coverage check — a config
+// error that would abort boot, never a tick-time failure. Exercised with a
+// synthetic tool absent from the sim resolver/duration tables.
+func TestCoverageRejectsMissingResolver(t *testing.T) {
+	bogus := append(tool.All(), tool.Tool{Name: "ghost_verb", Effect: tool.World, PlanStep: true})
+	err := validateCoverage(bogus)
+	if err == nil {
+		t.Fatal("expected coverage failure for a world tool with no resolver")
+	}
+	if !strings.Contains(err.Error(), "ghost_verb") || !strings.Contains(err.Error(), "resolver") {
+		t.Errorf("error should name the uncovered tool and its missing resolver: %v", err)
 	}
 }
 

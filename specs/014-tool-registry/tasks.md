@@ -86,10 +86,10 @@ whitelist diff empty; live smoke world behaves as before.
 **Independent Test**: villager naming a metatron tool rejected at `InjectIntent`;
 metatron naming a world verb rejected; roster/registry inconsistency fails startup.
 
-- [ ] T025 [US3] Roster enforcement at the intent door: `internal/sim/loop.go` goal validation becomes `tool.OnRoster(tool.RosterVillager, goal)` ∧ effect-class check (accept set unchanged for real traffic); rejection recorded via the existing `reject` path, non-fatal (FR-009)
-- [ ] T026 [US3] Roster enforcement for metatron: nudge form validation in `internal/metatron/turn.go` + reducer dry-run keyed off `RosterMetatron` membership (converse/nudge_dream/nudge_omen only)
-- [ ] T027 [P] [US3] Rejection tests in `internal/sim/roster_test.go`: villager action naming `nudge_dream` → rejected, no event lands; unknown name → rejected identically; metatron form outside roster → refused with counsel as today (US3 scenarios 1–2, SC-005)
-- [ ] T028 [P] [US3] Startup inconsistency tests in `internal/tool/validate_test.go` + `internal/sim/toolcheck_test.go`: roster naming a missing tool, Read tool on a roster, World tool without resolver — each aborts boot with a config error, never a tick-time failure (US3 scenario 3)
+- [X] T025 [US3] Roster enforcement at the intent door: `internal/sim/loop.go` goal validation becomes `tool.OnRoster(tool.RosterVillager, goal)` ∧ effect-class check (accept set unchanged for real traffic); rejection recorded via the existing `reject` path, non-fatal (FR-009)
+- [X] T026 [US3] Roster enforcement for metatron: nudge form validation in `internal/metatron/turn.go` + reducer dry-run keyed off `RosterMetatron` membership (converse/nudge_dream/nudge_omen only)
+- [X] T027 [P] [US3] Rejection tests in `internal/sim/roster_test.go`: villager action naming `nudge_dream` → rejected, no event lands; unknown name → rejected identically; metatron form outside roster → refused with counsel as today (US3 scenarios 1–2, SC-005)
+- [X] T028 [P] [US3] Startup inconsistency tests in `internal/tool/validate_test.go` + `internal/sim/toolcheck_test.go`: roster naming a missing tool, Read tool on a roster, World tool without resolver — each aborts boot with a config error, never a tick-time failure (US3 scenario 3)
 
 **Checkpoint**: all three stories independently demonstrated.
 

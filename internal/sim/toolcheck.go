@@ -25,8 +25,15 @@ import (
 //     whitelist each capability uses; it may never name a type the door would
 //     reject. The whitelist itself is unchanged (the door-level backstop).
 func ValidateToolCoverage() error {
+	return validateCoverage(tool.All())
+}
+
+// validateCoverage is the coverage check over an explicit tool list — the
+// exported entry passes the live registry; tests pass synthetic lists to prove
+// a missing resolver/duration is caught before boot.
+func validateCoverage(tools []tool.Tool) error {
 	var errs []error
-	for _, t := range tool.All() {
+	for _, t := range tools {
 		switch t.Effect {
 		case tool.World:
 			if _, ok := goalResolvers[t.Name]; !ok {

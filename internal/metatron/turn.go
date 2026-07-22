@@ -149,6 +149,12 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 	if len(text) > nudgeTextMax {
 		text = text[:nudgeTextMax]
 	}
+	// Roster enforcement (spec 014 US3, FR-008): the form must name a metatron
+	// nudge tool on the metatron roster (nudge_dream / nudge_omen). Anything
+	// else is refused exactly like an unknown form — same reason string.
+	if !tool.OnRoster(tool.RosterMetatron, "nudge_"+form) {
+		return nil, fmt.Sprintf("unknown form %q", n.Form)
+	}
 	var targets []int
 	switch form {
 	case "dream":

@@ -544,6 +544,17 @@ func (l *Loop) handleCommand(cmd command) error {
 			}
 			emit("agent.plan_set", PlanSetPayload{Agent: in.Agent, Job: in.JobID, Steps: in.Plan})
 		} else {
+			// Roster door check (spec 014 US3, FR-008/FR-009): capability is
+			// roster membership. The goal must be a World tool on the villager
+			// roster; an out-of-roster tool (a metatron converse/nudge) or an
+			// unknown name is rejected here — recorded, non-fatal, with the same
+			// reason and kind as an unknown goal today. Real planner traffic (the
+			// world verbs) all resolve on the roster, so its accept set is
+			// unchanged.
+			if td, ok := tool.Lookup(in.Goal); !ok || td.Effect != tool.World || !tool.OnRoster(tool.RosterVillager, in.Goal) {
+				reject(OutcomeRejectedGuard, fmt.Sprintf("unknown goal %q", in.Goal))
+				break
+			}
 			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, in.Kind, in.Qty, l.state.Tick)
 			if rerr != nil {
 				// resolveGoal is the repair path; failing here means no

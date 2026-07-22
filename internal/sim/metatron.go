@@ -63,6 +63,12 @@ func (s *State) applyMetatron(e store.Event) error {
 		if s.MetatronCharges <= 0 {
 			return fmt.Errorf("apply %s: no charges banked", e.Type)
 		}
+		// Roster enforcement (spec 014 US3, FR-008): only the metatron nudge
+		// forms (nudge_dream / nudge_omen) may land. The dry-run refuses anything
+		// else exactly like an unknown form — same reason string.
+		if !tool.OnRoster(tool.RosterMetatron, "nudge_"+p.Form) {
+			return fmt.Errorf("apply %s: unknown form %q", e.Type, p.Form)
+		}
 		switch p.Form {
 		case "dream":
 			if len(p.Targets) != 1 {
