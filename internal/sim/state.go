@@ -388,6 +388,10 @@ func (s *State) Apply(e store.Event) error {
 			return err
 		}
 		a.Intent = &Intent{Goal: p.Goal, TargetX: p.TargetX, TargetY: p.TargetY, ResX: p.ResX, ResY: p.ResY, Kind: p.Kind, Qty: p.Qty}
+		// TASK-56: remember the objective past its own lifetime (never
+		// cleared) so the villagers tab can show it while idle.
+		a.LastGoal = p.Goal
+		a.LastGoalTick = e.Tick
 	case "agent.work_started":
 		var p WorkStartedPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
