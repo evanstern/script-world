@@ -30,6 +30,9 @@ func TestVillageHasAllResources(t *testing.T) {
 		if n := m.CountKind(Forage); n == 0 {
 			t.Errorf("seed %d: no forage", seed)
 		}
+		if n := m.CountKind(Rock); n == 0 {
+			t.Errorf("seed %d: no rock outcrops (SC-001)", seed)
+		}
 		if len(m.Dens) == 0 {
 			t.Errorf("seed %d: no animal dens", seed)
 		}
@@ -64,6 +67,50 @@ func TestProportionsRoughlyHold(t *testing.T) {
 	}
 	if f := float64(m.CountKind(Tree)) / total; f < 0.10 || f > 0.35 {
 		t.Errorf("tree fraction %.2f outside sane band", f)
+	}
+	// Rock is ~6% of dry grass remaining after trees, so a few percent of the
+	// whole map (research R1: ~150-200 tiles on 64x64) — not the raw 6%.
+	if f := float64(m.CountKind(Rock)) / total; f < 0.01 || f > 0.10 {
+		t.Errorf("rock fraction %.3f outside sane band", f)
+	}
+}
+
+// TestRockOutcropsAcrossSeeds is FR-001/SC-001: outcrops appear on every
+// tested seed, identical generation is stable (Hash), and the ≥25% buildable
+// floor holds with rock now claiming part of dry grass.
+func TestRockOutcropsAcrossSeeds(t *testing.T) {
+	for _, seed := range []uint64{1, 7, 42, 99, 12345, 987654321} {
+		a := Generate(seed, 64, 64)
+		b := Generate(seed, 64, 64)
+		if a.Hash() != b.Hash() {
+			t.Fatalf("seed %d: same-seed maps differ (AC#3) once outcrops are generated", seed)
+		}
+		if n := a.CountKind(Rock); n == 0 {
+			t.Errorf("seed %d: no rock outcrops", seed)
+		}
+		if n := a.CountKind(Water); n == 0 {
+			t.Errorf("seed %d: no water", seed)
+		}
+		if n := a.CountKind(Tree); n == 0 {
+			t.Errorf("seed %d: no trees", seed)
+		}
+		if n := a.CountKind(Forage); n == 0 {
+			t.Errorf("seed %d: no forage", seed)
+		}
+		if len(a.Dens) == 0 {
+			t.Errorf("seed %d: no dens", seed)
+		}
+		buildable := 0
+		for y := 0; y < a.H; y++ {
+			for x := 0; x < a.W; x++ {
+				if a.Buildable(x, y) {
+					buildable++
+				}
+			}
+		}
+		if buildable < a.W*a.H/4 {
+			t.Errorf("seed %d: only %d buildable tiles of %d (SC-001 floor)", seed, buildable, a.W*a.H)
+		}
 	}
 }
 

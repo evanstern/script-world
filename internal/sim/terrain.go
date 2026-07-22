@@ -22,6 +22,15 @@ func effectiveKind(m *worldmap.Map, s *State, x, y int) worldmap.TileKind {
 				return worldmap.Grass
 			}
 		}
+	case worldmap.Rock:
+		// Quarried (spec 012): unlike Cleared/Harvested, a depleted outcrop
+		// does NOT revert to Grass — it stays non-buildable and non-quarryable,
+		// rendered distinctly (worldmap.Depleted), permanent in v1 (no regrow).
+		for _, q := range s.Quarried {
+			if q.X == x && q.Y == y {
+				return worldmap.Depleted
+			}
+		}
 	}
 	return k
 }
@@ -31,7 +40,7 @@ func passable(m *worldmap.Map, s *State, x, y int) bool {
 		return false
 	}
 	k := effectiveKind(m, s, x, y)
-	return k == worldmap.Grass || k == worldmap.Forage
+	return k == worldmap.Grass || k == worldmap.Forage || k == worldmap.Depleted
 }
 
 // buildSite: effective grass with no structure on it.

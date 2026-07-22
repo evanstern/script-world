@@ -272,6 +272,10 @@ func intentDuration(goal string) int64 {
 		return buildShelterTicks
 	case "hunt":
 		return huntTicks
+	case "quarry":
+		return quarryTicks
+	case "collect_water":
+		return collectWaterTicks
 	}
 	return 0 // sleep / goto_warmth / wander / seek complete on arrival
 }

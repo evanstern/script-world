@@ -323,6 +323,10 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 
 	agents := map[[2]int]string{}
 	structures := map[[2]int]string{}
+	// Quarried (spec 012, US1): depleted rock outcrops are dynamic overlay
+	// state (never part of the static gm.At tile), so the set comes from the
+	// replica just like structures/dens below.
+	quarried := map[[2]int]bool{}
 	if m.replica != nil {
 		for _, st := range m.replica.Structures {
 			switch st.Kind {
@@ -331,6 +335,9 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 			case "shelter":
 				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
 			}
+		}
+		for _, q := range m.replica.Quarried {
+			quarried[[2]int{q.X, q.Y}] = true
 		}
 		for _, a := range m.replica.Agents {
 			g := strings.ToUpper(a.Name[:1])
@@ -371,13 +378,20 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		}
 		var s string
 		var st lipgloss.Style
-		switch gm.At(x, y) {
-		case worldmap.Water:
+		switch {
+		case quarried[[2]int{x, y}]:
+			// Depleted outcrop (effective-kind path, worldmap.Depleted):
+			// passable dug-out ground, distinct from both intact rock and
+			// plain grass (research R8).
+			s, st = ",", styleDepleted
+		case gm.At(x, y) == worldmap.Water:
 			s, st = "~", styleWater
-		case worldmap.Tree:
+		case gm.At(x, y) == worldmap.Tree:
 			s, st = "♠", styleTree
-		case worldmap.Forage:
+		case gm.At(x, y) == worldmap.Forage:
 			s, st = "\"", styleForage
+		case gm.At(x, y) == worldmap.Rock:
+			s, st = "^", styleRock
 		default:
 			s, st = "·", styleDim
 		}
@@ -402,20 +416,22 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		phase = styleNight.Render("night")
 	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ᴥden ▲fire ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
 	return grid, legend
 }
 
 // Terrain glyphs. Night dims the palette rather than hiding the world.
 var (
-	styleWater   = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-	styleTree    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	styleForage  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	styleDen     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	styleFire    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
-	styleShelter = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
-	styleGru     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	styleWater    = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	styleTree     = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	styleForage   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	styleRock     = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	styleDepleted = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
+	styleDen      = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	styleFire     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+	styleShelter  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
+	styleGru      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView is the narrow-fallback map pane: today's vw/vh formula,

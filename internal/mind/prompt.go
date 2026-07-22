@@ -12,7 +12,7 @@ import (
 // system prefix (persona + instruction block — prompt-cache friendly) and a
 // variable user suffix (situation + the bounded working-memory window).
 
-const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to"
+const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water"
 
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
@@ -24,6 +24,7 @@ func systemPrompt(name, personaText string) string {
 	fmt.Fprintf(&b, `You decide what %s does next. Reply with ONLY a JSON object:
 {"goal": "<goal>", "target": "<agent name, only for talk_to>", "reason": "<one short sentence in your voice>"}
 Goals: %s.
+quarry gathers stone from a rock outcrop; collect_water gathers water from a water tile.
 For a short sequence instead, reply:
 {"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
 At most %d steps; steps run in order, each waits for its time.

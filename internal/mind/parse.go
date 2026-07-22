@@ -33,6 +33,8 @@ var validGoals = map[string]bool{
 	"build_fire": true, "build_shelter": true,
 	"eat": true, "sleep": true, "wander": true,
 	"goto_warmth": true, "talk_to": true,
+	// spec 012 (US1): planner-only, never reflex-chosen.
+	"quarry": true, "collect_water": true,
 }
 
 // parseMusing accepts one plain line of interiority (TASK-21): first line,

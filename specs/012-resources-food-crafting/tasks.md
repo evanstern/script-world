@@ -47,14 +47,14 @@ TASK-50 at each dispatch.
 
 **Independent test**: fresh worlds show outcrops (same-seed identical); a directed agent quarries (inventory + permanent depletion) and collects water; contested quarry resolves like contested chop.
 
-- [ ] T009 [US1] Add `Rock` TileKind + elevation-correlated outcrop placement (~6% dry land, after trees before forage, purpose tag `"rock"`) in `internal/worldmap/worldmap.go`; `Passable` excludes Rock; `Buildable` unchanged (research R1)
-- [ ] T010 [US1] Extend `internal/worldmap/worldmap_test.go`: outcrops present across seed spread; same-seed identical `Hash()`; water/trees/forage/dens still present; ≥25% buildable floor (SC-001)
-- [ ] T011 [US1] Add `Quarried []Point` overlay to `State` in `internal/sim/state.go` and merge into `effectiveKind`/`passable` in `internal/sim/terrain.go` (depleted = passable, not buildable, not quarryable, distinct kind for TUI)
-- [ ] T012 [US1] Add `quarry` and `collect_water` to `resolveGoal` in `internal/sim/policy.go` (nearestAdjacentTo Rock-not-quarried / Water) and durations (400/60) to `intentDuration` in `internal/sim/agents.go`
-- [ ] T013 [US1] Executor completion in `internal/sim/executor.go`: emit `agent.quarried` / `agent.collected_water` (HarvestPayload) with completion-tick re-validation; reducer cases in `internal/sim/state.go` (+2 Stone + Quarried append / +1 Water) per contracts/events.md
-- [ ] T014 [US1] Tests in `internal/sim`: quarry happy path, contested quarry (second agent's work yields nothing), water inexhaustible, replay byte-identity over a quarry+collect run
-- [ ] T015 [P] [US1] TUI: Rock glyph + quarried-out rendering in `internal/tui/views.go`
-- [ ] T016 [P] [US1] Planner vocabulary: add `quarry, collect_water` to `goalVocabulary` in `internal/mind/prompt.go` with one-line guidance
+- [X] T009 [US1] Add `Rock` TileKind + elevation-correlated outcrop placement (~6% dry land, after trees before forage, purpose tag `"rock"`) in `internal/worldmap/worldmap.go`; `Passable` excludes Rock; `Buildable` unchanged (research R1)
+- [X] T010 [US1] Extend `internal/worldmap/worldmap_test.go`: outcrops present across seed spread; same-seed identical `Hash()`; water/trees/forage/dens still present; ≥25% buildable floor (SC-001)
+- [X] T011 [US1] Add `Quarried []Point` overlay to `State` in `internal/sim/state.go` and merge into `effectiveKind`/`passable` in `internal/sim/terrain.go` (depleted = passable, not buildable, not quarryable, distinct kind for TUI)
+- [X] T012 [US1] Add `quarry` and `collect_water` to `resolveGoal` in `internal/sim/policy.go` (nearestAdjacentTo Rock-not-quarried / Water) and durations (400/60) to `intentDuration` in `internal/sim/agents.go`
+- [X] T013 [US1] Executor completion in `internal/sim/executor.go`: emit `agent.quarried` / `agent.collected_water` (HarvestPayload) with completion-tick re-validation; reducer cases in `internal/sim/state.go` (+2 Stone + Quarried append / +1 Water) per contracts/events.md
+- [X] T014 [US1] Tests in `internal/sim`: quarry happy path, contested quarry (second agent's work yields nothing), water inexhaustible, replay byte-identity over a quarry+collect run
+- [X] T015 [P] [US1] TUI: Rock glyph + quarried-out rendering in `internal/tui/views.go`
+- [X] T016 [P] [US1] Planner vocabulary: add `quarry, collect_water` to `goalVocabulary` in `internal/mind/prompt.go` with one-line guidance
 
 **Checkpoint**: US1 fully functional — deliverable MVP.
 

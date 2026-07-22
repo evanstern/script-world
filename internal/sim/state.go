@@ -32,6 +32,11 @@ type State struct {
 	Cleared       []Point     `json:"cleared,omitempty"`
 	Harvested     []Harvest   `json:"harvested,omitempty"`
 	DenUses       []DenUse    `json:"den_uses,omitempty"`
+	// Quarried (spec 012, US1) marks depleted rock outcrops — permanent in
+	// v1, no regrow entry (unlike Harvested/Cleared, which do regrow). A
+	// quarried tile is passable but NOT buildable and NOT quarryable again;
+	// effectiveKind renders it as worldmap.Depleted, distinct from Grass.
+	Quarried []Point `json:"quarried,omitempty"`
 	// Social fabric (TASK-8) — all event-sourced.
 	Relations   []Relation `json:"relations,omitempty"`
 	Debts       []Debt     `json:"debts,omitempty"`
@@ -423,9 +428,30 @@ func (s *State) Apply(e store.Event) error {
 	// vocabulary. Until wired, behavior is identical to the unknown-type
 	// fall-through: recorded history, zero state effect (contracts/events.md).
 	case "agent.quarried":
-		// TODO(T013): Inv.Stone += quarryYield; append (x,y) to Quarried; clear intent.
+		var p HarvestPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Stone += quarryYield
+		a.Intent = nil
+		a.IdleSince = e.Tick
+		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
 	case "agent.collected_water":
-		// TODO(T013): Inv.Water += collectWaterYield; clear intent (water inexhaustible).
+		var p HarvestPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Water += collectWaterYield
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.crafted":
 		// TODO(T026): apply recipeFor(kind) delta (spear appends spearDurability); clear intent.
 	case "agent.cooked":

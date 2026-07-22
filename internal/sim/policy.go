@@ -168,6 +168,23 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return in, "", nil
 		}
 		return nil, "", fmt.Errorf("no tree reachable")
+	case "quarry":
+		// Planner-only (research R5, FR-020): never added to decideIntent's
+		// reflex ladder.
+		if stand, res, ok := nearestAdjacentTo(m, s, a.X, a.Y, func(x, y int) bool {
+			return m.InBounds(x, y) && effectiveKind(m, s, x, y) == worldmap.Rock
+		}); ok {
+			return &Intent{Goal: "quarry", TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no rock outcrop reachable")
+	case "collect_water":
+		// Planner-only, same as quarry.
+		if stand, res, ok := nearestAdjacentTo(m, s, a.X, a.Y, func(x, y int) bool {
+			return m.InBounds(x, y) && effectiveKind(m, s, x, y) == worldmap.Water
+		}); ok {
+			return &Intent{Goal: "collect_water", TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no water reachable")
 	case "build_fire", "build_shelter":
 		cost := fireWoodCost
 		if goal == "build_shelter" {

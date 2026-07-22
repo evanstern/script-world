@@ -406,6 +406,11 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
 	case "build_fire", "build_shelter":
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
+	case "quarry":
+		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
+		// have quarried this outcrop while this agent walked over.
+		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Rock
+		// collect_water: no depletion check — water sources are inexhaustible.
 	}
 	if !valid {
 		emit("agent.intent_done", AgentPayload{Agent: i})
@@ -438,6 +443,10 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
 		events = append(events, memoryEvent(nextTick, i, salShelter, "Raised a shelter with my own hands."))
+	case "quarry":
+		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+	case "collect_water":
+		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	}
 	return events
 }
