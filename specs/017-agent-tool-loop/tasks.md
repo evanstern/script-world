@@ -92,17 +92,17 @@ local-tier smoke where planner cognitions land intents/plans/musings via tool ca
       internal/toolloop/loop_test.go: cap exhaustion, batched calls, rejected-acting
       retry within cap, read-then-act, admission_refused mid-loop, provider_error,
       ctx_done — every path's records + observation counts (with T009)
-- [ ] T011 (Opus 4.8) [US1] Villager handlers in internal/mind: world verbs + set_plan
+- [x] T011 (Opus 4.8) [US1] Villager handlers in internal/mind: world verbs + set_plan
       wrap InjectIntent/injectPlan translating door accept/reject → verdicts; muse
       handler lands agent.thought through the social door; Record sink buffers
       CallRecords for the cognition's telemetry batch (depends on T009)
-- [ ] T012 (Opus 4.8) [US1] Migrate runPlan to toolloop.Run: tool-era systemPrompt in
+- [x] T012 (Opus 4.8) [US1] Migrate runPlan to toolloop.Run: tool-era systemPrompt in
       internal/mind/prompt.go (declared tools replace vocabulary/gloss prose),
       planner-path parseReply/plannerReplySchema retired, cog.thought/cog.outcome
       emission preserved around the loop, rearm semantics kept in
       internal/mind/mind.go + parse.go (depends on T011; retire the 014 golden-prompt
       test in the same commit, noted per contracts/loop-api.md)
-- [ ] T013 (Opus 4.8) [US1] Delete scheduled musing: muse queue/worker/cadence fields in
+- [x] T013 (Opus 4.8) [US1] Delete scheduled musing: muse queue/worker/cadence fields in
       internal/mind/mind.go, `KindMusing` routing in internal/llm/llm.go, `musing`
       DecisionClass + kindToClass entry in internal/cognition/registry.go; update
       ValidateKinds and its daemon-start gate tests (depends on T012)

@@ -71,6 +71,12 @@ agent.thought (muse)      │      ↑ sibling records: ordinals 1..k-1 (reads, 
 - Every landed acting call has ≥ 1 grounding event carrying its `job`.
 - Every rejected/malformed/unknown/unlanded call exists as `cog.tool_call` with NO
   grounding event — present and queryable, grounding nothing.
+- **Outcome multiplicity (as-built note, T012)**: the intent door records one
+  `cog.outcome` per acting inject (its existing non-silent-rejection contract), so an
+  intra-cognition retry (gate-reject → retry → land) yields multiple `cog.outcome`
+  events sharing the job — rejection verdict(s) then the landing. The mind adds its own
+  `OutcomeUnusable` only when NO acting call reached a door. Chain-walking by job is
+  unaffected; consumers must not assume exactly one outcome per job.
 - Muse landings: `agent.thought` carries no job field today; the muse handler's
   `cog.tool_call{verdict:landed}` plus the batch's shared `cog.outcome{job}` closes the
   chain without touching `agent.thought`'s payload (byte-stability preferred over
