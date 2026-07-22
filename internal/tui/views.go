@@ -8,6 +8,7 @@ import (
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -34,6 +35,28 @@ var (
 	styleFeedSpeech  = lipgloss.NewStyle().Bold(true)
 	styleFeedClock   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	styleFeedSelect  = lipgloss.NewStyle().Reverse(true)
+
+	// Family color roles (contracts/digest-grammar.md §4, TASK-60 Phase 5):
+	// applied to the type column for natural-phrase families, and to the
+	// whole line for labeled-voice families (clock/cog/daemon — §2). The
+	// palette (recorded in patterns/chronicle-grammar.md's Color roles
+	// section): clock keeps its existing yellow (contract §4 says so
+	// explicitly); the rest are chosen to stay distinguishable from each
+	// other and from the name/speech/emphasis/alert roles below.
+	styleFamilyWorld      = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))            // blue — foundational/world
+	styleFamilySim        = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))            // green — environment (plain, vs. name's bold green)
+	styleFamilyAgent      = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))            // cyan — the plurality of events (today's default type color)
+	styleFamilySocial     = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))            // magenta — relationships/conversation
+	styleFamilyGovernance = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))          // amber — meeting/norm proceedings
+	styleFamilyGru        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")) // bold red — predator threat
+	styleFamilyChronicle  = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))           // bright magenta — the narrator's voice
+	styleFamilyMetatron   = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))           // violet — the angel, otherworldly
+	styleFamilyCog        = lipgloss.NewStyle().Faint(true)                                // muted — telemetry noise
+	// daemon has no distinct tint in data-model.md's token list (process
+	// bookkeeping, low salience) — familyTint falls back to styleDim.
+
+	styleFeedEmphasis = lipgloss.NewStyle().Underline(true)                            // amounts/kinds/causes/coords
+	styleFeedAlert    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")) // whole-line: died/attacked/chest_taken/violated
 )
 
 func (m Model) View() string {
@@ -113,7 +136,7 @@ func (m Model) footerView() string {
 	case m.mbFocused:
 		return styleDim.Render("esc release · ⏎ send · ↑↓ history")
 	case m.inspecting():
-		return styleDim.Render("j/k select · ⏎ expand · space resume · m ask")
+		return styleDim.Render("j/k select · J/K scroll detail · space resume · m ask")
 	case m.villagersVisible() && m.villDetail:
 		return styleDim.Render("esc back · space pause · q quit")
 	case m.villagersVisible():
@@ -223,7 +246,7 @@ func (m Model) soloTitle() string {
 			if !m.chronRaw && m.replica != nil && len(m.replica.Chronicle) > 0 {
 				mode = "narrated"
 			}
-			return fmt.Sprintf("%s · %s · paused — j/k select · ⏎ expand · r narrated", name, mode)
+			return fmt.Sprintf("%s · %s · paused — j/k select · J/K scroll detail · r narrated", name, mode)
 		}
 		return name + " · r narrated ↔ raw · a/t filter"
 	}
@@ -831,8 +854,12 @@ func (m Model) chronicleNarratedBody(width, rows int) string {
 	return header + "\n\n" + strings.TrimRight(strings.Join(lines, "\n"), "\n")
 }
 
-// chronicleRawBody is the raw event feed formatted by the chronicle
-// grammar (patterns/chronicle-grammar.md), auto-following the tail.
+// chronicleRawBody is the raw event feed formatted by the chronicle digest
+// grammar (contracts/digest-grammar.md), auto-following the tail. R8:
+// window first, then format — only the tail slice of events that could
+// possibly land in the visible budget is digested, not the whole 256-event
+// ring, so per-frame cost stays O(visible rows) even at max time
+// compression (SC-005).
 func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 	narrated := m.replica != nil && len(m.replica.Chronicle) > 0
 	hint := "raw feed · no narrated entries yet — the narrator writes at day and night boundaries"
@@ -843,84 +870,170 @@ func (m Model) chronicleRawBody(width, rows, maxWrap int) string {
 		return styleDim.Render(hint) + "\n\n" +
 			styleDim.Render("no events yet this session — the chronicle fills as the world moves")
 	}
-	names := m.agentNames()
-	var out []string
-	for _, e := range m.events {
-		l := formatChronicleLine(e, names)
-		out = append(out, renderChronicleRow(l, width, maxWrap, false))
-	}
-	all := strings.Split(strings.Join(out, "\n"), "\n")
 	// B1/B5: `rows` is this body's *entire* row budget; hint+blank above
 	// already spend 2 of it (see chronicleNarratedBody).
 	entryRows := rows - 2
 	if entryRows < 3 {
 		entryRows = 3
 	}
+	// Each event contributes at least one physical line, so the tail
+	// `entryRows` events are always enough to fill (and, once wrapped,
+	// potentially overfill) the budget — the physical-line slice below
+	// trims any overshoot from dock-mode wrapping.
+	events := m.events
+	if len(events) > entryRows {
+		events = events[len(events)-entryRows:]
+	}
+	names := m.agentNames()
+	dock := maxWrap > 1
+	lines := make([]chronicleLine, len(events))
+	for i, e := range events {
+		lines[i] = formatChronicleLine(e, names)
+	}
+	cols := computeChronicleColumns(lines, dock)
+	var out []string
+	for _, l := range lines {
+		out = append(out, renderChronicleRow(l, cols, width, maxWrap, false))
+	}
+	all := strings.Split(strings.Join(out, "\n"), "\n")
 	if len(all) > entryRows {
 		all = all[len(all)-entryRows:]
 	}
 	return styleDim.Render(hint) + "\n\n" + strings.Join(all, "\n")
 }
 
-// chronicleInspectBody is Mode 2 (paused) — selection, expansion, the
-// stored event verbatim (patterns/chronicle-grammar.md "Inspector").
-// chronicleInspectBody windows the raw feed around the selection, bounded
-// to exactly `rows` total lines whether or not something is expanded (B2 /
-// B1: the expansion block's line count is reserved out of the row budget
-// *before* windowing the marker rows, so an expanded event can never push
-// the composite past its handed height — which was the actual cause of
-// "j/k looks like a no-op while expanded": the selection moved correctly,
-// but an unbounded expansion could grow the panel past the terminal's
-// visible rows, scrolling the moved marker out of view).
+// chronicleInspectBody is Mode 2 (paused) — panels/chronicle.md "Mode 2",
+// contracts/digest-grammar.md §5. The body splits into the entry list (top)
+// and an always-on detail pane (bottom) separated by a rule line: no
+// keypress required to see the selected event's verbatim payload (FR-008,
+// R6) — the ⏎-triggered inline inspector this replaced is gone (R7).
+// Bounded to exactly `rows` total lines regardless of payload size (B1/B2):
+// the pane's row budget is reserved *before* windowing the list, and the
+// pane itself windows the annotated payload by chronDetailScroll rather
+// than ever emitting it in full — the actual cause of the old inline
+// inspector's unbounded-growth bug (see the historical comment this
+// replaced) for oversized payloads like world.migrated (FR-011).
 func (m Model) chronicleInspectBody(width, rows int) string {
 	if len(m.events) == 0 {
 		return styleDim.Render("paused — no events recorded yet")
 	}
-	if rows < 3 {
-		rows = 3
+	// Minimum viable split: list(5) + rule(1) — the floor every other body
+	// in this package clamps to (B5); paneRows may shrink to 0 below this
+	// only in a starved-terminal degenerate case.
+	if rows < 6 {
+		rows = 6
 	}
 	names := m.agentNames()
 	n := len(m.events)
 	sel := m.chronSelectionBase()
 
-	baseBudget := rows
-	var expBlock string
-	if m.chronExpanded && m.chronExpIdx >= 0 && m.chronExpIdx < n {
-		expBlock = indentBlock(formatInspector(m.events[m.chronExpIdx], names), "  ")
-		expLines := len(strings.Split(expBlock, "\n"))
-		baseBudget = rows - expLines
-		if baseBudget < 1 {
-			baseBudget = 1
+	// R6: paneRows = min(rows/2, 14); list keeps the remainder, floored at 5.
+	paneRows := rows / 2
+	if paneRows > 14 {
+		paneRows = 14
+	}
+	const ruleRows = 1
+	listRows := rows - paneRows - ruleRows
+	if listRows < 5 {
+		listRows = 5
+		paneRows = rows - listRows - ruleRows
+		if paneRows < 0 {
+			paneRows = 0
 		}
 	}
 
-	start := sel - baseBudget/2
+	// --- entry list (unchanged windowing discipline, minus expansion) ---
+	start := sel - listRows/2
 	if start < 0 {
 		start = 0
 	}
-	end := start + baseBudget
+	end := start + listRows
 	if end > n {
 		end = n
-		start = end - baseBudget
+		start = end - listRows
 		if start < 0 {
 			start = 0
 		}
 	}
-	var out []string
+	lines := make([]chronicleLine, 0, end-start)
 	for i := start; i < end; i++ {
-		e := m.events[i]
-		l := formatChronicleLine(e, names)
+		lines = append(lines, formatChronicleLine(m.events[i], names))
+	}
+	cols := computeChronicleColumns(lines, false) // inspect is always tick-shown (solo-style)
+	listOut := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		l := lines[i-start]
 		selected := i == sel
 		marker := "  "
 		if selected {
 			marker = styleFeedSelect.Render("▌") + " "
 		}
-		out = append(out, marker+renderChronicleRow(l, width-2, 1, selected))
-		if m.chronExpanded && m.chronExpIdx == i {
-			out = append(out, expBlock)
-		}
+		listOut = append(listOut, marker+renderChronicleRow(l, cols, width-2, 1, selected))
+	}
+
+	// --- rule + detail pane (contract §5) ---
+	e := m.events[sel]
+	rule := styleDim.Render(fmt.Sprintf("DETAIL · seq %d", e.Seq))
+	out := append([]string{}, listOut...)
+	out = append(out, rule)
+	if paneRows > 0 {
+		out = append(out, chronicleDetailPane(e, names, m.chronDetailScroll, width, paneRows)...)
 	}
 	return strings.Join(out, "\n")
+}
+
+// chronicleDetailPane windows formatInspector's verbatim-payload output to
+// exactly paneRows lines (contract §5): scroll clamps to content so J past
+// the end (or K before the start) is a no-op rather than drifting the view
+// blank; a footer replaces the last row with a remaining-line count plus
+// the [future: actions] slot (FR-009) whenever content overflows the pane.
+// Oversized payloads (world.migrated) are never processed beyond this
+// slice — the annotated string is built once, then only the visible lines
+// are touched, satisfying FR-011 structurally rather than by a size cap.
+func chronicleDetailPane(e store.Event, names []string, scroll, width, paneRows int) []string {
+	content := strings.Split(formatInspector(e, names), "\n")
+
+	contentRows := paneRows
+	footerNeeded := len(content) > paneRows
+	if footerNeeded {
+		contentRows = paneRows - 1
+		if contentRows < 1 {
+			contentRows = 1
+		}
+	}
+	maxScroll := len(content) - contentRows
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	visEnd := scroll + contentRows
+	if visEnd > len(content) {
+		visEnd = len(content)
+	}
+
+	out := make([]string, 0, paneRows)
+	for _, ln := range content[scroll:visEnd] {
+		out = append(out, indentBlock(ln, "  "))
+	}
+	if footerNeeded {
+		remaining := len(content) - visEnd
+		footer := fmt.Sprintf("… (+%d more — J to scroll)", remaining)
+		actions := "[future: actions]" // detailActions' attachment slot (FR-009)
+		gap := width - len([]rune(footer)) - len([]rune(actions)) - 4
+		if gap < 2 {
+			gap = 2
+		}
+		out = append(out, styleDim.Render("  "+footer+strings.Repeat(" ", gap)+actions))
+	}
+	for len(out) < paneRows { // pad so the composite height is fixed (B1)
+		out = append(out, "")
+	}
+	return out
 }
 
 func indentBlock(s, prefix string) string {
@@ -931,17 +1044,123 @@ func indentBlock(s, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderChronicleRow styles+wraps/truncates one formatted line to width.
-func renderChronicleRow(l chronicleLine, width, maxWrap int, selected bool) string {
-	plain := plainChronicleLine(l)
-	lines := wrapOrTruncatePlain(plain, width, maxWrap)
-	style := styleDim
-	switch l.Class {
-	case classClock:
-		style = styleFeedClock
-	case classSpeech:
-		style = styleFeedSpeech
+// familyTint resolves a family to its color-role token (contract §4).
+// Roles, never raw colors, at the call site — this is the one place a
+// family maps to an actual lipgloss.Style.
+func familyTint(f eventFamily) lipgloss.Style {
+	switch f {
+	case familyWorld:
+		return styleFamilyWorld
+	case familyClock:
+		return styleFeedClock // existing token; contract §4: "clock keeps yellow"
+	case familySim:
+		return styleFamilySim
+	case familyAgent:
+		return styleFamilyAgent
+	case familySocial:
+		return styleFamilySocial
+	case familyGovernance:
+		return styleFamilyGovernance
+	case familyGru:
+		return styleFamilyGru
+	case familyChronicle:
+		return styleFamilyChronicle
+	case familyMetatron:
+		return styleFamilyMetatron
+	case familyCog:
+		return styleFamilyCog
+	default: // familyDaemon, familyUnknown — no distinct tint (see token block)
+		return styleDim
 	}
+}
+
+// styleForRole maps one styled rune's paint-time role to a style, given the
+// row's family tint (used for styleRoleFamily — the prefix — since it's the
+// one role whose color varies per line rather than being fixed).
+func styleForRole(role styleRole, fam lipgloss.Style) lipgloss.Style {
+	switch role {
+	case styleRoleFamily:
+		return fam
+	case styleRoleName:
+		return styleFeedName
+	case styleRoleSpeech:
+		return styleFeedSpeech
+	case styleRoleEmphasis:
+		return styleFeedEmphasis
+	default:
+		return lipgloss.NewStyle() // default terminal foreground
+	}
+}
+
+// paintStyledLine renders one already-wrapped/truncated styledLine
+// (grammar.go's styleWrapLine) by walking its per-rune roles and emitting
+// one Render() call per contiguous same-role run — R4's "style segment-wise
+// after wrap": the wrapping/truncation that produced l already happened on
+// plain runes, so this can never split an ANSI escape.
+func paintStyledLine(l styledLine, fam lipgloss.Style, selected bool) string {
+	var b strings.Builder
+	i := 0
+	for i < len(l.Runes) {
+		role := styleRoleText
+		if i < len(l.Roles) {
+			role = l.Roles[i]
+		}
+		j := i + 1
+		for j < len(l.Runes) {
+			r := styleRoleText
+			if j < len(l.Roles) {
+				r = l.Roles[j]
+			}
+			if r != role {
+				break
+			}
+			j++
+		}
+		st := styleForRole(role, fam)
+		if selected {
+			st = st.Reverse(true)
+		}
+		b.WriteString(st.Render(string(l.Runes[i:j])))
+		i = j
+	}
+	return b.String()
+}
+
+// renderChronicleRow styles+wraps/truncates one formatted line to width,
+// given the shared window's column layout (R5) — contract §2/§4/T021:
+//   - alert types (agent.died, gru.attacked, social.chest_taken,
+//     norm.violated) render the whole line in the alert role, regardless
+//     of family, so they pop without reading.
+//   - labeled-voice families (cog, clock, daemon) tint the whole line with
+//     the family color — the summary IS already "key=value", no further
+//     per-segment treatment applies.
+//   - every other family tints only the type column, and the summary
+//     renders segment-wise (name/speech/emphasis roles pop against
+//     default-color connective prose) via styleWrapLine + paintStyledLine.
+//
+// Selection reverse is preserved in all three paths.
+func renderChronicleRow(l chronicleLine, cols chronicleColumns, width, maxWrap int, selected bool) string {
+	if isAlertType(l.Type) {
+		return styleWholeLine(plainChronicleLine(l, cols), width, maxWrap, styleFeedAlert, selected)
+	}
+	if isLabeledVoiceFamily(l.Family) {
+		return styleWholeLine(plainChronicleLine(l, cols), width, maxWrap, familyTint(l.Family), selected)
+	}
+	prefix := chronicleLinePrefix(l, cols)
+	fam := familyTint(l.Family)
+	styledLines := styleWrapLine(prefix, l.Summary, width, maxWrap)
+	out := make([]string, len(styledLines))
+	for i, sl := range styledLines {
+		out[i] = paintStyledLine(sl, fam, selected)
+	}
+	return strings.Join(out, "\n")
+}
+
+// styleWholeLine wraps/truncates the plain line then renders every
+// physical line with one uniform style — the alert and labeled-voice paths
+// don't need per-segment attribution (contract §2).
+func styleWholeLine(plain string, width, maxWrap int, style lipgloss.Style, selected bool) string {
+	lines := wrapOrTruncatePlain(plain, width, maxWrap)
 	if selected {
 		style = style.Reverse(true)
 	}

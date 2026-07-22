@@ -35,21 +35,28 @@ No other key does anything silently — see
 
 ## Mode: inspect (clock paused + chronicle visible; layered on global)
 
+**TASK-60 (spec 018-chronicle-digest)**: the detail pane is always on (no
+`⏎` needed to see it — panels/chronicle.md "Mode 2"); `⏎` is reserved for a
+future jump-off actions bar (contract §5 "Extension point") rather than
+toggling expansion, and `J`/`K` scroll the pane when its content overflows.
+
 | Key | Action |
 |---|---|
-| `j` / `k` | select next / previous event |
-| `g` / `G` | jump to first / last |
-| `⏎` | expand / collapse selected event |
-| `space` | resume (exits inspect, collapses expansion) |
+| `j` / `k` | select next / previous event (also resets detail pane scroll) |
+| `g` / `G` | jump to first / last (also resets detail pane scroll) |
+| `J` / `K` | scroll the detail pane down / up |
+| `⏎` | reserved — no-op today (future jump-off actions) |
+| `space` | resume (exits inspect, clears selection and detail scroll) |
 
-All global keys stay live in inspect mode; `j/k/g/G/⏎` are additions, not
-replacements. (Map pan keeps the arrow keys; inspect deliberately uses `j/k` so the
-two never collide.)
+All global keys stay live in inspect mode; `j/k/g/G/J/K` are additions, not
+replacements. (Map pan keeps the arrow keys; inspect deliberately uses `j/k`
+so the two never collide. `J`/`K` mirror `j`/`k` one layer up — selecting a
+row vs. scrolling what it shows.)
 
 ## Mode: villagers (the villagers tab is the thing visible; layered on global, TASK-56)
 
 Scoped to whichever tab is on screen — the dock shows one tab at a time, so this
-never collides with inspect mode's `j/k/⏎` (chronicle) or the map's arrow-pan.
+never collides with inspect mode's `j/k/J/K` (chronicle) or the map's arrow-pan.
 Unlike inspect mode, this does **not** require the clock to be paused.
 
 | Key | Roster view | Detail view |
@@ -69,7 +76,7 @@ loaded (or an empty roster) `j/k/g/G/⏎` are strict no-ops.
 ```
 global            2 chronicle 3 metatron 4 villagers (again: solo) · m ask · space pause · q quit
 minibuffer        esc release · ⏎ send · ↑↓ history
-inspect           j/k select · ⏎ expand · space resume · m ask
+inspect           j/k select · J/K scroll detail · space resume · m ask
 villagers roster  j/k select · ⏎ inspect · space pause · q quit
 villagers detail  esc back · space pause · q quit
 ```

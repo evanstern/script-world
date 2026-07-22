@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -353,34 +354,49 @@ func TestInspectSelectionMoveAndJump(t *testing.T) {
 	}
 }
 
-func TestInspectExpandCollapse(t *testing.T) {
+// TestInspectDetailPaneAlwaysVisible: the detail pane shows the selected
+// event verbatim with zero extra keypresses (FR-008, contract §5) — no ⏎
+// required, unlike the inline inspector this replaced.
+func TestInspectDetailPaneAlwaysVisible(t *testing.T) {
 	m := pausedModel(t)
 	m.chronSelected = 2
-	var mdl tea.Model = m
-	mdl = update(mdl, "enter")
-	mm := mdl.(Model)
-	if !mm.chronExpanded || mm.chronExpIdx != 2 {
-		t.Fatal("enter should expand the selected event")
-	}
-	body := mm.chronicleInspectBody(60, 20)
+	body := m.chronicleInspectBody(60, 20)
 	if !strings.Contains(body, `"seq": 3`) {
-		t.Errorf("expanded body should show the verbatim event: %q", body)
+		t.Errorf("detail pane should show the selected event verbatim: %q", body)
 	}
-	mdl = update(mm, "enter")
-	if mdl.(Model).chronExpanded {
-		t.Fatal("enter again should collapse")
+	if !strings.Contains(body, "DETAIL · seq 3") {
+		t.Errorf("detail pane should carry the rule line contract §5 specifies: %q", body)
 	}
 }
 
+// TestInspectEnterIsNoOp: ⏎ is reserved for the future jump-off actions bar
+// (contract §5 "Extension point", R7) — it must not move the selection or
+// change what's rendered.
+func TestInspectEnterIsNoOp(t *testing.T) {
+	m := pausedModel(t)
+	m.chronSelected = 2
+	before := m.chronicleInspectBody(60, 20)
+	var mdl tea.Model = m
+	mdl = update(mdl, "enter")
+	mm := mdl.(Model)
+	if mm.chronSelected != 2 {
+		t.Fatalf("enter must not move the selection: chronSelected = %d", mm.chronSelected)
+	}
+	if after := mm.chronicleInspectBody(60, 20); before != after {
+		t.Errorf("enter is a reserved no-op and must not change the rendered body:\nbefore: %q\nafter:  %q", before, after)
+	}
+}
+
+// TestInspectResetsOnResume: resume clears the selection and the detail
+// pane's scroll offset (data-model.md "Interaction state").
 func TestInspectResetsOnResume(t *testing.T) {
 	m := pausedModel(t)
 	m.chronSelected = 2
-	m.chronExpanded = true
-	m.chronExpIdx = 2
+	m.chronDetailScroll = 3
 	mdl, _ := m.Update(statusMsg{status: &ipc.StatusData{Clock: ipc.ClockStatus{Paused: false}}})
 	mm := mdl.(Model)
-	if mm.chronSelected != -1 || mm.chronExpanded {
-		t.Errorf("resume must collapse and clear selection: selected=%d expanded=%v", mm.chronSelected, mm.chronExpanded)
+	if mm.chronSelected != -1 || mm.chronDetailScroll != 0 {
+		t.Errorf("resume must clear selection and detail scroll: selected=%d scroll=%d", mm.chronSelected, mm.chronDetailScroll)
 	}
 }
 
@@ -397,43 +413,95 @@ func TestInspectStateSurvivesTabSwitch(t *testing.T) {
 	}
 }
 
-// TestInspectSelectionMovesWhileExpanded is the B2 regression:
-// chronicle-grammar.md's "expanding another collapses the first" implies
-// selection moves freely while something is expanded (⏎ on the new
-// selection swaps the expansion) — j/k must never be a no-op just because
-// something is expanded (focus-contract.md rule 4, no silent swallows).
-func TestInspectSelectionMovesWhileExpanded(t *testing.T) {
+// TestInspectSelectionMoveResetsDetailScroll: moving the selection follows
+// with the detail pane (it now shows a different event) and resets any
+// scroll offset back to the top (data-model.md) — carried over from the B2
+// regression this replaces: j/k must never be a no-op, and the composite
+// must stay within its row budget regardless of pane content.
+func TestInspectSelectionMoveResetsDetailScroll(t *testing.T) {
+	m := pausedModel(t)
+	m.chronSelected = 2
+	m.chronDetailScroll = 5
+	var mdl tea.Model = m
+	mdl = update(mdl, "k")
+	mm := mdl.(Model)
+	if mm.chronSelected != 1 {
+		t.Fatalf("k must move the selection: chronSelected = %d, want 1", mm.chronSelected)
+	}
+	if mm.chronDetailScroll != 0 {
+		t.Errorf("selection move must reset detail scroll: got %d, want 0", mm.chronDetailScroll)
+	}
+
+	mdl = update(mm, "j")
+	mdl = update(mdl, "j")
+	if got := mdl.(Model).chronSelected; got != 3 {
+		t.Fatalf("j must move the selection: chronSelected = %d, want 3", got)
+	}
+
+	// B2's regression: the composite must stay within its row budget no
+	// matter the pane content (5 events exactly fill an 8-row split's list).
+	body := mm.chronicleInspectBody(60, 8)
+	if lines := strings.Split(body, "\n"); len(lines) != 8 {
+		t.Fatalf("inspect body must render to exactly its row budget (8): got %d lines:\n%s", len(lines), body)
+	}
+}
+
+// TestInspectDetailScrollKeysAndClamp: J/K scroll the detail pane; K at 0
+// stays at 0; a scroll far past the content is clamped at render time
+// rather than growing the pane or panicking (contract §5, R6).
+func TestInspectDetailScrollKeysAndClamp(t *testing.T) {
 	m := pausedModel(t)
 	m.chronSelected = 2
 	var mdl tea.Model = m
-	mdl = update(mdl, "enter") // expand index 2
+	mdl = update(mdl, "K")
+	if got := mdl.(Model).chronDetailScroll; got != 0 {
+		t.Errorf("K at scroll 0 must clamp at 0: got %d", got)
+	}
+	mdl = update(mdl, "J")
+	mdl = update(mdl, "J")
+	if got := mdl.(Model).chronDetailScroll; got != 2 {
+		t.Errorf("J should increment scroll: got %d, want 2", got)
+	}
+
 	mm := mdl.(Model)
-	if !mm.chronExpanded || mm.chronExpIdx != 2 {
-		t.Fatalf("setup: want index 2 expanded, got expanded=%v idx=%d", mm.chronExpanded, mm.chronExpIdx)
+	mm.chronDetailScroll = 99999 // far past any real content
+	body := mm.chronicleInspectBody(60, 10)
+	if got := len(strings.Split(body, "\n")); got > 10 {
+		t.Fatalf("render-time scroll clamp must not overflow the row budget: got %d lines", got)
 	}
+}
 
-	mdl = update(mm, "k")
-	mm2 := mdl.(Model)
-	if mm2.chronSelected != 1 {
-		t.Fatalf("k while expanded must move the selection: chronSelected = %d, want 1", mm2.chronSelected)
+// TestInspectDetailPaneBoundsOversizedPayload: a world.migrated-sized
+// payload (spec 018 FR-011) must never grow the composite past its row
+// budget — the pane windows the annotated payload rather than emitting it
+// in full, and shows the scroll footer once content overflows.
+func TestInspectDetailPaneBoundsOversizedPayload(t *testing.T) {
+	m := pausedModel(t)
+	seedEvents(&m, 30) // enough events that the list fills its share too
+	// formatAnnotatedPayload renders one line per *top-level* field (nested
+	// values pass through compact) — so a world.migrated-sized payload needs
+	// many top-level siblings, not one deeply-populated nested map, to
+	// actually overflow the pane the way the real embedded sim.State does.
+	fields := make(map[string]json.RawMessage, 40)
+	for i := 0; i < 40; i++ {
+		fields[fmt.Sprintf("field_%02d", i)] = json.RawMessage(fmt.Sprintf(`"value_%d"`, i))
 	}
-	if !mm2.chronExpanded || mm2.chronExpIdx != 2 {
-		t.Errorf("the expansion persists until enter/resume, independent of the selection: expanded=%v idx=%d", mm2.chronExpanded, mm2.chronExpIdx)
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("marshal fixture payload: %v", err)
 	}
+	m.applyEvent(store.Event{Seq: 1000, Tick: 3000, Type: "world.migrated", Payload: payload})
+	m.chronSelected = len(m.events) - 1
 
-	mdl = update(mm2, "j")
-	mdl = update(mdl, "j")
-	if got := mdl.(Model).chronSelected; got != 3 {
-		t.Fatalf("j while expanded must move the selection: chronSelected = %d, want 3", got)
+	body := m.chronicleInspectBody(60, 20)
+	if lines := strings.Split(body, "\n"); len(lines) > 20 {
+		t.Fatalf("an oversized payload must not grow the body past its row budget: got %d lines, want <= 20:\n%s", len(lines), body)
 	}
-
-	// The real B2 failure mode was state moving correctly while an
-	// unbounded expansion pushed the rendered marker past the panel's
-	// row budget — indistinguishable from a no-op in a real terminal.
-	// Assert the bound directly at a deliberately small budget.
-	body := mm2.chronicleInspectBody(60, 8)
-	if lines := strings.Split(body, "\n"); len(lines) > 8 {
-		t.Fatalf("inspect body exceeded its row budget (8): got %d lines — this hides a moved selection off-screen:\n%s", len(lines), body)
+	if !strings.Contains(body, "more — J to scroll") {
+		t.Errorf("an oversized payload should show the scroll footer: %q", body)
+	}
+	if !strings.Contains(body, "[future: actions]") {
+		t.Errorf("the footer should carry the reserved actions slot (FR-009): %q", body)
 	}
 }
 

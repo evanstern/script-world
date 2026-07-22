@@ -90,13 +90,17 @@ type Model struct {
 	chronThread string
 	chronRaw    bool
 
-	// Chronicle inspect mode (TASK-34, panels/chronicle.md): entered
-	// automatically whenever the clock is paused and the chronicle is
-	// visible. Selection indexes the raw feed (events); remembered across
-	// tab switches, collapsed and cleared on resume.
-	chronSelected int // -1 = none
-	chronExpanded bool
-	chronExpIdx   int
+	// Chronicle inspect mode (TASK-34, panels/chronicle.md; detail pane
+	// TASK-60 spec 018 US2): entered automatically whenever the clock is
+	// paused and the chronicle is visible. Selection indexes the raw feed
+	// (events); remembered across tab switches, cleared on resume.
+	// chronDetailScroll is the always-on detail pane's own scroll offset
+	// (contract §5/R6/R7) — reset to 0 on selection move, pause exit, and
+	// reconnect (data-model.md "Interaction state"); the render-time clamp
+	// to the pane's actual content length lives in chronicleInspectBody,
+	// the same defensive-tolerance pattern chronSelectionBase uses.
+	chronSelected     int // -1 = none
+	chronDetailScroll int
 
 	// Metatron (TASK-12, re-surfaced as the minibuffer by TASK-34): the
 	// transcript is dock/pane content; mbInput/mbFocused/mbBusy are the
@@ -287,7 +291,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.status
 		m.replica = msg.replica
 		m.lastSeq = msg.lastSeq
-		m.clampVillSelected() // R5: connectedMsg swaps the replica wholesale
+		m.clampVillSelected()   // R5: connectedMsg swaps the replica wholesale
+		m.chronDetailScroll = 0 // data-model.md: detail pane scroll resets on reconnect
 		return m, listen(m.client)
 
 	case disconnectedMsg:
@@ -321,9 +326,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nowPaused := m.status != nil && m.status.Clock.Paused
 		if wasPaused && !nowPaused {
 			// Resume: collapse everything, snap back to tail-follow
-			// (panels/chronicle.md Mode 2 "On resume").
+			// (panels/chronicle.md Mode 2 "On resume"; contract §5/R7).
 			m.chronSelected = -1
-			m.chronExpanded = false
+			m.chronDetailScroll = 0
 		}
 		return m, nil
 
@@ -711,7 +716,11 @@ func (m *Model) historyDown() {
 
 // handleInspectKey is patterns/keymap.md "Mode: inspect" — layered on top
 // of the global mode, never replacing it (handled is false for any key it
-// does not own, so handleKey falls through to handleGlobalKey).
+// does not own, so handleKey falls through to handleGlobalKey). J/K scroll
+// the always-on detail pane (contract §5/§6, R6); ⏎ is reserved (R7) — the
+// pane's [future: actions] slot and detailActions are the documented
+// attachment point (FR-009, contract §5 "Extension point"), so it is
+// swallowed (handled=true) rather than left to fall through by accident.
 func (m Model) handleInspectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	switch msg.String() {
 	case "j":
@@ -726,9 +735,16 @@ func (m Model) handleInspectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case "G":
 		m.chronJumpLast()
 		return m, nil, true
-	case "enter":
-		m.chronToggleExpand()
+	case "J":
+		m.chronDetailScroll++ // clamped to content length at render time
 		return m, nil, true
+	case "K":
+		if m.chronDetailScroll > 0 {
+			m.chronDetailScroll--
+		}
+		return m, nil, true
+	case "enter":
+		return m, nil, true // reserved no-op (contract §5 "Extension point")
 	}
 	return m, nil, false
 }
@@ -850,6 +866,7 @@ func (m *Model) chronMoveSelection(delta int) {
 		sel = n - 1
 	}
 	m.chronSelected = sel
+	m.chronDetailScroll = 0 // data-model.md: reset on selection move
 }
 
 func (m *Model) chronJumpFirst() {
@@ -857,6 +874,7 @@ func (m *Model) chronJumpFirst() {
 		return
 	}
 	m.chronSelected = 0
+	m.chronDetailScroll = 0
 }
 
 func (m *Model) chronJumpLast() {
@@ -864,22 +882,23 @@ func (m *Model) chronJumpLast() {
 		return
 	}
 	m.chronSelected = len(m.events) - 1
+	m.chronDetailScroll = 0
 }
 
-// chronToggleExpand: "One event expanded at a time; expanding another
-// collapses the first" (panels/chronicle.md).
-func (m *Model) chronToggleExpand() {
-	sel := m.chronSelectionBase()
-	if sel < 0 {
-		return
-	}
-	m.chronSelected = sel
-	if m.chronExpanded && m.chronExpIdx == sel {
-		m.chronExpanded = false
-		return
-	}
-	m.chronExpanded = true
-	m.chronExpIdx = sel
+// detailAction is one future jump-off action attachable to the detail
+// pane's bottom-right "[future: actions]" slot (contract §5 "Extension
+// point", FR-009). Not populated by this feature — the hook exists so a
+// later feature can wire actions (e.g. "jump to related event") without
+// re-deriving where they attach; ⏎ (handleInspectKey) is the reserved key.
+type detailAction struct {
+	Label string
+}
+
+// detailActions returns the jump-off actions available for one event.
+// Always nil today; deliberately takes the event so a future
+// implementation doesn't need to change the call site.
+func detailActions(e store.Event) []detailAction {
+	return nil
 }
 
 func (m Model) handlePush(p ipc.Push) (tea.Model, tea.Cmd) {
