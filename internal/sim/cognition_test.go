@@ -14,7 +14,7 @@ import (
 // inject_social door; agent.intent_rejected is loop-emitted only and must
 // NOT be injectable from the mind.
 func TestCognitionTelemetryWhitelisted(t *testing.T) {
-	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended"} {
+	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended", "cog.tool_call"} {
 		if !injectSocialWhitelist[typ] {
 			t.Errorf("%s not whitelisted", typ)
 		}
@@ -45,6 +45,11 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 		"agent.intent_rejected": IntentRejectedPayload{
 			Agent: 3, Goal: "talk_to", Reason: "stale", StalenessTicks: 1646,
 		},
+		"cog.tool_call": CogToolCallPayload{
+			Job: "planner-3-412800", Ordinal: 2, Tool: "set_plan",
+			Args:    json.RawMessage(`{"steps":[{"goal":"chop"}]}`),
+			Verdict: "landed", Tier: "local", SnapshotTick: 412800,
+		},
 	}
 	for typ, p := range payloads {
 		b, err := json.Marshal(p)
@@ -57,6 +62,88 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 	}
 	if string(s.Marshal()) != string(before) {
 		t.Error("telemetry event mutated state")
+	}
+}
+
+// TestCogToolCallPayloadMarshalOrder pins the canonical field order
+// (contracts/events.md): future additive fields must go last, omitempty, so
+// existing cog.tool_call events keep replaying byte-identically.
+func TestCogToolCallPayloadMarshalOrder(t *testing.T) {
+	p := CogToolCallPayload{
+		Job:          "planner-3-412800",
+		Ordinal:      2,
+		Tool:         "set_plan",
+		Args:         json.RawMessage(`{"steps":[{"goal":"chop"},{"goal":"build_fire"}]}`),
+		Verdict:      "landed",
+		Reason:       "",
+		Tier:         "local",
+		SnapshotTick: 412800,
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// reason is empty here, so omitempty drops it — the marshaled order is
+	// job, ordinal, tool, args, verdict, tier, snapshot_tick.
+	want := `{"job":"planner-3-412800","ordinal":2,"tool":"set_plan","args":{"steps":[{"goal":"chop"},{"goal":"build_fire"}]},"verdict":"landed","tier":"local","snapshot_tick":412800}`
+	if string(b) != want {
+		t.Errorf("marshal order mismatch:\n got  %s\n want %s", b, want)
+	}
+
+	// A rejected verdict carries a reason: it lands right after verdict,
+	// still before tier/snapshot_tick.
+	p.Verdict = "rejected_malformed"
+	p.Reason = "unknown param \"qty\""
+	p.Args = nil
+	b, err = json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = `{"job":"planner-3-412800","ordinal":2,"tool":"set_plan","verdict":"rejected_malformed","reason":"unknown param \"qty\"","tier":"local","snapshot_tick":412800}`
+	if string(b) != want {
+		t.Errorf("marshal order mismatch (reason+no args):\n got  %s\n want %s", b, want)
+	}
+}
+
+// TestCogToolCallInjectableAndNoOp: a cog.tool_call event lands through the
+// mind's InjectSocial door (whitelist admission) and applies as a reducer
+// no-op — recorded observability, zero state effect (spec 017 FR-007).
+func TestCogToolCallInjectableAndNoOp(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	before, _, err := h.loop.DoState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := CogToolCallPayload{
+		Job: "planner-3-412800", Ordinal: 1, Tool: "chop",
+		Verdict: "landed", Tier: "local", SnapshotTick: 10000,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.loop.InjectSocial([]store.Event{{Type: "cog.tool_call", Payload: b}}); err != nil {
+		t.Fatalf("InjectSocial rejected whitelisted cog.tool_call: %v", err)
+	}
+	after, _, err := h.loop.DoState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Error("cog.tool_call mutated state")
+	}
+	evs, err := h.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range evs {
+		if e.Type == "cog.tool_call" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("cog.tool_call was not admitted through InjectSocial")
 	}
 }
 

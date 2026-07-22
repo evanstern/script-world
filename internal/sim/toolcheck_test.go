@@ -74,21 +74,26 @@ func TestExpressiveEventsWhitelisted(t *testing.T) {
 // ZERO entries. The whitelist is the isolation boundary; the registry
 // formalizes what passes through it without widening or narrowing it. If a
 // future change touches the whitelist, this test must be updated deliberately.
+//
+// Spec 017 (agent tool loop) deliberately widens the boundary by exactly one
+// entry, "cog.tool_call" (contracts/events.md: "the whitelist's ONLY
+// change") — the tool-use loop's call trace, a cog.* type like the three
+// above it.
 func TestWhitelistDiffIdentical(t *testing.T) {
 	want := map[string]bool{
-		"social.relation_changed":       true,
-		"social.rumor_told":             true,
-		"social.conversation_turn":      true,
-		"social.conversation":           true,
-		"agent.memory_added":            true,
-		"agent.memory_promoted":         true,
-		"agent.memory_faded":            true,
-		"agent.belief_revised":          true,
-		"agent.narrative_set":           true,
-		"agent.consolidated":            true,
-		"agent.thought":                 true,
-		"chronicle.entry":               true,
-		"metatron.nudged":               true,
+		"social.relation_changed":  true,
+		"social.rumor_told":        true,
+		"social.conversation_turn": true,
+		"social.conversation":      true,
+		"agent.memory_added":       true,
+		"agent.memory_promoted":    true,
+		"agent.memory_faded":       true,
+		"agent.belief_revised":     true,
+		"agent.narrative_set":      true,
+		"agent.consolidated":       true,
+		"agent.thought":            true,
+		"chronicle.entry":          true,
+		"metatron.nudged":          true,
 		// Spec 016 (metatron miracles) deliberately widens the isolation
 		// boundary by four recorded miracle event types (contracts §4). They
 		// land through the same InjectSocial door as the nudge; they are NOT
@@ -102,6 +107,7 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		"cog.thought":                   true,
 		"cog.outcome":                   true,
 		"cog.recalibration_recommended": true,
+		"cog.tool_call":                 true,
 	}
 	for typ := range want {
 		if !injectSocialWhitelist[typ] {
