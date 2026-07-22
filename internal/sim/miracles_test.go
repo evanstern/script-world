@@ -483,8 +483,10 @@ func TestGratisValidationSurvives(t *testing.T) {
 	}
 	for _, c := range invalids {
 		t.Run(c.label, func(t *testing.T) {
-			// Charged and forced runs use identical fresh states.
-			run := func(gratis bool) (string, error) {
+			// Charged and forced runs on identical fresh states. Each returns the
+			// error and the after-state bytes; the before-state bytes are checked
+			// in-run (no partial application).
+			run := func(gratis bool) (after string, err error) {
 				s := NewState(seed, m)
 				s.MetatronCharges = 3
 				a := &s.Agents[0]
@@ -494,24 +496,21 @@ func TestGratisValidationSurvives(t *testing.T) {
 					pl = mv
 				}
 				before := string(s.Marshal())
-				err := applyMiracleErr(s, 40, c.typ, pl)
-				return before + "|" + string(s.Marshal()), err
+				err = applyMiracleErr(s, 40, c.typ, pl)
+				after = string(s.Marshal())
+				if after != before {
+					t.Errorf("gratis=%v: rejected miracle mutated state (partial application)", gratis)
+				}
+				return after, err
 			}
 			charged, cerr := run(false)
 			forced, ferr := run(true)
 			if cerr == nil || ferr == nil {
 				t.Fatalf("both charged and forced must reject: charged=%v forced=%v", cerr, ferr)
 			}
-			// Same rejection, same untouched state (before==after in each).
-			cParts := charged
-			fParts := forced
-			if cParts != fParts {
-				t.Errorf("charged vs forced left different state:\n charged: %s\n forced:  %s", cParts, fParts)
-			}
-			// Reconfirm no partial application: before == after.
-			for _, p := range []string{charged, forced} {
-				half := len(p) / 2
-				_ = half
+			// Gratis is not a validity waiver: identical rejection, identical state.
+			if charged != forced {
+				t.Errorf("charged vs forced left different state:\n charged: %s\n forced:  %s", charged, forced)
 			}
 		})
 	}
