@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 06:41'
+updated_date: '2026-07-22 06:57'
 labels: []
 dependencies:
   - TASK-50
@@ -25,7 +25,7 @@ Spec: specs/013-inventory-storage
 - [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #3 Spec phase: User Story 1 — Villagers can only carry so much (P1) 🎯 MVP
 - [x] #4 Spec phase: User Story 2 — Ground piles and emergent stockpiles (P2)
-- [ ] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
+- [x] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
 - [ ] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
 - [ ] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
 - [ ] #8 Spec phase: Migration & Format Door (Cross-Cutting)
@@ -54,4 +54,6 @@ Phase 1+2 complete on task-51-inventory-storage (worktree .worktrees/task-51): 7
 US1 (bulk cap) complete: 0aa5c6e mechanics (T010-T014: reducer yield clamps, zero-space guard, craft net-delta + give guards, R2 audit table test, degraded-mode SC-001 regression — 3 seeds), 2c29a21 TUI bulk n/24 (T015, Sonnet). Full suite green. Deviation accepted: 012's whole-feature replay test scenario reworked consume-as-you-go (its genesis seeded 48 bulk, impossible under cap 24); all 012 event types still exercised, replay byte-identical. R2 prose fix fa3ec23 (plankYield 4 -> net +3). Branch pushed.
 
 US2 (piles) complete: a5c6ffd mechanics (T016-T020: drop/pick_up goals with Kind/Qty threading through resolveGoal+InjectArgs, death spill reducer-internal on agent.died, build-site pile guard in buildSite, 6-test suite incl. contested same-tick pickup + replay byte-identity), 260084b contract note (contested pickup keeps contested-gather idiom), 29d65c3 TUI+vocab (T021-T022, Sonnet: % pile glyph, render-side BFS zone grouping, legend inspection line, planner kind/qty parse wiring in mind/parse.go with validation — storage kind key is 'spears' plural). Full suite green both dispatches; US1 degraded-mode gate stays green.
+
+US3 (chests) mechanics complete: d700cbd (T023-T025) — build_chest goal (build_oven pattern, buildFireTicks duration), deposit/withdraw instant goals with double-clamped total reducers, chestAt helper, spears most-worn-first through chests, 6-test suite incl. owner-survives-death, full-rot-window chest-food immortality, replay byte-identity. Full suite green. Chest-built salience memory deliberately deferred to T030 (US4 salience table) per tasks.md scope. T026/T027 (TUI + vocab, Sonnet) next.
 <!-- SECTION:NOTES:END -->
