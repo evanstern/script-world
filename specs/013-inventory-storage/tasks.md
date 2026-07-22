@@ -159,7 +159,7 @@ and their belongings — intact.
 - [X] T038 [P] Whole-feature replay test in `internal/sim`: one scripted run exercising EVERY new event type + death spill + rot + theft, byte-identical state hash on replay (SC-005); confirm new types no-op under the unknown-type convention
 - [X] T039 Quickstart live smoke (quickstart.md §Live validation) against a fresh v3 world in a scratch worlds home: SC-002 (full storage loop within 2 game days of planks) + SC-006 (TUI answers) observed; record observations on TASK-51 — deterministic half done (fresh v3 boot/stop, v2→v3 migration boot, SC-006 storage surfaces via headless snapshot dump); planner-driven SC-002 deferred to post-merge live observation per the 012/T045 precedent
 - [X] T040 `go build ./... && go vet ./... && go test ./...` green; open TASK-51's single PR from `.worktrees/task-51`
-- [ ] T041 Post-merge DoD tail: `/grounding-wiki:wiki-update` (re-pin list in quickstart.md §Post-merge), `spec-bridge:sync`, worktree cleanup, root ff-pull
+- [X] T041 Post-merge DoD tail: `/grounding-wiki:wiki-update` (re-pin list in quickstart.md §Post-merge), `spec-bridge:sync`, worktree cleanup, root ff-pull
 
 ---
 
