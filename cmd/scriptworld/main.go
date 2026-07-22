@@ -17,6 +17,7 @@ starts with "." or "~") is used exactly as given.
 Usage:
   scriptworld new <name> [--at DIR] [--seed N]     create a world by name in the worlds home
   scriptworld new <path> [--name NAME] [--seed N]  create a world at an explicit path (legacy form)
+  scriptworld migrate <world>                      migrate a stopped v1 world to the current format
   scriptworld ps [--all] [--json]                  list world daemons machine-wide
   scriptworld daemon <world>                       run the daemon in the foreground
   scriptworld start <world>                        start a detached daemon
@@ -46,6 +47,8 @@ func main() {
 	switch cmd {
 	case "new":
 		err = cmdNew(args)
+	case "migrate":
+		err = cmdMigrate(args)
 	case "ps":
 		err = cmdPs(args)
 	case "daemon":

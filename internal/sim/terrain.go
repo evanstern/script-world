@@ -22,6 +22,15 @@ func effectiveKind(m *worldmap.Map, s *State, x, y int) worldmap.TileKind {
 				return worldmap.Grass
 			}
 		}
+	case worldmap.Rock:
+		// Quarried (spec 012): unlike Cleared/Harvested, a depleted outcrop
+		// does NOT revert to Grass — it stays non-buildable and non-quarryable,
+		// rendered distinctly (worldmap.Depleted), permanent in v1 (no regrow).
+		for _, q := range s.Quarried {
+			if q.X == x && q.Y == y {
+				return worldmap.Depleted
+			}
+		}
 	}
 	return k
 }
@@ -31,7 +40,7 @@ func passable(m *worldmap.Map, s *State, x, y int) bool {
 		return false
 	}
 	k := effectiveKind(m, s, x, y)
-	return k == worldmap.Grass || k == worldmap.Forage
+	return k == worldmap.Grass || k == worldmap.Forage || k == worldmap.Depleted
 }
 
 // buildSite: effective grass with no structure on it.
@@ -47,12 +56,14 @@ func buildSite(m *worldmap.Map, s *State, x, y int) bool {
 	return true
 }
 
-// warmAt: within fireWarmRadius of a fire, or exactly on a shelter tile.
-func warmAt(s *State, x, y int) bool {
+// warmAt: within fireWarmRadius of a LIT fire, or exactly on a shelter tile.
+// A fire is lit iff tick < FuelUntil (T019): a burned-out fire grants no
+// warmth. Shelter warmth is unchanged (no fuel).
+func warmAt(s *State, x, y int, tick int64) bool {
 	for _, st := range s.Structures {
 		switch st.Kind {
 		case "fire":
-			if abs(st.X-x)+abs(st.Y-y) <= fireWarmRadius {
+			if tick < st.FuelUntil && abs(st.X-x)+abs(st.Y-y) <= fireWarmRadius {
 				return true
 			}
 		case "shelter":
@@ -80,6 +91,25 @@ func (s *State) hasStructure(kind string) bool {
 		}
 	}
 	return false
+}
+
+// fireStructAt returns a pointer to the fire structure on (x,y), if any
+// (T020/T021: refuel/cook re-validate the station at completion by coord).
+func fireStructAt(s *State, x, y int) (*Structure, bool) {
+	for i := range s.Structures {
+		st := &s.Structures[i]
+		if st.Kind == "fire" && st.X == x && st.Y == y {
+			return st, true
+		}
+	}
+	return nil, false
+}
+
+// litFireAt reports whether a LIT fire stands on (x,y) at tick — the cook
+// station predicate (T021). Lit-ness is derived: tick < FuelUntil.
+func litFireAt(s *State, x, y int, tick int64) bool {
+	st, ok := fireStructAt(s, x, y)
+	return ok && tick < st.FuelUntil
 }
 
 func denReadyAt(s *State, x, y int, tick int64) bool {

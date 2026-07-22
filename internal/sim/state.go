@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/store"
@@ -32,6 +33,11 @@ type State struct {
 	Cleared       []Point     `json:"cleared,omitempty"`
 	Harvested     []Harvest   `json:"harvested,omitempty"`
 	DenUses       []DenUse    `json:"den_uses,omitempty"`
+	// Quarried (spec 012, US1) marks depleted rock outcrops — permanent in
+	// v1, no regrow entry (unlike Harvested/Cleared, which do regrow). A
+	// quarried tile is passable but NOT buildable and NOT quarryable again;
+	// effectiveKind renders it as worldmap.Depleted, distinct from Grass.
+	Quarried []Point `json:"quarried,omitempty"`
 	// Social fabric (TASK-8) — all event-sourced.
 	Relations   []Relation `json:"relations,omitempty"`
 	Debts       []Debt     `json:"debts,omitempty"`
@@ -78,24 +84,39 @@ func NewState(seed uint64, m *worldmap.Map) *State {
 		Agents:          make([]Agent, agentCount),
 		MetatronCharges: MetatronGenesisCharges,
 	}
-	taken := map[Point]bool{}
+	pos := genesisPlacement(seed, m, agentCount)
 	for i := range s.Agents {
+		s.Agents[i] = Agent{
+			Name:  AgentNames[i],
+			X:     pos[i].X,
+			Y:     pos[i].Y,
+			Needs: Needs{Health: 1000, Food: 600, Rest: 800, Warmth: 800, Morale: 600},
+		}
+	}
+	return s
+}
+
+// genesisPlacement assigns each of count agents a distinct passable tile,
+// deterministically from (seed, "genesis", …) with no long-lived RNG stream
+// (rng.go). Shared by NewState (cold-start genesis) and MigrateState (spec
+// 012 US6: re-placing carried souls on the regenerated v2 map) so the two use
+// byte-identical placement — the migration lands villagers exactly where a
+// fresh world of that seed would, on passable v2 tiles.
+func genesisPlacement(seed uint64, m *worldmap.Map, count int) []Point {
+	pos := make([]Point, count)
+	taken := map[Point]bool{}
+	for i := 0; i < count; i++ {
 		for n := int64(0); ; n++ {
 			r := rngAt(seed, "genesis", n, i)
-			x, y := int(r.Uint64N(uint64(m.W))), int(r.Uint64N(uint64(m.H)))
-			if m.Passable(x, y) && !taken[Point{X: x, Y: y}] {
-				taken[Point{X: x, Y: y}] = true
-				s.Agents[i] = Agent{
-					Name:  AgentNames[i],
-					X:     x,
-					Y:     y,
-					Needs: Needs{Health: 1000, Food: 600, Rest: 800, Warmth: 800, Morale: 600},
-				}
+			p := Point{X: int(r.Uint64N(uint64(m.W))), Y: int(r.Uint64N(uint64(m.H)))}
+			if m.Passable(p.X, p.Y) && !taken[p] {
+				taken[p] = true
+				pos[i] = p
 				break
 			}
 		}
 	}
-	return s
+	return pos
 }
 
 // Marshal renders canonical state bytes (struct field order is fixed, so the
@@ -143,6 +164,17 @@ type (
 	}
 	DaemonStoppedPayload struct {
 		Tick int64 `json:"tick"`
+	}
+	// WorldMigratedPayload (spec 012, US6) carries the full transformed v2 state
+	// of a migrated v1 world. Appended once to the fresh v2 log right after
+	// world.created; the reducer replaces State wholesale (after validating
+	// name/seed), so the log alone reproduces the migrated world with zero
+	// snapshots. State is the full canonical sim.State (struct-embedded).
+	WorldMigratedPayload struct {
+		FromFormat   int   `json:"from_format"`
+		SourceEvents int64 `json:"source_events"`
+		SourceTick   int64 `json:"source_tick"`
+		State        State `json:"state"`
 	}
 )
 
@@ -332,7 +364,7 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Food += forageYield
+		a.Inv.FoodRaw += forageYieldV2
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
@@ -358,7 +390,19 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Food += huntYield
+		// T027: spear-aware hunting — carrying a spear yields huntYieldSpear
+		// (12) and spends the most-worn spear's (Spears[0]) last use. This is
+		// re-derived from the SAME pre-mutation state the emitter checked
+		// (contracts/events.md: "no new types" for this — yield/spend are
+		// state-derived, not payload-carried). A companion agent.spear_broke,
+		// if any, applies right after this in the same batch and removes the
+		// now-zero spear.
+		if len(a.Inv.Spears) > 0 {
+			a.Inv.FoodRaw += huntYieldSpear
+			a.Inv.Spears[0]--
+		} else {
+			a.Inv.FoodRaw += huntYieldBare
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		out := s.DenUses[:0]
@@ -377,16 +421,28 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		cost := fireWoodCost
-		if p.Kind == "shelter" {
-			cost = shelterWoodCost
+		// T030/T036: costs come from the recipes table (the single source) by
+		// its "build_<kind>" goal — shelter (planks, re-costed from wood) and
+		// oven (refined stone + planks) both fall out of this the same way
+		// fire always has.
+		if r, ok := recipeFor("build_" + p.Kind); ok {
+			addItems(&a.Inv, r.Inputs, -1)
 		}
-		a.Inv.Wood = maxInt(0, a.Inv.Wood-cost)
 		a.Intent = nil
 		a.IdleSince = e.Tick
-		s.Structures = append(s.Structures, Structure{Kind: p.Kind, X: p.X, Y: p.Y})
+		st := Structure{Kind: p.Kind, X: p.X, Y: p.Y}
+		if p.Kind == "fire" {
+			// T019: a fresh fire (2 wood) burns 2×fireBurnPerWood from now; the
+			// fuel sweep burns it out and refuel pushes FuelUntil forward.
+			st.FuelUntil = e.Tick + 2*fireBurnPerWood
+		}
+		s.Structures = append(s.Structures, st)
 	case "agent.ate":
-		var p AgentPayload
+		// T018: outcome-payload eat — the emitter computed the
+		// most-nutritious-first consumption (Meals → FoodCooked → FoodRaw) to
+		// satiety; the reducer decrements the counts and sets the absolute
+		// post-eat food need. No arithmetic that could drift on replay.
+		var p AtePayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			return fmt.Errorf("apply %s: %w", e.Type, err)
 		}
@@ -394,10 +450,175 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		if a.Inv.Food > 0 {
-			a.Inv.Food--
-			a.Needs.Food = minInt(1000, a.Needs.Food+eatFoodValue)
+		a.Inv.Meals = maxInt(0, a.Inv.Meals-p.Meals)
+		a.Inv.FoodCooked = maxInt(0, a.Inv.FoodCooked-p.Cooked)
+		a.Inv.FoodRaw = maxInt(0, a.Inv.FoodRaw-p.Raw)
+		a.Needs.Food = p.FoodAfter
+
+	// --- spec 012 resources/food/crafting v2 event surface ---
+	// Registered as explicit no-ops in Phase 2 so each later story fills its own
+	// case without merge collisions, and so the reducer documents the v2 event
+	// vocabulary. Until wired, behavior is identical to the unknown-type
+	// fall-through: recorded history, zero state effect (contracts/events.md).
+	case "agent.quarried":
+		var p HarvestPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
 		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Stone += quarryYield
+		a.Intent = nil
+		a.IdleSince = e.Tick
+		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
+	case "agent.collected_water":
+		var p HarvestPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Water += collectWaterYield
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.crafted":
+		// T026: recipe delta re-derived from recipes.go by the crafted kind's
+		// goal (recipes.go stays the single source — no duplicated numbers
+		// here). Spear durability doesn't fit a plain int field: a fresh
+		// spear (spearDurability uses) is appended to Spears, kept sorted
+		// ascending so hunts always spend the most-worn spear first.
+		var p CraftedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		goal := craftGoalFor(p.Kind)
+		r, ok := recipeFor(goal)
+		if !ok {
+			return fmt.Errorf("apply %s: no recipe for crafted kind %q", e.Type, p.Kind)
+		}
+		addItems(&a.Inv, r.Inputs, -1)
+		if p.Kind == "spear" {
+			a.Inv.Spears = append(a.Inv.Spears, spearDurability)
+			sort.Ints(a.Inv.Spears)
+		} else {
+			addItems(&a.Inv, r.Outputs, 1)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.cooked":
+		// T021: a cook batch. FoodRaw -= consumed; the produced kind gains the
+		// same count (fire → food_cooked; oven → meals, wired in Phase 6). The
+		// oven also burns 1 Wood (T031). Station lit-ness was re-validated by
+		// the emitter (contested pattern) — the reducer applies the outcome.
+		var p CookedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.FoodRaw = maxInt(0, a.Inv.FoodRaw-p.Consumed)
+		switch p.Kind {
+		case "food_cooked":
+			a.Inv.FoodCooked += p.Produced
+		case "meals":
+			a.Inv.Meals += p.Produced
+		}
+		if p.Station == "oven" {
+			a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.bathed":
+		// T032: water's only v1 consumer. Morale/Warmth are absolute post-cap
+		// values (gru-pattern) — the emitter already applied the cap, so the
+		// reducer never recomputes arithmetic that could drift on replay.
+		var p BathedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Water = maxInt(0, a.Inv.Water-1)
+		a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		a.Needs.Morale = p.MoraleAfter
+		a.Needs.Warmth = p.WarmthAfter
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.refueled":
+		// T020: 1 Wood spent; the fire's FuelUntil is set to the absolute
+		// deadline the emitter already capped. Relighting a cold fire is the
+		// same assignment (lit-ness is derived from FuelUntil vs tick).
+		var p RefueledPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		for i := range s.Structures {
+			st := &s.Structures[i]
+			if st.Kind == "fire" && st.X == p.X && st.Y == p.Y {
+				st.FuelUntil = p.FuelUntil
+				break
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.spear_broke":
+		// T027: the batch's preceding agent.hunted already decremented
+		// Spears[0] to zero (spent its last use) — this event just removes
+		// the now-empty entry. The companion memory rides alongside as its
+		// own agent.memory_added event, not part of this payload.
+		var p SpearBrokePayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Inv.Spears) > 0 {
+			a.Inv.Spears = a.Inv.Spears[1:]
+		}
+	case "sim.fire_burned_out":
+		// T019: no state effect — lit-ness is derived from FuelUntil; the event
+		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
+	case "world.migrated":
+		// T038 (spec 012 US6): the format-break migration event carries the FULL
+		// transformed v2 state (research R10) — the reducer replaces State
+		// wholesale so the log alone (world.created → world.migrated, zero
+		// snapshots) reproduces the migrated world byte-identically. v1 events
+		// are never replayed under v2 rules; this single event is the whole
+		// history-before-the-break, distilled to one canonical state.
+		var p WorldMigratedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		// Seed is the world's identity carried in State (Name lives in the
+		// manifest, not State — the migrate command stamps it on the preceding
+		// world.created and preserves the seed through the transform). A payload
+		// whose seed disagrees with the world being replayed is a foreign
+		// migration record: no-op, keeping the reducer total (never errors on a
+		// well-formed but mismatched event, exactly like the contested-resource
+		// completions).
+		if p.State.Seed != s.Seed {
+			return nil
+		}
+		*s = p.State
 
 	case "agent.slept":
 		var p AgentPayload

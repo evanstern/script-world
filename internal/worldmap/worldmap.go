@@ -22,6 +22,13 @@ const (
 	Water
 	Tree
 	Forage
+	Rock // spec 012: rock outcrops, quarryable stone (impassable while standing)
+	// Depleted is an effective-kind-only value (internal/sim/terrain.go): a
+	// quarried-out rock outcrop. It never appears in a generated Map — it is
+	// produced only by the sim package's overlay merge, to mark ground that
+	// is passable but NOT buildable and NOT quarryable again (distinct from
+	// Grass, which both Cleared trees and Harvested forage revert to).
+	Depleted
 )
 
 // DefaultSize is the v1 village area; the representation itself is
@@ -49,8 +56,8 @@ func (m *Map) InBounds(x, y int) bool {
 	return x >= 0 && x < m.W && y >= 0 && y < m.H
 }
 
-// Passable is walkable terrain: grass and forage. Water and standing trees
-// block movement.
+// Passable is walkable terrain: grass and forage. Water, standing trees, and
+// rock outcrops block movement.
 func (m *Map) Passable(x, y int) bool {
 	if !m.InBounds(x, y) {
 		return false
@@ -93,6 +100,7 @@ func (m *Map) Hash() string {
 const (
 	waterFraction  = 0.18 // lowest-lying land floods
 	treeFraction   = 0.24 // moistest dry land forests
+	rockFraction   = 0.06 // highest-elevation remaining dry grass, after trees (spec 012 research R1)
 	foragePerMille = 45   // ~4.5% of open grass carries forage
 	denCount       = 4
 	denMinDistance = 12
@@ -143,6 +151,31 @@ func Generate(seed uint64, w, h int) *Map {
 		}
 	}
 
+	// Rock outcrops: the highest-elevation ~6% of dry grass remaining after
+	// trees (spec 012 research R1), scored by the existing elevation field
+	// plus a small hash-jitter (purpose "rock") so patches get a coherent-but-
+	// textured edge instead of a smooth ridge line. Reuses the elevation
+	// field rather than adding a new noise pass — correlated noise already
+	// yields patches, exactly like trees claiming the moistest fraction.
+	var dryHeight []float64
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			i := y*w + x
+			if m.Tiles[i] == Grass {
+				dryHeight = append(dryHeight, height[i]+rockJitter(seed, x, y))
+			}
+		}
+	}
+	rockLine := percentileTop(dryHeight, rockFraction)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			i := y*w + x
+			if m.Tiles[i] == Grass && height[i]+rockJitter(seed, x, y) >= rockLine {
+				m.Tiles[i] = Rock
+			}
+		}
+	}
+
 	// Forage: scattered over remaining grass by per-tile hash.
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
@@ -173,6 +206,14 @@ func Generate(seed uint64, w, h int) *Map {
 	}
 
 	return m
+}
+
+// rockJitter is a small deterministic nudge (purpose "rock") added to the
+// elevation score before the rock-outcrop percentile cut: elevation stays
+// the dominant, spatially-correlated signal (coherent patches), while the
+// jitter roughens the patch boundary and breaks exact-tie ordering.
+func rockJitter(seed uint64, x, y int) float64 {
+	return float64(hash2(seed, "rock", x, y)%1000) / 1000 * 0.05
 }
 
 func percentile(values []float64, frac float64) float64 {

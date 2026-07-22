@@ -79,7 +79,10 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 	evs := []store.Event{ev("agent.plan_step_started", PlanStepPayload{
 		Agent: idx, Job: st.Job, Step: st.Goal})}
 	if direct == "agent.ate" {
-		evs = append(evs, ev("agent.ate", AgentPayload{Agent: idx}))
+		if p, ok := eatOutcome(a); ok {
+			p.Agent = idx
+			evs = append(evs, ev("agent.ate", p))
+		}
 	} else if intent != nil {
 		evs = append(evs, ev("agent.intent_set", IntentSetPayload{
 			Agent: idx, Goal: intent.Goal,

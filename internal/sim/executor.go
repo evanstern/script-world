@@ -62,6 +62,31 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Fire fuel burnout (T019): a fire whose deadline falls in this tick's
+	// window goes cold — emit sim.fire_burned_out exactly once on the
+	// transition (tick-1 < FuelUntil <= tick). Pure function of (state, tick);
+	// lit-ness stays derived from FuelUntil, so the event carries no state
+	// effect. Refuel pushes FuelUntil forward, re-arming this detection.
+	for _, st := range s.Structures {
+		if st.Kind == "fire" && st.FuelUntil > nextTick-1 && st.FuelUntil <= nextTick {
+			emit("sim.fire_burned_out", FireBurnedOutPayload{X: st.X, Y: st.Y})
+			// Deferred Phase-4 item (contracts/events.md): a fire going cold
+			// nearby is background texture, not formative — low salience,
+			// purely personal (no gossip subject), same witness-radius idiom
+			// as the oven-built/death witnessing above. Fixed agent
+			// iteration order keeps this deterministic.
+			for w := range s.Agents {
+				if s.Agents[w].Dead {
+					continue
+				}
+				if abs(s.Agents[w].X-st.X)+abs(s.Agents[w].Y-st.Y) <= witnessRadius {
+					events = append(events, memoryEvent(nextTick, w, salFireOut,
+						"Watched the fire burn out."))
+				}
+			}
+		}
+	}
+
 	// Per-game-minute needs heartbeat: decay, warmth, death.
 	if nextTick%60 == 0 {
 		for i := range s.Agents {
@@ -69,7 +94,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			if a.Dead {
 				continue
 			}
-			n := decayNeeds(a.Needs, a.Asleep, night, warmAt(s, a.X, a.Y))
+			n := decayNeeds(a.Needs, a.Asleep, night, warmAt(s, a.X, a.Y, nextTick), s.structureAt("shelter", a.X, a.Y))
 			emit("agent.needs_changed", NeedsPayload{
 				Agent: i, Health: n.Health, Food: n.Food, Rest: n.Rest, Warmth: n.Warmth, Morale: n.Morale,
 			})
@@ -175,7 +200,10 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 				d := decideIntent(s, m, i, nextTick)
 				switch {
 				case d.directEvent == "agent.ate":
-					emit("agent.ate", AgentPayload{Agent: i})
+					if p, ok := eatOutcome(a); ok {
+						p.Agent = i
+						emit("agent.ate", p)
+					}
 				case d.intent != nil:
 					emit("agent.intent_set", IntentSetPayload{
 						Agent: i, Goal: d.intent.Goal,
@@ -361,7 +389,10 @@ func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
 }
 
 func canGive(a *Agent, tick int64) bool {
-	return a.Inv.Food >= giveKeepsAtLeast &&
+	// Give-to-starving stays on raw food (T018 decision: simplest re-expression
+	// of the pre-feature gift; the food triplet's least-nutritious form is what
+	// a subsistence village shares — see social.go apply).
+	return a.Inv.FoodRaw >= giveKeepsAtLeast &&
 		(a.LastGive == 0 || tick-a.LastGive >= giveCooldownSec)
 }
 
@@ -387,6 +418,31 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	case "wander", "goto_warmth", "seek":
 		emit("agent.intent_done", AgentPayload{Agent: i})
 		return events
+	case "refuel_fire":
+		// T020: instant on arrival (like eat/sleep). Re-validate at completion
+		// (contested pattern): fire still present and wood still carried, else
+		// resolve with no effect. The new deadline is absolute and capped; a
+		// cold fire relights. At-cap refuels are a no-op (edge case: consumes
+		// and extends nothing) — detected as no gain over the current deadline.
+		st, ok := fireStructAt(s, in.TargetX, in.TargetY)
+		if !ok || a.Inv.Wood < 1 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		base := st.FuelUntil
+		if base < nextTick {
+			base = nextTick // cold or expired: relight from now
+		}
+		deadline := base + fireBurnPerWood
+		if capAt := nextTick + fireFuelCap; deadline > capAt {
+			deadline = capAt
+		}
+		if deadline <= st.FuelUntil {
+			emit("agent.intent_done", AgentPayload{Agent: i}) // already at the fuel cap
+			return events
+		}
+		emit("agent.refueled", RefueledPayload{Agent: i, X: in.TargetX, Y: in.TargetY, FuelUntil: deadline})
+		return events
 	case "attend_meeting":
 		// Assembled: stand at the meeting place until it closes (the
 		// executor clears the pin once the meeting ends).
@@ -403,8 +459,23 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Tree
 	case "hunt":
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
-	case "build_fire", "build_shelter":
+	case "build_fire", "build_shelter", "build_oven":
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
+	case "quarry":
+		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
+		// have quarried this outcrop while this agent walked over.
+		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Rock
+		// collect_water: no depletion check — water sources are inexhaustible.
+	case "cook":
+		// T031: the station must still be a lit fire OR an oven (ovens carry
+		// no fuel window of their own) — a fire that went cold while walking
+		// over (or during the work) yields no cooked food (edge case: fire
+		// burns out mid-cook). Re-validated every tick.
+		valid = litFireAt(s, in.TargetX, in.TargetY, nextTick) || s.structureAt("oven", in.TargetX, in.TargetY)
+	case "bathe":
+		// T032: the oven itself must still be there (it never goes cold —
+		// only carried water/wood, checked at completion).
+		valid = s.structureAt("oven", in.TargetX, in.TargetY)
 	}
 	if !valid {
 		emit("agent.intent_done", AgentPayload{Agent: i})
@@ -415,7 +486,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		emit("agent.work_started", WorkStartedPayload{Agent: i, Tick: nextTick})
 		return events
 	}
-	if nextTick-in.WorkStart < intentDuration(in.Goal) {
+	if nextTick-in.WorkStart < workDuration(s, a, in) {
 		return events // still working
 	}
 
@@ -429,22 +500,137 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	case "chop":
 		emit("agent.chopped", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "hunt":
+		// T027: carrying a spear (checked against pre-mutation state, exactly
+		// what the reducer will independently re-derive when it applies this
+		// event) raises the yield and spends the most-worn spear's last use.
+		// Spent-to-zero breaks it — a companion agent.spear_broke rides the
+		// same batch, immediately after, so apply order matches: the hunt
+		// reducer decrements Spears[0] to 0, then spear_broke removes it.
 		emit("agent.hunted", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
 		events = append(events, memoryEvent(nextTick, i, salHunt, "Hunted at the den and came back with meat."))
+		if len(a.Inv.Spears) > 0 && a.Inv.Spears[0] == 1 {
+			emit("agent.spear_broke", SpearBrokePayload{Agent: i})
+			events = append(events, memoryEvent(nextTick, i, salSpearBroke,
+				"My spear broke on the hunt — I'll need to craft another."))
+		}
 	case "build_fire":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "fire", X: in.TargetX, Y: in.TargetY})
 		events = append(events, memoryEvent(nextTick, i, salFire, "Built a fire."))
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
 		events = append(events, memoryEvent(nextTick, i, salShelter, "Raised a shelter with my own hands."))
+	case "build_oven":
+		// T030: the flagship station. "First oven" wording (research R8) is
+		// accurate here — s.hasStructure checks the pre-mutation state, before
+		// this very build lands. Village-visible: nearby living agents get a
+		// witness memory too, same pattern as a witnessed death.
+		first := !s.hasStructure("oven")
+		emit("agent.built", BuiltPayload{Agent: i, Kind: "oven", X: in.TargetX, Y: in.TargetY})
+		text := "Raised an oven for the village."
+		if first {
+			text = "Raised the village's first oven — meals and baths, at last."
+		}
+		events = append(events, memoryEvent(nextTick, i, salOvenBuilt, "%s", text))
+		for w := range s.Agents {
+			if w == i || s.Agents[w].Dead {
+				continue
+			}
+			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
+				events = append(events, memoryAboutEvent(nextTick, w, i, toneOvenBuilt, salOvenBuilt,
+					"Watched %s raise an oven for the village.", a.Name))
+			}
+		}
+	case "quarry":
+		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+	case "collect_water":
+		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+	case "craft_planks", "craft_stone", "craft_spear":
+		// T026: inputs re-validated at completion (contested-resource
+		// pattern) — insufficient inputs resolve via intent_done only, no
+		// agent.crafted. Hand-crafts have no travel window (target = the
+		// agent's own tile), so this is normally a formality, but the rule
+		// applies uniformly with every other completion.
+		r, _ := recipeFor(in.Goal)
+		if !hasItems(a.Inv, r.Inputs) {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.crafted", CraftedPayload{Agent: i, Kind: craftKindFor(in.Goal)})
+	case "cook":
+		// T021/T031: convert up to a batch of raw food — fire produces
+		// food_cooked (fuel-free, the fire's own fire burns); an oven
+		// produces meals and additionally burns 1 carried wood fuel. No
+		// carried wood at an oven ⇒ intent_done only (fuel required from day
+		// one, FR-017); nothing to cook (no raw carried) is the same no-op.
+		atOven := s.structureAt("oven", in.TargetX, in.TargetY)
+		if atOven && a.Inv.Wood < 1 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		consumed := a.Inv.FoodRaw
+		if consumed > ovenBatchSize {
+			consumed = ovenBatchSize
+		}
+		if consumed <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		if atOven {
+			emit("agent.cooked", CookedPayload{
+				Agent: i, Station: "oven", Consumed: consumed, Produced: consumed, Kind: "meals",
+			})
+		} else {
+			emit("agent.cooked", CookedPayload{
+				Agent: i, Station: "fire", Consumed: consumed, Produced: consumed, Kind: "food_cooked",
+			})
+		}
+	case "bathe":
+		// T032: re-validate carried water + wood at completion — missing
+		// either resolves via intent_done only (water's only v1 consumer).
+		if a.Inv.Water < 1 || a.Inv.Wood < 1 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		morale := minInt(1000, a.Needs.Morale+bathMorale)
+		warmth := minInt(1000, a.Needs.Warmth+bathWarmth)
+		emit("agent.bathed", BathedPayload{Agent: i, MoraleAfter: morale, WarmthAfter: warmth})
+		events = append(events, memoryEventToned(nextTick, i, salBath, toneBath,
+			"Took a hot bath at the oven — warm, clean, and content."))
 	}
 	return events
 }
 
-func decayNeeds(n Needs, asleep, night, warm bool) Needs {
+// workDuration is the completion-timing rule for the two goals whose
+// duration depends on context rather than the goal string alone (spec 012):
+// a spear-carrying hunt is faster, and cooking at an oven takes longer than
+// at a fire. Both are derived from current state — Spears/the target
+// structure — never persisted on the Intent, matching the codebase's
+// "duration is encoded in WorkStart + completion timing, not the payload"
+// convention (contracts/events.md).
+func workDuration(s *State, a *Agent, in *Intent) int64 {
+	switch in.Goal {
+	case "hunt":
+		if len(a.Inv.Spears) > 0 {
+			return huntTicksSpear
+		}
+	case "cook":
+		if s.structureAt("oven", in.TargetX, in.TargetY) {
+			return cookOvenTicks
+		}
+	}
+	return intentDuration(in.Goal)
+}
+
+func decayNeeds(n Needs, asleep, night, warm, onShelter bool) Needs {
 	n.Food = maxInt(0, n.Food-foodDecay)
 	if asleep {
-		n.Rest = minInt(1000, n.Rest+restRegenSleep)
+		// T037: sleeping on a shelter tile recovers rest at the boosted rate
+		// (the plank economy's payoff for the structure).
+		regen := restRegenSleep
+		if onShelter {
+			regen = restRegenShelter
+		}
+		n.Rest = minInt(1000, n.Rest+regen)
 	} else {
 		n.Rest = maxInt(0, n.Rest-restDecayAwake)
 	}
@@ -477,7 +663,43 @@ func wakeReason(a *Agent, night bool) bool {
 	if !night && a.Needs.Rest >= 600 {
 		return true
 	}
-	return a.Needs.Food < 150 && a.Inv.Food > 0
+	// Wake to a hunger emergency the agent can act on: any food in hand (T018).
+	return a.Needs.Food < 150 && hasAnyFood(a)
+}
+
+// eatOutcome computes the most-nutritious-first eat (T018, FR-007): Meals →
+// FoodCooked → FoodRaw, one unit at a time, until the Food need reaches
+// satietyAt or the inventory runs out. It returns the outcome payload
+// (consumed counts per form + the absolute post-eat need) and whether anything
+// is eaten — false when already sated or carrying no food, so no unit is ever
+// consumed at satiety (the eating-overshoot edge case). The caller sets Agent.
+func eatOutcome(a *Agent) (AtePayload, bool) {
+	food := a.Needs.Food
+	if food >= satietyAt {
+		return AtePayload{}, false
+	}
+	availM, availC, availR := a.Inv.Meals, a.Inv.FoodCooked, a.Inv.FoodRaw
+	var meals, cooked, raw int
+	for food < satietyAt && (availM > 0 || availC > 0 || availR > 0) {
+		switch {
+		case availM > 0:
+			availM--
+			meals++
+			food = minInt(1000, food+mealRestore)
+		case availC > 0:
+			availC--
+			cooked++
+			food = minInt(1000, food+foodCookedRestore)
+		default: // availR > 0
+			availR--
+			raw++
+			food = minInt(1000, food+foodRawRestore)
+		}
+	}
+	if meals == 0 && cooked == 0 && raw == 0 {
+		return AtePayload{}, false
+	}
+	return AtePayload{Meals: meals, Cooked: cooked, Raw: raw, FoodAfter: food}, true
 }
 
 func minInt(a, b int) int {

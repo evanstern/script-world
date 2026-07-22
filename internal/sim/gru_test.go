@@ -98,7 +98,9 @@ func TestGruLightAndShelterProtect(t *testing.T) {
 	x, y := findOpenArea(t, s)
 
 	// Fire at (x,y); agent 0 beside it (lit, warm); gru right next to the agent.
-	s.Structures = append(s.Structures, Structure{Kind: "fire", X: x, Y: y})
+	// FuelUntil in the far future so warmAt keeps the agent put (T019): a cold
+	// fire would send the reflex off to chop, vacating the protected tile.
+	s.Structures = append(s.Structures, Structure{Kind: "fire", X: x, Y: y, FuelUntil: tick + 24*3600})
 	a := &s.Agents[0]
 	a.Dead = false
 	a.X, a.Y = x+1, y

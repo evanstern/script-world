@@ -888,7 +888,7 @@ func curfewViolations(s *State, nextTick int64) []store.Event {
 	var events []store.Event
 	for i := range s.Agents {
 		a := &s.Agents[i]
-		if a.Dead || a.Asleep || IsExiled(s, i) || warmAt(s, a.X, a.Y) {
+		if a.Dead || a.Asleep || IsExiled(s, i) || warmAt(s, a.X, a.Y, nextTick) {
 			continue
 		}
 		if violatedSince(n, i, nightStart) {

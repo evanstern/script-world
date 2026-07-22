@@ -12,7 +12,7 @@ import (
 // system prefix (persona + instruction block — prompt-cache friendly) and a
 // variable user suffix (situation + the bounded working-memory window).
 
-const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to"
+const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water, cook, refuel_fire, craft_planks, craft_stone, craft_spear, build_oven, bathe"
 
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
@@ -24,6 +24,10 @@ func systemPrompt(name, personaText string) string {
 	fmt.Fprintf(&b, `You decide what %s does next. Reply with ONLY a JSON object:
 {"goal": "<goal>", "target": "<agent name, only for talk_to>", "reason": "<one short sentence in your voice>"}
 Goals: %s.
+quarry gathers stone from a rock outcrop; collect_water gathers water from a water tile.
+cook turns raw food into fire-cooked food (worth double) at a lit fire, or into meals (the best food) at an oven; refuel_fire feeds one wood to a fire to keep it burning (or relight a cold one).
+craft_planks turns 1 wood into 4 planks; craft_stone turns 1 stone into 1 refined stone; craft_spear needs 1 wood + 1 refined stone and makes a spear (breaks after 3 hunts) — all hand-crafted anywhere, no travel needed.
+build_oven needs 4 refined stone + 2 planks and lets you cook meals and bathe; bathe at an oven spends 1 water + 1 wood for warmth and morale.
 For a short sequence instead, reply:
 {"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
 At most %d steps; steps run in order, each waits for its time.
@@ -68,7 +72,16 @@ func userPrompt(s *sim.State, idx int, k int) string {
 	fmt.Fprintf(&b, "It is %s (%s). You are at (%d, %d).\n", clock.Format(s.Tick), phase, a.X, a.Y)
 	fmt.Fprintf(&b, "Needs (0-100): health %d, food %d, rest %d, warmth %d, morale %d.\n",
 		a.Needs.Health/10, a.Needs.Food/10, a.Needs.Rest/10, a.Needs.Warmth/10, a.Needs.Morale/10)
-	fmt.Fprintf(&b, "Carrying: %d wood, %d meals.\n", a.Inv.Wood, a.Inv.Food)
+	// Carried inventory: the full resource/item set (spec 012, T025/T029/T035)
+	// so the planner can reason about cooking/eating AND the crafting chain
+	// (planks/refined stone/spear) and the oven's water/wood consumers.
+	fmt.Fprintf(&b, "Carrying: %d wood, %d stone, %d water, %d planks, %d refined stone, food (%d raw, %d cooked, %d meals)",
+		a.Inv.Wood, a.Inv.Stone, a.Inv.Water, a.Inv.Planks, a.Inv.RefinedStone,
+		a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)
+	if n := len(a.Inv.Spears); n > 0 {
+		fmt.Fprintf(&b, ", %d spear(s) (%d uses left on the most-worn)", n, a.Inv.Spears[0])
+	}
+	b.WriteString(".\n")
 
 	if len(s.Structures) > 0 {
 		var parts []string

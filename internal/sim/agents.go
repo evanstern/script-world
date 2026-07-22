@@ -22,9 +22,22 @@ type Needs struct {
 	Morale int `json:"morale"`
 }
 
+// Inventory is what an agent carries. Spec 012 (resources/food/crafting v2)
+// widened it from the legacy {wood, food} pair to the full resource/item set;
+// the legacy `Food int` field is gone (the format-version bump to 2 shields old
+// v1 snapshots, which never decode under v2). All counts are ints; `Spears`
+// holds remaining uses per carried spear, sorted ascending (hunts spend the
+// most-worn first). omitempty keeps canonical bytes stable for empty kinds.
 type Inventory struct {
-	Wood int `json:"wood"`
-	Food int `json:"food"`
+	Wood         int   `json:"wood"`
+	Stone        int   `json:"stone,omitempty"`
+	Water        int   `json:"water,omitempty"`
+	Planks       int   `json:"planks,omitempty"`
+	RefinedStone int   `json:"refined_stone,omitempty"`
+	FoodRaw      int   `json:"food_raw,omitempty"`
+	FoodCooked   int   `json:"food_cooked,omitempty"`
+	Meals        int   `json:"meals,omitempty"`
+	Spears       []int `json:"spears,omitempty"` // remaining uses per spear, sorted ascending
 }
 
 // Intent is one multi-step goal being executed unattended: walk to
@@ -103,10 +116,18 @@ type Memory struct {
 
 // Structure is player-visible built stuff; the map itself never contains
 // structures ([[worldmap]] cold start) — they exist only as event-sourced state.
+//
+// FuelUntil (spec 012) applies to fires only: a fire is lit iff tick <
+// FuelUntil. It is set at build (build tick + fire's initial burn window) and
+// pushed forward by refuel, capped at now + fireFuelCap. Lit-ness is always
+// derived, never stored as a flag. omitempty keeps shelter/oven and pre-012
+// snapshots byte-identical. NOTE: warmth/burnout behavior is NOT yet wired to
+// FuelUntil — that lands in Phase 4 (T019).
 type Structure struct {
-	Kind string `json:"kind"` // "fire" | "shelter"
-	X    int    `json:"x"`
-	Y    int    `json:"y"`
+	Kind      string `json:"kind"` // "fire" | "shelter" | "oven"
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	FuelUntil int64  `json:"fuel_until,omitempty"` // fires only
 }
 
 // Harvest marks a foraged tile regrowing at Regrow.
@@ -141,12 +162,9 @@ const (
 	healthLoss     = 3 // per minute while starving or freezing (~5.5h to die)
 	healthRegen    = 1 // fed and rested
 
-	eatFoodValue = 350 // one food item
-
 	// Thresholds the reflex policy keys on.
-	hungryAt    = 350
-	tiredAt     = 250
-	stockFoodTo = 3
+	hungryAt = 350
+	tiredAt  = 250
 
 	// Action durations in ticks (game seconds).
 	forageTicks       = 120
@@ -157,8 +175,6 @@ const (
 
 	// Yields and costs.
 	chopWood        = 2
-	forageYield     = 1
-	huntYield       = 3
 	fireWoodCost    = 2
 	shelterWoodCost = 5
 
@@ -180,6 +196,74 @@ const (
 	talkMoraleBonus     = 50
 )
 
+// --- spec 012 resources/food/crafting v2 tuning ---
+//
+// The single scalar tuning surface for the v2 economy, mirrored in
+// specs/012-resources-food-crafting/contracts/recipes.md and the recipe table
+// (recipes.go). Ticks are game-seconds (a game-hour is 3600 ticks). Phase 2
+// only declares these; behavior is wired to them in later phases (T013–T037),
+// so several are intentionally unused until then (package-level constants may
+// be unused without a compile error).
+const (
+	// Food restore per unit eaten, on the 0..1000 need scale (cooking ~doubles
+	// raw; the meal is the best food). Eating stops at Food >= satietyAt.
+	foodRawRestore    = 40
+	foodCookedRestore = 80
+	mealRestore       = 100
+	satietyAt         = 900
+
+	// Reflex larder target (T018): idle agents top up carried raw food to this
+	// many units before wandering. Restates the legacy stock-3-meals prep rule
+	// over the finer raw unit (contracts/recipes.md sizing).
+	stockFoodRawTo = 8
+
+	// refuelDyingBelow (T020): the reflex refuels a fire whose remaining fuel
+	// has dropped below this window (1 game-hour) when carrying wood.
+	refuelDyingBelow = 3600
+
+	// Fire fuel window. A fresh fire (2 wood) burns 2×fireBurnPerWood; each
+	// refuel (1 wood) adds fireBurnPerWood, truncated to now + fireFuelCap.
+	fireBurnPerWood = 4 * 3600  // 4 game-hours per wood
+	fireFuelCap     = 12 * 3600 // remaining fuel ceiling
+
+	// Spear durability: hunts a spear lasts before breaking.
+	spearDurability = 3
+
+	// Rest regen per game-minute while asleep on a shelter tile (else
+	// restRegenSleep = 4).
+	restRegenShelter = 6
+
+	// Bath effects at an oven (absolute post-values are carried in the event;
+	// these are the pre-cap bumps applied, gru-pattern).
+	bathMorale = 150
+	bathWarmth = 300
+
+	// v2 gather rescale (wired T013 quarry/water, T017 forage/hunt). The legacy
+	// forageYield/huntYield constants are gone (T017): agent.foraged now yields
+	// forageYieldV2 FoodRaw, agent.hunted huntYieldBare (spear boost is T027).
+	quarryYield       = 2
+	quarryTicks       = 400
+	collectWaterYield = 1
+	collectWaterTicks = 60
+	forageYieldV2     = 2
+	huntYieldBare     = 8
+	huntYieldSpear    = 12
+	huntTicksSpear    = 600
+
+	// Hand-craft / build / station recipe magnitudes (mirrored by recipes.go;
+	// wired T026/T030–T037).
+	plankYield       = 4
+	craftPlanksTicks = 180
+	craftStoneTicks  = 180
+	craftSpearTicks  = 240
+	shelterPlankCost = 8
+	buildOvenTicks   = 900
+	ovenBatchSize    = 8
+	cookFireTicks    = 240
+	cookOvenTicks    = 360
+	batheTicks       = 240
+)
+
 func intentDuration(goal string) int64 {
 	switch goal {
 	case "forage":
@@ -192,8 +276,27 @@ func intentDuration(goal string) int64 {
 		return buildShelterTicks
 	case "hunt":
 		return huntTicks
+	case "quarry":
+		return quarryTicks
+	case "collect_water":
+		return collectWaterTicks
+	case "cook":
+		// Fire cooking base case; a cook intent resolved at an oven takes
+		// longer — that override happens in the executor (workDuration,
+		// T031), since the station is only known from the intent's target.
+		return cookFireTicks
+	case "craft_planks":
+		return craftPlanksTicks
+	case "craft_stone":
+		return craftStoneTicks
+	case "craft_spear":
+		return craftSpearTicks
+	case "build_oven":
+		return buildOvenTicks
+	case "bathe":
+		return batheTicks
 	}
-	return 0 // sleep / goto_warmth / wander / seek complete on arrival
+	return 0 // sleep / goto_warmth / wander / seek / refuel_fire complete on arrival
 }
 
 // --- event payloads ---
@@ -270,5 +373,61 @@ type (
 	HailExpiredPayload struct {
 		From int `json:"from"`
 		To   int `json:"to"`
+	}
+
+	// --- spec 012 resources/food/crafting v2 payloads ---
+	// Field order below is the canonical serialization order (see
+	// contracts/events.md); all outcomes are absolute (no deltas, no dice).
+
+	// CraftedPayload: a completed hand-craft. Kind ∈ planks|refined_stone|spear;
+	// the reducer applies the recipe delta from recipes.go.
+	CraftedPayload struct {
+		Agent int    `json:"agent"`
+		Kind  string `json:"kind"`
+	}
+	// AtePayload replaces the old empty AgentPayload for agent.ate (the format
+	// bump shields old logs): counts consumed per form plus the absolute
+	// post-eat food need. Wired in Phase 4 (T018).
+	AtePayload struct {
+		Agent     int `json:"agent"`
+		Meals     int `json:"meals"`
+		Cooked    int `json:"cooked"`
+		Raw       int `json:"raw"`
+		FoodAfter int `json:"food_after"`
+	}
+	// CookedPayload: a cook batch. Station ∈ fire|oven; Kind ∈
+	// food_cooked|meals. Consumed FoodRaw → Produced of Kind.
+	CookedPayload struct {
+		Agent    int    `json:"agent"`
+		Station  string `json:"station"`
+		Consumed int    `json:"consumed"`
+		Produced int    `json:"produced"`
+		Kind     string `json:"kind"`
+	}
+	// BathedPayload: a bath at an oven — absolute post-cap need values
+	// (gru-pattern).
+	BathedPayload struct {
+		Agent       int `json:"agent"`
+		MoraleAfter int `json:"morale_after"`
+		WarmthAfter int `json:"warmth_after"`
+	}
+	// RefueledPayload: a fire refuel (planner or reflex). FuelUntil is the
+	// absolute new deadline (already capped by the emitter).
+	RefueledPayload struct {
+		Agent     int   `json:"agent"`
+		X         int   `json:"x"`
+		Y         int   `json:"y"`
+		FuelUntil int64 `json:"fuel_until"`
+	}
+	// SpearBrokePayload: the spear that spent its last use, alongside the hunt
+	// completion; a companion memory rides the same batch.
+	SpearBrokePayload struct {
+		Agent int `json:"agent"`
+	}
+	// FireBurnedOutPayload: the fuel sweep's once-per-burnout signal. No state
+	// effect (lit-ness is derived from FuelUntil); chronicle/TUI material.
+	FireBurnedOutPayload struct {
+		X int `json:"x"`
+		Y int `json:"y"`
 	}
 )

@@ -59,7 +59,7 @@ func TestLedgerLifecycle(t *testing.T) {
 	const seed = 42
 	m := testMap(seed)
 	s := NewState(seed, m)
-	s.Agents[0].Inv.Food = 3
+	s.Agents[0].Inv.FoodRaw = 3
 
 	// A(0) gives to B(1): debt opens (B owes A).
 	if err := s.Apply(socialEvent(t, 1000, "social.gave", GavePayload{From: 0, To: 1, Kind: "food"})); err != nil {
@@ -68,15 +68,15 @@ func TestLedgerLifecycle(t *testing.T) {
 	if len(s.Debts) != 1 || s.Debts[0].Debtor != 1 || s.Debts[0].Creditor != 0 || s.Debts[0].Status != "open" {
 		t.Fatalf("debt after give: %+v", s.Debts)
 	}
-	if s.Agents[0].Inv.Food != 2 || s.Agents[1].Inv.Food != 1 {
-		t.Errorf("food transfer wrong: %d %d", s.Agents[0].Inv.Food, s.Agents[1].Inv.Food)
+	if s.Agents[0].Inv.FoodRaw != 2 || s.Agents[1].Inv.FoodRaw != 1 {
+		t.Errorf("food transfer wrong: %d %d", s.Agents[0].Inv.FoodRaw, s.Agents[1].Inv.FoodRaw)
 	}
 	if s.Debts[0].Due != 1000+debtDueTicks {
 		t.Errorf("due = %d", s.Debts[0].Due)
 	}
 
 	// B gives back: settles kept.
-	s.Agents[1].Inv.Food = 2
+	s.Agents[1].Inv.FoodRaw = 2
 	if err := s.Apply(socialEvent(t, 2000, "social.gave", GavePayload{From: 1, To: 0, Kind: "food"})); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestExecutorGiveAndDueCheck(t *testing.T) {
 	// leave them idle; the social slot runs at tick%60==30.
 	s.Agents[0].X, s.Agents[0].Y = 10, 10
 	s.Agents[1].X, s.Agents[1].Y = 10, 11
-	s.Agents[0].Inv.Food = 3
+	s.Agents[0].Inv.FoodRaw = 3
 	s.Agents[1].Needs.Food = 100
 	// Park everyone else far away and asleep so nothing interferes.
 	for i := 2; i < len(s.Agents); i++ {
@@ -149,7 +149,7 @@ func TestExecutorGiveAndDueCheck(t *testing.T) {
 	// Jump the clock to just before due (a live 2-day drive would let the
 	// debtor legitimately repay — good behavior, wrong for this assertion),
 	// pauper the debtor, separate the pair, and cross one hourly boundary.
-	s.Agents[1].Inv.Food = 0
+	s.Agents[1].Inv.FoodRaw = 0
 	s.Agents[1].X, s.Agents[1].Y = 50, 50
 	s.Tick = s.Debts[0].Due - 50
 	log = driveTicks(t, s, m, s.Debts[0].Due+3700, nil)

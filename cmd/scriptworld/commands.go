@@ -196,6 +196,60 @@ func cmdNew(args []string) error {
 	return nil
 }
 
+// resolveWorldForMigrate resolves a migrate argument to a directory. Unlike
+// resolveWorld, it must reach v1 worlds — which this v2 build cannot
+// world.Open, so worlds.Resolve (whose name lookup gates on openability) is
+// blind to them. Path arguments pass through verbatim; bare names resolve
+// against the worlds home then the known-worlds registry by manifest presence
+// alone, never the version gate.
+func resolveWorldForMigrate(arg string) (string, error) {
+	if worlds.IsPathArg(arg) {
+		return arg, nil
+	}
+	home, err := worlds.WorldsHome()
+	if err != nil {
+		return "", err
+	}
+	if cand := filepath.Join(home, arg); hasManifest(cand) {
+		return cand, nil
+	}
+	if reg, err := worlds.LoadRegistry(); err == nil {
+		if p, ok := reg.Worlds[arg]; ok && hasManifest(p) {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("no world named %q (searched %s and the known-worlds list) — try `scriptworld ps --all`", arg, home)
+}
+
+func hasManifest(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, world.ManifestName))
+	return err == nil
+}
+
+// cmdMigrate implements `scriptworld migrate <world>` (spec 012 US6): the
+// offline v1→v2 snapshot-cut migration. It resolves the world, then hands the
+// whole archive/transform/rewrite ceremony to world.Migrate, and prints a
+// human summary of what carried across the break.
+func cmdMigrate(args []string) error {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	arg, err := dirArg(fs, args)
+	if err != nil {
+		return err
+	}
+	dir, err := resolveWorldForMigrate(arg)
+	if err != nil {
+		return err
+	}
+	res, err := world.Migrate(dir)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("migrated %q (seed %d) to format v%d\n  %d villagers carried across the break at tick %d (%s)\n  %d source events archived in %s\nstart it with: scriptworld start %s\n",
+		res.Name, res.Seed, world.FormatVersion, res.AgentsCarried, res.Tick, clock.Format(res.Tick),
+		res.SourceEvents, res.ArchivePath, arg)
+	return nil
+}
+
 func cmdLLM(args []string) error {
 	fs := flag.NewFlagSet("llm", flag.ContinueOnError)
 	system := fs.String("system", "", "system prompt")
