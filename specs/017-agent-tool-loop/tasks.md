@@ -176,11 +176,11 @@ live-vs-replay byte-identity on a loop-era run.
       reducer-enforced; spec 016's one-mediated-act-per-turn rule = loop cardinality),
       parseTurn/turnReply retired, cog.tool_call telemetry landed, in
       internal/metatron/turn.go + tests (depends on T009, T018, T019b)
-- [ ] T021 [P] (Sonnet) [US4] Fallback-mode equivalence test: same scripted cognition
+- [x] T021 [P] (Sonnet) [US4] Fallback-mode equivalence test: same scripted cognition
       through `tool_mode:"native"` and `tool_mode:"json"` stub servers produces
       identical event-log shape (verdicts, correlation, outcomes) in
       internal/llm or internal/mind integration tests (depends on T012)
-- [ ] T022 [P] (Sonnet) [US4] Operator docs for tier strategy + fallback + knobs
+- [x] T022 [P] (Sonnet) [US4] Operator docs for tier strategy + fallback + knobs
       (`tool_mode`, `loop_max_rounds`) in README/config docs where llm.json is
       documented (depends on T007)
 

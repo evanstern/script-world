@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 22:49'
+updated_date: '2026-07-22 23:00'
 labels:
   - agent-mind
   - llm
@@ -87,4 +87,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Opus 4.8 landed T018 (7fe3b58: CallRecords → cog.tool_call via dedicated all-or-nothing emitCog batch on every termination path, ordinal-sorted, empty-buffer guarded; conversion constructor sim.NewCogToolCallPayload placed sim-side w/ plain arg types so metatron T020 reuses it without dependency inversion; reason invariant enforced-at-emission w/ backfill+log, never fatal) and T019 (84d578f: TestToolCallCorrelationChainSC003, 8/8 under -count=8; chain-granularity refinement recorded in events.md — grounding events carry job not ordinal, so rejected-grounds-nothing is job-resolvable only for rejected-only cognitions). T019 ran on Opus for seam continuity (recorded per rubric). US3 complete — board AC#5 provable from the event log. Full suite incl e2e green. Next: T019b+T020 metatron migration (Opus, T019b rides along w/ justification: work_miracle schema must mirror landMiracle expectations the same agent studies).
 
 2026-07-22 Opus 4.8 landed T019b (2ef5477) + T020 (61d8db2): metatron on the loop. As-built decisions gated and recorded in data-model.md: work_miracle = Expressive (InjectSocial family, Events-declaration coherence) w/ flat Params not authored schema (driver validateArgs hard-routes authored schemas to the set_plan validator — latent generalization debt noted for a third authored-schema tool); converse excluded from declared roster (final text IS the reply; model_done = natural termination). Behavior upgrades vs today, intended: gate refusals feed back so the angel can correct a bad target within the cap; spec-016 nudge-over-miracle precedence dissolves into loop cardinality; no synthetic refusal suffix. turnMaxTokens 700→1024. Full suite incl e2e green. Pre-existing repo-wide gofmt discrepancy (8 untouched files, present on origin/main) noted, out of scope. US4 remaining: T021 fallback equivalence + T022 docs (Sonnet). Then US2 T014-T015, US5 T023-T024, polish.
+
+2026-07-22 Sonnet landed T021 (ba1dd4f: TestToolModeEquivalenceNativeVsJSON in internal/toolloop — real Orchestrator vs two scripted httptest servers; full driver-level equivalence (records/termination/final/rounds identical) with confirmed wire-level divergence; zero bugs found) and T022 (836cd27: README operator docs for loop_max_rounds + tool_mode incl when-to-flip-to-json cues; docs/wiki untouched per lifecycle). US4 complete — board AC#3 satisfied. Remaining: T014-T015 (US2), T023-T024 (US5), polish T025-T028.
 <!-- SECTION:NOTES:END -->
