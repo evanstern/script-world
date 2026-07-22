@@ -114,10 +114,10 @@ mark through existing machinery.
 **Independent test**: SC-003 — 100% of non-owner withdrawals produce record +
 owner memory + trust drop; 0% blocked; owner withdrawals produce none.
 
-- [ ] T028 [US4] `social.chest_taken` record case in `internal/sim/social.go` + `internal/sim/state.go` (reducer effect: the record itself only — chronicle/TUI material, FR-011)
-- [ ] T029 [US4] Theft companion batch in `internal/sim/executor.go`: non-owner `agent.withdrew` co-emits `social.chest_taken`, `social.relation_changed` (owner→taker, `theftTrustDelta`/`theftAffectionDelta`, reason `"theft"`), owner `agent.memory_added` (subject = taker, tone `theftMemoryTone`, high salience, any distance, skipped if owner dead), and witness `agent.memory_added` for living awake villagers within `witnessRadius` excluding the taker — one atomic batch; owner-from-own-chest emits `agent.withdrew` alone (FR-012, research R5)
-- [ ] T030 [US4] Salience table entries in `internal/sim/memory.go`: chest built (high, village-visible — oven precedent), taking suffered/witnessed (high, negative)
-- [ ] T031 [US4] Tests in `internal/sim`: SC-003 full-batch assertions, own-chest silence (US4-AS4), dead-owner rule (record + witnesses, no owner memory), rumor birth from the subject-tagged owner memory via existing machinery, replay byte-identity over a theft run
+- [X] T028 [US4] `social.chest_taken` record case in `internal/sim/social.go` + `internal/sim/state.go` (reducer effect: the record itself only — chronicle/TUI material, FR-011)
+- [X] T029 [US4] Theft companion batch in `internal/sim/executor.go`: non-owner `agent.withdrew` co-emits `social.chest_taken`, `social.relation_changed` (owner→taker, `theftTrustDelta`/`theftAffectionDelta`, reason `"theft"`), owner `agent.memory_added` (subject = taker, tone `theftMemoryTone`, high salience, any distance, skipped if owner dead), and witness `agent.memory_added` for living awake villagers within `witnessRadius` excluding the taker — one atomic batch; owner-from-own-chest emits `agent.withdrew` alone (FR-012, research R5)
+- [X] T030 [US4] Salience table entries in `internal/sim/memory.go`: chest built (high, village-visible — oven precedent), taking suffered/witnessed (high, negative)
+- [X] T031 [US4] Tests in `internal/sim`: SC-003 full-batch assertions, own-chest silence (US4-AS4), dead-owner rule (record + witnesses, no owner memory), rumor birth from the subject-tagged owner memory via existing machinery, replay byte-identity over a theft run
 
 **Checkpoint**: taking is never blocked and never free.
 

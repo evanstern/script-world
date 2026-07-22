@@ -531,6 +531,12 @@ func freeBulk(inv Inventory) int {
 // and its ceiling.
 const BulkCap = bulkCap
 
+// ChestCap is chestCap exported for internal/tui (SC-006: "what's in a given
+// chest, and is it full" must be answerable from the TUI alone), mirroring the
+// BulkCap export — sim stays the single source of truth for the per-chest
+// stored-bulk ceiling and its display.
+const ChestCap = chestCap
+
 func Bulk(inv Inventory) int {
 	return bulk(inv)
 }

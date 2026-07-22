@@ -567,6 +567,19 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		}
 		if !moved {
 			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		// T029 (spec 013 US4): a non-owner withdrawal is theft — never blocked
+		// (the transfer above already stands), always marked. In THIS same batch,
+		// after the agent.withdrew event(s) and in contract order (events.md
+		// "Companion batch on a non-owner withdrawal"), the executor co-emits the
+		// social consequences through the existing machinery: the taking record,
+		// the reason-tagged relation delta, the owner's gossip-seed memory, and a
+		// witness memory for each neighbor who saw it. Owner-from-own-chest ⇒
+		// agent.withdrew alone (US4-AS4). All companions are additive; none can
+		// undo the goods that already moved (FR-012).
+		if owner := ch.Owner; owner != i && owner >= 0 && owner < len(s.Agents) {
+			events = append(events, theftCompanions(s, owner, i, in.TargetX, in.TargetY, nextTick, a.Name)...)
 		}
 		return events
 	}
@@ -676,11 +689,28 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 			}
 		}
 	case "build_chest":
-		// T023 (spec 013 US3): the first owned container. Site re-validated above
-		// (buildSite, including the pile-tile exclusion); the reducer consumes the
-		// planks and stamps Owner + an empty Store. Village-visible salience/memory
-		// is deferred to US4 (T030), matching this slice's scope.
+		// T023/T030 (spec 013 US3/US4): the first owned container. Site re-validated
+		// above (buildSite, including the pile-tile exclusion); the reducer consumes
+		// the planks and stamps Owner + an empty Store. Village-visible, like the
+		// oven: the builder remembers raising it, nearby living agents get a witness
+		// memory. "First chest" wording checks the pre-mutation state (this build
+		// hasn't landed yet), matching build_oven.
+		first := !s.hasStructure("chest")
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "chest", X: in.TargetX, Y: in.TargetY})
+		text := "Built a chest to keep the village's things."
+		if first {
+			text = "Built the village's first chest — a place to keep things safe."
+		}
+		events = append(events, memoryEvent(nextTick, i, salChestBuilt, "%s", text))
+		for w := range s.Agents {
+			if w == i || s.Agents[w].Dead {
+				continue
+			}
+			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
+				events = append(events, memoryAboutEvent(nextTick, w, i, toneChestBuilt, salChestBuilt,
+					"Watched %s build a chest for the village.", a.Name))
+			}
+		}
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "collect_water":

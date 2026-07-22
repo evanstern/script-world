@@ -495,15 +495,6 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 	return grid, legend
 }
 
-// chestCapDisplay mirrors internal/sim's private chestCap (spec 013
-// data-model.md: per-chest stored bulk ceiling, 48) for the TUI's fullness
-// hint. Not exported from internal/sim by this task (T026 is TUI-only, no
-// internal/sim edits) — the same "mirrored, single source of truth stays in
-// sim" caveat as BulkCap/Bulk applies in spirit, but this constant is
-// display-only and never used to clamp or gate anything, so a private
-// mirror is safe here.
-const chestCapDisplay = 48
-
 // describeChest renders one chest's inspection entry (spec 013 T026,
 // SC-006): "chest(x,y) [Owner] <contents> <bulk>/<cap>" — owner resolved to
 // the agent's Name via the same agentName helper the chronicle grammar uses
@@ -518,7 +509,7 @@ func describeChest(ch sim.Structure, names []string) string {
 		full = sim.Bulk(*ch.Store)
 		contents = summarizeInventoryContents(*ch.Store)
 	}
-	return fmt.Sprintf("chest(%d,%d) [%s] %s %d/%d", ch.X, ch.Y, owner, contents, full, chestCapDisplay)
+	return fmt.Sprintf("chest(%d,%d) [%s] %s %d/%d", ch.X, ch.Y, owner, contents, full, sim.ChestCap)
 }
 
 // summarizeInventoryContents renders a chest's Store the same way

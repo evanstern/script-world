@@ -343,6 +343,16 @@ func (s *State) applySocial(e store.Event) error {
 	case "social.conversation_turn":
 		// Chronicle material; no state effect.
 
+	case "social.chest_taken":
+		// T028 (spec 013 US4, FR-011): the distinct taking happening. Its entire
+		// effect IS the record — the reducer holds no theft ledger; the trust drop
+		// and the memories ride their own companion events in the same batch (the
+		// reason-tagged social.relation_changed and the agent.memory_added seeds,
+		// emitted by the executor's theftCompanions). So this case is deliberately
+		// effect-free: the event's existence in the log is the chronicle/TUI
+		// material, exactly like social.conversation_turn above. No unmarshal is
+		// needed to stay total — nothing here can fail on a well-formed event.
+
 	case "social.conversation":
 		// TASK-22: conversations leave a durable, bounded record.
 		var p ConversationPayload
@@ -362,6 +372,48 @@ func (s *State) applySocial(e store.Event) error {
 		}
 	}
 	return nil
+}
+
+// theftCompanions builds the social batch a non-owner chest withdrawal drags
+// behind it (spec 013 US4, FR-011/012, research R5), in the canonical contract
+// order (events.md "Companion batch on a non-owner withdrawal"): the taking
+// record, the reason-tagged owner→taker relation delta through the existing
+// edge machinery, the owner's negative gossip-seed memory (subject = taker,
+// regardless of distance — skipped when the owner is dead, since the dead don't
+// remember but the village does), and a witness memory for each living, awake
+// neighbor within witnessRadius of the chest, excluding the taker and the owner
+// (who already carries the stronger, any-distance memory). Every companion is
+// additive — none can undo the goods the withdrawal already moved. Witness
+// order is fixed agent order, so replay is byte-identical; takerName is resolved
+// by the caller from pre-event state, and the executor calls this only when the
+// withdrawal actually moved goods and the taker is not the owner.
+func theftCompanions(s *State, owner, taker, x, y int, nextTick int64, takerName string) []store.Event {
+	events := []store.Event{
+		{Tick: nextTick, Type: "social.chest_taken",
+			Payload: mustPayload(ChestTakenPayload{Owner: owner, Taker: taker, X: x, Y: y})},
+		{Tick: nextTick, Type: "social.relation_changed",
+			Payload: mustPayload(RelationChangedPayload{
+				A: owner, B: taker, TrustDelta: theftTrustDelta,
+				AffectionDelta: theftAffectionDelta, Reason: "theft"})},
+	}
+	// The owner remembers it wherever they are — but only if they live.
+	if !s.Agents[owner].Dead {
+		events = append(events, memoryAboutEvent(nextTick, owner, taker, theftMemoryTone, salTaking,
+			"%s took from my chest without asking.", takerName))
+	}
+	// Witnesses: whoever stood near enough to see, minus the two principals.
+	ownerName := s.Agents[owner].Name
+	for w := range s.Agents {
+		wa := &s.Agents[w]
+		if w == taker || w == owner || wa.Dead || wa.Asleep {
+			continue
+		}
+		if abs(wa.X-x)+abs(wa.Y-y) <= witnessRadius {
+			events = append(events, memoryAboutEvent(nextTick, w, taker, theftMemoryTone, salTaking,
+				"Saw %s take from %s's chest.", takerName, ownerName))
+		}
+	}
+	return events
 }
 
 func knows(a *Agent, rumorID int) bool {

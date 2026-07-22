@@ -875,9 +875,6 @@ func (s *State) Apply(e store.Event) error {
 		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
-	case "social.chest_taken":
-		// TODO(T028, US4): the taking record itself (chronicle/TUI material) —
-		// no state effect beyond the record; lands with the social record case.
 	case "sim.food_rotted":
 		// TODO(T032, US5): remove the pile's food batches with spoil_at ≤ tick
 		// and matching kind (up to n); emptied pile removed.
@@ -1023,7 +1020,7 @@ func (s *State) Apply(e store.Event) error {
 
 	case "social.relation_changed", "social.gave", "social.promise_broken",
 		"social.rumor_told", "social.secret_seeded",
-		"social.conversation_turn", "social.conversation":
+		"social.conversation_turn", "social.conversation", "social.chest_taken":
 		return s.applySocial(e)
 
 	case "agent.memory_promoted", "agent.memory_faded", "agent.belief_revised",
