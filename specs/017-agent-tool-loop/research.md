@@ -231,6 +231,17 @@ artifacts land through the same whitelisted door as its existing telemetry.
 tools are already registered with the charge gate, and the cloud tier needs a real
 consumer to prove AC#3's cloud leg.
 
+**Amendment (2026-07-22, post PR #38 / spec 016 merge)**: the metatron turn now also
+works miracles (`turnReply.Miracle`, landed via `landMiracle` through the shared
+operator-console builder). Spec 016 already enforces "at most one mediated act per
+turn" (nudge wins over miracle), which maps exactly onto this spec's
+one-landed-acting-call cardinality — no doctrine conflict. The loop migration
+therefore adds a `work_miracle` registry entry (charge-gated, authored
+`InputSchemaJSON` over the miracle parameter surface — kind/day/time/villager/item/
+qty/class/x/y/to_x/to_y, mirroring spec 016's turn contract with gratis structurally
+absent) to `LoopRosterMetatron`, with its handler wrapping `landMiracle` unchanged.
+Tracked as T019b (registry entry, Sonnet) and folded into T020's handler scope.
+
 ## R14 — Iteration cap and budgets
 
 **Decision**: hard iteration cap default **8 provider rounds** per cognition,

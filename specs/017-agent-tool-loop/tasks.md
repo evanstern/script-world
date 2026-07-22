@@ -82,13 +82,13 @@ constitution Principle V — `(Opus 4.8)` for cross-package/concurrency/doctrine
 local-tier smoke where planner cognitions land intents/plans/musings via tool calls
 (quickstart §2).
 
-- [ ] T009 (Opus 4.8) [US1] Implement `internal/toolloop` package: `Run(ctx, orch, Job)`
+- [x] T009 (Opus 4.8) [US1] Implement `internal/toolloop` package: `Run(ctx, orch, Job)`
       per contracts/loop-api.md — round loop, roster/schema validation
       (rejected_unknown/rejected_malformed driver-side), one-landed-acting-call
       cardinality with trailing-call rejection, MaxRounds cap, Termination taxonomy,
       one CallRecord per model call via `Record`, SkipObserve on every Submit, exactly
       one ObserveCognition report (depends on T005–T008)
-- [ ] T010 (Opus 4.8) [US1] toolloop unit tests with stub caller in
+- [x] T010 (Opus 4.8) [US1] toolloop unit tests with stub caller in
       internal/toolloop/loop_test.go: cap exhaustion, batched calls, rejected-acting
       retry within cap, read-then-act, admission_refused mid-loop, provider_error,
       ctx_done — every path's records + observation counts (with T009)
@@ -165,11 +165,17 @@ live-vs-replay byte-identity on a loop-era run.
 
 **Independent Test**: quickstart §3 + §4.
 
+- [ ] T019b (Sonnet) [US4] Register `work_miracle` metatron tool (charge-gated,
+      authored InputSchemaJSON over spec 016's miracle parameter surface — kind/day/
+      time/villager/item/qty/class/x/y/to_x/to_y, gratis structurally absent) and add
+      it to LoopRosterMetatron, in internal/tool/registry.go + roster.go + tests
+      (post-PR-#38 amendment, research R13; depends on T002–T004)
 - [ ] T020 (Opus 4.8) [US4] Migrate `Metatron.Turn` to toolloop.Run with
-      LoopRosterMetatron: converse = Final text, nudge handlers wrap `landNudge`
-      (charge economy stays reducer-enforced), parseTurn/turnReply retired,
-      cog.tool_call telemetry landed, in internal/metatron/turn.go + tests
-      (depends on T009, T018)
+      LoopRosterMetatron: converse = Final text, nudge handlers wrap `landNudge`,
+      work_miracle handler wraps `landMiracle` (charge economy stays
+      reducer-enforced; spec 016's one-mediated-act-per-turn rule = loop cardinality),
+      parseTurn/turnReply retired, cog.tool_call telemetry landed, in
+      internal/metatron/turn.go + tests (depends on T009, T018, T019b)
 - [ ] T021 [P] (Sonnet) [US4] Fallback-mode equivalence test: same scripted cognition
       through `tool_mode:"native"` and `tool_mode:"json"` stub servers produces
       identical event-log shape (verdicts, correlation, outcomes) in

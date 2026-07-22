@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 20:33'
+updated_date: '2026-07-22 20:42'
 labels:
   - agent-mind
   - llm
@@ -77,4 +77,6 @@ Full Spec Kit at specs/017-agent-tool-loop: spec (3 clarifications resolved with
 2026-07-22 Opus 4.8 spec-implementer landed the llm transport slice: T005 (da95388: Turn/Block/ToolDecl/ToolCall/StopReason types, Request.Tools/Turns/SkipObserve, Response.ToolCalls/Stop, loop_max_rounds + tool_mode config w/ warn-not-error normalizers, caller interface returns callResult), T006 (373c16b: anthropic native tools; SDK v1.58.0 drops unknown schema keywords — routed via ExtraFields), T007 (561ccad: openaiCompat native function calling + tool_mode:json fallback envelope; ToolResult→user-turn mapping transport-side; env-<round> IDs derived from assistant-turn count — T009 driver must record one assistant Turn per round, pinned in driver contract), T008 (7d1a354: ObserveCognition + SkipObserve estimator seam; metering/admission/breaker untouched). Full suite incl e2e green. Foundational phase complete. Follow-up candidate noted: pre-existing flake TestEstimatorSampleCountUnderConcurrency (capacity-boundary race, reproduced on base commit).
 
 spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP: 0/5 · User Story 2 — replay reproduces state without re-running loops (P1): 0/2 · User Story 3 — every tool call is a first-class correlatable artifact (P2): 0/4 · User Story 4 — both tiers + documented fallback (P2): 0/3 · User Story 5 — governor stays sane on multi-call cognitions (P3): 0/2 · Polish & Cross-Cutting: 0/4
+
+2026-07-22 Opus 4.8 landed T009+T010 (branch commits 548a1a6, 49ed3fd post-rebase): internal/toolloop driver — contract surface exact, unexported submitter seam for deterministic tests, transcript invariant one-assistant-turn-per-round pinned (the env-<round> fallback dependency), final-round reads recorded unlanded by design, CallRecord.Reason = handler ResultForModel for rejections. Full suite green. Branch then rebased onto origin/main after PRs #37 (chronicle digest) + #38 (metatron miracles) merged — clean rebase, overlapping packages green. Post-#38 impact absorbed into artifacts: metatron turn now works miracles with an at-most-one-mediated-act rule that maps exactly onto loop cardinality; added T019b (work_miracle registry entry, Sonnet) and amended T020 + research R13. Next: T011-T013 mind migration (Opus).
 <!-- SECTION:NOTES:END -->
