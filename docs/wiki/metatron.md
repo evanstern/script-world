@@ -7,9 +7,10 @@ sources:
   - internal/metatron/turn.go
   - internal/metatron/charter.go
   - internal/metatron/digest.go
+  - internal/metatron/miracle_batch.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # Metatron
@@ -32,8 +33,10 @@ frame that pins two invariants beneath ANY charter (never invent unobserved even
 never pass the player's words to a villager), live status (clock, ⚡ bank, roster),
 queued moments, the [[chronicle]] tail (the angel reads its village's story — this
 grounds fresh reigns and upgraded worlds), its soul tail, and recent transcript.
-Output contract: strict JSON `{say, nudge|null}`; unusable output → safe apology,
-nothing lands, nothing spent.
+Output contract: strict JSON `{say, nudge|null, miracle|null}`; unusable output →
+safe apology, nothing lands, nothing spent. The fixed frame's prompt (`turnPrompt`)
+spells out the miracle vocabulary and its per-kind charge cost alongside the nudge
+rule, beneath any charter.
 
 **Nudges**: `dream` (one living villager) or `omen` (all living, recorded
 explicitly). Validation (form, living target, ≤400 chars, charges ≥ 1) downgrades
@@ -49,6 +52,22 @@ spends the charge; the dry-run enforces it at the door) + one prefixed
 `SalDream` (8) — provenance-unknown memories the villager interprets in persona.
 The firewall is structural, not behavioral: no code path exists from console input
 to any villager surface (sentinel-audited in `metatron_test.go`).
+
+**Miracles** (spec 016, [[metatron-miracles]]): the angel's other mediated act,
+spent from the same charge bank. At most one act per turn — a nudge takes the
+turn if the model returns one, otherwise a `miracle` may land (`move`, `remove`,
+`give_item`, `time_snap`). `turnReply.Miracle` is an anonymous struct with **no
+gratis field** — structural stripping identical in spirit to the nudge firewall:
+a model-driven miracle can never waive its charge, because there is nothing to
+unmarshal `gratis` into. `landMiracle` resolves door-neutral `MiracleParams`
+(villager name → index, day/`HH:MM` → tick via [[game-clock]]'s
+`ParseTimeOfDay`/`TickAt`) from an `agentXY` snapshot the absorb goroutine
+mirrors per batch (so the turn worker never races the live replica), then calls
+the shared `metatron.BuildMiracleBatch` — the SAME builder the IPC `miracle` door
+uses — to compose the event and its perception-memory companions, and lands it
+through `InjectSocial`. A rejection at the reducer dry-run becomes an in-fiction
+refusal in the reply suffix, exactly like a refused nudge; a landed miracle also
+appends a soul-file line.
 
 **Charge economy** (`internal/sim/metatron.go`): `State.MetatronCharges` — genesis
 1, cap 3, +1 per absolute 6-game-hour boundary emitted by the [[executor]]
@@ -76,12 +95,15 @@ survival comes free with files, and world determinism never depends on them.
 
 ## Connections
 
-[[sim-loop]] whitelists `metatron.nudged`; [[sim-state-reducer]] holds the bank;
-[[executor]] regenerates it; [[event-types]] catalogs the family;
-[[llm-orchestrator]] routes `KindMetatron` to the cloud tier; [[chronicle]] feeds
-the angel's grounding; [[agent-mind]] is how villagers interpret what lands;
-[[daemon-lifecycle]] wires the component behind the LLM-config gate. Spec:
-`specs/005-metatron/`.
+[[sim-loop]] whitelists `metatron.nudged` and the four `metatron.*` miracle
+types; [[sim-state-reducer]] holds the bank and the miracle reducer arms
+([[metatron-miracles]]); [[executor]] regenerates it; [[event-types]] catalogs
+both families; [[llm-orchestrator]] routes `KindMetatron` to the cloud tier;
+[[chronicle]] feeds the angel's grounding; [[agent-mind]] is how villagers
+interpret what lands; [[daemon-lifecycle]] wires the component behind the
+LLM-config gate; [[ipc-server]]'s `handleMiracle` is the miracle's other door,
+sharing `BuildMiracleBatch` with `landMiracle` here. Specs: `specs/005-metatron/`,
+`specs/016-metatron-miracles/`.
 
 ## Operational notes
 

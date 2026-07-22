@@ -6,7 +6,8 @@ sources:
   - internal/sim/state.go
   - internal/sim/agents.go
   - internal/sim/recipes.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+  - internal/sim/miracles.go
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # Sim state & reducer
@@ -63,6 +64,16 @@ before dark. `genesisPlacement` (spec 012 US6) is factored out so [[world-migrat
 can re-place carried souls on a regenerated v2 map byte-identically to a fresh
 genesis of the same seed.
 
+`State` also carries an unexported `m *worldmap.Map` (spec 016): the static
+generated map, attached at construction and never serialized (canonical state
+bytes are unchanged by it). `SetMap` attaches it to a `State` built outside
+`NewState` — the loop's dry-run probe and any replica reconstructed by
+unmarshalling into a bare `State` have none until called — so miracle reducer
+arms can consult the terrain vocabulary (`passable`/`buildSite`/`effectiveKind`)
+identically live, in the dry-run, and in replay. `world.migrated`'s wholesale
+`*s = p.State` replacement preserves the receiver's existing map across the
+swap (the unmarshalled payload state carries none of its own).
+
 `Apply` switches on event type: `clock.*` maintain pause/speed/degradation;
 `sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
@@ -95,7 +106,11 @@ owner/witness `agent.memory_added` events — ride the same companion batch,
 `applyGru` in `gru.go` ([[gru]]);
 the `meeting.*`/`norm.*` families — plus `meeting.convention_established` and
 the `sim.gathering_observed` watch event (TASK-36) — dispatch to
-`applyGovernance` in `governance.go` ([[governance]]).
+`applyGovernance` in `governance.go` ([[governance]]); the four miracle types
+`metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`/
+`metatron.entity_removed` (spec 016, [[metatron-miracles]]) dispatch to
+`applyMiracle` in `miracles.go`, alongside `metatron.charge_regenerated`/
+`metatron.nudged`'s `applyMetatron`.
 `world.migrated` (spec 012 US6) is the one case that does not incrementally mutate
 fields: after checking the payload's `State.Seed` matches (a mismatched payload
 no-ops, keeping `Apply` total), it replaces `*s` wholesale with the embedded state —
@@ -134,7 +149,9 @@ verification and the determinism tests. Wall-clock time never appears in state.
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
 [[event-types]] lists every payload struct (the cognition-horizon payloads
 live in sibling files `cognition.go`, `guard.go`, and `plan.go`); [[world-migration]]
-is the sole producer of `world.migrated`.
+is the sole producer of `world.migrated`; [[metatron-miracles]] covers the
+miracle payload shapes, cost table, and the `rebaseTicks` shift-semantics
+taxonomy `applyTimeSnapped` uses.
 
 ## Operational notes
 

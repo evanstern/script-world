@@ -6,11 +6,12 @@ sources:
   - internal/sim/sim_test.go
   - internal/sim/migrate_test.go
   - internal/sim/whole_feature_test.go
+  - internal/sim/miracles_test.go
   - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # Testing strategy
@@ -91,6 +92,31 @@ daemons' sim histories over their common tick prefix (past tick 25000, so the
 full day-1 [[governance]] meeting cycle is inside the compared window),
 excluding wall-dependent `daemon.*`/`clock.*` bookkeeping.
 
+**Miracle reducer suite** (`internal/sim/miracles_test.go`, spec 016,
+[[metatron-miracles]]): per-arm coverage for all four types — move (villager/
+structure-whole/pile-merge, impassable/absent-source rejection), remove
+(villager rejected, chest spill, pile destruction, terrain routing), grant
+(happy path, over-cap whole-reject, unknown kind, dead villager, non-positive
+qty, spear shape), and time-snap (forward-only, duration-preserving,
+whole-day-no-drift, mints-no-charges-across-skipped-boundaries, while-paused);
+plus charge doctrine (insufficient-charge rejection, gratis waives only the
+charge, gratis is logged visibly), and `TestRebaseTaxonomyComplete` — the build
+fails if a new tick-anchored `int64` field appears anywhere in the state tree
+without a SHIFT/KEEP classification in `rebaseTicks`, so the taxonomy can never
+silently drift from the state struct. Byte-identity replay suites
+(`TestMiracleReplayByteIdentity`, `TestMiracleSnapReplayByteIdentity`,
+`TestMiracleGrantReplayByteIdentity`) prove each miracle type replays to the
+same state hash as live application.
+
+**IPC miracle round trips** (`internal/ipc/ipc_test.go`, spec 016): the
+operator "miracle" command exercised over the real wire on a pure-sim world
+(no LLM/angel) — a move lands, spends a charge, and is visible in the next
+state fetch; `--force`/`gratis` lands a miracle against an empty bank and
+leaves it untouched at zero, while a non-forced attempt against the same
+empty bank is refused; a `give_item` resolves the villager by name and the
+grant is visible in the next state fetch; unknown kinds/names are refused
+cleanly with the connection surviving.
+
 The whole suite runs under `-race`; it caught a real race (store `lastSeq`, loop
 writer vs IPC readers — now atomic).
 
@@ -98,7 +124,8 @@ writer vs IPC readers — now atomic).
 
 Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
 [[ipc-server]]/[[ipc-client]] (integration), and [[cli-promptworld]]/
-[[daemon-lifecycle]] (e2e). Manual validation results live in
+[[daemon-lifecycle]] (e2e). [[metatron-miracles]] covers the reducer arms and
+doors these suites exercise. Manual validation results live in
 `specs/001-world-daemon/quickstart-results.md`.
 
 ## Operational notes

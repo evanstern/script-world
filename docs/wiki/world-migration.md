@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/migrate.go
   - internal/world/migrate.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # World migration
@@ -88,6 +88,10 @@ JSON). The transform then:
   in-flight session — re-seeded from `world.json` on next boot, or re-emerges), and
   per-agent `Intent`/`Plan`/`Hail`/`Asleep` (everyone wakes standing, freshly idle
   at the migration tick via `IdleSince`).
+- **Attaches the map** (spec 016): `MigrateState` sets the resulting `State`'s
+  unexported `m *worldmap.Map` field (via the same construction path `NewState`
+  uses, [[sim-state-reducer]]), so a migrated state is map-aware for the
+  miracle reducer arms exactly like a fresh genesis or a live replica.
 - **Re-places** every carried soul via `genesisPlacement` — the same deterministic
   placement `NewState` uses for a fresh genesis of that seed
   ([[sim-state-reducer]], [[deterministic-rng]]) — so migrated villagers land on

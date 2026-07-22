@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # IPC server
@@ -32,6 +32,20 @@ worlds without an LLM config answer with a clean "not present" error. `set_speed
 policy (TASK-20): `max` is refused with an actionable error whenever the world
 has an LLM configured (`llm != nil`) — uncapped ticking is for pure-sim worlds;
 the watchable ceiling is 32x ([[game-clock]]).
+
+`miracle` (spec 016, [[metatron-miracles]]) dispatches to `handleMiracle`, which
+needs only `srv.loop` — never `srv.llm` or `srv.metatron` — so it works on
+pure-sim worlds with no angel or orchestrator configured. It fetches the current
+state via `loop.DoState` (to resolve door-side name/tile lookups: a `give_item`
+villager name through `sim.AgentIndexByName`, a `time_snap` day/`HH:MM` through
+`clock.ParseTimeOfDay`/`clock.TickAt`), builds `metatron.MiracleParams` from the
+kind-specific args, calls the shared `metatron.BuildMiracleBatch` (the same
+batch-builder the angel's turn uses) to compose the miracle event plus its
+perception-memory companions, and lands it through `loop.InjectSocial` — so the
+door is validated by the exact same dry-run/reducer path as every other injected
+batch. Replies with the post-land charge bank and a one-line summary
+(`MiracleData`); an invalid kind, unresolvable name/tile, or reducer rejection
+(insufficient charges, bad destination, …) returns `ok:false` and nothing lands.
 
 **Broadcast path**: the loop's notify callback is `Server.Broadcast`, which offers
 committed events to each session under a non-blocking send into a
@@ -69,7 +83,9 @@ listener and every session and removes the socket file.
 
 [[sim-loop]] feeds `Broadcast` and receives `Do` calls; [[event-log]] backs replay and
 gap-fill; [[ipc-protocol]] defines the wire shapes; [[daemon-lifecycle]] constructs the
-server (with `SetLoop` breaking the mutual reference) and calls `Close` on exit.
+server (with `SetLoop` breaking the mutual reference) and calls `Close` on exit;
+`handleMiracle` is one of the two doors into [[metatron-miracles]] (the other is
+the angel's turn reply, [[metatron]]).
 
 ## Operational notes
 

@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # Sim loop
@@ -102,16 +102,25 @@ by construction.
 
 `Loop.InjectSocial` is the second door — the mind's injection
 door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]],
-narrator entries per [[chronicle]], nudges per [[metatron]], proposal rephrasing
+narrator entries per [[chronicle]], nudges and miracles per [[metatron]] /
+[[metatron-miracles]], proposal rephrasing
 per [[governance]] — `agent.thought` is
 whitelisted as a reducer no-op, `chronicle.entry` appends the story ring,
 `metatron.nudged` spends a charge with a validating reducer the dry-run enforces,
-`meeting.proposal_rephrased` swaps an enacted norm's text and nothing else,
+the four `metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`/
+`metatron.entity_removed` miracle types (spec 016) are whitelisted the same way —
+their reducer arms enforce presence/destination/charge before anything lands,
+the whitelist is only the isolation boundary — `meeting.proposal_rephrased` swaps
+an enacted norm's text and nothing else,
 and the `cog.*` telemetry triple — `cog.thought`, `cog.outcome`,
 `cog.recalibration_recommended` — is whitelisted as reducer no-ops so the
 [[cognition]] layer's observability is recorded, never silent):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
-nudge, phrasing, or telemetry effects, dry-run on a state copy before applying.
+nudge, miracle, phrasing, or telemetry effects, dry-run on a state copy before
+applying — the dry-run probe is reconstructed from bytes and so carries no
+unexported/unserialized state, so `handleCommand` re-attaches the loop's static
+map (`probe.SetMap(l.m)`) before applying, letting miracle arms validate the
+terrain vocabulary in the dry-run exactly as the real apply and replay will.
 Model output enters
 the sim only through these two doors, as recorded input. The protocol `Status`
 carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
@@ -124,6 +133,7 @@ carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
 the ctx whose cancellation triggers the final snapshot. The landing ladder's
 budgets and classes come from [[cognition]] (`cognition.ClassFor`), whose router
 and estimators produce the snapshot/landing metadata the ladder judges.
+[[metatron-miracles]]'s four event types ride `InjectSocial`'s whitelist.
 
 ## Operational notes
 

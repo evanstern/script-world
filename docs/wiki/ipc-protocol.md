@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # IPC protocol
@@ -38,7 +38,14 @@ model, tokens, cost, latency — errors when the world has no orchestrator), and
 `shutdown`, and the Metatron console pair (TASK-12, [[metatron]]): `metatron_chat`
 (`MetatronChatArgs{text}` → a `metatron.TurnResult` with reply, optional landed
 nudge, charge bank, surfaced moments — a long call, one cloud round-trip) and
-`metatron_status` (no args → the model-free `metatron.Status` peek). `StatusData`
+`metatron_status` (no args → the model-free `metatron.Status` peek), and `miracle`
+(spec 016, [[metatron-miracles]]): `MiracleArgs{kind, day?, time?, villager?,
+item?, qty?, class?, x?, y?, to_x?, to_y?, gratis?}` where `kind` selects
+`time_snap`/`give_item`/`move`/`remove` and the remaining fields are that kind's
+arguments → `MiracleData{kind, charges, gratis, summary}`. `miracle` is the
+**only** surface that accepts `gratis` (the CLI's `--force` sets it, waiving the
+charge — the angel's turn path has no equivalent field); the handler needs only
+the sim loop, no LLM/angel presence, so it works in a pure-sim world. `StatusData`
 gains an optional `llm` section (tier health, queue depths,
 monthly spend vs budget) when the orchestrator is enabled.
 
@@ -64,7 +71,7 @@ oversized reply → the substituted `reply too large` error above.
 [[ipc-server]] implements the daemon side; [[ipc-client]] the attach side;
 [[event-types]] defines what rides inside event pushes; [[cli-promptworld]] renders
 `StatusData` for humans. The [[tui-client]] consumes `state` + `subscribe` to run its
-live replica.
+live replica. `miracle` is the CLI/IPC operator door into [[metatron-miracles]].
 
 ## Operational notes
 

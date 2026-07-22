@@ -7,7 +7,8 @@ sources:
   - cmd/promptworld/commands.go
   - cmd/promptworld/calibrate.go
   - cmd/promptworld/ps.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+  - cmd/promptworld/miracle.go
+verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
 ---
 
 # promptworld CLI
@@ -90,6 +91,16 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   a message, one mediated turn (prints surfaced moments, the reply, any landed
   `⚡ dream/omen` line, and the charge bank); without, a model-free status peek
   (charges, charter provenance, recent soul notes).
+- `miracle <world> <snap-time|give|move|remove> ... [--force]` — the operator door
+  for Metatron's miracles ([[metatron-miracles]], spec 016 R6), a dedicated
+  subcommand family independent of the `metatron` conversational path: `snap-time
+  <day> <HH:MM>`, `give <villager> <item> <qty>`, `move <class> <x,y> <x1,y1>`,
+  `remove <class> <x,y>` (`<class>` is `villager|structure|pile|terrain`; terrain
+  is remove-only, villagers cannot be removed). Dials the daemon and calls the
+  `miracle` IPC command directly — no LLM involved. `--force` sets the gratis flag
+  that waives the charge cost, an override reachable only from this CLI door, never
+  from the angel's own turn. Prints the miracle summary (`(forced)` suffix when
+  gratis) and the remaining charge bank.
 - `llm <world> <kind> <prompt...> [--system] [--max-tokens]` — one-shot model call via
   the daemon's `llm_call` command, printing tier, model, tokens, cost, and latency
   ([[llm-orchestrator]]). `new` also writes the default `llm.json` config.
@@ -111,7 +122,8 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
 resolution, discovery, and the `ps` probe; [[ipc-client]] carries every online
 command; [[world-save-directory]] and [[event-log]] back the offline paths;
 [[game-clock]] formats times in `clockLine`/`eventLine`; `calibrate` writes the
-profile [[cognition]] routes with; `migrate` hands off to [[world-migration]].
+profile [[cognition]] routes with; `migrate` hands off to [[world-migration]];
+`miracle` hands off to [[metatron-miracles]].
 
 ## Operational notes
 
