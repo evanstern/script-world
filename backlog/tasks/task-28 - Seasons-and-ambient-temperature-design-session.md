@@ -4,11 +4,11 @@ title: 'Seasons and ambient temperature: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
-updated_date: '2026-07-21 14:12'
+updated_date: '2026-07-22 04:34'
 labels:
   - design
 dependencies: []
-ordinal: 24000
+ordinal: 14000
 ---
 
 ## Description
@@ -26,4 +26,6 @@ Roguelike survival design (user, 2026-07-20; see decision-3 strife doctrine). To
 
 <!-- SECTION:NOTES:BEGIN -->
 Pre-session decisions (user, 2026-07-20): (1) Two seasons only — hot and cold, no four-season calendar. (2) Day/night temperature difference is in: temperature drops at night and spikes at 13:00-14:00. (3) Purpose is decision-3: seasons exist to turn the labor-budget screw, not for flavor.
+
+Re-grounding 2026-07-22: numeric premises hold (warmthLossCold=4 / warmthGainDay=2 at agents.go:138/140; night 22:00-06:00 per clock tests). Stale ref: 'TASK-26 storage' is Done and became spec 013 (TASK-51, In Progress) — point storage coupling there. Absorbed from TASK-29 (archived, core superseded by spec 012): storm/rain dousing of fires and fire-duty rosters are now open questions for THIS design session; spec 012 pinned the base fuel mechanic (2 wood -> 8 game-hours, +4h per refuel, cap 12h, cold fire refuses cooking, reflex refuels).
 <!-- SECTION:NOTES:END -->

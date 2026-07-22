@@ -4,13 +4,12 @@ title: 'The survival labor budget: effort, healing, and health retune — design
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
-updated_date: '2026-07-21 14:12'
+updated_date: '2026-07-22 04:34'
 labels:
   - design
 dependencies:
   - TASK-28
-  - TASK-29
-ordinal: 26000
+ordinal: 13000
 ---
 
 ## Description
@@ -29,4 +28,6 @@ Roguelike survival design (user, 2026-07-20). This is the calibration task that 
 
 <!-- SECTION:NOTES:BEGIN -->
 Pre-session decisions (user, 2026-07-20): (1) Feeding self + one other costs ~8h of hunting or foraging. (2) Chop a tree ~30 min = 1 wood. (3) One hut ~2 days of effort from one person; a fire ~1h. (4) Healing must exist and stay simple — sleep is the preferred mechanic. (5) Health can deplete; permadeath (already permanent in code) makes that final.
+
+Re-grounding 2026-07-22: cited constants hold (eatFoodValue=350 agents.go:144, healthRegen=1 agents.go:142, chopTicks=300 / chopWood=2 agents.go:153/159). WARNING: spec 012 (TASK-50, in progress) re-denominates food (raw +40 / cooked +80 / meal +100 replacing the single +350; forage=2, hunt=8/12) and explicitly defers the labor-budget retune to this task — rewrite the food-side baselines against spec 012's pins once it merges. Absorbed from TASK-29 (archived): raising fire build cost (~1 game-hour of labor) folds into this retune. Coordinate carry caps with spec 013.
 <!-- SECTION:NOTES:END -->

@@ -4,10 +4,12 @@ title: 'Tool registry: single source of truth for agent capabilities (Layer 1)'
 status: To Do
 assignee: []
 created_date: '2026-07-22 02:49'
+updated_date: '2026-07-22 04:34'
 labels:
   - llm
 dependencies: []
-ordinal: 48000
+priority: high
+ordinal: 1000
 ---
 
 ## Description

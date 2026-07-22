@@ -4,11 +4,12 @@ title: 'Webhook sinks: post world events to external endpoints'
 status: To Do
 assignee: []
 created_date: '2026-07-19 19:30'
+updated_date: '2026-07-22 04:34'
 labels:
   - events
   - observability
 dependencies: []
-ordinal: 18000
+ordinal: 17000
 ---
 
 ## Description
@@ -24,3 +25,9 @@ Let a world POST its committed events to configured web hooks so debugging/monit
 - [ ] #3 A slow, failing, or unreachable sink never blocks or slows the sim loop — drops are counted and delivery health is visible in daemon status
 - [ ] #4 Sim behavior and the event log are byte-identical with and without webhooks enabled (pure observer, replay unaffected)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Re-grounding 2026-07-22: notify fan-out moved to daemon.go:89-105 (was 67-83); consumer list has grown — Broadcast, scribe, mind, metatron (daemon.go:93/99/164/175) — which strengthens the just-another-Observe-consumer premise. Scribe 256-batch buffer holds (scribe.go:38). Pairs with TASK-17: external readers cannot do replica lookups, they need named payloads.
+<!-- SECTION:NOTES:END -->

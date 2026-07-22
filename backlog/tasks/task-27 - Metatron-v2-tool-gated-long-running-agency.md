@@ -4,10 +4,13 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:06'
+updated_date: '2026-07-22 04:34'
 labels: []
-dependencies: []
+dependencies:
+  - TASK-53
+  - TASK-52
 priority: medium
-ordinal: 23000
+ordinal: 6000
 ---
 
 ## Description
@@ -42,3 +45,9 @@ Grounding: docs/wiki/metatron.md, docs/wiki/llm-orchestrator.md, docs/wiki/chron
 - [ ] #8 Budget/degraded honesty: an order firing with empty charge bank or exhausted budget queues an honest moment instead of acting or retry-looping
 - [ ] #9 docs/wiki re-pinned for touched notes (metatron, llm-orchestrator, event-types) via grounding-wiki:wiki-update before merge
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Re-grounding 2026-07-22: Decision #1's infrastructure (Go tool registry as single source of truth + bounded execute-and-feed-back loop) is now owned by TASK-53 (registry, Layer 1) and TASK-52 (agent tool-use loop), written 2026-07-21 after this task. Re-scope: TASK-27 consumes that substrate and contributes the Metatron-specific pieces — roster (send_omen, send_vision, monitor_and_act, pause/start/adjust_speed), KindMetatronWatch routing, standing-order event sourcing, charge economy expressed as tool costs. Decision 1a's strict-JSON envelope may be superseded by TASK-52's provider-native tool calling — resolve in the 52 spec, not here. Other grounding verified current: sentinel test metatron_test.go:272, agent.slept/woke executor.go:385/128, KindMetatron llm.go:37. Stale next-step: 'specs/006-metatron-agency' — 006 is taken (norms); use the next free spec number. Deps added: TASK-53, TASK-52.
+<!-- SECTION:NOTES:END -->

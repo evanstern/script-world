@@ -4,13 +4,14 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: To Do
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 02:50'
+updated_date: '2026-07-22 04:34'
 labels:
   - agent-mind
   - llm
 dependencies:
   - TASK-53
-ordinal: 47000
+priority: high
+ordinal: 2000
 ---
 
 ## Description

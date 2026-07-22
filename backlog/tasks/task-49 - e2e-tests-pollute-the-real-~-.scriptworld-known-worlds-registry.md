@@ -4,9 +4,11 @@ title: e2e tests pollute the real ~/.scriptworld known-worlds registry
 status: To Do
 assignee: []
 created_date: '2026-07-21 20:30'
+updated_date: '2026-07-22 04:34'
 labels: []
 dependencies: []
-ordinal: 43000
+priority: medium
+ordinal: 4000
 ---
 
 ## Description
@@ -20,3 +22,9 @@ Found live on 2026-07-21 while auditing a migrated world: ~/.scriptworld/known_w
 - [ ] #1 All e2e daemon-spawning helpers run with a hermetic SCRIPTWORLD_HOME (no test writes ~/.scriptworld)
 - [ ] #2 Full e2e suite green; a run against a seeded real-registry fixture leaves it byte-identical
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Re-grounding 2026-07-22: refs drifted ~2 lines — run/runErr helpers at daemon_e2e_test.go:~37/46 (exec real binary, no .Env, inherit os.Environ); registerWorld at daemon boot daemon.go:60; only manager_e2e_test.go isolates SCRIPTWORLD_HOME (:18-27). Diagnosis and fix (hermetic SCRIPTWORLD_HOME in shared helpers / TestMain) unchanged.
+<!-- SECTION:NOTES:END -->

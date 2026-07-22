@@ -4,7 +4,7 @@ title: 'Fire fuel and the hearth: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:54'
-updated_date: '2026-07-21 14:12'
+updated_date: '2026-07-22 04:34'
 labels:
   - design
 dependencies: []
@@ -26,4 +26,6 @@ Roguelike survival design (user, 2026-07-20; see decision-3 strife doctrine). Fi
 
 <!-- SECTION:NOTES:BEGIN -->
 Pre-session decisions (user, 2026-07-20): (1) Fire burns out without constant fuel — 1 wood per unit-of-time (working number: 1 wood/game-hour). (2) Building a fire costs about 1 hour of effort. (3) The fuel bill is the cooperation lever per decision-3: shared fires divide it, private fires multiply it.
+
+Superseded 2026-07-22: spec 012 (TASK-50) already contains the core fire-fuel design this session was to produce — Session Decision #5, FR-009..012, US2 scenarios, pinned tuning (2 wood -> 8 game-hours, +4h/refuel, cap 12h, cold fire grants nothing and refuses cooking, reflex refuels a dying fire). Residual scope redistributed: fire build-cost raise -> TASK-30; storm/rain dousing + fire-duty rosters -> TASK-28. Archived as superseded.
 <!-- SECTION:NOTES:END -->

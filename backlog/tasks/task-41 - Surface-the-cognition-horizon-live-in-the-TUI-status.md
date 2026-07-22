@@ -4,13 +4,13 @@ title: Surface the cognition horizon live in the TUI/status
 status: To Do
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-21 14:11'
+updated_date: '2026-07-22 04:34'
 labels:
   - ux
   - tui
 dependencies: []
 priority: medium
-ordinal: 35000
+ordinal: 12000
 ---
 
 ## Description
@@ -23,4 +23,6 @@ From TASK-39: suppression exists only in raw cog.outcome payloads; no TUI/status
 
 <!-- SECTION:NOTES:BEGIN -->
 Sequencing: depends on TASK-34's dock landing (its natural home is a dock status surface) — open/merge the TASK-34 PR first. Scope note: pair with the metatron cloud-tier-unreachable spinner fix recorded on TASK-34 (same 'daemon knows, UI doesn't say' family).
+
+Re-grounding 2026-07-22: narrate.go router gate holds (~:261). Blocker cleared — TASK-34's dock is Done and landed; the sequencing note about merging the TASK-34 PR first is obsolete. Unblocked.
 <!-- SECTION:NOTES:END -->

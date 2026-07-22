@@ -4,13 +4,14 @@ title: 'Grounded memories: context-rich episodic capture'
 status: To Do
 assignee: []
 created_date: '2026-07-19 15:56'
-updated_date: '2026-07-22 02:50'
+updated_date: '2026-07-22 04:34'
 labels:
   - memory
   - agent-mind
 dependencies:
   - TASK-52
-ordinal: 16000
+priority: high
+ordinal: 3000
 ---
 
 ## Description
@@ -45,4 +46,6 @@ Second layer on top of the deterministic episodic capture: give each agent a per
 2026-07-21: Journal tools decided as tool-driven, not prompt stuffing — search results enter context only when the agent calls search_journal. This requires an agent tool-use loop, which does not exist (llm.Orchestrator is single-shot). Created TASK-52 as the prerequisite; TASK-16 now depends on it.
 
 2026-07-21: prereq chain extended — TASK-53 (tool registry) -> TASK-52 (tool loop) -> TASK-16 journal tools. Journal write tools are expressive-class registry entries; search/read are read-class (loop-dependent). One acting tool per cognition; read tools exempt.
+
+Re-grounding 2026-07-22: line refs drifted — agent.thought emit is now loop.go:531/543 (was 371); conversation-turn emit convo.go:311 with ConversationTurnPayload carrying Text at sim/social.go:138 (was convo.go:135); MemoryAddedPayload now agents.go:246 (was 218); executor memory template literals live in executor.go (memoryEvent helper) — memory.go holds the constructor, not the strings. All mechanisms hold; premise unchanged.
 <!-- SECTION:NOTES:END -->

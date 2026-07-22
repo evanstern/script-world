@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-21 14:11'
+updated_date: '2026-07-22 04:34'
 labels:
   - engine
   - llm
@@ -18,7 +18,7 @@ references:
     backlog/tasks/task-24 -
     Local-tier-contention-concurrent-worlds-share-one-Ollama-with-no-coordination.md
 priority: high
-ordinal: 29000
+ordinal: 8000
 ---
 
 ## Description
@@ -47,4 +47,6 @@ Related: TASK-6 (two-tier orchestrator, Done), TASK-15 (9router cloud tier, Done
 
 <!-- SECTION:NOTES:BEGIN -->
 Live evidence for this design session (2026-07-21): local server parallelizes natively (4 concurrent cogito:3b calls in 0.98s wall vs 3.8s single cold call; no multi-instance setup needed — one loaded model, N slots). Cost/quality sketch from today's measurements: cogito:3b ~1s/call warm vs gemma4:12b-mlx ~20s under load; 48-128-token structured outputs (musings, conversation turns) are 3B-viable, planner/narrator prose is not — division of labor should route cheap chatty classes to the small parallel model and keep quality classes on gemma (both loaded simultaneously fits memory). Caution from TASK-42: small models raise empty-utterance rates — routing design must pair with the retry/tolerance work. Mechanical prerequisite now split out as the parallel-tier task (N workers per tier); this session owns the routing criteria (per-class? per-provider incl. cloud/9router? cost/latency/quality axes).
+
+Re-grounding 2026-07-22: no drift — kind-to-tier table (llm.go:61) and breaker/queue machinery hold. Mechanical prereq TASK-45 (parallel local tier workers) is Done. TASK-24's endpoint-contention findings feed this session; its advisory-lock option may be subsumed by the per-endpoint concurrency guard designed here.
 <!-- SECTION:NOTES:END -->
