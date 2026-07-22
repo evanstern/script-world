@@ -1,10 +1,11 @@
 ---
 name: world-save-directory
-description: One directory = one world run — manifest (world.json), path helpers, create/open validation, clean separability
+description: One directory = one world run — manifest (world.json), path helpers, create/open validation, clean separability, v1→v2 migration
 kind: component
 sources:
   - internal/world/world.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+  - internal/world/migrate.go
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # World save directory
@@ -17,7 +18,9 @@ stopped world's directory is a complete, restorable archive.
 
 `Manifest` (serialized as `world.json` at the dir root) carries `name`, `seed`
 (uint64), `created_at` (RFC3339, metadata only — wall time never enters sim state),
-`format_version` (currently 1), `tick_game_seconds` (fixed 1),
+`format_version` (currently **2** — spec 012's resources/food/crafting break bumped
+it from 1; a v1 manifest is refused by `Open` with a pointer to
+`scriptworld migrate <world>` — [[world-migration]]), `tick_game_seconds` (fixed 1),
 `map_width`/`map_height` (default 64×64; zero/absent values from older saves default
 on `Open`), and an optional `meeting` block (TASK-36, `MeetingConfig`:
 `convene`/`open` as "HH:MM" 24-hour game clock times, optional `x`/`y` meeting
@@ -50,15 +53,32 @@ Runtime files (`daemon.sock`, `daemon.pid`) exist only while a daemon runs and a
 swept by [[daemon-lifecycle]] when stale. The full layout is documented in
 `specs/001-world-daemon/contracts/storage.md`.
 
+**Migration** (`migrate.go`, spec 012 US6 — [[world-migration]] has the full design):
+`OpenForMigration(dir)` loads a world manifest without the version gate (the sole
+purpose is migrating a v1 world this build otherwise can't `Open`); `Migrate(dir)`
+runs the whole ceremony — refuse a live daemon or an already-migrated world
+(`V1DBPath()` → `world.v1.db` existing is that guard), read the v1 covering
+snapshot, transform it (`internal/sim`), archive the live `world.db` (and any
+`-wal`/`-shm` sidecars) to `world.v1.db` **before** writing anything new (the
+archive is never overwritten and never deleted), write a fresh v2 log
+(`world.created` then `world.migrated`) plus its covering snapshot, then bump
+`Manifest.FormatVersion` last — a crash between the archive and the manifest bump
+leaves a recoverable state (restore = rename `world.v1.db` back, reset the
+manifest).
+
 ## Connections
 
 [[daemon-lifecycle]] opens the world and cross-checks the manifest against store meta;
 [[event-log]] and [[snapshots]] live inside `world.db`; [[ipc-server]] binds the socket
-at `SockPath()`. [[cli-scriptworld]]'s `new` creates worlds.
+at `SockPath()`. [[cli-scriptworld]]'s `new` creates worlds and `migrate` upgrades
+a v1 one ([[world-migration]]).
 
 ## Operational notes
 
-Seed and format version are immutable after creation. There is deliberately no global
+Seed and format version are immutable after creation (except across a migration,
+which bumps `format_version` in place). There is deliberately no global
 registry of worlds — the directory is the identity, per the grounding decision "never
 global; runs cleanly separable" ([[design-grounding]]). Archiving = stop the daemon,
-`cp -R` the directory.
+`cp -R` the directory. A migrated world's directory additionally carries
+`world.v1.db`, the untouched original database — deleting it is a deliberate,
+irreversible acceptance of the migration; `Migrate` never removes it itself.

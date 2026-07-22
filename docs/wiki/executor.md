@@ -1,13 +1,14 @@
 ---
 name: executor
-description: The deterministic agent-body layer — integer needs with death, multi-step intents (forage/chop/hunt/build/eat/sleep), per-minute heartbeat, dynamic terrain overlays
+description: The deterministic agent-body layer — integer needs with death, multi-step intents (forage/chop/hunt/quarry/craft/cook/build/eat/bathe/sleep), per-minute heartbeat, dynamic terrain overlays, fire fuel
 kind: component
 sources:
   - internal/sim/executor.go
   - internal/sim/agents.go
   - internal/sim/plan.go
   - internal/sim/terrain.go
-verified_against: 0cfc04adc5ea41bc9c35442f137e9e5d60763e17
+  - internal/sim/recipes.go
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Executor
@@ -17,29 +18,106 @@ deterministic bodies with needs, inventories, and multi-step intents, run unatte
 by `stepEvents` between planner calls. The LLM planner (TASK-7) will *choose* goals;
 the executor is what makes goals physically happen — and it must keep bodies alive
 with no planner at all (the degraded-mode contract from the grounding session).
+Spec 012 (resources/food/crafting v2) widened the body's economy substantially:
+finer-grained resources, a crafting chain, fire fuel with burnout, spear-armed
+hunts, and a shelter rest bonus — this note covers that v2 shape.
 
 ## How it works
 
 **Agents** (`agents.go`): eight named bodies (`sim.AgentNames`) with authored
 personas ([[agent-mind]]). `Needs{Health, Food, Rest, Warmth, Morale}` are integers 0..1000 —
-integer math keeps decay byte-deterministic across platforms. `Inventory` carries
-wood and food. All tuning constants (decay rates, action durations, yields, costs,
-thresholds) sit at the top of `agents.go`.
+integer math keeps decay byte-deterministic across platforms. `Inventory` (v2,
+format_version 2 — [[world-save-directory]]) carries `Wood`, `Stone`, `Water`,
+`Planks`, `RefinedStone`, `FoodRaw`, `FoodCooked`, `Meals` (all `omitempty` ints),
+and `Spears []int` — remaining uses per carried spear, sorted ascending so a hunt
+always spends the most-worn one first. The legacy `Food int` field is gone; a v1
+world must run `scriptworld migrate` ([[world-migration]]) before it can boot under
+this build. All tuning constants (decay rates, action durations, yields, costs,
+thresholds) sit at the top of `agents.go`; the v2 economy's constants (food
+restores, fire fuel, spear durability, gather/craft/build/station magnitudes) are
+grouped under their own "spec 012" block there, and the recipe table itself lives
+in `recipes.go` (mirroring `specs/012-resources-food-crafting/contracts/recipes.md`
+— `recipes_test.go` asserts the two agree).
 
 **Heartbeat**: every game-minute (`tick%60 == 0`) each living agent's needs decay via
-`decayNeeds`: food always falls; rest falls awake / recovers asleep; warmth falls at
-night outdoors, recovers near fire or in shelter, drifts up by day. Zero food or zero
-warmth drains health; health at 0 emits `agent.died` with cause `starvation` /
-`exposure` / `collapse`. The new values land as one absolute `agent.needs_changed`
-event per agent per minute (absolute values = replay-safe).
+`decayNeeds`: food always falls; rest falls awake (or recovers asleep — at
+`restRegenShelter` (6/minute) on a shelter tile, `restRegenSleep` (4) otherwise, the
+plank economy's payoff for building one); warmth falls at night outdoors, recovers
+near a **lit** fire or in shelter, drifts up by day. A fire is lit iff
+`tick < Structure.FuelUntil` — `warmAt` takes the tick and checks it, so a burned-out
+fire grants no warmth. Zero food or zero warmth drains health; health at 0 emits
+`agent.died` with cause `starvation` / `exposure` / `collapse`. The new values land
+as one absolute `agent.needs_changed` event per agent per minute (absolute values =
+replay-safe).
+
+**Fire fuel** (T019/T020): `build_fire` (still 2 wood) lights a fire for
+`2×fireBurnPerWood` (4 game-hours per wood, so 8 hours) from the build tick.
+`refuel_fire` (instant on arrival, 1 wood) pushes `FuelUntil` forward by
+`fireBurnPerWood`, capped at `now + fireFuelCap` (12 hours); relighting a cold fire
+starts the window from now. Every tick, `stepEvents` sweeps `Structures` for a fire
+whose `FuelUntil` falls in the tick's window (`tick-1 < FuelUntil <= tick`) and emits
+`sim.fire_burned_out` exactly once on that transition (no state effect — lit-ness
+stays derived), plus a low-salience witness memory ("Watched the fire burn out.")
+for every living agent within `witnessRadius`.
 
 **Intents**: `Intent{Goal, Target, Res, WorkStart}` executes as a state machine —
 walk (one tile per 5 ticks, staggered per agent, next hop from [[reflex-policy]]'s
-BFS), then on arrival: instant goals (`sleep`, `wander`, `goto_warmth`) complete
-immediately; work goals re-validate the resource (someone may have taken it), emit
-`agent.work_started`, and after the goal's duration emit the completion event
-(`agent.foraged/chopped/hunted/built`), which the reducer turns into inventory,
-overlays, and a cleared intent.
+BFS), then on arrival: instant goals (`sleep`, `wander`, `goto_warmth`,
+`refuel_fire`) complete immediately; work goals re-validate the resource or station
+(someone may have taken it, or a fire may have gone cold — the contested-resource
+pattern, spec 012 FR-002/FR-014), emit `agent.work_started`, and after the goal's
+duration (`workDuration`, below) emit the completion event, which the reducer turns
+into inventory, overlays, structures, or needs.
+
+**The v2 goal set** adds `quarry`/`collect_water` (gather, like forage/chop/hunt),
+`craft_planks`/`craft_stone`/`craft_spear` (hand-crafts, `SiteAnywhere` — no travel,
+work happens on the agent's own tile), `build_oven` (alongside `build_fire`/
+`build_shelter`), and `cook`/`bathe`/`refuel_fire` (station actions at a fire or
+oven). `workDuration` overrides the plain `intentDuration(goal)` lookup for two
+context-dependent cases: a spear-carrying hunt takes `huntTicksSpear` (faster than
+the bare-handed default) and cooking at an oven takes `cookOvenTicks` (slower than
+at a fire) — both read off current state (`Agent.Inv.Spears`, the target structure),
+never persisted on the `Intent`.
+
+Completion behavior per goal:
+- `quarry` → `agent.quarried` (+`quarryYield` Stone), and the outcrop is added to
+  `State.Quarried` (below). `collect_water` → `agent.collected_water`
+  (+`collectWaterYield` Water); water sources never deplete.
+- `hunt` → `agent.hunted`; a carried spear (`Spears[0]`, checked pre-mutation) raises
+  the yield to `huntYieldSpear` (vs. `huntYieldBare` bare-handed) and spends that
+  spear's last use — spending it to zero emits a companion `agent.spear_broke` right
+  after, in the same batch, plus a memory ("My spear broke on the hunt…").
+- `craft_planks`/`craft_stone`/`craft_spear` → inputs re-validated against
+  `recipes.go`'s table at completion (`hasItems`); insufficient inputs resolve via
+  `agent.intent_done` only (no craft). A satisfied craft emits `agent.crafted{Kind}`;
+  the reducer applies the recipe's delta.
+- `build_oven` → `agent.built{Kind: "oven"}`; the first oven in the village gets
+  distinct memory text ("Raised the village's first oven — meals and baths, at
+  last."), and nearby living agents get a witness memory, same pattern as a
+  witnessed death.
+- `cook` → up to `ovenBatchSize` FoodRaw converts to `agent.cooked`: at a fire,
+  fuel-free, producing `food_cooked`; at an oven, additionally burning 1 carried
+  wood, producing `meals` (mirrors the fire's own fuel — an oven with no carried
+  wood or no raw food resolves via `agent.intent_done` only).
+- `bathe` (oven only) → re-validates carried water + wood at completion (water's
+  only consumer); emits `agent.bathed` with absolute post-cap Morale/Warmth
+  (`bathMorale`/`bathWarmth` bumps, gru-pattern) and a positive-toned memory.
+- `refuel_fire` → re-validated on arrival (fire still present, wood still carried);
+  a refuel that would grant no gain over the current deadline (already at the fuel
+  cap) is a no-op (`agent.intent_done` only).
+
+**Eating** (T018, `eatOutcome`): the reflex's `agent.ate` direct-event path (and the
+planner's guarded-plan equivalent) now computes an outcome rather than emitting a
+bare marker. `eatOutcome` consumes the most-nutritious form first — `Meals` →
+`FoodCooked` → `FoodRaw` — one unit at a time until `Needs.Food` reaches `satietyAt`
+(900) or the inventory runs dry, and returns `false` (nothing eaten, no event) if
+already sated or carrying no food at all. Each form restores a different amount
+(`mealRestore` 100, `foodCookedRestore` 80, `foodRawRestore` 40 — cooking roughly
+doubles raw, a meal is the best food); the payload carries counts consumed per form
+plus the absolute post-eat food need, so the reducer never re-derives arithmetic.
+`wakeReason`'s hunger-emergency wake check now looks for *any* carried food form,
+not just raw. `canGive` (the give-to-starving social rule) checks `Inv.FoodRaw`
+specifically — raw is deliberately the form a subsistence village shares.
 
 **Guarded plans** (TASK-32, `plan.go`): a planner reply may land as a short
 conditional plan — up to `PlanStepCap` (3) `PlanStep`s, each with a goal, an
@@ -58,10 +136,15 @@ older generation are superseded when they land ([[cognition]]).
 
 **Terrain overlays** (`terrain.go`): chopped trees and harvested forage are
 event-sourced state over the static map — `effectiveKind`/`passable` merge
-[[worldmap-generation]] with `State.Cleared`/`Harvested`; forage regrows after 12
-game-hours (`sim.forage_regrown`), dens cool down 6 game-hours after a hunt.
-Structures (`fire`, `shelter`) exist only in state; `warmAt` is fire within Manhattan
-radius 2 or standing on a shelter.
+[[worldmap-generation]] with `State.Cleared`/`Harvested`/`Quarried`; forage regrows
+after 12 game-hours (`sim.forage_regrown`), dens cool down 6 game-hours after a hunt.
+A quarried rock outcrop (spec 012) is different from the other two: it does NOT
+revert to Grass — `effectiveKind` renders it as `worldmap.Depleted` permanently (no
+regrow in v1), `passable` allows walking across it, but it is neither buildable
+(`buildSite`) nor quarryable again. Structures (`fire`, `shelter`, `oven`) exist only
+in state; `warmAt` is a *lit* fire within Manhattan radius 2, or standing on a
+shelter (ovens grant no warmth). `fireStructAt`/`litFireAt` locate a fire by
+coordinate and test lit-ness for the refuel/cook completion checks.
 
 **Hails** (TASK-47, `hail.go`): a `talk_to` landing flags its target down —
 `social.hailed` pauses the target for `hailWindowTicks` (480, 8 game-minutes) so
@@ -104,10 +187,13 @@ the substrate hold unchanged over the whole layer.
 
 ## Connections
 
-[[reflex-policy]] decides what idle agents do; [[sim-loop]] drives the tick;
-[[event-types]] catalogs the event families; the [[gru]] preys on the bodies at
-night; [[tui-client]] renders bodies, needs gauges, and structures. TASK-7
-replaces goal *selection*, never execution.
+[[reflex-policy]] decides what idle agents do (including the v2 fuel/craft/eat
+ladder); [[sim-loop]] drives the tick; [[event-types]] catalogs the event families;
+the [[gru]] preys on the bodies at night; [[tui-client]] renders bodies, needs
+gauges, structures, and fire lit/cold state; [[worldmap-generation]] supplies the
+Rock kind quarry sites overlay onto; [[world-migration]] re-places carried souls on
+a fresh v2 map with empty overlays. TASK-7 replaces goal *selection*, never
+execution.
 
 ## Operational notes
 
@@ -115,4 +201,7 @@ A fresh village (seed 42) builds fires within the first game-hour and survives
 multiple days unattended. Known day-1 quirk: agents can't see construction in
 progress, so several may each build a fire in the same window — wasteful, harmless.
 Event volume: ~8 needs events/game-minute (one per living agent) plus movement bursts;
-a two-day run is ~100k events.
+a two-day run is ~100k events. The v2 economy adds a full crafting chain (wood/stone
+→ planks/refined_stone → spears/shelter/oven) and a fire that must be refueled or it
+goes cold — `whole_feature_test.go` and `food_fire_test.go` exercise the chain and
+the fuel sweep end-to-end.

@@ -11,7 +11,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Agent mind
@@ -34,7 +34,17 @@ salience table gains `SalDream` (8) for nudge memories.
 
 **Memories** (`internal/sim/memory.go`): the executor emits `agent.memory_added`
 events from a fixed salience table (talk 3★ … death witnessed 10★); the reducer
-appends them to `Agent.Memories`. `SelectMemories` is the deterministic working
+appends them to `Agent.Memories`. Spec 012's crafting economy added four entries
+— `salSpearBroke` (8, the spear that spent its last use), `salOvenBuilt` (7,
+village-visible), `salBath` (5, medium and positive), and `salFireOut` (3, a
+cold fire nearby is background texture, not formative) — all, like the
+pre-existing `SalDream` (8), kept below `GenerationBumpSalience` (9,
+[[cognition]]) on purpose: memorable enough to surface in the working window,
+never so high they'd interrupt an in-flight generation the way near-death or
+exile do. It also added `memoryEventToned`, a `memoryEvent` variant for a
+personal (non-gossip, `Subject: -1`) memory that still carries an explicit tone
+— `toneBath` (40) and `toneOvenBuilt` (30) are its two spec-012 tones, both
+positive. `SelectMemories` is the deterministic working
 window: salience halved per game-day of age, top K−2, plus 2 seeded serendipity
 picks from the oldest half (bucketed to the planner cadence), presented
 reverse-chronologically. K = `WindowK` (10). Prompts never see the whole soul.
@@ -92,8 +102,19 @@ one call (`llm.KindPlanner`, persona system prefix, situation + memory window
 suffix, MaxTokens 256); the worker emits `cog.thought` at call start and every
 job terminates in exactly one `cog.outcome` (landed, unusable, or —
 loop-owned — rejected), riding `InjectSocial` as reducer no-ops
-(telemetry.go). The reply's first JSON object is parsed against the goal
-vocabulary; the contract now allows either one goal or a guarded plan of at
+(telemetry.go). Spec 012 widened the situation suffix's carried-inventory line
+(`userPrompt` in prompt.go) from wood-and-meals to the full resource/item set —
+wood, stone, water, planks, refined stone, the food triplet (raw/cooked/meals),
+and, when any are held, a spear count with the most-worn's remaining uses — so
+the planner can reason about the crafting chain and the oven's consumers
+directly. The reply's first JSON object is parsed against the goal
+vocabulary — also widened by spec 012, from the original ten goals to
+nineteen: both `validGoals` (parse.go) and the prompt's `goalVocabulary`
+constant gained `quarry`, `collect_water`, `cook`, `refuel_fire`,
+`craft_planks`, `craft_stone`, `craft_spear`, `build_oven`, and `bathe`, each
+with a one-line behavior gloss appended to `systemPrompt` so the planner knows
+what it's choosing before it commits to a goal — the contract now allows
+either one goal or a guarded plan of at
 most `planStepCap` (3) steps (parse.go) — `after_min` becomes a
 `GuardAfterTick` guard anchored at the snapshot tick, `for_min` bounds each
 step's window (`injectPlan`). Single goals are injected via `Loop.InjectIntent`

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: b6f2378b8467fb2486e1b4aa560a311d5a3e95d8
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Social fabric
@@ -22,8 +22,11 @@ model creativity (dialogue, paraphrase) entering only as recorded events.
 affection, give (+30 trust/+20 affection receiver→giver), promise broken (−150/−50
 creditor→debtor), rumor tone/4 listener→subject, conversation tones ×12/×25.
 
-**Ledger**: a give to a starving neighbor opens `Debt{due +2 game days}`
-(reducer-internal on `social.gave`); a matching give-back settles it kept; the
+**Ledger**: a give to a starving neighbor — one unit of `Inv.FoodRaw` moves
+giver→receiver (spec 012 widened the single `Food` field to a raw/cooked/meals
+triplet; giving stays denominated in the least-nutritious raw form) — opens
+`Debt{due +2 game days}` (reducer-internal on `social.gave`); a matching
+give-back settles it kept; the
 executor's hourly due-check breaks overdue debts permanently — with the trust
 penalty and a gossip-seed memory ("X never repaid…"). `Reputation` is computed
 (500 +100·kept −200·broken), never stored.

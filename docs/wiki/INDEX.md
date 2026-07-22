@@ -23,7 +23,8 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 ## Persistence
 
 - [[world-save-directory]] — one dir = one run; manifest, layout, separability
-- [[worldmap-generation]] — seeded terrain (water/woods/forage/dens); regenerated, never stored
+- [[world-migration]] — v1→v2 snapshot-cut migration: keep the people, reset the land
+- [[worldmap-generation]] — seeded terrain (water/woods/forage/rock/dens); regenerated, never stored
 - [[event-log]] — append-only SQLite events table; seq contiguity; source of truth
 - [[snapshots]] — hash-verified recovery accelerator; cadence and fallback chain
 

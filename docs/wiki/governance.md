@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/governance.go
   - internal/mind/meeting.go
-verified_against: 5f1c2894075ef128b627d38198bd2cd69876c5ac
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Governance (norms and votes)
@@ -72,7 +72,11 @@ Attendees remember outcomes (subject-tagged, toned — gossip seeds).
 **Teeth**: norms are a closed vocabulary (`curfew`, `repay_debts`, `exile`)
 because only observable behavior can be judged. Detectors are deterministic and
 witnessed-only (≥1 awake villager in `witnessRadius`, else nothing happens):
-curfew rides the per-minute beat (night, uncovered, latch once per night) —
+curfew rides the per-minute beat (night, uncovered, latch once per night —
+"uncovered" is `!warmAt`, which since spec 012's fire-fuel model takes the
+current tick and only counts a fire as warmth if it is still lit, so an agent
+huddled by a burned-out fire is uncovered exactly as if no fire were there;
+[[executor]] owns the fuel window) —
 and detectors run regardless of the convention, so an upgraded save carrying a
 law keeps enforcing it even before any convention exists;
 repay-debts piggybacks the hourly due-check's `promise_broken`; exile-defiance

@@ -6,10 +6,11 @@ sources:
   - internal/sim/state.go
   - internal/sim/agents.go
   - internal/sim/executor.go
+  - internal/sim/recipes.go
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Event types
@@ -18,13 +19,18 @@ Every event has a namespaced `type` and a canonical-JSON payload defined as a Go
 struct in `internal/sim` (structs, never maps, so bytes are deterministic; core
 payloads live in `state.go`, families note their own file below).
 This catalog is the contract downstream consumers (chronicle, Metatron digests, the
-TUI) will read.
+TUI) will read. Spec 012 (resources/food/crafting) bumped the world save format to
+**v2** ([[world-save-directory]]): a widened `Inventory`, a new `agent.ate` payload
+shape, and nine new event types below. A v1 world cannot boot under a v2 build — it
+must run `scriptworld migrate` first ([[world-migration]]), whose sole output event,
+`world.migrated`, is also cataloged here.
 
 ## How it works
 
 | Type | Payload struct | Emitted by | Reducer effect |
 |---|---|---|---|
 | `world.created` | `WorldCreatedPayload{name, seed}` | CLI `new`, tick 0 | none (genesis marker) |
+| `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` (`state` embeds the full canonical `sim.State`) | `scriptworld migrate` (client-side, offline — [[world-migration]]), once, right after a fresh `world.created` | replaces `State` wholesale (after checking `state.Seed` matches — a foreign payload is a no-op); the log alone (`world.created` → `world.migrated`) reproduces the migrated world with zero snapshots |
 | `clock.paused` / `clock.resumed` | `{}` | loop command | pause flag (+ snapshot on pause) |
 | `clock.speed_set` | `SpeedSetPayload{speed}` | loop command | `Speed` updated |
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
@@ -34,9 +40,17 @@ TUI) will read.
 | `agent.work_started` | `WorkStartedPayload{agent, tick}` | executor at target | `WorkStart` stamped |
 | `agent.intent_done` | `AgentPayload{agent}` | executor (done/invalid/unreachable) | intent cleared |
 | `agent.moved` | `AgentMovedPayload{agent, x, y}` | executor pathing | position updated |
-| `agent.foraged` / `agent.chopped` / `agent.hunted` | `HarvestPayload{agent, x, y}` | work completion | +food/+wood, overlay (harvest/cleared/den cooldown), intent cleared |
-| `agent.built` | `BuiltPayload{agent, kind, x, y}` | work completion | structure added, wood spent, intent cleared |
-| `agent.ate` | `AgentPayload{agent}` | reflex (instant) | −1 carried food, +350 food need |
+| `agent.foraged` / `agent.chopped` / `agent.hunted` | `HarvestPayload{agent, x, y}` | work completion | +FoodRaw (forage `forageYieldV2`; hunt `huntYieldBare`, or `huntYieldSpear` + spends `Spears[0]`'s last use if carrying one) / +wood, overlay (harvest/cleared/den cooldown), intent cleared |
+| `agent.quarried` | `HarvestPayload{agent, x, y}` | work completion (rock outcrop) | +`quarryYield` Stone; `(x,y)` appended to `State.Quarried` (permanent — [[worldmap-generation]], [[executor]]), intent cleared |
+| `agent.collected_water` | `HarvestPayload{agent, x, y}` | work completion (any water tile) | +`collectWaterYield` Water, intent cleared (no overlay — water never depletes) |
+| `agent.crafted` | `CraftedPayload{agent, kind}` (kind ∈ planks\|refined_stone\|spear) | work completion (hand-craft) | recipe delta from `recipes.go` by goal (re-derived from `kind`); a fresh spear appends `spearDurability` (3) to `Spears`, kept sorted ascending, intent cleared |
+| `agent.built` | `BuiltPayload{agent, kind, x, y}` (kind ∈ fire\|shelter\|oven) | work completion | structure added, recipe's inputs spent (via `recipes.go`'s `build_<kind>`); a fresh fire also gets `FuelUntil = tick + 2×fireBurnPerWood`, intent cleared |
+| `agent.cooked` | `CookedPayload{agent, station, consumed, produced, kind}` (station ∈ fire\|oven; kind ∈ food_cooked\|meals) | work completion (cook) | −FoodRaw(consumed), +kind(produced); an oven cook also −1 Wood, intent cleared |
+| `agent.bathed` | `BathedPayload{agent, morale_after, warmth_after}` | work completion (bathe, oven only) | −1 Water, −1 Wood, Morale/Warmth set to the absolute post-cap values, intent cleared |
+| `agent.refueled` | `RefueledPayload{agent, x, y, fuel_until}` | reflex/planner (instant on arrival) | −1 Wood, the fire at `(x,y)`'s `FuelUntil` set to the absolute (already-capped) deadline, intent cleared |
+| `agent.spear_broke` | `SpearBrokePayload{agent}` | work completion (hunt, companion to `agent.hunted` in the same batch) | removes the now-zero `Spears[0]` entry |
+| `sim.fire_burned_out` | `FireBurnedOutPayload{x, y}` | `stepEvents`, once per fuel-window transition (`tick-1 < FuelUntil <= tick`) | none — lit-ness stays derived from `FuelUntil`; chronicle/TUI material, plus a low-salience witness memory for nearby living agents |
+| `agent.ate` | `AtePayload{agent, meals, cooked, raw, food_after}` | reflex/planner (instant), most-nutritious-first (Meals→FoodCooked→FoodRaw) to satiety (`eatOutcome`) | −Meals/−FoodCooked/−FoodRaw by the consumed counts, Food need set to the absolute `food_after` |
 | `agent.slept` / `agent.woke` | `AgentPayload{agent}` | executor | sleep flag (slept clears intent) |
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
 | `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared |
@@ -72,11 +86,16 @@ types is backward-compatible with old replay code. The `cog.*` family and
 explicit reducer no-ops whose wall-time fields are recorded input, so no failure
 is silent and thought chains are walkable from the log alone; their payload
 field order is canonical per `specs/007-cognition-horizon/contracts/events.md`.
+`world.migrated` (spec 012 US6) is the one exception to "payloads are small
+outcomes" — its payload embeds the entire canonical `sim.State`, by design: it is
+the single record standing in for the whole pre-break history, and the reducer's
+`state.Seed` check keeps it total (a mismatched payload no-ops rather than erroring).
 
 ## Connections
 
 [[sim-state-reducer]] applies these; the [[executor]], [[reflex-policy]], and
-[[sim-loop]] emit the sim/agent/clock families; the mind driver and the loop's
+[[sim-loop]] emit the sim/agent/clock families; `scriptworld migrate`
+([[cli-scriptworld]], [[world-migration]]) emits `world.migrated`; the mind driver and the loop's
 landing ladder emit the `cog.*` telemetry ([[cognition]]); [[daemon-lifecycle]]
 emits `daemon.*`; [[event-log]] stores them;
 [[ipc-protocol]] pushes them to subscribers verbatim.

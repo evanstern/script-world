@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/worldmap/worldmap.go
   - internal/worldmap/noise.go
-verified_against: cee600e086a1be15868205c16c395ee33aaa397e
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # World map generation
@@ -20,9 +20,13 @@ event-sourced on top of this static base.
 
 Representation: `Map{W, H, Tiles []TileKind, Dens []Point}` — a flat slice indexed
 `y*W+x`, the shape that scales to DF-style sizes later (the engine requirement from
-the grounding session). `TileKind` is `Grass | Water | Tree | Forage`. **There is
-deliberately no structure kind**: worlds start cold (Minecraft-style), so "no
-structures at seed" holds by construction, and `Buildable(x,y)` = plain grass.
+the grounding session). `TileKind` is `Grass | Water | Tree | Forage | Rock |
+Depleted`. **There is deliberately no structure kind**: worlds start cold
+(Minecraft-style), so "no structures at seed" holds by construction, and
+`Buildable(x,y)` = plain grass. `Depleted` is an effective-kind-only value: `Generate`
+never produces it — it exists only as a value the [[executor]]'s terrain overlay
+merge (`internal/sim/terrain.go`) can mark a quarried-out `Rock` tile with, distinct
+from `Grass` (which cleared trees and harvested forage both revert to).
 
 Noise (`noise.go`): integer-hash value noise — lattice values from FNV-64a of
 (seed, purpose, lattice point), smoothstep-bilinear interpolation, summed over three
@@ -34,19 +38,28 @@ generation byte-identical across platforms and Go versions, the same discipline 
 tags) → water floods the lowest `waterFraction = 18%` of elevation (percentile
 threshold, so every seed gets real water) → trees claim the moistest
 `treeFraction = 24%` of dry land (correlated noise ⇒ woods, not salt-and-pepper) →
-forage scatters over remaining grass at ~4.5% per-tile hash probability → four animal
-`Dens` are picked from a deterministic candidate stream, grass-only, ≥12 Manhattan
-apart. Zero dims default to `DefaultSize = 64`.
+rock outcrops claim the highest-elevation `rockFraction = 6%` of the dry grass left
+after trees (spec 012 research R1) — scored by the same elevation field plus a small
+deterministic `rockJitter` hash-nudge (purpose `"rock"`) so patches get a
+coherent-but-textured edge rather than a smooth ridge line, reusing the elevation
+signal rather than adding a new noise pass, the same idiom as trees claiming the
+moistest fraction → forage scatters over remaining grass at ~4.5% (`foragePerMille =
+45`) per-tile hash probability → four (`denCount`) animal `Dens` are picked from a
+deterministic candidate stream, grass-only, ≥12 (`denMinDistance`) Manhattan apart.
+Zero dims default to `DefaultSize = 64`.
 
-`Passable(x,y)` = in-bounds grass or forage (water and standing trees block);
-`Hash()` fingerprints tiles + dens for determinism tests.
+`Passable(x,y)` = in-bounds grass or forage (water, standing trees, and rock outcrops
+block); `Hash()` fingerprints tiles + dens for determinism tests.
 
 ## Connections
 
 [[world-save-directory]]'s manifest carries `map_width`/`map_height` and `world.Map()`
-regenerates; the [[executor]] overlays dynamic terrain on it and moves agents against effective passability;
-[[sim-state-reducer]]'s genesis places them on passable tiles; the [[tui-client]] map
-pane renders tiles and dens. Dens are huntable food sites with cooldowns as of TASK-5.
+regenerates; the [[executor]] overlays dynamic terrain on it (quarrying a `Rock` tile
+produces the `Depleted` effective kind) and moves agents against effective
+passability; [[sim-state-reducer]]'s genesis places them on passable tiles; the
+[[tui-client]] map pane renders tiles and dens. Dens are huntable food sites with
+cooldowns as of TASK-5. [[world-migration]] re-places migrated agents onto a freshly
+generated v2 map, rock outcrops included.
 
 ## Operational notes
 

@@ -4,10 +4,13 @@ description: How correctness is proven — unit determinism harness, in-process 
 kind: pattern
 sources:
   - internal/sim/sim_test.go
+  - internal/sim/migrate_test.go
+  - internal/sim/whole_feature_test.go
+  - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Testing strategy
@@ -27,7 +30,14 @@ suites — multi-step intent chains with zero input (AC#1), needs decay + self-f
 and starvation death with recorded cause (AC#2), night warmth mechanics and exposure
 death (AC#3), and a two-day unattended village survival run on multiple seeds.
 (Terrain generation has its own determinism/AC suite in `internal/worldmap`, covered
-by [[worldmap-generation]].) Proves: same seed + same command timeline over 30k ticks → byte-identical
+by [[worldmap-generation]].) Spec 012 added its own fixture suite spanning both
+save-format packages — `internal/sim/migrate_test.go` and `internal/world/migrate_test.go`
+build representative v1 states and prove the transform's carry/reset/re-place rules
+([[world-migration]]) — plus `whole_feature_test.go`, a single scripted-agent run
+chaining every new resources/food/crafting event kind (quarrying, water, the full
+craft chain, both cook stations, bathing, refueling, a spear breaking, a fire burning
+out) that replays from genesis to a byte-identical state hash (SC-004). Proves: same
+seed + same command timeline over 30k ticks → byte-identical
 event sequences and equal state hashes; different seeds diverge; replaying the logged
 events over genesis (then re-living the quiet tail) reproduces the live state hash
 exactly; the day/night cycle behaves (nobody moves at night).

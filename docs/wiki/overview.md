@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/scriptworld/main.go
   - go.mod
-verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Overview
@@ -62,6 +62,9 @@ a default worlds home (`~/.scriptworld/worlds`, where `new <name>` creates) and 
 advisory known-worlds pointer cache — both strictly optional: every command still
 takes a plain path, and a world runs and copies with no manager state present.
 `scriptworld ps` enumerates every running world machine-wide from live evidence.
+The save format has broken once so far: spec 012 (resources/food/crafting) bumped
+`format_version` to 2, and `scriptworld migrate <world>` ([[world-migration]]) is
+the door a stopped v1 world walks through to keep running under a newer binary.
 
 ## Connections
 
@@ -70,7 +73,8 @@ the [[llm-orchestrator]] is the (strictly quarantined) voice of the models, and
 [[cognition]] decides deterministically when that voice may speak at all;
 [[event-log]] and [[snapshots]] its memory; [[ipc-server]], [[tui-client]], and
 [[cli-scriptworld]] its face. [[daemon-lifecycle]] ties them into a process;
-[[instance-manager]] keeps many such processes legible (`ps`, names, worlds home).
+[[instance-manager]] keeps many such processes legible (`ps`, names, worlds home);
+[[world-migration]] carries a world across a format break.
 
 ## Operational notes
 

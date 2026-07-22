@@ -7,7 +7,7 @@ sources:
   - internal/tui/views.go
   - internal/tui/layout.go
   - internal/tui/grammar.go
-verified_against: 3911e4ca0bf6dc76ce6960a09db2ffed3ed0e9f4
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # TUI client
@@ -51,17 +51,24 @@ re-clamp pan/selection state (`clampGeometry`).
 
 Regions: the **map** is a camera window over the generated terrain from
 `Model.gameMap` (regenerated locally via `world.Map()`,
-[[worldmap-generation]]): water/trees/forage/dens glyphs with the replica's
-agents on top (by initial, lowercase asleep, † dead) plus built fires ▲,
-shelters ⌂, and the [[gru]] as a red G while it is abroad; the camera follows
-the living agents' centroid, arrow keys pan, `c` recenters. The **dock** hosts
+[[worldmap-generation]]): water ~, wood ♠, forage ", rock outcrops ^, and dens
+ᴥ glyphs, plus dynamic overlay state read off the replica (never part of the
+static tile) — a quarried-out rock outcrop renders as a faint `,` ahead of the
+static terrain check — with the replica's agents on top (by initial,
+lowercase asleep, † dead) plus built structures: fires render lit ▲ while the
+current tick is before the structure's `FuelUntil` and fall back to a faint,
+hollow cold glyph △ once fuel runs out, shelters ⌂, ovens ▣, and the [[gru]]
+as a red G while it is abroad; the camera follows the living agents'
+centroid, arrow keys pan, `c` recenters. The **dock** hosts
 three tabs — keys `2`/`3`/`4` select, the same key again zooms the tab solo,
 `1`/`esc` return to the composite: **chronicle** (default; see below),
 **metatron** (the angel transcript — replies stream here, or badge the tab
 `metatron •` when it isn't visible; charge bank and charter provenance as
 before — [[metatron]]), and **souls** (live agent bodies: status, current
-goal, needs gauges, inventory, newest memory line; full soul.md files on disk
-per [[agent-mind]]).
+goal, needs gauges, a full carried-inventory line — wood/stone/water/planks/
+refined-stone counts, the food triplet raw/cooked/meals, and (when carried) a
+spear count with the most-worn spear's remaining uses — newest memory line;
+full soul.md files on disk per [[agent-mind]]).
 
 The **chronicle** renders the narrated story from the replica's
 snapshot-carried `State.Chronicle` ring ([[chronicle]]) or the raw feed (`r`

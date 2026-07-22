@@ -6,7 +6,7 @@ sources:
   - internal/store/store.go
   - internal/sim/loop.go
   - internal/daemon/daemon.go
-verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Snapshots
@@ -41,7 +41,8 @@ uses, bumping `state.Tick` to the highest event tick seen.
 
 [[sim-loop]] produces snapshots; [[daemon-lifecycle]] consumes them at startup;
 [[sim-state-reducer]]'s canonical marshal is what gets hashed; [[event-log]] remains
-the truth they accelerate.
+the truth they accelerate; [[world-migration]] borrows the covering-snapshot
+mechanism to make a migrated log replay-provable with zero v1 history.
 
 ## Operational notes
 

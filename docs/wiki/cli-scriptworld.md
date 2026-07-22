@@ -1,13 +1,13 @@
 ---
 name: cli-scriptworld
-description: The single scriptworld binary — subcommand dispatch, world management, daemon control, observation commands, exit discipline
+description: The single scriptworld binary — subcommand dispatch, world management, daemon control, observation commands, v1→v2 migration, exit discipline
 kind: component
 sources:
   - cmd/scriptworld/main.go
   - cmd/scriptworld/commands.go
   - cmd/scriptworld/calibrate.go
   - cmd/scriptworld/ps.go
-verified_against: 1434b65a74598495e01b2a8f5c0bbe8d1ad9722b
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # scriptworld CLI
@@ -43,6 +43,16 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   [[metatron]]), and
   appends the tick-0 secret events ([[social-fabric]]). Random default seed (crypto-random,
   right-shifted 12 bits to stay comfortably printable).
+- `migrate <world>` — the one-time v1→v2 upgrade (spec 012 US6 —
+  [[world-migration]]): resolves `<world>` via `resolveWorldForMigrate`, which
+  unlike `resolveWorld`/`worlds.Resolve` must reach v1 worlds that this v2 build
+  cannot `world.Open` — a path argument passes through verbatim, a bare name
+  resolves against the worlds home then the known-worlds registry by manifest
+  *presence* alone, never the version gate. Hands the whole
+  archive/transform/rewrite ceremony to `world.Migrate`
+  ([[world-save-directory]]) and prints a human summary (seed, villagers carried,
+  continuation tick, source event count, archive path, and the `start` command to
+  run next).
 - `ps [--all] [--json]` — machine-wide listing of worlds with live-proven state
   ([[instance-manager]]): discovery over the worlds home + registry, concurrent
   bounded probes, `NAME STATE PID TICK GAME TIME SPEED LLM PATH` table or a JSON
@@ -97,7 +107,7 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
 resolution, discovery, and the `ps` probe; [[ipc-client]] carries every online
 command; [[world-save-directory]] and [[event-log]] back the offline paths;
 [[game-clock]] formats times in `clockLine`/`eventLine`; `calibrate` writes the
-profile [[cognition]] routes with.
+profile [[cognition]] routes with; `migrate` hands off to [[world-migration]].
 
 ## Operational notes
 

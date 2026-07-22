@@ -5,17 +5,21 @@ kind: component
 sources:
   - internal/sim/state.go
   - internal/sim/agents.go
-verified_against: 0cfc04adc5ea41bc9c35442f137e9e5d60763e17
+  - internal/sim/recipes.go
+verified_against: 1d1cc6ff8cad2414108f7e768f61eb0faaea3088
 ---
 
 # Sim state & reducer
 
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
 degraded, effective rate) plus the living world — agents with needs/intents/
-inventories/memories (with `IdleSince` for the reflex grace, a `NearDeath`
+inventories (the v2 resource set, spec 012 — [[executor]])/memories (with
+`IdleSince` for the reflex grace, a `NearDeath`
 latch, a `Generation` interrupt counter and pending `Plan` steps for the
 [[cognition]] horizon — both `omitempty` so pre-TASK-32 snapshots stay
-byte-stable), structures, cleared trees, harvested forage, den cooldowns, the social
+byte-stable), structures (`fire`/`shelter`/`oven`, fires carrying a `FuelUntil`),
+cleared trees, harvested forage, den cooldowns, `Quarried` depleted rock outcrops
+(spec 012, permanent, `omitempty`), the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
 variants and the bounded conversation-record ring ([[social-fabric]]) — the
 consolidated inner life: per-agent beliefs, self-narrative, and the
@@ -36,23 +40,40 @@ lawless village) (executor types in `agents.go`; memories belong to
 [[agent-mind]]). Its
 `Apply(event)` method is the **only** event-driven mutation path — the live loop and
 crash recovery run the exact same code, which is what makes replay provably equal to
-live execution.
+live execution. Spec 012 bumped the save format to v2 ([[world-save-directory]]); a
+v1 world's `Inventory` (just `wood`/`food`) cannot decode under this build at all —
+[[world-migration]] is the one-time bridge, landing as a single wholesale-replace
+event rather than incremental `Apply` calls (below).
 
 ## How it works
 
 `NewState(seed, m)` is genesis: tick 0 (day 1 06:00), `DefaultSpeed` (4x), eight
-named agents on distinct passable tiles via [[deterministic-rng]], with deliberately
-imperfect needs — day 1 must demand foraging, wood, and a fire before dark.
+named agents on distinct passable tiles via `genesisPlacement` ([[deterministic-rng]]),
+with deliberately imperfect needs — day 1 must demand foraging, wood, and a fire
+before dark. `genesisPlacement` (spec 012 US6) is factored out so [[world-migration]]
+can re-place carried souls on a regenerated v2 map byte-identically to a fresh
+genesis of the same seed.
 
 `Apply` switches on event type: `clock.*` maintain pause/speed/degradation;
 `sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
 `agent.*` family ([[event-types]]) drives intents, movement, work products
-(inventory + overlays + structures), eating, sleep, talk, needs (absolute values),
-and death; the `gru.*` family dispatches to `applyGru` in `gru.go` ([[gru]]);
+(inventory + overlays + structures), eating (`agent.ate`'s `AtePayload` sets the
+absolute post-eat food need and decrements each carried food form by its consumed
+count — no reducer-side arithmetic), sleep, talk, needs (absolute values), and
+death; the v2 resource/crafting events (`agent.quarried`/`collected_water`/
+`crafted`/`cooked`/`bathed`/`refueled`/`spear_broke`, `sim.fire_burned_out`) apply
+inventory deltas and structure/overlay changes, several by re-deriving the recipe
+from `recipes.go` (the single source for craft/build magnitudes — a duplicated
+number here would drift from the contract table); the `gru.*` family dispatches to
+`applyGru` in `gru.go` ([[gru]]);
 the `meeting.*`/`norm.*` families — plus `meeting.convention_established` and
 the `sim.gathering_observed` watch event (TASK-36) — dispatch to
 `applyGovernance` in `governance.go` ([[governance]]).
+`world.migrated` (spec 012 US6) is the one case that does not incrementally mutate
+fields: after checking the payload's `State.Seed` matches (a mismatched payload
+no-ops, keeping `Apply` total), it replaces `*s` wholesale with the embedded state —
+[[world-migration]] is the only producer.
 `agent.memory_added` additionally bumps `Agent.Generation` when the memory's
 salience is at or above `GenerationBumpSalience` (9) — in-flight thoughts
 snapshotted under the old generation are superseded at landing ([[cognition]],
@@ -83,7 +104,8 @@ verification and the determinism tests. Wall-clock time never appears in state.
 [[sim-loop]] generates events via the [[executor]] and applies them here;
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
 [[event-types]] lists every payload struct (the cognition-horizon payloads
-live in sibling files `cognition.go`, `guard.go`, and `plan.go`).
+live in sibling files `cognition.go`, `guard.go`, and `plan.go`); [[world-migration]]
+is the sole producer of `world.migrated`.
 
 ## Operational notes
 
