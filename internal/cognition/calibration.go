@@ -6,7 +6,9 @@ import (
 	"os"
 )
 
-// ShapeSamples is the audit trail for one reference-workload shape.
+// ShapeSamples is the audit trail for one reference-workload shape. WallMs is
+// per-sample wall time: one model call for a single-shot shape, the whole
+// tool-use loop for a loop shape (spec 017).
 type ShapeSamples struct {
 	Shape  string  `json:"shape"`
 	Points int     `json:"points"`
@@ -14,6 +16,14 @@ type ShapeSamples struct {
 }
 
 // TierProfile is one tier's measured identity and baseline.
+//
+// SecondsPerPoint is the tier's normalized cost per Fibonacci point. For a
+// single-shot cognition kind it is one model call's wall time per point; for a
+// loop cognition (the villager planner on the local tier, spec 017) it is the
+// WHOLE tool-use loop's wall time per point — the same unit the live estimator
+// observes via Orchestrator.ObserveCognition — so a seeded baseline and a live
+// observation are directly comparable and the router's suppression arithmetic
+// stays truthful when a cognition is N model calls.
 type TierProfile struct {
 	Model           string         `json:"model"`
 	Endpoint        string         `json:"endpoint,omitempty"`
