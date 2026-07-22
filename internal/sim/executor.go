@@ -135,6 +135,36 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Ground-food rot sweep (T032, US5): on the same per-game-minute boundary
+	// the needs heartbeat uses, each ground pile's food batches whose absolute
+	// deadline has arrived (SpoilAt <= tick) are removed as a visible,
+	// event-sourced happening. A pure function of (state, tick) — the fuel-sweep
+	// pattern: no bookkeeping state, the reducer's batch removal itself re-arms
+	// the sweep. Pile iteration is State.Piles slice order; per pile, same-kind
+	// spoiled batches merge into ONE sim.food_rotted, and kinds are walked in the
+	// fixed canonical food order — both fixed orders keep replay byte-identical.
+	// A world with no piles emits nothing (degraded-mode safe); chest food
+	// carries no deadlines and never reaches here (FR-010). Placed among the
+	// world sweeps (regrowth, burnout, needs) before per-agent execution, so a
+	// pickup completing this same tick lands after the rot events in the batch
+	// and the reducer's clamp resolves the contest (spec edge "Rot mid-pickup").
+	if nextTick%60 == 0 {
+		for pi := range s.Piles {
+			pile := &s.Piles[pi]
+			for _, kind := range foodKinds {
+				n := 0
+				for _, b := range pile.Food {
+					if b.Kind == kind && b.SpoilAt <= nextTick {
+						n += b.N
+					}
+				}
+				if n > 0 {
+					emit("sim.food_rotted", FoodRottedPayload{X: pile.X, Y: pile.Y, Kind: kind, N: n})
+				}
+			}
+		}
+	}
+
 	// Hail sweep (TASK-47): resolve outstanding pauses — met (hailer arrived)
 	// or expired — before anyone moves this tick, so met-vs-expired is a
 	// deterministic race with met winning ties (research D4).

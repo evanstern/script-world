@@ -876,8 +876,22 @@ func (s *State) Apply(e store.Event) error {
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "sim.food_rotted":
-		// TODO(T032, US5): remove the pile's food batches with spoil_at ≤ tick
-		// and matching kind (up to n); emptied pile removed.
+		// T032 (spec 013 US5, FR-013): remove the pile's spoiled food batches —
+		// batches whose SpoilAt has arrived (<= event tick) matching Kind, up to
+		// the recorded N, draining oldest batches first (drop order). The reducer
+		// stays total: it clamps to the spoiled units that remain (a same-tick
+		// pickup that applied first drained the oldest batch, so this finds only
+		// the remainder — the contested re-validation idiom), and an absent
+		// pile/batch is a no-op. An emptied pile is removed in the same
+		// application. Chest food never batches, so it is never reached (FR-010).
+		var p FoodRottedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		if pile := s.pileAt(p.X, p.Y); pile != nil {
+			pile.takeSpoiled(p.Kind, p.N, e.Tick)
+			s.removeEmptyPileAt(p.X, p.Y)
+		}
 
 	case "world.migrated":
 		// T038 (spec 012 US6): the format-break migration event carries the FULL

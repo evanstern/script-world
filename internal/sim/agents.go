@@ -215,6 +215,12 @@ func isFoodKind(kind string) bool {
 	return kind == "food_raw" || kind == "food_cooked" || kind == "meals"
 }
 
+// foodKinds is the fixed iteration order the rot sweep walks each pile with
+// (spec 013 US5, T032): the food subset of canonicalKinds, in canonical field
+// order. Determinism depends on it — a sweep emits at most one sim.food_rotted
+// per (pile, kind), and the kinds are always visited in this exact order.
+var foodKinds = []string{"food_raw", "food_cooked", "meals"}
+
 // carriedCount is how many units of a kind an agent carries: spears counted
 // (durability lives in the slice), every other kind its flat inventory field.
 func carriedCount(inv Inventory, kind string) int {
@@ -309,6 +315,41 @@ func (p *Pile) takeFood(kind string, n int) int {
 	out := p.Food[:0]
 	for _, b := range p.Food {
 		if b.Kind == kind && taken < n {
+			t := b.N
+			if t > n-taken {
+				t = n - taken
+			}
+			b.N -= t
+			taken += t
+		}
+		if b.N > 0 {
+			out = append(out, b)
+		}
+	}
+	if len(out) == 0 {
+		p.Food = nil
+	} else {
+		p.Food = out
+	}
+	return taken
+}
+
+// takeSpoiled removes up to n units of a food kind from the batches already
+// spoiled at tick (SpoilAt <= tick), oldest matching batch first (drop order),
+// returning the actual amount removed. Emptied batches are compacted out,
+// preserving drop order. The rot sweep's reducer primitive (spec 013 US5,
+// T032): it mirrors takeFood but only ever drains batches whose deadline has
+// arrived, so a fresh batch dropped this same tick (spoil_at far in the future)
+// is never touched, and it stays total (clamped to the spoiled units present —
+// a same-tick pickup that applied first leaves only the remainder).
+func (p *Pile) takeSpoiled(kind string, n int, tick int64) int {
+	if n <= 0 {
+		return 0
+	}
+	taken := 0
+	out := p.Food[:0]
+	for _, b := range p.Food {
+		if b.Kind == kind && b.SpoilAt <= tick && taken < n {
 			t := b.N
 			if t > n-taken {
 				t = n - taken
