@@ -91,6 +91,19 @@ func join(parts ...[]seg) []seg {
 	return out
 }
 
+// gratisMark appends a visible " (forced)" annotation when a miracle's
+// Gratis flag waived its charge (internal/sim/miracles.go) — the operator
+// force spec 016 SC-004 requires stay enumerable must be visible in the
+// digest line, not just inferable from the payload. nil (no segs) when the
+// miracle was charge-priced, so the plain summary is unchanged for the
+// common case.
+func gratisMark(gratis bool) []seg {
+	if !gratis {
+		return nil
+	}
+	return []seg{txt(" ("), emph("forced"), txt(")")}
+}
+
 // digestRegistry is the ~80-entry per-type table (contract §3). A key
 // absent here (or present in the fixture but not here) fails the catalog
 // sweep test (digest_test.go, contract §7, SC-001).
@@ -751,6 +764,61 @@ var digestRegistry = map[string]digestFunc{
 			targets = append(targets, nameOf(names, t))
 		}
 		return join([]seg{txt("Metatron "), emph(p.Form), txt(" → ")}, targets, []seg{txt(": "), speech(p.Text)}), true
+	},
+	// metatron.time_snapped / item_granted / entity_moved / entity_removed
+	// (TASK-59, spec 016) predate this contract (specs/018) — no template
+	// row exists for them, so voice/style mirrors metatron.nudged's (natural
+	// phrase, "Metatron" as subject); gratisMark surfaces the operator force
+	// SC-004 requires be enumerable, never silently indistinguishable from a
+	// charge-priced miracle.
+	"metatron.time_snapped": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.TimeSnappedPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("Metatron snapped time forward to "), emph(clock.Format(p.ToTick)),
+		}, gratisMark(p.Gratis)), true
+	},
+	"metatron.item_granted": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.ItemGrantedPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("Metatron granted "), nameOf(names, p.Agent), txt(" "), emphN(p.Qty), txt(" "), emph(p.Kind),
+		}, gratisMark(p.Gratis)), true
+	},
+	// entity_moved: the payload identifies its target by class + source
+	// coordinates only (internal/sim/miracles.go) — no agent index, so a
+	// moved villager renders by its (pre-move) location rather than a
+	// resolved name.
+	"metatron.entity_moved": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.EntityMovedPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("Metatron moved the "), emph(p.Class), txt(" at "), coord(p.X, p.Y), txt(" to "), coord(p.ToX, p.ToY),
+		}, gratisMark(p.Gratis)), true
+	},
+	// entity_removed: the payload carries the target's class only, never a
+	// structure's Kind (internal/sim/miracles.go) — a removed chest renders
+	// as "the structure", not "the chest". A terrain target is overlaid
+	// (chop/forage/quarry vocabulary), not deleted, so it reads "cleared"
+	// rather than "removed".
+	"metatron.entity_removed": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.EntityRemovedPayload](e)
+		if !ok {
+			return nil, false
+		}
+		verb := "removed"
+		if p.Class == "terrain" {
+			verb = "cleared"
+		}
+		return join([]seg{
+			txt("Metatron " + verb + " the "), emph(p.Class), txt(" at "), coord(p.X, p.Y),
+		}, gratisMark(p.Gratis)), true
 	},
 
 	// --- cog (labeled) ---

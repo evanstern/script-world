@@ -122,6 +122,10 @@ var catalogFixture = map[string]digestFixture{
 	"chronicle.entry":             {`{"day":3,"from_tick":100,"to_tick":200,"text":"Ash lit the first fire.","thread":"cold-start","agents":[0]}`, `day 3 · cold-start: Ash lit the first fire.`},
 	"metatron.charge_regenerated": {`{}`, `a charge regenerated`},
 	"metatron.nudged":             {`{"form":"dream","targets":[0],"text":"beware the cold"}`, `Metatron dream → Ash: "beware the cold"`},
+	"metatron.time_snapped":       {`{"to_tick":106200,"gratis":false}`, `Metatron snapped time forward to day 2 11:30`},
+	"metatron.item_granted":       {`{"agent":0,"kind":"food_raw","qty":2,"gratis":false}`, `Metatron granted Ash 2 food_raw`},
+	"metatron.entity_moved":       {`{"class":"pile","x":3,"y":4,"to_x":6,"to_y":7,"gratis":false}`, `Metatron moved the pile at (3,4) to (6,7)`},
+	"metatron.entity_removed":     {`{"class":"structure","x":12,"y":8,"gratis":false}`, `Metatron removed the structure at (12,8)`},
 
 	// --- cog (labeled) ---
 	"cog.thought": {
@@ -273,6 +277,96 @@ func TestDigestGatheringDispersed(t *testing.T) {
 	segs := digestOf(t, "sim.gathering_observed", `{"x":0,"y":0,"start":0}`)
 	if want := "gathering dispersed"; plainSegs(segs) != want {
 		t.Errorf("plain summary = %q, want %q", plainSegs(segs), want)
+	}
+}
+
+// hasSeg reports whether segs contains a seg matching both text and role
+// exactly — used where anyRole's role-only check is too loose (e.g.
+// distinguishing the gratis marker's own segment from other segEmphasis
+// spans already present in the summary).
+func hasSeg(segs []seg, text string, role segRole) bool {
+	for _, s := range segs {
+		if s.Text == text && s.Role == role {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDigestMiracleGratisMark: the four miracle types (TASK-59/spec 016)
+// append a visible " (forced)" annotation when Gratis waives the charge, and
+// nothing when it doesn't (spec 016 SC-004's enumerability story surfaced in
+// the digest — gratisMark must never appear on a charge-priced miracle).
+func TestDigestMiracleGratisMark(t *testing.T) {
+	cases := []struct {
+		typ                           string
+		chargedPayload, gratisPayload string
+		want                          string // base summary, sans the gratis suffix
+	}{
+		{
+			"metatron.time_snapped",
+			`{"to_tick":106200,"gratis":false}`, `{"to_tick":106200,"gratis":true}`,
+			`Metatron snapped time forward to day 2 11:30`,
+		},
+		{
+			"metatron.item_granted",
+			`{"agent":0,"kind":"food_raw","qty":2,"gratis":false}`, `{"agent":0,"kind":"food_raw","qty":2,"gratis":true}`,
+			`Metatron granted Ash 2 food_raw`,
+		},
+		{
+			"metatron.entity_moved",
+			`{"class":"pile","x":3,"y":4,"to_x":6,"to_y":7,"gratis":false}`, `{"class":"pile","x":3,"y":4,"to_x":6,"to_y":7,"gratis":true}`,
+			`Metatron moved the pile at (3,4) to (6,7)`,
+		},
+		{
+			"metatron.entity_removed",
+			`{"class":"structure","x":12,"y":8,"gratis":false}`, `{"class":"structure","x":12,"y":8,"gratis":true}`,
+			`Metatron removed the structure at (12,8)`,
+		},
+	}
+	for _, tc := range cases {
+		if got := plainSegs(digestOf(t, tc.typ, tc.chargedPayload)); got != tc.want {
+			t.Errorf("%s (charged): plain summary = %q, want %q", tc.typ, got, tc.want)
+		}
+		gotGratis := plainSegs(digestOf(t, tc.typ, tc.gratisPayload))
+		wantGratis := tc.want + " (forced)"
+		if gotGratis != wantGratis {
+			t.Errorf("%s (gratis): plain summary = %q, want %q", tc.typ, gotGratis, wantGratis)
+		}
+		if !hasSeg(digestOf(t, tc.typ, tc.gratisPayload), "forced", segEmphasis) {
+			t.Errorf("%s (gratis): expected a styled %q segment", tc.typ, "forced")
+		}
+		if hasSeg(digestOf(t, tc.typ, tc.chargedPayload), "forced", segEmphasis) {
+			t.Errorf("%s (charged): unexpected %q segment on a charge-priced miracle", tc.typ, "forced")
+		}
+	}
+}
+
+// TestDigestEntityMovedRemovedClasses: entity_moved/entity_removed render
+// distinctly per Class (internal/sim/miracles.go) — villager/structure/pile
+// for a move, structure/pile/terrain for a remove (terrain is overlaid, not
+// deleted, so it reads "cleared" rather than "removed").
+func TestDigestEntityMovedRemovedClasses(t *testing.T) {
+	moveCases := []struct{ payload, want string }{
+		{`{"class":"villager","x":1,"y":1,"to_x":2,"to_y":2,"gratis":false}`, `Metatron moved the villager at (1,1) to (2,2)`},
+		{`{"class":"structure","x":1,"y":1,"to_x":2,"to_y":2,"gratis":false}`, `Metatron moved the structure at (1,1) to (2,2)`},
+		{`{"class":"pile","x":1,"y":1,"to_x":2,"to_y":2,"gratis":false}`, `Metatron moved the pile at (1,1) to (2,2)`},
+	}
+	for _, tc := range moveCases {
+		if got := plainSegs(digestOf(t, "metatron.entity_moved", tc.payload)); got != tc.want {
+			t.Errorf("entity_moved %s: plain summary = %q, want %q", tc.payload, got, tc.want)
+		}
+	}
+
+	removeCases := []struct{ payload, want string }{
+		{`{"class":"structure","x":1,"y":1,"gratis":false}`, `Metatron removed the structure at (1,1)`},
+		{`{"class":"pile","x":1,"y":1,"gratis":false}`, `Metatron removed the pile at (1,1)`},
+		{`{"class":"terrain","x":1,"y":1,"gratis":false}`, `Metatron cleared the terrain at (1,1)`},
+	}
+	for _, tc := range removeCases {
+		if got := plainSegs(digestOf(t, "metatron.entity_removed", tc.payload)); got != tc.want {
+			t.Errorf("entity_removed %s: plain summary = %q, want %q", tc.payload, got, tc.want)
+		}
 	}
 }
 
