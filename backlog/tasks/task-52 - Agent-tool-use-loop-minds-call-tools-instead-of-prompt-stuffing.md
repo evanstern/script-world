@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 19:07'
+updated_date: '2026-07-22 19:42'
 labels:
   - agent-mind
   - llm
@@ -71,4 +71,6 @@ Full Spec Kit at specs/017-agent-tool-loop: spec (3 clarifications resolved with
 2026-07-22 (with Evan): added the tool-call observability AC. Today (post-TASK-53) tool usage is visible only as the landing (agent.intent_set{goal, source} / agent.plan_set); the call itself has no independent record, and correlating a completion back to its causing thought requires agent+adjacency inference (cog.outcome carries the job id, IntentSetPayload does not). Fold the cure into this task's loop design: the request artifact plus JobID threading on IntentSetPayload (additive payload field — verify snapshot/replay byte-stability for old logs via omitempty, the TASK-32 pattern). Related registry note: a numeric ParamKind (for storage-verb qty) is also owed to this task — recorded in specs/014-tool-registry/contracts/tool-catalog.md.
 
 2026-07-22 planning session (Fable 5): spec 017 authored+clarified+planned+tasked; linked via spec-bridge. Clarification decisions (Evan): local tier native-first w/ per-model json fallback; scheduled musing channel removed NOW; scope = villager planner + metatron turn. Tier decision per constitution v1.1.0 Principle V rubric: Opus 4.8 for T005-T015, T018, T020, T023-T025 (cross-package llm/cognition/mind/metatron orchestration, concurrency, doctrine-adjacent landing-door behavior); Sonnet for T002-T004, T016-T017, T019, T021-T022, T026 (single-package registry additions, additive sim payloads with pinned byte-stability contracts, docs). Justification: the loop driver, transport, and channel removal touch internal/llm + internal/cognition + internal/mind orchestration = senior tier per rubric; registry/payload slices are routine with explicit contracts.
+
+2026-07-22 implementation underway in .worktrees/task-52 (branch task-52-agent-tool-loop, forked c0206a6). T001 baseline green (full suite incl e2e). Sonnet spec-implementer landed T002 (4c96954: Number ParamKind, qty params on 4 storage verbs, Validate extensions, Read-roster legal), T003 (64fceea: tool.InputSchema derivation), T004 (0915fb8: set_plan entry w/ authored schema, LoopRosterVillager/Metatron, legacy surfaces byte-stable), T004b (a607896: implementer-found plan gap cured — spec-014 boot gate ValidateToolCoverage re-keyed on goal-door vocabulary so non-goal-door World tools like set_plan are deliberately exempt; daemon boot verified, full suite incl e2e green). Known pre-existing flake: internal/metatron TestDigestFailureCarries under full-suite load. Phases Setup + Foundational-registry portion complete; next: T005-T008 llm transport (Opus 4.8).
 <!-- SECTION:NOTES:END -->

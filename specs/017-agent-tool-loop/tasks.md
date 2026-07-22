@@ -20,7 +20,7 @@ constitution Principle V — `(Opus 4.8)` for cross-package/concurrency/doctrine
 
 ## Phase 1: Setup
 
-- [ ] T001 Create worktree `.worktrees/task-52` on branch `task-52-agent-tool-loop` from
+- [x] T001 Create worktree `.worktrees/task-52` on branch `task-52-agent-tool-loop` from
       fresh `origin/main`; verify `go test ./...` green at baseline
 
 ---
@@ -29,18 +29,25 @@ constitution Principle V — `(Opus 4.8)` for cross-package/concurrency/doctrine
 
 **Purpose**: registry vocabulary + llm transport that every story consumes.
 
-- [ ] T002 [P] (Sonnet) Add `Number` ParamKind with `Param.Min/Max`, declare `qty`
+- [x] T002 [P] (Sonnet) Add `Number` ParamKind with `Param.Min/Max`, declare `qty`
       Number param on drop/pick_up/deposit/withdraw, and extend `Validate` (Min≤Max,
       Read-roster entries now legal, InputSchemaJSON must be a JSON object) in
       internal/tool/tool.go + internal/tool/registry.go, tests in internal/tool
-- [ ] T003 [P] (Sonnet) Implement `tool.InputSchema(t)` derivation (data-model §1 rules,
+- [x] T003 [P] (Sonnet) Implement `tool.InputSchema(t)` derivation (data-model §1 rules,
       deterministic key order) honoring new `Tool.InputSchemaJSON` override, in
       internal/tool/derive.go with table-driven tests
-- [ ] T004 (Sonnet) Add `set_plan` catalog entry (World, Resolvable, authored steps
+- [x] T004 (Sonnet) Add `set_plan` catalog entry (World, Resolvable, authored steps
       schema per data-model §2) and `LoopRosterVillager()`/`LoopRosterMetatron()`
       derived surfaces; pin byte-stability of the legacy surfaces
       (VocabularyLine/WorldGoals/PlanStepGoals exclude set_plan) in internal/tool
       (depends on T002, T003)
+- [x] T004b (Sonnet) Fix sim-side coverage validator for non-goal-door World tools:
+      `ValidateToolCoverage` (internal/sim/toolcheck.go) must require resolver/duration
+      arms only for the goal-door vocabulary (`tool.WorldGoals()` / legacy world tools),
+      not every World-effect tool — `set_plan` grounds via injectPlan and never rides
+      `resolveGoal` (discovered by T004: daemon boot + e2e red without this); update
+      TestToolCoverageClean/TestWorldToolDurationsMatchSimConstants accordingly and
+      restore full-suite green including e2e
 - [ ] T005 (Opus 4.8) Extend llm transport types: `Request.Tools/Turns/SkipObserve`,
       `Response.ToolCalls/Stop`, Role/Turn/Block/ToolCall/StopReason per
       contracts/loop-api.md; config `loop_max_rounds` (+`Rounds()` clamp 1–16 default 8)
