@@ -34,13 +34,13 @@ TASK-51 at dispatch.
 **Purpose**: state shapes, payloads, recipe row, format gate — everything every
 story compiles against.
 
-- [ ] T003 Add `Pile`/`FoodBatch` structs + `State.Piles []Pile` per data-model.md in `internal/sim/agents.go` + `internal/sim/state.go`, with pile helpers (find-by-tile, create-or-merge, remove-when-empty; batch merge on identical `(Kind, SpoilAt)`)
-- [ ] T004 Extend `Structure` with `Owner int` + `Store *Inventory` (omitempty) and add `Kind string`/`Qty int` (omitempty) to `Intent` + `IntentSetPayload` in `internal/sim/agents.go` and to `PlanStep` in `internal/sim/plan.go`; fix compile-touched references
-- [ ] T005 [P] Add derived `bulk(Inventory) int` + tuning constants per data-model.md (`bulkCap` 24, `chestCap` 48, `chestPlankCost` 6, `rotWindowTicks` 172800, `theftTrustDelta` −120, `theftAffectionDelta` −40, `theftMemoryTone` −60) in `internal/sim/agents.go`
-- [ ] T006 [P] Add new payload structs with canonical field order per contracts/events.md: `DroppedPayload`, `PickedUpPayload`, `DepositedPayload`, `WithdrewPayload`, `FoodRottedPayload` in `internal/sim/agents.go`; `ChestTakenPayload` in `internal/sim/social.go`
-- [ ] T007 [P] Add `build_chest` recipe row ({planks 6} → structure "chest", on_site, fire-comparable duration) in `internal/sim/recipes.go`; extend the mirror test in `internal/sim/recipes_test.go`
-- [ ] T008 [P] Bump `FormatVersion` 2→3 in `internal/world/world.go`; extend `internal/world/world_test.go`: v2 manifest refused with the unsupported-version error naming `scriptworld migrate`
-- [ ] T009 Reducer scaffolding in `internal/sim/state.go`: register `agent.dropped`, `agent.picked_up`, `agent.deposited`, `agent.withdrew`, `social.chest_taken`, `sim.food_rotted` as explicit no-ops-for-now with TODO-per-story markers — then `go test ./...` green
+- [X] T003 Add `Pile`/`FoodBatch` structs + `State.Piles []Pile` per data-model.md in `internal/sim/agents.go` + `internal/sim/state.go`, with pile helpers (find-by-tile, create-or-merge, remove-when-empty; batch merge on identical `(Kind, SpoilAt)`)
+- [X] T004 Extend `Structure` with `Owner int` + `Store *Inventory` (omitempty) and add `Kind string`/`Qty int` (omitempty) to `Intent` + `IntentSetPayload` in `internal/sim/agents.go` and to `PlanStep` in `internal/sim/plan.go`; fix compile-touched references
+- [X] T005 [P] Add derived `bulk(Inventory) int` + tuning constants per data-model.md (`bulkCap` 24, `chestCap` 48, `chestPlankCost` 6, `rotWindowTicks` 172800, `theftTrustDelta` −120, `theftAffectionDelta` −40, `theftMemoryTone` −60) in `internal/sim/agents.go`
+- [X] T006 [P] Add new payload structs with canonical field order per contracts/events.md: `DroppedPayload`, `PickedUpPayload`, `DepositedPayload`, `WithdrewPayload`, `FoodRottedPayload` in `internal/sim/agents.go`; `ChestTakenPayload` in `internal/sim/social.go`
+- [X] T007 [P] Add `build_chest` recipe row ({planks 6} → structure "chest", on_site, fire-comparable duration) in `internal/sim/recipes.go`; extend the mirror test in `internal/sim/recipes_test.go`
+- [X] T008 [P] Bump `FormatVersion` 2→3 in `internal/world/world.go`; extend `internal/world/world_test.go`: v2 manifest refused with the unsupported-version error naming `scriptworld migrate`
+- [X] T009 Reducer scaffolding in `internal/sim/state.go`: register `agent.dropped`, `agent.picked_up`, `agent.deposited`, `agent.withdrew`, `social.chest_taken`, `sim.food_rotted` as explicit no-ops-for-now with TODO-per-story markers — then `go test ./...` green
 
 **Checkpoint**: v3 world boots; nothing behaves differently yet.
 

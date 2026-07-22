@@ -38,6 +38,12 @@ type State struct {
 	// quarried tile is passable but NOT buildable and NOT quarryable again;
 	// effectiveKind renders it as worldmap.Depleted, distinct from Grass.
 	Quarried []Point `json:"quarried,omitempty"`
+	// Piles (spec 013 US2) are the per-tile commons of dropped/spilled goods —
+	// event-sourced overlay state like Quarried, appended in creation order,
+	// one pile per tile (the reducer merges drops onto an existing pile), an
+	// emptied pile removed in the same application. omitempty keeps pre-013
+	// snapshots byte-identical.
+	Piles []Pile `json:"piles,omitempty"`
 	// Social fabric (TASK-8) — all event-sourced.
 	Relations   []Relation `json:"relations,omitempty"`
 	Debts       []Debt     `json:"debts,omitempty"`
@@ -186,6 +192,53 @@ func mustPayload(v any) json.RawMessage {
 	return b
 }
 
+// --- ground pile helpers (spec 013 US2) ---
+//
+// One pile per tile is a reducer invariant, so at most one pile ever matches a
+// coordinate. These are the create-or-merge / drain-and-remove primitives the
+// drop, pick_up, death-spill, and rot cases build on (wired in Phase 4/5/7).
+
+// pileAt returns a pointer to the pile on (x,y), or nil when the tile holds none.
+func (s *State) pileAt(x, y int) *Pile {
+	for i := range s.Piles {
+		if s.Piles[i].X == x && s.Piles[i].Y == y {
+			return &s.Piles[i]
+		}
+	}
+	return nil
+}
+
+// pileFor returns the pile on (x,y), creating an empty one in creation order
+// (slice append) when the tile has none — the create-or-merge target of a drop
+// or a death spill.
+func (s *State) pileFor(x, y int) *Pile {
+	if p := s.pileAt(x, y); p != nil {
+		return p
+	}
+	s.Piles = append(s.Piles, Pile{X: x, Y: y})
+	return &s.Piles[len(s.Piles)-1]
+}
+
+// removeEmptyPileAt drops the pile on (x,y) when its contents have reached zero,
+// preserving the creation order of the survivors (the forage-regrown filter
+// pattern). A no-op when the tile has no pile or a non-empty one.
+func (s *State) removeEmptyPileAt(x, y int) {
+	p := s.pileAt(x, y)
+	if p == nil || !p.empty() {
+		return
+	}
+	out := s.Piles[:0]
+	for _, q := range s.Piles {
+		if !(q.X == x && q.Y == y) {
+			out = append(out, q)
+		}
+	}
+	s.Piles = out
+	if len(s.Piles) == 0 {
+		s.Piles = nil
+	}
+}
+
 // Apply is the reducer: the only mutation path for event-sourced state, used
 // identically by the live loop and by recovery replay. Unknown and daemon.*
 // event types are recorded history but no-ops on state.
@@ -319,7 +372,7 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Intent = &Intent{Goal: p.Goal, TargetX: p.TargetX, TargetY: p.TargetY, ResX: p.ResX, ResY: p.ResY}
+		a.Intent = &Intent{Goal: p.Goal, TargetX: p.TargetX, TargetY: p.TargetY, ResX: p.ResX, ResY: p.ResY, Kind: p.Kind, Qty: p.Qty}
 	case "agent.work_started":
 		var p WorkStartedPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -597,6 +650,31 @@ func (s *State) Apply(e store.Event) error {
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
+
+	// --- spec 013 inventory/storage v1 event surface ---
+	// Registered as explicit no-ops in Phase 2 (T009) so each later story fills
+	// its own case without merge collisions, and so the reducer documents the
+	// v3 storage vocabulary. Until wired, behavior is identical to the
+	// unknown-type fall-through: recorded history, zero state effect
+	// (contracts/events.md). The format bump (2→3, T008) shields v2 logs from
+	// these changed semantics.
+	case "agent.dropped":
+		// TODO(T016, US2): Inv[kind] −= n; pile at (x,y) create-or-merge += n
+		// (food batch stamped tick + rotWindowTicks; spears most-worn-first).
+	case "agent.picked_up":
+		// TODO(T017, US2): pile −= n (food oldest-batch-first); Inv[kind] += n;
+		// emptied pile removed.
+	case "agent.deposited":
+		// TODO(T024, US3): Inv[kind] −= n; chest Store[kind] += n.
+	case "agent.withdrew":
+		// TODO(T024, US3): chest Store[kind] −= n; Inv[kind] += n.
+	case "social.chest_taken":
+		// TODO(T028, US4): the taking record itself (chronicle/TUI material) —
+		// no state effect beyond the record; lands with the social record case.
+	case "sim.food_rotted":
+		// TODO(T032, US5): remove the pile's food batches with spoil_at ≤ tick
+		// and matching kind (up to n); emptied pile removed.
+
 	case "world.migrated":
 		// T038 (spec 012 US6): the format-break migration event carries the FULL
 		// transformed v2 state (research R10) — the reducer replaces State

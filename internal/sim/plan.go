@@ -26,6 +26,12 @@ type PlanStep struct {
 	Target int    `json:"target,omitempty"` // agent index for talk_to; -1/absent otherwise
 	When   *Guard `json:"when,omitempty"`   // gate to start; nil = immediately
 	Until  int64  `json:"until"`            // validity deadline (tick)
+	// Kind/Qty (spec 013 R4) argue a storage plan step (drop/pick_up/deposit/
+	// withdraw): Kind is an inventory item key ("" = all kinds), Qty the amount
+	// (0 = all of kind / as much as fits). Both omitempty keep pre-013 and every
+	// non-storage plan step byte-identical.
+	Kind string `json:"kind,omitempty"`
+	Qty  int    `json:"qty,omitempty"`
 }
 
 // planGoals mirrors the planner goal vocabulary — the loop validates plan

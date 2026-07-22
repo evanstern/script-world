@@ -153,6 +153,16 @@ type (
 		Topics       []string `json:"topics,omitempty"`
 		Tones        []int    `json:"tones,omitempty"` // per participant, -2..2
 	}
+	// ChestTakenPayload — social.chest_taken (spec 013 US4, FR-011): the distinct
+	// taking happening co-emitted with a non-owner agent.withdrew. Canonical
+	// field order per contracts/events.md; the reducer records nothing beyond the
+	// event itself (chronicle/TUI material).
+	ChestTakenPayload struct {
+		Owner int `json:"owner"`
+		Taker int `json:"taker"`
+		X     int `json:"x"`
+		Y     int `json:"y"`
+	}
 )
 
 // ConvoRecord is the durable trace of one conversation (TASK-22) — the

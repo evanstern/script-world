@@ -54,6 +54,10 @@ var recipes = []Recipe{
 	{Goal: "build_fire", Inputs: []Item{{"wood", fireWoodCost}}, Structure: "fire", Duration: buildFireTicks, Site: SiteOnSite},
 	{Goal: "build_shelter", Inputs: []Item{{"planks", shelterPlankCost}}, Structure: "shelter", Duration: buildShelterTicks, Site: SiteOnSite},
 	{Goal: "build_oven", Inputs: []Item{{"refined_stone", 4}, {"planks", 2}}, Structure: "oven", Duration: buildOvenTicks, Site: SiteOnSite},
+	// build_chest (spec 013 US3): 6 planks → an owner-tagged chest, fire-comparable
+	// build time. Build-site validation (all build_*) additionally rejects tiles
+	// holding a pile (FR-007), wired with the goal in Phase 5.
+	{Goal: "build_chest", Inputs: []Item{{"planks", chestPlankCost}}, Structure: "chest", Duration: buildFireTicks, Site: SiteOnSite},
 
 	// Station actions. cook_fire is fuel-free (the fire's own fuel); cook_oven
 	// and bathe each burn 1 wood from the worker's inventory.
