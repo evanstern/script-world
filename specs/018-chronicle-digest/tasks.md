@@ -83,9 +83,9 @@
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T023 Reconcile docs/design/tui/patterns/chronicle-grammar.md: line format (tick column, seq to detail), hybrid voice by family, per-type table pointer to contract, color roles incl. family/emphasis/alert (FR-012)
-- [ ] T024 [P] Reconcile docs/design/tui/panels/chronicle.md: Mode 2 mockup with detail pane, always-on detail semantics, extension point, updated key hints (FR-012)
-- [ ] T025 [P] Reconcile docs/design/tui/patterns/keymap.md inspect-mode rows: ⏎ reserved, J/K scroll (contract §6)
+- [X] T023 Reconcile docs/design/tui/patterns/chronicle-grammar.md: line format (tick column, seq to detail), hybrid voice by family, per-type table pointer to contract, color roles incl. family/emphasis/alert (FR-012)
+- [X] T024 [P] Reconcile docs/design/tui/panels/chronicle.md: Mode 2 mockup with detail pane, always-on detail semantics, extension point, updated key hints (FR-012)
+- [X] T025 [P] Reconcile docs/design/tui/patterns/keymap.md inspect-mode rows: ⏎ reserved, J/K scroll (contract §6)
 - [ ] T026 Run quickstart.md end-to-end in the worktree: `go build ./... && go vet ./... && go test ./...`, live-world feed/inspect walkthrough, gate-proves-itself check (delete one registry entry → sweep fails → restore)
 - [ ] T027 After the TASK-60 PR merges: run `/grounding-wiki:wiki-update` to re-pin wiki notes sourcing internal/tui (tui-client.md, event-types.md, chronicle.md — Principle IV), then remove the worktree
 
