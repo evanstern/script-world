@@ -87,7 +87,7 @@
 - [X] T024 [P] Reconcile docs/design/tui/panels/chronicle.md: Mode 2 mockup with detail pane, always-on detail semantics, extension point, updated key hints (FR-012)
 - [X] T025 [P] Reconcile docs/design/tui/patterns/keymap.md inspect-mode rows: ⏎ reserved, J/K scroll (contract §6)
 - [x] T026 Run quickstart.md end-to-end in the worktree: `go build ./... && go vet ./... && go test ./...`, live-world feed/inspect walkthrough, gate-proves-itself check (delete one registry entry → sweep fails → restore) — all done: mechanical gates green (implementer + orchestrator re-runs); live walkthrough executed 2026-07-22 by the orchestrator via an expect-driven PTY against a throwaway world (digest rows with tick/time/type/summary rendering live; pause → inspect with ▌ selection, `DETAIL · seq N` pane showing type/payload, footer `j/k select · J/K scroll detail`; resume + quit clean). Family colors and full-width column alignment carry unit-test coverage but were not eyeballed in a real terminal (ANSI stripped in capture) — worth a human glance at PR review
-- [ ] T027 After the TASK-60 PR merges: run `/grounding-wiki:wiki-update` to re-pin wiki notes sourcing internal/tui (tui-client.md, event-types.md, chronicle.md — Principle IV), then remove the worktree
+- [x] T027 After the TASK-60 PR merges: run `/grounding-wiki:wiki-update` to re-pin wiki notes sourcing internal/tui (tui-client.md, event-types.md, chronicle.md — Principle IV), then remove the worktree
 
 ## Dependencies
 

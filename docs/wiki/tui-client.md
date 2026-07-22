@@ -7,7 +7,8 @@ sources:
   - internal/tui/views.go
   - internal/tui/layout.go
   - internal/tui/grammar.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+  - internal/tui/digest.go
+verified_against: e239ece0602c3be3cdcb36a93fea0fa35291aa8f
 ---
 
 # TUI client
@@ -108,18 +109,31 @@ on reconnect. Full soul.md persona files stay on disk per [[agent-mind]].
 The **chronicle** renders the narrated story from the replica's
 snapshot-carried `State.Chronicle` ring ([[chronicle]]) or the raw feed (`r`
 toggles; raw is the automatic fallback with no narrated entries; `a`/`t`
-cycle agent/thread filters). Raw lines follow the grammar in grammar.go
-(pure functions): agent indices resolve to names, speech events
-(`social.conversation_turn`, `social.rumor_told`) render bright as
-`{"Speaker"→"Listener"} "utterance"`, scene summaries and default events dim,
-`clock.*` yellow. The agent-index field table driving that resolution
-(`agentIndexFields`/`agentIndexFieldRe`) covers `agent`, `a`, `b`, `from`,
-`to`, `speaker`, `listener`, `subject`, and — since spec 013 — `owner` and
-`taker`, so `agent.withdrew` and the chest-theft record `social.chest_taken`
-resolve to names in both the raw feed and the inspector instead of rendering
-bare integers. Pausing puts the visible chronicle into **inspect mode**:
-`j`/`k`/`g`/`G` select, `⏎` expands the stored event verbatim —
-pretty-printed with `// name` annotations beside integer agent indices.
+cycle agent/thread filters). Raw lines follow the **digest grammar** (spec
+018/TASK-60; grammar.go + digest.go, pure functions emitting styled segments
+— never ANSI): every cataloged event type has a `digestRegistry` entry
+turning its payload into a readable per-type summary, so a feed line reads
+`TICK HH:MM type summary` — natural phrases for narrative families
+(`Ash foraged at (14,9)`, speech privileged as `Ash→Rowan "utterance"`),
+compact `key=value` fields for the telemetry families (`cog.*`, `clock.*`,
+`daemon.*`). Columns align at solo width (tick right-aligned, type padded);
+the narrow dock drops the tick and shortens the type to its last segment.
+Families carry color-role tints, key tokens (names, speech, amounts, causes)
+carry emphasis, and four high-salience types (`agent.died`, `gru.attacked`,
+`social.chest_taken`, `norm.violated`) render whole-line alert. Unregistered
+future types fall back to the compact resolved-name JSON of the old grammar
+(the agent-index field table — `agentIndexFields`/`agentIndexFieldRe`,
+covering `agent`, `a`, `b`, `from`, `to`, `speaker`, `listener`, `subject`,
+`owner`, `taker` — still drives that fallback and the inspector). A sweep
+test (`digest_test.go`) fails if any type cataloged in [[event-types]] lacks
+a digest. Pausing puts the visible chronicle into **inspect mode**:
+`j`/`k`/`g`/`G` select, and the selected event's full detail shows
+automatically in an always-on **detail pane** at the panel bottom — seq,
+tick, type, the stored payload verbatim, pretty-printed with `// name`
+annotations beside integer agent indices; `J`/`K` scroll oversized payloads
+within the pane's row budget, and `⏎` is a reserved no-op documented as the
+attachment point for future jump-off actions
+(`docs/design/tui/patterns/chronicle-grammar.md`, `panels/chronicle.md`).
 
 Input follows the **focus contract** (`docs/design/tui/patterns/focus-contract.md`):
 viewing never captures typing; `m` focuses the minibuffer (amber border, inline
@@ -142,7 +156,8 @@ it as the `ui` subcommand.
 Rendering requires no daemon round trips — map updates come from pushed events, so the
 UI stays smooth at max speed (the chronicle simply scrolls fast). Unit tests cover pane
 navigation, replica application, ring capping, quit behavior, the widescreen layout
-math (layout.go), chronicle grammar per event class (grammar.go), focus-contract key
+math (layout.go), the digest grammar (per-family digests + the catalog sweep in
+digest_test.go, plain/segment equivalence under wrap), focus-contract key
 routing in both layouts, exact-height rendering invariants across sizes and dense
 content, and resize round-trips with live selection; an expect-driven PTY smoke test
 drives the real binary. When real systems land, dock tabs graduate from stubs without
