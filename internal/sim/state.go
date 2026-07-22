@@ -84,24 +84,39 @@ func NewState(seed uint64, m *worldmap.Map) *State {
 		Agents:          make([]Agent, agentCount),
 		MetatronCharges: MetatronGenesisCharges,
 	}
-	taken := map[Point]bool{}
+	pos := genesisPlacement(seed, m, agentCount)
 	for i := range s.Agents {
+		s.Agents[i] = Agent{
+			Name:  AgentNames[i],
+			X:     pos[i].X,
+			Y:     pos[i].Y,
+			Needs: Needs{Health: 1000, Food: 600, Rest: 800, Warmth: 800, Morale: 600},
+		}
+	}
+	return s
+}
+
+// genesisPlacement assigns each of count agents a distinct passable tile,
+// deterministically from (seed, "genesis", …) with no long-lived RNG stream
+// (rng.go). Shared by NewState (cold-start genesis) and MigrateState (spec
+// 012 US6: re-placing carried souls on the regenerated v2 map) so the two use
+// byte-identical placement — the migration lands villagers exactly where a
+// fresh world of that seed would, on passable v2 tiles.
+func genesisPlacement(seed uint64, m *worldmap.Map, count int) []Point {
+	pos := make([]Point, count)
+	taken := map[Point]bool{}
+	for i := 0; i < count; i++ {
 		for n := int64(0); ; n++ {
 			r := rngAt(seed, "genesis", n, i)
-			x, y := int(r.Uint64N(uint64(m.W))), int(r.Uint64N(uint64(m.H)))
-			if m.Passable(x, y) && !taken[Point{X: x, Y: y}] {
-				taken[Point{X: x, Y: y}] = true
-				s.Agents[i] = Agent{
-					Name:  AgentNames[i],
-					X:     x,
-					Y:     y,
-					Needs: Needs{Health: 1000, Food: 600, Rest: 800, Warmth: 800, Morale: 600},
-				}
+			p := Point{X: int(r.Uint64N(uint64(m.W))), Y: int(r.Uint64N(uint64(m.H)))}
+			if m.Passable(p.X, p.Y) && !taken[p] {
+				taken[p] = true
+				pos[i] = p
 				break
 			}
 		}
 	}
-	return s
+	return pos
 }
 
 // Marshal renders canonical state bytes (struct field order is fixed, so the
@@ -583,7 +598,27 @@ func (s *State) Apply(e store.Event) error {
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
 	case "world.migrated":
-		// TODO(T038): validate name/seed match, then replace State wholesale from the payload.
+		// T038 (spec 012 US6): the format-break migration event carries the FULL
+		// transformed v2 state (research R10) — the reducer replaces State
+		// wholesale so the log alone (world.created → world.migrated, zero
+		// snapshots) reproduces the migrated world byte-identically. v1 events
+		// are never replayed under v2 rules; this single event is the whole
+		// history-before-the-break, distilled to one canonical state.
+		var p WorldMigratedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		// Seed is the world's identity carried in State (Name lives in the
+		// manifest, not State — the migrate command stamps it on the preceding
+		// world.created and preserves the seed through the transform). A payload
+		// whose seed disagrees with the world being replayed is a foreign
+		// migration record: no-op, keeping the reducer total (never errors on a
+		// well-formed but mismatched event, exactly like the contested-resource
+		// completions).
+		if p.State.Seed != s.Seed {
+			return nil
+		}
+		*s = p.State
 
 	case "agent.slept":
 		var p AgentPayload
