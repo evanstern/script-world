@@ -327,6 +327,9 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 	// state (never part of the static gm.At tile), so the set comes from the
 	// replica just like structures/dens below.
 	quarried := map[[2]int]bool{}
+	// Piles (spec 013 US2): ground piles are dynamic overlay state, same
+	// treatment as Quarried/Structures — never part of the static gm.At tile.
+	piles := map[[2]int]bool{}
 	if m.replica != nil {
 		for _, st := range m.replica.Structures {
 			switch st.Kind {
@@ -343,10 +346,19 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
 			case "oven":
 				structures[[2]int{st.X, st.Y}] = styleOven.Render("▣")
+			case "chest":
+				structures[[2]int{st.X, st.Y}] = styleChest.Render("☐")
 			}
 		}
 		for _, q := range m.replica.Quarried {
 			quarried[[2]int{q.X, q.Y}] = true
+		}
+		// Piles (spec 013 US2): a dedicated map, not folded into
+		// structures — build-site validation (FR-007) keeps piles and
+		// structures off the same tile, but keeping them separate means a
+		// coincidental overlap loses neither glyph's priority silently.
+		for _, p := range m.replica.Piles {
+			piles[[2]int{p.X, p.Y}] = true
 		}
 		for _, a := range m.replica.Agents {
 			g := strings.ToUpper(a.Name[:1])
@@ -381,6 +393,9 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		}
 		if g, ok := structures[[2]int{x, y}]; ok {
 			return g
+		}
+		if piles[[2]int{x, y}] {
+			return stylePile.Render("%")
 		}
 		if dens[[2]int{x, y}] {
 			return styleDen.Render("ᴥ")
@@ -424,10 +439,237 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 	if night {
 		phase = styleNight.Render("night")
 	}
+	// Stockpile inspection (spec 013 T021, US2-AS5, SC-006): piles currently
+	// in view are grouped into zones by 4-neighbor Manhattan adjacency — a
+	// render-side-only computation (no zone state; data-model.md, spec.md
+	// "Stockpile zone") — and each zone's aggregate contents (non-food
+	// counts + food batch totals) are appended to the legend line, the
+	// map panel's one designated inspection surface (map.md: "legend stays
+	// pinned as the panel's last row" — content grows the line, never a
+	// second row; clipContent already clips an over-wide legend, so this is
+	// safe the same way the existing key text is).
+	pilesInfo := ""
+	if m.replica != nil && len(m.replica.Piles) > 0 {
+		var visible []sim.Pile
+		for _, p := range m.replica.Piles {
+			if p.X >= x0 && p.X < x0+vw && p.Y >= y0 && p.Y < y0+vh {
+				visible = append(visible, p)
+			}
+		}
+		if len(visible) > 0 {
+			var bits []string
+			for _, zone := range pileZones(visible) {
+				bits = append(bits, describePileZone(zone))
+			}
+			pilesInfo = " · " + strings.Join(bits, " · ")
+		}
+	}
+	// Chest inspection (spec 013 T026, SC-006): chests currently in view get
+	// an owner + contents entry appended to the same legend line, following
+	// the pile inspection precedent above (T021) — the map panel's one
+	// designated inspection surface, content grows the line rather than
+	// adding a second row.
+	chestsInfo := ""
+	if m.replica != nil {
+		var visible []sim.Structure
+		for _, st := range m.replica.Structures {
+			if st.Kind != "chest" {
+				continue
+			}
+			if st.X >= x0 && st.X < x0+vw && st.Y >= y0 && st.Y < y0+vh {
+				visible = append(visible, st)
+			}
+		}
+		if len(visible) > 0 {
+			names := m.agentNames()
+			var bits []string
+			for _, ch := range visible {
+				bits = append(bits, describeChest(ch, names))
+			}
+			chestsInfo = " · " + strings.Join(bits, " · ")
+		}
+	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
-		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
+		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H, pilesInfo, chestsInfo))
 	return grid, legend
+}
+
+// describeChest renders one chest's inspection entry (spec 013 T026,
+// SC-006): "chest(x,y) [Owner] <contents> <bulk>/<cap>" — owner resolved to
+// the agent's Name via the same agentName helper the chronicle grammar uses
+// (grammar.go), contents via summarizeInventoryContents (mirroring the pile
+// zone summary's "non-food counts + food batch totals" shape, T021), and a
+// fullness hint so "is the chest full" is answerable without opening state.
+func describeChest(ch sim.Structure, names []string) string {
+	owner := agentName(names, ch.Owner)
+	contents := "empty"
+	full := 0
+	if ch.Store != nil {
+		full = sim.Bulk(*ch.Store)
+		contents = summarizeInventoryContents(*ch.Store)
+	}
+	return fmt.Sprintf("chest(%d,%d) [%s] %s %d/%d", ch.X, ch.Y, owner, contents, full, sim.ChestCap)
+}
+
+// summarizeInventoryContents renders a chest's Store the same way
+// summarizePileContents renders a pile's aggregate contents (T021): each
+// non-zero resource count, a spear count, and the food triplet as one
+// "food Nr/Nc/Nm" entry when any food is held. A chest's Store is a plain
+// sim.Inventory (counts, not FoodBatch — chests preserve food forever, no
+// spoilage deadlines to track, FR-010), so this reads the counts directly
+// rather than summing batches.
+func summarizeInventoryContents(inv sim.Inventory) string {
+	var parts []string
+	if inv.Wood > 0 {
+		parts = append(parts, fmt.Sprintf("%dw", inv.Wood))
+	}
+	if inv.Stone > 0 {
+		parts = append(parts, fmt.Sprintf("%dst", inv.Stone))
+	}
+	if inv.Water > 0 {
+		parts = append(parts, fmt.Sprintf("%dwt", inv.Water))
+	}
+	if inv.Planks > 0 {
+		parts = append(parts, fmt.Sprintf("%dpl", inv.Planks))
+	}
+	if inv.RefinedStone > 0 {
+		parts = append(parts, fmt.Sprintf("%drs", inv.RefinedStone))
+	}
+	if n := len(inv.Spears); n > 0 {
+		parts = append(parts, fmt.Sprintf("%dspear", n))
+	}
+	if inv.FoodRaw+inv.FoodCooked+inv.Meals > 0 {
+		parts = append(parts, fmt.Sprintf("food %dr/%dc/%dm", inv.FoodRaw, inv.FoodCooked, inv.Meals))
+	}
+	if len(parts) == 0 {
+		return "empty"
+	}
+	return strings.Join(parts, " ")
+}
+
+// pileZones groups piles into stockpile zones by 4-neighbor Manhattan
+// adjacency (spec.md "Stockpile zone": "an observability grouping of
+// adjacent piles — a rendering concept, not a state entity"). Purely a
+// render-side flood fill: it reads only the piles handed to it and
+// produces no state. Deterministic given a deterministic input order —
+// zones are discovered in `piles` order, and each zone's members are
+// visited in a fixed 4-neighbor order (N, E, S, W), matching the sim
+// package's own Manhattan-adjacency convention (internal/sim/state.go
+// pileOnOrAdjacent's neighborOrder).
+func pileZones(piles []sim.Pile) [][]sim.Pile {
+	byTile := make(map[[2]int]sim.Pile, len(piles))
+	for _, p := range piles {
+		byTile[[2]int{p.X, p.Y}] = p
+	}
+	dirs := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
+	visited := make(map[[2]int]bool, len(piles))
+	var zones [][]sim.Pile
+	for _, p := range piles {
+		start := [2]int{p.X, p.Y}
+		if visited[start] {
+			continue
+		}
+		visited[start] = true
+		queue := [][2]int{start}
+		var zone []sim.Pile
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			zone = append(zone, byTile[cur])
+			for _, d := range dirs {
+				nb := [2]int{cur[0] + d[0], cur[1] + d[1]}
+				if _, ok := byTile[nb]; ok && !visited[nb] {
+					visited[nb] = true
+					queue = append(queue, nb)
+				}
+			}
+		}
+		zones = append(zones, zone)
+	}
+	return zones
+}
+
+// describePileZone renders one pile-content inspection entry: a single pile
+// as "pile(x,y) contents", a multi-pile zone as its bounding box + pile
+// count. Contents = non-food counts (wood/stone/water/planks/refined stone/
+// spears) + food batch totals per kind, matching T021's spec wording and the
+// souls pane's carried-inventory phrasing (SC-006 consistency).
+func describePileZone(zone []sim.Pile) string {
+	contents := summarizePileContents(zone)
+	if len(zone) == 1 {
+		return fmt.Sprintf("pile(%d,%d) %s", zone[0].X, zone[0].Y, contents)
+	}
+	minX, minY, maxX, maxY := zone[0].X, zone[0].Y, zone[0].X, zone[0].Y
+	for _, p := range zone[1:] {
+		if p.X < minX {
+			minX = p.X
+		}
+		if p.X > maxX {
+			maxX = p.X
+		}
+		if p.Y < minY {
+			minY = p.Y
+		}
+		if p.Y > maxY {
+			maxY = p.Y
+		}
+	}
+	return fmt.Sprintf("zone[%d](%d,%d)-(%d,%d) %s", len(zone), minX, minY, maxX, maxY, contents)
+}
+
+// summarizePileContents aggregates one or more piles' contents into the
+// same "non-food counts + food batch totals" shape T021 calls for: raw
+// resource counts, a spear count, and the food triplet raw/cooked/meals
+// (batch totals, deadlines omitted — this is a contents summary, not a rot
+// countdown).
+func summarizePileContents(piles []sim.Pile) string {
+	var wood, stone, water, planks, refined, spears int
+	var foodRaw, foodCooked, foodMeals int
+	for _, p := range piles {
+		wood += p.Wood
+		stone += p.Stone
+		water += p.Water
+		planks += p.Planks
+		refined += p.RefinedStone
+		spears += len(p.Spears)
+		for _, f := range p.Food {
+			switch f.Kind {
+			case "food_raw":
+				foodRaw += f.N
+			case "food_cooked":
+				foodCooked += f.N
+			case "meals":
+				foodMeals += f.N
+			}
+		}
+	}
+	var parts []string
+	if wood > 0 {
+		parts = append(parts, fmt.Sprintf("%dw", wood))
+	}
+	if stone > 0 {
+		parts = append(parts, fmt.Sprintf("%dst", stone))
+	}
+	if water > 0 {
+		parts = append(parts, fmt.Sprintf("%dwt", water))
+	}
+	if planks > 0 {
+		parts = append(parts, fmt.Sprintf("%dpl", planks))
+	}
+	if refined > 0 {
+		parts = append(parts, fmt.Sprintf("%drs", refined))
+	}
+	if spears > 0 {
+		parts = append(parts, fmt.Sprintf("%dspear", spears))
+	}
+	if foodRaw+foodCooked+foodMeals > 0 {
+		parts = append(parts, fmt.Sprintf("food %dr/%dc/%dm", foodRaw, foodCooked, foodMeals))
+	}
+	if len(parts) == 0 {
+		return "empty"
+	}
+	return strings.Join(parts, " ")
 }
 
 // Terrain glyphs. Night dims the palette rather than hiding the world.
@@ -442,7 +684,18 @@ var (
 	styleFireCold = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
 	styleShelter  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
 	styleOven     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("166"))
-	styleGru      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	// Pile (spec 013 US2): "%" is the roguelike convention for a ground
+	// item/goods stash, distinct from every existing glyph; tan/gold (178)
+	// reads as "cache" without colliding with fire's orange (208), oven's
+	// burnt orange (166), or shelter's brown (130).
+	stylePile = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("178"))
+	// Chest (spec 013 US3): "☐" (empty box) reads as a container distinct
+	// from every existing glyph — unlike a pile's loose "%", a chest is a
+	// built structure with a lid. Dark goldenrod (136) sits between pile's
+	// tan (178) and shelter's brown (130) without matching either, so a
+	// chest never gets mistaken for a stockpile or a house at a glance.
+	styleChest = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("136"))
+	styleGru   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView is the narrow-fallback map pane: today's vw/vh formula,
@@ -978,8 +1231,13 @@ func (m Model) soulsBody(width, height int) string {
 			// triplet, and spear count (with the most-worn spear's
 			// remaining uses when at least one is carried — Spears is kept
 			// sorted ascending by the reducer, so Spears[0] is the one
-			// closest to breaking).
-			carry := fmt.Sprintf("carry %dw %dst %dwt %dpl %drs · food %dr/%dc/%dm",
+			// closest to breaking). Leading bulk n/24 (spec 013 T015,
+			// SC-006) answers "how full are this villager's hands" from
+			// the TUI alone — sim.Bulk is the same derived-load function
+			// the reducer/executor clamp against, so the number never
+			// drifts from what a gather/craft/give will actually do.
+			carry := fmt.Sprintf("bulk %d/%d · carry %dw %dst %dwt %dpl %drs · food %dr/%dc/%dm",
+				sim.Bulk(a.Inv), sim.BulkCap,
 				a.Inv.Wood, a.Inv.Stone, a.Inv.Water, a.Inv.Planks, a.Inv.RefinedStone,
 				a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)
 			if n := len(a.Inv.Spears); n > 0 {

@@ -44,6 +44,11 @@ type InjectArgs struct {
 	Goal        string
 	TargetAgent int // for seek/talk_to; -1 otherwise
 	Reason      string
+	// Kind/Qty (spec 013 R4) argue the storage goals (drop/pick_up/deposit/
+	// withdraw) when Goal is one of them; ignored otherwise. Additive —
+	// pre-013 callers leave them zero.
+	Kind string
+	Qty  int
 	// Cognition-horizon landing metadata (TASK-32). Class empty means an
 	// unmetered caller (tests, tooling): the ladder's staleness, generation,
 	// and guard checks are skipped and no telemetry is emitted — the
@@ -532,7 +537,7 @@ func (l *Loop) handleCommand(cmd command) error {
 			}
 			emit("agent.plan_set", PlanSetPayload{Agent: in.Agent, Job: in.JobID, Steps: in.Plan})
 		} else {
-			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, l.state.Tick)
+			intent, direct, rerr := resolveGoal(l.state, l.m, in.Agent, in.Goal, in.TargetAgent, in.Kind, in.Qty, l.state.Tick)
 			if rerr != nil {
 				// resolveGoal is the repair path; failing here means no
 				// deterministic adaptation exists — a world change.
@@ -552,6 +557,7 @@ func (l *Loop) handleCommand(cmd command) error {
 					Agent: in.Agent, Goal: intent.Goal,
 					TargetX: intent.TargetX, TargetY: intent.TargetY,
 					ResX: intent.ResX, ResY: intent.ResY,
+					Kind: intent.Kind, Qty: intent.Qty,
 					Source: "planner",
 				})
 			}

@@ -157,7 +157,7 @@ func TestInjectedPlannerIntent(t *testing.T) {
 	// Compute what the resolver would emit for agent 0 "forage" at tick 30.
 	pre := NewState(seed, m)
 	driveTicks(t, pre, m, 30, nil)
-	intent, direct, err := resolveGoal(pre, m, 0, "forage", -1, 30)
+	intent, direct, err := resolveGoal(pre, m, 0, "forage", -1, "", 0, 30)
 	if err != nil || direct != "" || intent == nil {
 		t.Fatalf("resolveGoal: %v %q %v", err, direct, intent)
 	}
@@ -203,19 +203,19 @@ func TestResolveGoalErrors(t *testing.T) {
 	m := testMap(seed)
 	s := NewState(seed, m)
 
-	if _, _, err := resolveGoal(s, m, 0, "summon_gru", -1, 0); err == nil {
+	if _, _, err := resolveGoal(s, m, 0, "summon_gru", -1, "", 0, 0); err == nil {
 		t.Error("unknown goal should error")
 	}
-	if _, _, err := resolveGoal(s, m, 0, "eat", -1, 0); err == nil {
+	if _, _, err := resolveGoal(s, m, 0, "eat", -1, "", 0, 0); err == nil {
 		t.Error("eat with no food should error")
 	}
-	if _, _, err := resolveGoal(s, m, 0, "build_fire", -1, 0); err == nil {
+	if _, _, err := resolveGoal(s, m, 0, "build_fire", -1, "", 0, 0); err == nil {
 		t.Error("build_fire with no wood should error")
 	}
-	if _, _, err := resolveGoal(s, m, 0, "talk_to", 0, 0); err == nil {
+	if _, _, err := resolveGoal(s, m, 0, "talk_to", 0, "", 0, 0); err == nil {
 		t.Error("talking to yourself should error")
 	}
-	if in, _, err := resolveGoal(s, m, 0, "talk_to", 1, 0); err != nil || in.Goal != "seek" {
+	if in, _, err := resolveGoal(s, m, 0, "talk_to", 1, "", 0, 0); err != nil || in.Goal != "seek" {
 		t.Errorf("talk_to should resolve to seek: %v %v", in, err)
 	}
 }

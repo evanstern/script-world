@@ -156,7 +156,7 @@ func foodIntent(s *State, m *worldmap.Map, a *Agent, tick int64) (*Intent, bool)
 // resolveGoal turns a planner-chosen goal into a concrete, deterministic
 // intent at the tick boundary (research R5). The model steers; the sim
 // drives. Errors mean the goal is impossible right now — nothing is emitted.
-func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent int, tick int64) (*Intent, string, error) {
+func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
 	a := &s.Agents[idx]
 	switch goal {
 	case "eat":
@@ -239,6 +239,19 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no build site reachable")
+	case "build_chest":
+		// T023 (spec 013 US3): the first owned container — 6 planks on the
+		// nearest buildable tile (build_oven pattern; the pile-tile exclusion
+		// already lives in buildSite, T019). Planner/plan-only (FR-014). Timed
+		// work; the completion re-validates inputs + site (contested pattern).
+		r, _ := recipeFor("build_chest")
+		if !hasItems(a.Inv, r.Inputs) {
+			return nil, "", fmt.Errorf("%s lacks planks for a chest (%d < %d)", a.Name, a.Inv.Planks, r.Inputs[0].N)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no build site reachable")
 	case "craft_planks", "craft_stone", "craft_spear":
 		// T026: hand-crafts anywhere — target is the agent's own tile, no
 		// travel. Planner-only (FR-020); never enters the reflex ladder.
@@ -285,6 +298,51 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return &Intent{Goal: "bathe", TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no oven reachable to bathe at")
+	case "drop":
+		// Planner/plan-only (FR-014). Instant on the agent's current tile; the
+		// completion emits agent.dropped with the actual post-clamp counts. An
+		// empty Kind or nothing carried resolves via intent_done at completion
+		// (executor) — resolveGoal creates the intent regardless (the goal is
+		// possible; the re-validation is where it may become a no-op).
+		return &Intent{Goal: "drop", TargetX: a.X, TargetY: a.Y, Kind: kind, Qty: qty}, "", nil
+	case "pick_up":
+		// Planner/plan-only. Target the nearest pile tile — piles sit on
+		// passable ground, so the agent walks onto it; the completion
+		// re-validates a pile on/adjacent and moves goods truncated to free
+		// bulk (Kind "" sweeps every kind in canonical order).
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return s.pileAt(x, y) != nil }); ok {
+			return &Intent{Goal: "pick_up", TargetX: p.X, TargetY: p.Y, Kind: kind, Qty: qty}, "", nil
+		}
+		return nil, "", fmt.Errorf("no pile reachable")
+	case "deposit":
+		// T024 (spec 013 US3): planner/plan-only. Target the nearest chest (any
+		// owner — the commons/ownership split is social, not mechanical; anyone
+		// may deposit). The completion re-validates the chest and truncates to its
+		// free space (chestCap − bulk(*Store)); Kind "" or nothing that fits
+		// resolves via intent_done at completion.
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return s.chestAt(x, y) != nil }); ok {
+			return &Intent{Goal: "deposit", TargetX: p.X, TargetY: p.Y, Kind: kind, Qty: qty}, "", nil
+		}
+		return nil, "", fmt.Errorf("no chest reachable")
+	case "withdraw":
+		// T024: planner/plan-only. Target the nearest chest whose Store holds Kind
+		// (Kind "" ⇒ the nearest chest with anything in it). The completion
+		// truncates to the taker's free bulk and to what the chest holds; a
+		// non-owner take co-emits the theft companion batch (US4, T029) — this
+		// goal only resolves the intent here.
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool {
+			ch := s.chestAt(x, y)
+			if ch == nil || ch.Store == nil {
+				return false
+			}
+			if kind == "" {
+				return bulk(*ch.Store) > 0
+			}
+			return carriedCount(*ch.Store, kind) > 0
+		}); ok {
+			return &Intent{Goal: "withdraw", TargetX: p.X, TargetY: p.Y, Kind: kind, Qty: qty}, "", nil
+		}
+		return nil, "", fmt.Errorf("no chest with those goods reachable")
 	case "sleep":
 		return &Intent{Goal: "sleep", TargetX: a.X, TargetY: a.Y}, "", nil
 	case "goto_warmth":

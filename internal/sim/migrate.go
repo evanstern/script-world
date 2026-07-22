@@ -1,20 +1,25 @@
 package sim
 
-// Spec 012 US6 — v1→v2 world migration (research R10). This file is the
-// migration-only seam: a typed decoder for the frozen v1 snapshot-state shape
-// and the pure v1→v2 transform. Neither runs on the live reducer path — the
-// migrate command (internal/world) decodes a v1 world's covering snapshot,
-// transforms it here, and writes the result as a single world.migrated event
-// whose reducer case (state.go) replaces state wholesale.
+// World migration — the migration-only seam (spec 012 US6 for v1→v2, research
+// R10; spec 013 for v2→v3, research R3). This file holds the pure transforms:
+// the typed v1 legacy decode + v1→v2 transform, and the v2→v3 transform.
+// Neither runs on the live reducer path — the migrate command (internal/world)
+// decodes a world's covering snapshot, transforms it here, and writes the
+// result as a single world.migrated event whose reducer case (state.go)
+// replaces state wholesale. A v1 world chains 1→2→3 in one run.
 //
-// The transform's contract is "keep the people, reset the land": every villager
-// and the whole social/governance fabric carry over verbatim (tick continuity
-// intact, so memory ticks, consolidation marks, and day counts stay
-// meaningful); the map and everything bound to it is reborn under v2 rules.
+// The v1→v2 transform's contract is "keep the people, reset the land": every
+// villager and the whole social/governance fabric carry over verbatim (tick
+// continuity intact, so memory ticks, consolidation marks, and day counts stay
+// meaningful); the map and everything bound to it is reborn under v2 rules. The
+// v2→v3 transform (below) is people- AND land-preserving — spec 013 changed no
+// terrain, so nothing resets; it only enforces the new bulk cap by spilling
+// over-cap carry to ground piles.
 
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/worldmap"
@@ -197,4 +202,127 @@ func TransformV1Snapshot(v1StateJSON []byte, m *worldmap.Map) (*State, int64, er
 		return nil, 0, err
 	}
 	return MigrateState(ls, m), ls.Tick, nil
+}
+
+// --- v2→v3 transform (spec 013 US, research R3) -----------------------------
+//
+// The v3 format break (spec 013: bulk cap, ground piles, chests, theft, rot)
+// changes how the reducer/executor treat EXISTING event shapes (yield
+// truncation, death spill, give-guard), so a v2 log replayed under v3 code
+// would diverge — the format gate is the shield, and this transform is the
+// door. Unlike the v1→v2 cut it is NOT a "reset the land" migration: spec 013
+// changes no terrain generation and no map inputs, so everything carries
+// VERBATIM — agents in place (NO re-placement), structures, overlays,
+// memories, relations, rumors, governance, ticks. The one adjustment is the new
+// bulk-cap invariant: any carried bulk over bulkCap spills to a ground pile at
+// the agent's tile, and — taking the v3 death-spill invariant forward — a dead
+// villager's entire carried inventory spills too (under v3, death spills; a v2
+// world froze the dead's Inv, so carrying it forward keeps the migrated world
+// consistent with what v3 would have produced).
+//
+// No distinct "v2 legacy decode" is needed: every v3 addition is additive and
+// omitempty (State.Piles, Structure.Owner/Store, Intent.Kind/Qty), so a v2
+// snapshot's JSON decodes into the current sim.State faithfully, all new fields
+// landing on their zero values. A parallel legacy decoder would be redundant
+// maintenance surface, so the transform runs against sim.State directly.
+
+// TransformV2State is the pure v2→v3 transform. It carries the whole v2 state
+// verbatim (positions, structures, overlays, the social/governance fabric, the
+// clock — the migration tick is the carried tick, so the clock simply
+// continues) and applies only the bulk-cap invariant: living agents over the
+// cap spill their excess, dead agents spill everything, both into a ground pile
+// at the agent's own tile (create-or-merge in agent-index order for
+// determinism), spilled food stamped with a fresh rot deadline. It is a pure
+// function of the input state and mutates no input slice.
+func TransformV2State(v2 *State) *State {
+	migTick := v2.Tick
+	out := *v2 // carry every field verbatim (slice headers shared, read-only)
+	// Derived clock fields start fresh & non-degraded, exactly as the v1→v2
+	// transform does: a stopped world carries no live drift across the break.
+	out.Degraded = false
+	out.EffectiveRate = out.Speed.TicksPerSecond()
+	// Own the Agents slice (we mutate Inv on spill) and the Piles slice (we
+	// append spill piles) so the input is never mutated — the transform is pure.
+	out.Agents = make([]Agent, len(v2.Agents))
+	copy(out.Agents, v2.Agents)
+	out.Piles = append([]Pile(nil), v2.Piles...)
+
+	for i := range out.Agents {
+		a := &out.Agents[i]
+		switch {
+		case a.Dead:
+			// The v3 death-spill invariant, applied to the frozen v2 dead: the
+			// entire carried inventory spills (research R7 idiom).
+			if over := bulk(a.Inv); over > 0 {
+				spillToPile(&out, a, over, migTick)
+			}
+		default:
+			// FR-001: no living villager may carry over the cap. The excess
+			// spills; the cap's worth of best goods stays carried.
+			if over := bulk(a.Inv) - bulkCap; over > 0 {
+				spillToPile(&out, a, over, migTick)
+			}
+		}
+	}
+	return &out
+}
+
+// spillToPile moves `over` units of an agent's carried goods into the ground
+// pile at its tile (create-or-merge), removing in canonical kind order. Within
+// food that order is least-nutritious-first (food_raw → food_cooked → meals,
+// which IS canonical order), so a capped villager keeps its best food; spears
+// move most-worn-first, mirroring the drop/deposit transfer idioms. Spilled
+// food batches are stamped SpoilAt = migration tick + rotWindowTicks. `over` is
+// clamped to what is actually carried, so a dead agent (over = full bulk)
+// empties completely and a living one lands exactly at the cap.
+func spillToPile(s *State, a *Agent, over int, migTick int64) {
+	if over <= 0 {
+		return
+	}
+	pile := s.pileFor(a.X, a.Y)
+	for _, kind := range canonicalKinds {
+		if over <= 0 {
+			break
+		}
+		n := carriedCount(a.Inv, kind)
+		if n > over {
+			n = over
+		}
+		if n <= 0 {
+			continue
+		}
+		switch {
+		case kind == "spears":
+			// Most-worn-first: the front of the ascending slice moves; both
+			// sides stay sorted ascending.
+			pile.Spears = append(pile.Spears, a.Inv.Spears[:n]...)
+			sort.Ints(pile.Spears)
+			rest := append([]int(nil), a.Inv.Spears[n:]...)
+			if len(rest) == 0 {
+				a.Inv.Spears = nil
+			} else {
+				a.Inv.Spears = rest
+			}
+		case isFoodKind(kind):
+			pile.addFood(kind, n, migTick+rotWindowTicks)
+			addItems(&a.Inv, []Item{{kind, n}}, -1)
+		default:
+			pile.addNonFood(kind, n)
+			addItems(&a.Inv, []Item{{kind, n}}, -1)
+		}
+		over -= n
+	}
+}
+
+// TransformV2Snapshot decodes a v2 covering-snapshot state JSON (structurally a
+// subset of v3 — see TransformV2State) and applies the pure v2→v3 transform,
+// returning the v3 state and the carried migration tick (the v2 tick continues
+// unbroken). The migrate command's 2→3 entry point.
+func TransformV2Snapshot(v2StateJSON []byte) (*State, int64, error) {
+	var v2 State
+	if err := json.Unmarshal(v2StateJSON, &v2); err != nil {
+		return nil, 0, fmt.Errorf("decode v2 state: %w", err)
+	}
+	out := TransformV2State(&v2)
+	return out, out.Tick, nil
 }

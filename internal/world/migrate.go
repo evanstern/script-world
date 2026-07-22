@@ -1,12 +1,14 @@
 package world
 
-// Spec 012 US6 — the snapshot-cut migration that carries a v1 world's people
-// across the resources/food/crafting format break while the land resets
-// (research R10). This is a client-side, offline operation: the daemon must be
-// stopped. It never replays v1 events under v2 rules — it reads the v1 world's
-// covering snapshot, transforms it (internal/sim), and writes a fresh v2 log
-// whose single world.migrated event carries the full transformed state, so the
-// log alone reproduces the migrated world byte-identically.
+// The snapshot-cut migration that carries a world's people (spec 012 US6 for
+// v1→v2 while the land resets, research R10; spec 013 for v2→v3 which preserves
+// people AND land, research R3). This is a client-side, offline operation: the
+// daemon must be stopped. It never replays old events under new rules — it reads
+// the source world's covering snapshot, transforms it (internal/sim), and writes
+// a fresh log whose single world.migrated event carries the full transformed
+// state, so the log alone reproduces the migrated world byte-identically. A v1
+// world chains 1→2→3 in one run; the archive name is keyed to the source format
+// (world.v1.db or world.v2.db).
 
 import (
 	"encoding/json"
@@ -33,11 +35,12 @@ type MigrateResult struct {
 	ArchivePath   string
 }
 
-// OpenForMigration loads a world directory WITHOUT the v2 version gate, for the
-// sole purpose of migrating it. It refuses anything that is not a v1 world: an
-// already-v2 (or future) world has nothing to migrate, and a corrupt manifest
-// is refused exactly as Open would. Map dimensions are defaulted identically to
-// Open so the regenerated v2 map matches what the daemon will boot.
+// OpenForMigration loads a world directory WITHOUT the current version gate,
+// for the sole purpose of migrating it. It admits any older supported source
+// format (v1 or v2) and refuses everything else: an already-current (or future)
+// world has nothing to migrate, and a corrupt manifest is refused exactly as
+// Open would. Map dimensions are defaulted identically to Open so a regenerated
+// map matches what the daemon will boot.
 func OpenForMigration(dir string) (*World, error) {
 	data, err := os.ReadFile(filepath.Join(dir, ManifestName))
 	if err != nil {
@@ -50,8 +53,8 @@ func OpenForMigration(dir string) (*World, error) {
 	if m.FormatVersion == FormatVersion {
 		return nil, fmt.Errorf("world %q is already format_version %d — nothing to migrate", m.Name, FormatVersion)
 	}
-	if m.FormatVersion != 1 {
-		return nil, fmt.Errorf("world %q is format_version %d; only v1 worlds can be migrated to v%d", m.Name, m.FormatVersion, FormatVersion)
+	if m.FormatVersion != 1 && m.FormatVersion != 2 {
+		return nil, fmt.Errorf("world %q is format_version %d; only v1 and v2 worlds can be migrated to v%d", m.Name, m.FormatVersion, FormatVersion)
 	}
 	if m.TickGameSeconds != 1 {
 		return nil, fmt.Errorf("tick_game_seconds %d unsupported (must be 1)", m.TickGameSeconds)
@@ -65,10 +68,21 @@ func OpenForMigration(dir string) (*World, error) {
 	return &World{Dir: dir, Manifest: m}, nil
 }
 
-// V1DBPath is the archived original database — its existence is the
-// already-migrated guard, and restoring is "delete world.db, rename this back,
-// reset the manifest to v1".
+// V1DBPath / V2DBPath are the archived original databases — the archive name is
+// keyed to the SOURCE format so a v1→(2→)3 run parks world.v1.db and a v2→3 run
+// parks world.v2.db. The archive's existence is the already-migrated guard for
+// that source format, and restoring is "delete world.db, rename this back, reset
+// the manifest to the source version".
 func (w *World) V1DBPath() string { return filepath.Join(w.Dir, "world.v1.db") }
+func (w *World) V2DBPath() string { return filepath.Join(w.Dir, "world.v2.db") }
+
+// archiveDBPath is the archive name for this world's SOURCE format version.
+func (w *World) archiveDBPath() string {
+	if w.Manifest.FormatVersion == 2 {
+		return w.V2DBPath()
+	}
+	return w.V1DBPath()
+}
 
 // Migrate performs the whole v1→v2 migration in place (research R10). The
 // archive is sacred: world.db is renamed to world.v1.db (never deleted), and
@@ -88,9 +102,14 @@ func Migrate(dir string) (*MigrateResult, error) {
 		return nil, fmt.Errorf("daemon is running (pid %d) — stop it first: scriptworld stop %s", pid, dir)
 	}
 
-	// Already-migrated guard: the archive is never overwritten (FR-025).
-	if _, err := os.Stat(w.V1DBPath()); err == nil {
-		return nil, fmt.Errorf("this world is already migrated (%s exists); the archive is never overwritten", filepath.Base(w.V1DBPath()))
+	// Already-migrated guard: the archive is never overwritten (FR-025). The
+	// guard is on the SOURCE-format archive (world.v1.db for a v1 source,
+	// world.v2.db for a v2 source), so a v2 world produced by an earlier v1
+	// migration — which would carry a stale world.v1.db — is still migratable
+	// to v3.
+	archivePath := w.archiveDBPath()
+	if _, err := os.Stat(archivePath); err == nil {
+		return nil, fmt.Errorf("this world is already migrated (%s exists); the archive is never overwritten", filepath.Base(archivePath))
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -139,26 +158,47 @@ func Migrate(dir string) (*MigrateResult, error) {
 		}
 	}
 
-	// Transform: v1 covering-snapshot state → v2 state, re-placing souls on the
-	// v2 regeneration of the same seed. w.Map() uses this build's generator, so
-	// the migrated agents stand on passable v2 tiles (rock outcrops included).
-	v2state, srcTick, err := sim.TransformV1Snapshot(snap.State, w.Map())
-	if err != nil {
+	// Transform the covering-snapshot state to the current (v3) format. A v1
+	// world chains both transforms in one run: v1→v2 re-places souls on the v2
+	// regeneration of the same seed (w.Map() uses this build's generator, so
+	// they stand on passable v2 tiles, rock outcrops included), then v2→v3
+	// carries everything verbatim and spills any over-cap carry. A v2 world runs
+	// the v2→v3 step alone (no map needed — no land reset). srcTick is the
+	// carried continuation tick in every path.
+	var finalState *sim.State
+	var srcTick int64
+	switch w.Manifest.FormatVersion {
+	case 1:
+		var v2state *sim.State
+		v2state, srcTick, err = sim.TransformV1Snapshot(snap.State, w.Map())
+		if err != nil {
+			st.Close()
+			return nil, err
+		}
+		finalState = sim.TransformV2State(v2state)
+	case 2:
+		finalState, srcTick, err = sim.TransformV2Snapshot(snap.State)
+		if err != nil {
+			st.Close()
+			return nil, err
+		}
+	default:
 		st.Close()
-		return nil, err
+		return nil, fmt.Errorf("unsupported source format_version %d", w.Manifest.FormatVersion)
 	}
 	if err := st.Close(); err != nil {
 		return nil, err
 	}
 
-	// Archive the original database (and any WAL sidecars) intact. This is the
-	// point of no easy return, so everything that could refuse has already run.
-	if err := archiveDB(w.DBPath(), w.V1DBPath()); err != nil {
+	// Archive the original database (and any WAL sidecars) intact under the
+	// source-format archive name. This is the point of no easy return, so
+	// everything that could refuse has already run.
+	if err := archiveDB(w.DBPath(), archivePath); err != nil {
 		return nil, err
 	}
 
-	// Fresh v2 log: world.created (same name/seed) then world.migrated carrying
-	// the full transformed state. Both stamped at the continuation tick.
+	// Fresh log: world.created (same name/seed) then world.migrated carrying the
+	// full transformed state. Both stamped at the continuation tick.
 	fresh, err := store.Open(w.DBPath())
 	if err != nil {
 		return nil, err
@@ -173,7 +213,7 @@ func Migrate(dir string) (*MigrateResult, error) {
 		FromFormat:   w.Manifest.FormatVersion,
 		SourceEvents: maxSeq,
 		SourceTick:   srcTick,
-		State:        *v2state,
+		State:        *finalState,
 	})
 	if err != nil {
 		return nil, err
@@ -188,13 +228,14 @@ func Migrate(dir string) (*MigrateResult, error) {
 	// Initial snapshot at the migrated tick: the covering snapshot of the fresh
 	// log. Deleting it and replaying (world.created → world.migrated) must
 	// reproduce this exact state — the determinism half of SC-007.
-	if err := fresh.SaveSnapshot(srcTick, fresh.LastSeq(), v2state.Marshal()); err != nil {
+	if err := fresh.SaveSnapshot(srcTick, fresh.LastSeq(), finalState.Marshal()); err != nil {
 		return nil, err
 	}
 
-	// Bump the manifest last: with the manifest still at v1, a crash between the
-	// archive and here leaves a recoverable state (world.v1.db present, manifest
-	// v1 — restore is the same rename-back).
+	// Bump the manifest last: with the manifest still at the source version, a
+	// crash between the archive and here leaves a recoverable state (the
+	// source-format archive present, manifest unbumped — restore is the same
+	// rename-back).
 	w.Manifest.FormatVersion = FormatVersion
 	if err := writeManifest(w); err != nil {
 		return nil, err
@@ -203,18 +244,18 @@ func Migrate(dir string) (*MigrateResult, error) {
 	return &MigrateResult{
 		Name:          w.Manifest.Name,
 		Seed:          w.Manifest.Seed,
-		AgentsCarried: len(v2state.Agents),
+		AgentsCarried: len(finalState.Agents),
 		Tick:          srcTick,
 		SourceEvents:  maxSeq,
-		ArchivePath:   w.V1DBPath(),
+		ArchivePath:   archivePath,
 	}, nil
 }
 
 // migrateNeedsCleanStop wraps the "no covering snapshot" refusals with the
-// remedy: a clean start+stop under the v1 binary produces the finalSnapshot
-// migration relies on (FR-024).
+// remedy: a clean start+stop under the source-format binary produces the
+// shutdown snapshot migration relies on (FR-024).
 func migrateNeedsCleanStop(dir, why string) error {
-	return fmt.Errorf("%s — start and stop this world once with the v1 binary so a covering shutdown snapshot exists, then re-run: scriptworld migrate %s", why, dir)
+	return fmt.Errorf("%s — start and stop this world once with its own binary so a covering shutdown snapshot exists, then re-run: scriptworld migrate %s", why, dir)
 }
 
 // archiveDB renames the live database (and any WAL/SHM sidecars) to the archive

@@ -135,6 +135,36 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Ground-food rot sweep (T032, US5): on the same per-game-minute boundary
+	// the needs heartbeat uses, each ground pile's food batches whose absolute
+	// deadline has arrived (SpoilAt <= tick) are removed as a visible,
+	// event-sourced happening. A pure function of (state, tick) — the fuel-sweep
+	// pattern: no bookkeeping state, the reducer's batch removal itself re-arms
+	// the sweep. Pile iteration is State.Piles slice order; per pile, same-kind
+	// spoiled batches merge into ONE sim.food_rotted, and kinds are walked in the
+	// fixed canonical food order — both fixed orders keep replay byte-identical.
+	// A world with no piles emits nothing (degraded-mode safe); chest food
+	// carries no deadlines and never reaches here (FR-010). Placed among the
+	// world sweeps (regrowth, burnout, needs) before per-agent execution, so a
+	// pickup completing this same tick lands after the rot events in the batch
+	// and the reducer's clamp resolves the contest (spec edge "Rot mid-pickup").
+	if nextTick%60 == 0 {
+		for pi := range s.Piles {
+			pile := &s.Piles[pi]
+			for _, kind := range foodKinds {
+				n := 0
+				for _, b := range pile.Food {
+					if b.Kind == kind && b.SpoilAt <= nextTick {
+						n += b.N
+					}
+				}
+				if n > 0 {
+					emit("sim.food_rotted", FoodRottedPayload{X: pile.X, Y: pile.Y, Kind: kind, N: n})
+				}
+			}
+		}
+	}
+
 	// Hail sweep (TASK-47): resolve outstanding pauses — met (hailer arrived)
 	// or expired — before anyone moves this tick, so met-vs-expired is a
 	// deterministic race with met winning ties (research D4).
@@ -360,29 +390,33 @@ func rumorTellEvent(tick int64, from, to int, tell Tellable) store.Event {
 		})}
 }
 
-// repayable: one of the pair owes the other and can spare a meal.
+// repayable: one of the pair owes the other and can spare a meal — and the
+// creditor has bulk to receive it (T012: a gift into a full pouch is skipped
+// under the cap, research R2; the debt simply stays open until there's room).
 func repayable(s *State, i, j int, tick int64) (debtor, creditor int, ok bool) {
 	for _, d := range s.Debts {
 		if d.Status != "open" || d.Kind != "food" {
 			continue
 		}
-		if d.Debtor == i && d.Creditor == j && canGive(&s.Agents[i], tick) {
+		if d.Debtor == i && d.Creditor == j && canGive(&s.Agents[i], tick) && freeBulk(s.Agents[j].Inv) > 0 {
 			return i, j, true
 		}
-		if d.Debtor == j && d.Creditor == i && canGive(&s.Agents[j], tick) {
+		if d.Debtor == j && d.Creditor == i && canGive(&s.Agents[j], tick) && freeBulk(s.Agents[i].Inv) > 0 {
 			return j, i, true
 		}
 	}
 	return 0, 0, false
 }
 
-// giveable: one is starving, the other has spare food.
+// giveable: one is starving, the other has spare food — and the starving
+// receiver has free bulk (T012: never over the cap; a starving villager at the
+// cap is carrying food already and would eat rather than receive).
 func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
 	a, b := &s.Agents[i], &s.Agents[j]
-	if a.Needs.Food < giveNeedBelow && canGive(b, tick) {
+	if a.Needs.Food < giveNeedBelow && canGive(b, tick) && freeBulk(a.Inv) > 0 {
 		return j, i, true
 	}
-	if b.Needs.Food < giveNeedBelow && canGive(a, tick) {
+	if b.Needs.Food < giveNeedBelow && canGive(a, tick) && freeBulk(b.Inv) > 0 {
 		return i, j, true
 	}
 	return 0, 0, false
@@ -447,6 +481,137 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// Assembled: stand at the meeting place until it closes (the
 		// executor clears the pin once the meeting ends).
 		return events
+	case "drop":
+		// T016 (spec 013 US2): instant on the agent's current tile. Emit
+		// agent.dropped with the ACTUAL post-clamp count — min(Qty-or-all,
+		// carried). Kind is required; an empty Kind or nothing carried resolves
+		// via intent_done only (no pile is touched, contested-resource pattern).
+		n := carriedCount(a.Inv, in.Kind)
+		if in.Qty > 0 && in.Qty < n {
+			n = in.Qty
+		}
+		if in.Kind == "" || n <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.dropped", DroppedPayload{Agent: i, X: a.X, Y: a.Y, Kind: in.Kind, N: n})
+		return events
+	case "pick_up":
+		// T017 (spec 013 US2): instant on arrival. Re-validate a pile on/
+		// adjacent (it may have been drained while walking over) and emit ONE
+		// agent.picked_up per kind actually moved, truncated cumulatively to
+		// free bulk. Kind "" sweeps every kind in canonical field order (the
+		// reducer drains food oldest-batch-first). Nothing moved ⇒ intent_done.
+		pile := s.pileOnOrAdjacent(a.X, a.Y)
+		if pile == nil {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		kinds := []string{in.Kind}
+		if in.Kind == "" {
+			kinds = canonicalKinds
+		}
+		free := freeBulk(a.Inv)
+		moved := false
+		for _, kind := range kinds {
+			if free <= 0 {
+				break
+			}
+			take := pile.avail(kind)
+			if in.Kind != "" && in.Qty > 0 && in.Qty < take {
+				take = in.Qty
+			}
+			if take > free {
+				take = free
+			}
+			if take <= 0 {
+				continue
+			}
+			emit("agent.picked_up", PickedUpPayload{Agent: i, X: pile.X, Y: pile.Y, Kind: kind, N: take})
+			free -= take
+			moved = true
+		}
+		if !moved {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+		}
+		return events
+	case "deposit":
+		// T024 (spec 013 US3): instant on arrival at the chest. Re-validate the
+		// chest still stands (contested pattern) and truncate the move to its free
+		// space (chestCap − bulk(*Store)). Kind is required (an empty Kind, an
+		// unheld kind, or a full chest ⇒ intent_done only, no effect event). The
+		// payload carries the ACTUAL post-clamp count.
+		ch := s.chestAt(in.TargetX, in.TargetY)
+		if ch == nil || ch.Store == nil || in.Kind == "" {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		n := carriedCount(a.Inv, in.Kind)
+		if in.Qty > 0 && in.Qty < n {
+			n = in.Qty
+		}
+		if free := chestCap - bulk(*ch.Store); n > free {
+			n = free
+		}
+		if n <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.deposited", DepositedPayload{Agent: i, X: in.TargetX, Y: in.TargetY, Kind: in.Kind, N: n})
+		return events
+	case "withdraw":
+		// T024: instant on arrival. Re-validate the chest, then emit ONE
+		// agent.withdrew per kind actually moved, truncated cumulatively to the
+		// taker's free bulk and to what the chest holds. A named Kind honors Qty;
+		// Kind "" sweeps every kind in canonical field order. Owner rides the
+		// payload (the theft companion batch is US4, T029 — not emitted here).
+		// Nothing moved ⇒ intent_done only.
+		ch := s.chestAt(in.TargetX, in.TargetY)
+		if ch == nil || ch.Store == nil {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		kinds := []string{in.Kind}
+		if in.Kind == "" {
+			kinds = canonicalKinds
+		}
+		free := freeBulk(a.Inv)
+		moved := false
+		for _, kind := range kinds {
+			if free <= 0 {
+				break
+			}
+			take := carriedCount(*ch.Store, kind)
+			if in.Kind != "" && in.Qty > 0 && in.Qty < take {
+				take = in.Qty
+			}
+			if take > free {
+				take = free
+			}
+			if take <= 0 {
+				continue
+			}
+			emit("agent.withdrew", WithdrewPayload{Agent: i, X: in.TargetX, Y: in.TargetY, Kind: kind, N: take, Owner: ch.Owner})
+			free -= take
+			moved = true
+		}
+		if !moved {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		// T029 (spec 013 US4): a non-owner withdrawal is theft — never blocked
+		// (the transfer above already stands), always marked. In THIS same batch,
+		// after the agent.withdrew event(s) and in contract order (events.md
+		// "Companion batch on a non-owner withdrawal"), the executor co-emits the
+		// social consequences through the existing machinery: the taking record,
+		// the reason-tagged relation delta, the owner's gossip-seed memory, and a
+		// witness memory for each neighbor who saw it. Owner-from-own-chest ⇒
+		// agent.withdrew alone (US4-AS4). All companions are additive; none can
+		// undo the goods that already moved (FR-012).
+		if owner := ch.Owner; owner != i && owner >= 0 && owner < len(s.Agents) {
+			events = append(events, theftCompanions(s, owner, i, in.TargetX, in.TargetY, nextTick, a.Name)...)
+		}
+		return events
 	}
 
 	// Validity: the resource may have vanished while walking (someone else
@@ -459,7 +624,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Tree
 	case "hunt":
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
-	case "build_fire", "build_shelter", "build_oven":
+	case "build_fire", "build_shelter", "build_oven", "build_chest":
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
 	case "quarry":
 		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
@@ -488,6 +653,19 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	}
 	if nextTick-in.WorkStart < workDuration(s, a, in) {
 		return events // still working
+	}
+
+	// US1-AS1 zero-space guard (T011): a gather whose taker has no free bulk
+	// does not happen — no harvest event and, crucially, no depletion (the
+	// tree/den/outcrop/forage tile is left untouched for later). The intent
+	// simply resolves. Same contested-resource re-validation as the vanished-
+	// resource case above, keyed on the pouch instead of the world (research R2).
+	switch in.Goal {
+	case "forage", "chop", "hunt", "quarry", "collect_water":
+		if freeBulk(a.Inv) == 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
 	}
 
 	switch in.Goal {
@@ -540,6 +718,29 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 					"Watched %s raise an oven for the village.", a.Name))
 			}
 		}
+	case "build_chest":
+		// T023/T030 (spec 013 US3/US4): the first owned container. Site re-validated
+		// above (buildSite, including the pile-tile exclusion); the reducer consumes
+		// the planks and stamps Owner + an empty Store. Village-visible, like the
+		// oven: the builder remembers raising it, nearby living agents get a witness
+		// memory. "First chest" wording checks the pre-mutation state (this build
+		// hasn't landed yet), matching build_oven.
+		first := !s.hasStructure("chest")
+		emit("agent.built", BuiltPayload{Agent: i, Kind: "chest", X: in.TargetX, Y: in.TargetY})
+		text := "Built a chest to keep the village's things."
+		if first {
+			text = "Built the village's first chest — a place to keep things safe."
+		}
+		events = append(events, memoryEvent(nextTick, i, salChestBuilt, "%s", text))
+		for w := range s.Agents {
+			if w == i || s.Agents[w].Dead {
+				continue
+			}
+			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
+				events = append(events, memoryAboutEvent(nextTick, w, i, toneChestBuilt, salChestBuilt,
+					"Watched %s build a chest for the village.", a.Name))
+			}
+		}
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "collect_water":
@@ -552,6 +753,15 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// applies uniformly with every other completion.
 		r, _ := recipeFor(in.Goal)
 		if !hasItems(a.Inv, r.Inputs) {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		// US1 (T012): a craft doesn't truncate — it either fits or it doesn't
+		// happen. The completion re-validation extends to the net bulk delta
+		// (outputs − inputs, the inputs freeing their own space first); if the
+		// net won't fit, no agent.crafted, intent cleared. Only craft_planks
+		// has a positive net (research R2).
+		if craftNetBulk(r) > freeBulk(a.Inv) {
 			emit("agent.intent_done", AgentPayload{Agent: i})
 			return events
 		}

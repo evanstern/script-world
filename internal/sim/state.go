@@ -38,6 +38,12 @@ type State struct {
 	// quarried tile is passable but NOT buildable and NOT quarryable again;
 	// effectiveKind renders it as worldmap.Depleted, distinct from Grass.
 	Quarried []Point `json:"quarried,omitempty"`
+	// Piles (spec 013 US2) are the per-tile commons of dropped/spilled goods —
+	// event-sourced overlay state like Quarried, appended in creation order,
+	// one pile per tile (the reducer merges drops onto an existing pile), an
+	// emptied pile removed in the same application. omitempty keeps pre-013
+	// snapshots byte-identical.
+	Piles []Pile `json:"piles,omitempty"`
 	// Social fabric (TASK-8) — all event-sourced.
 	Relations   []Relation `json:"relations,omitempty"`
 	Debts       []Debt     `json:"debts,omitempty"`
@@ -186,6 +192,68 @@ func mustPayload(v any) json.RawMessage {
 	return b
 }
 
+// --- ground pile helpers (spec 013 US2) ---
+//
+// One pile per tile is a reducer invariant, so at most one pile ever matches a
+// coordinate. These are the create-or-merge / drain-and-remove primitives the
+// drop, pick_up, death-spill, and rot cases build on (wired in Phase 4/5/7).
+
+// pileAt returns a pointer to the pile on (x,y), or nil when the tile holds none.
+func (s *State) pileAt(x, y int) *Pile {
+	for i := range s.Piles {
+		if s.Piles[i].X == x && s.Piles[i].Y == y {
+			return &s.Piles[i]
+		}
+	}
+	return nil
+}
+
+// pileOnOrAdjacent returns the pile on (x,y) or, failing that, on a
+// Manhattan-adjacent tile (neighbor order fixed for determinism) — the pile a
+// pick_up completion may access (spec US2-AS3: on/adjacent). nil when none.
+func (s *State) pileOnOrAdjacent(x, y int) *Pile {
+	if p := s.pileAt(x, y); p != nil {
+		return p
+	}
+	for _, d := range neighborOrder {
+		if p := s.pileAt(x+d[0], y+d[1]); p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
+// pileFor returns the pile on (x,y), creating an empty one in creation order
+// (slice append) when the tile has none — the create-or-merge target of a drop
+// or a death spill.
+func (s *State) pileFor(x, y int) *Pile {
+	if p := s.pileAt(x, y); p != nil {
+		return p
+	}
+	s.Piles = append(s.Piles, Pile{X: x, Y: y})
+	return &s.Piles[len(s.Piles)-1]
+}
+
+// removeEmptyPileAt drops the pile on (x,y) when its contents have reached zero,
+// preserving the creation order of the survivors (the forage-regrown filter
+// pattern). A no-op when the tile has no pile or a non-empty one.
+func (s *State) removeEmptyPileAt(x, y int) {
+	p := s.pileAt(x, y)
+	if p == nil || !p.empty() {
+		return
+	}
+	out := s.Piles[:0]
+	for _, q := range s.Piles {
+		if !(q.X == x && q.Y == y) {
+			out = append(out, q)
+		}
+	}
+	s.Piles = out
+	if len(s.Piles) == 0 {
+		s.Piles = nil
+	}
+}
+
 // Apply is the reducer: the only mutation path for event-sourced state, used
 // identically by the live loop and by recovery replay. Unknown and daemon.*
 // event types are recorded history but no-ops on state.
@@ -319,7 +387,7 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Intent = &Intent{Goal: p.Goal, TargetX: p.TargetX, TargetY: p.TargetY, ResX: p.ResX, ResY: p.ResY}
+		a.Intent = &Intent{Goal: p.Goal, TargetX: p.TargetX, TargetY: p.TargetY, ResX: p.ResX, ResY: p.ResY, Kind: p.Kind, Qty: p.Qty}
 	case "agent.work_started":
 		var p WorkStartedPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -364,7 +432,12 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.FoodRaw += forageYieldV2
+		// US1-AS2 (T010): the yield truncates to the taker's free bulk; the
+		// remainder is forfeit, but the overlay/depletion still applies (the
+		// forage tile is marked harvested regardless). A full pouch never
+		// reaches here — the executor emits intent_done only at zero space
+		// (T011), so depletion-at-zero-space never occurs.
+		a.Inv.FoodRaw += minInt(forageYieldV2, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
@@ -377,7 +450,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Wood += chopWood
+		// US1-AS2 (T010): yield truncates to free bulk; the tree still clears.
+		a.Inv.Wood += minInt(chopWood, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Cleared = append(s.Cleared, Point{X: p.X, Y: p.Y})
@@ -397,11 +471,18 @@ func (s *State) Apply(e store.Event) error {
 		// state-derived, not payload-carried). A companion agent.spear_broke,
 		// if any, applies right after this in the same batch and removes the
 		// now-zero spear.
+		// US1-AS2 (T010): the food yield truncates to pre-event free bulk; the
+		// spear spend frees no bulk mid-event (decrementing a use leaves
+		// len(Spears) — and thus bulk — unchanged), and the spear's removal on
+		// break rides its own companion agent.spear_broke. So free space is
+		// read once, before the food is added, with the spear still counted.
+		yield := huntYieldBare
 		if len(a.Inv.Spears) > 0 {
-			a.Inv.FoodRaw += huntYieldSpear
+			yield = huntYieldSpear
+		}
+		a.Inv.FoodRaw += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Spears) > 0 {
 			a.Inv.Spears[0]--
-		} else {
-			a.Inv.FoodRaw += huntYieldBare
 		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
@@ -436,6 +517,14 @@ func (s *State) Apply(e store.Event) error {
 			// fuel sweep burns it out and refuel pushes FuelUntil forward.
 			st.FuelUntil = e.Tick + 2*fireBurnPerWood
 		}
+		if p.Kind == "chest" {
+			// T023 (spec 013 US3, research R8): the builder is recorded as owner
+			// permanently (no transfer/inheritance in v1), and the chest gets an
+			// empty Store for its contents. The recipe delta above already spent
+			// the chestPlankCost planks (recipes.go stays the single source).
+			st.Owner = p.Agent
+			st.Store = &Inventory{}
+		}
 		s.Structures = append(s.Structures, st)
 	case "agent.ate":
 		// T018: outcome-payload eat — the emitter computed the
@@ -469,7 +558,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Stone += quarryYield
+		// US1-AS2 (T010): yield truncates to free bulk; the outcrop still depletes.
+		a.Inv.Stone += minInt(quarryYield, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
@@ -482,7 +572,8 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Water += collectWaterYield
+		// US1-AS2 (T010): yield truncates to free bulk (water sources never deplete).
+		a.Inv.Water += minInt(collectWaterYield, freeBulk(a.Inv))
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.crafted":
@@ -597,6 +688,211 @@ func (s *State) Apply(e store.Event) error {
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
+
+	// --- spec 013 inventory/storage v1 event surface ---
+	// Registered as explicit no-ops in Phase 2 (T009) so each later story fills
+	// its own case without merge collisions, and so the reducer documents the
+	// v3 storage vocabulary. Until wired, behavior is identical to the
+	// unknown-type fall-through: recorded history, zero state effect
+	// (contracts/events.md). The format bump (2→3, T008) shields v2 logs from
+	// these changed semantics.
+	case "agent.dropped":
+		// T016 (spec 013 US2): move the recorded count of Kind from inventory
+		// to the tile's pile (create-or-merge). The payload carries the actual
+		// post-clamp count; the reducer clamps defensively to what is carried
+		// and stays total (a missing kind ⇒ no-op, intent still cleared).
+		var p DroppedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if p.Kind == "spears" {
+			n := p.N
+			if n > len(a.Inv.Spears) {
+				n = len(a.Inv.Spears)
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				// Most-worn-first: the front of the agent's ascending slice
+				// moves; both sides stay sorted ascending.
+				pile.Spears = append(pile.Spears, a.Inv.Spears[:n]...)
+				sort.Ints(pile.Spears)
+				rest := append([]int(nil), a.Inv.Spears[n:]...)
+				if len(rest) == 0 {
+					a.Inv.Spears = nil
+				} else {
+					a.Inv.Spears = rest
+				}
+			}
+		} else if n := p.N; n > 0 {
+			if c := carriedCount(a.Inv, p.Kind); n > c {
+				n = c
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				if isFoodKind(p.Kind) {
+					pile.addFood(p.Kind, n, e.Tick+rotWindowTicks)
+				} else {
+					pile.addNonFood(p.Kind, n)
+				}
+				addItems(&a.Inv, []Item{{p.Kind, n}}, -1)
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.picked_up":
+		// T017 (spec 013 US2): move the recorded count of Kind from the tile's
+		// pile into inventory (food drained oldest-batch-first), clamped
+		// defensively to free bulk and to what the pile holds (contested
+		// re-validation: a second same-tick taker finds only the remainder).
+		// An emptied pile is removed; intent is cleared.
+		var p PickedUpPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if pile := s.pileAt(p.X, p.Y); pile != nil {
+			n := p.N
+			if f := freeBulk(a.Inv); n > f {
+				n = f
+			}
+			switch {
+			case p.Kind == "spears":
+				if taken := pile.takeSpears(n); len(taken) > 0 {
+					a.Inv.Spears = append(a.Inv.Spears, taken...)
+					sort.Ints(a.Inv.Spears)
+				}
+			case isFoodKind(p.Kind):
+				addItems(&a.Inv, []Item{{p.Kind, pile.takeFood(p.Kind, n)}}, 1)
+			default:
+				addItems(&a.Inv, []Item{{p.Kind, pile.takeNonFood(p.Kind, n)}}, 1)
+			}
+			s.removeEmptyPileAt(p.X, p.Y)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.deposited":
+		// T024 (spec 013 US3): move the recorded count of Kind from inventory into
+		// the chest's Store (chest food is plain counts — NO rot batches, FR-010).
+		// The payload carries the actual post-clamp count; the reducer clamps
+		// defensively to what is carried AND to the chest's free space, and stays
+		// total (missing chest/Store ⇒ no-op, intent still cleared).
+		var p DepositedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if ch := s.chestAt(p.X, p.Y); ch != nil && ch.Store != nil {
+			free := chestCap - bulk(*ch.Store)
+			if p.Kind == "spears" {
+				n := p.N
+				if n > len(a.Inv.Spears) {
+					n = len(a.Inv.Spears)
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					// Most-worn-first: the front of the ascending slice moves;
+					// both sides stay sorted ascending.
+					ch.Store.Spears = append(ch.Store.Spears, a.Inv.Spears[:n]...)
+					sort.Ints(ch.Store.Spears)
+					rest := append([]int(nil), a.Inv.Spears[n:]...)
+					if len(rest) == 0 {
+						a.Inv.Spears = nil
+					} else {
+						a.Inv.Spears = rest
+					}
+				}
+			} else if n := p.N; n > 0 {
+				if c := carriedCount(a.Inv, p.Kind); n > c {
+					n = c
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					addItems(ch.Store, []Item{{p.Kind, n}}, 1)
+					addItems(&a.Inv, []Item{{p.Kind, n}}, -1)
+				}
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.withdrew":
+		// T024 (spec 013 US3): move the recorded count of Kind from the chest's
+		// Store into inventory, clamped defensively to the taker's free bulk and to
+		// what the chest holds. Spears leave most-worn-first carrying their
+		// durabilities; both slices stay sorted ascending. Chest food is plain
+		// counts (no batches). The Owner field feeds the US4 theft companion batch
+		// (T029); this case only moves goods. Missing chest/Store ⇒ no-op.
+		var p WithdrewPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if ch := s.chestAt(p.X, p.Y); ch != nil && ch.Store != nil {
+			n := p.N
+			if f := freeBulk(a.Inv); n > f {
+				n = f
+			}
+			if p.Kind == "spears" {
+				if n > len(ch.Store.Spears) {
+					n = len(ch.Store.Spears)
+				}
+				if n > 0 {
+					taken := append([]int(nil), ch.Store.Spears[:n]...)
+					rest := append([]int(nil), ch.Store.Spears[n:]...)
+					if len(rest) == 0 {
+						ch.Store.Spears = nil
+					} else {
+						ch.Store.Spears = rest
+					}
+					a.Inv.Spears = append(a.Inv.Spears, taken...)
+					sort.Ints(a.Inv.Spears)
+				}
+			} else if n > 0 {
+				if c := carriedCount(*ch.Store, p.Kind); n > c {
+					n = c
+				}
+				if n > 0 {
+					addItems(ch.Store, []Item{{p.Kind, n}}, -1)
+					addItems(&a.Inv, []Item{{p.Kind, n}}, 1)
+				}
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "sim.food_rotted":
+		// T032 (spec 013 US5, FR-013): remove the pile's spoiled food batches —
+		// batches whose SpoilAt has arrived (<= event tick) matching Kind, up to
+		// the recorded N, draining oldest batches first (drop order). The reducer
+		// stays total: it clamps to the spoiled units that remain (a same-tick
+		// pickup that applied first drained the oldest batch, so this finds only
+		// the remainder — the contested re-validation idiom), and an absent
+		// pile/batch is a no-op. An emptied pile is removed in the same
+		// application. Chest food never batches, so it is never reached (FR-010).
+		var p FoodRottedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		if pile := s.pileAt(p.X, p.Y); pile != nil {
+			pile.takeSpoiled(p.Kind, p.N, e.Tick)
+			s.removeEmptyPileAt(p.X, p.Y)
+		}
+
 	case "world.migrated":
 		// T038 (spec 012 US6): the format-break migration event carries the FULL
 		// transformed v2 state (research R10) — the reducer replaces State
@@ -676,6 +972,27 @@ func (s *State) Apply(e store.Event) error {
 		// The dead shed any hail (TASK-47); the hailer's seek proceeds or
 		// fails exactly as today.
 		a.Hail = nil
+		// T018 (spec 013 US2, FR-006, research R7): the agent's entire carried
+		// inventory spills as a ground pile at the death tile (create-or-merge),
+		// food batches stamped with a fresh rot deadline, spears riding along
+		// with their durabilities. Reducer-internal — no new event. An agent
+		// carrying nothing leaves no pile.
+		if bulk(a.Inv) > 0 {
+			pile := s.pileFor(a.X, a.Y)
+			pile.addNonFood("wood", a.Inv.Wood)
+			pile.addNonFood("stone", a.Inv.Stone)
+			pile.addNonFood("water", a.Inv.Water)
+			pile.addNonFood("planks", a.Inv.Planks)
+			pile.addNonFood("refined_stone", a.Inv.RefinedStone)
+			pile.addFood("food_raw", a.Inv.FoodRaw, e.Tick+rotWindowTicks)
+			pile.addFood("food_cooked", a.Inv.FoodCooked, e.Tick+rotWindowTicks)
+			pile.addFood("meals", a.Inv.Meals, e.Tick+rotWindowTicks)
+			if len(a.Inv.Spears) > 0 {
+				pile.Spears = append(pile.Spears, a.Inv.Spears...)
+				sort.Ints(pile.Spears)
+			}
+			a.Inv = Inventory{}
+		}
 
 	case "social.hailed":
 		var p HailedPayload
@@ -717,7 +1034,7 @@ func (s *State) Apply(e store.Event) error {
 
 	case "social.relation_changed", "social.gave", "social.promise_broken",
 		"social.rumor_told", "social.secret_seeded",
-		"social.conversation_turn", "social.conversation":
+		"social.conversation_turn", "social.conversation", "social.chest_taken":
 		return s.applySocial(e)
 
 	case "agent.memory_promoted", "agent.memory_faded", "agent.belief_revised",

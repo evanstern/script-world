@@ -54,6 +54,10 @@ var recipes = []Recipe{
 	{Goal: "build_fire", Inputs: []Item{{"wood", fireWoodCost}}, Structure: "fire", Duration: buildFireTicks, Site: SiteOnSite},
 	{Goal: "build_shelter", Inputs: []Item{{"planks", shelterPlankCost}}, Structure: "shelter", Duration: buildShelterTicks, Site: SiteOnSite},
 	{Goal: "build_oven", Inputs: []Item{{"refined_stone", 4}, {"planks", 2}}, Structure: "oven", Duration: buildOvenTicks, Site: SiteOnSite},
+	// build_chest (spec 013 US3): 6 planks → an owner-tagged chest, fire-comparable
+	// build time. Build-site validation (all build_*) additionally rejects tiles
+	// holding a pile (FR-007), wired with the goal in Phase 5.
+	{Goal: "build_chest", Inputs: []Item{{"planks", chestPlankCost}}, Structure: "chest", Duration: buildFireTicks, Site: SiteOnSite},
 
 	// Station actions. cook_fire is fuel-free (the fire's own fuel); cook_oven
 	// and bathe each burn 1 wood from the worker's inventory.
@@ -139,6 +143,23 @@ func addItems(inv *Inventory, items []Item, sign int) {
 			inv.Meals = maxInt(0, inv.Meals+n)
 		}
 	}
+}
+
+// craftNetBulk is a hand-craft's net change in carried bulk: outputs minus
+// inputs, one bulk per unit (a spear output counts 1, like every other unit —
+// its Outputs entry {spear, 1} sums the same way). Only craft_planks is
+// positive (+3 at plankYield 4); the executor requires this much free bulk at
+// completion or the craft does not happen (research R2, T012). Pure over the
+// compile-time recipe table, never serialized state.
+func craftNetBulk(r Recipe) int {
+	net := 0
+	for _, it := range r.Outputs {
+		net += it.N
+	}
+	for _, it := range r.Inputs {
+		net -= it.N
+	}
+	return net
 }
 
 // craftKindFor maps a hand-craft goal to its CraftedPayload.Kind, and

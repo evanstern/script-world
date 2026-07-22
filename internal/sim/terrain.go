@@ -53,6 +53,13 @@ func buildSite(m *worldmap.Map, s *State, x, y int) bool {
 			return false
 		}
 	}
+	// T019 (spec 013 US2, FR-007): goods aren't buried — a tile holding a pile
+	// is not buildable. buildSite backs both the resolveGoal buildable search
+	// and the executor's completion re-validation, so every build_* goal
+	// rejects pile tiles at both the search and the landing.
+	if s.pileAt(x, y) != nil {
+		return false
+	}
 	return true
 }
 
@@ -91,6 +98,20 @@ func (s *State) hasStructure(kind string) bool {
 		}
 	}
 	return false
+}
+
+// chestAt returns a pointer to the chest structure on (x,y), or nil when the
+// tile holds none — the deposit/withdraw completions and reducer cases
+// re-validate the chest by coord (spec 013 US3), and Store is the mutable
+// contents pointer they move goods through.
+func (s *State) chestAt(x, y int) *Structure {
+	for i := range s.Structures {
+		st := &s.Structures[i]
+		if st.Kind == "chest" && st.X == x && st.Y == y {
+			return st
+		}
+	}
+	return nil
 }
 
 // fireStructAt returns a pointer to the fire structure on (x,y), if any

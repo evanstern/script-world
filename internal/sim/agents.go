@@ -51,6 +51,12 @@ type Intent struct {
 	ResX      int    `json:"res_x"`
 	ResY      int    `json:"res_y"`
 	WorkStart int64  `json:"work_start"` // 0 until work begins at the target
+	// Kind/Qty (spec 013 R4) argue the storage goals (drop/pick_up/deposit/
+	// withdraw): Kind is an inventory item key ("" = all kinds), Qty the amount
+	// (0 = all of kind / as much as fits). Both omitempty keep pre-013 intents
+	// and every non-storage intent byte-identical.
+	Kind string `json:"kind,omitempty"`
+	Qty  int    `json:"qty,omitempty"`
 }
 
 type Agent struct {
@@ -123,11 +129,263 @@ type Memory struct {
 // derived, never stored as a flag. omitempty keeps shelter/oven and pre-012
 // snapshots byte-identical. NOTE: warmth/burnout behavior is NOT yet wired to
 // FuelUntil — that lands in Phase 4 (T019).
+//
+// Owner and Store (spec 013, research R8) apply to chests only: a chest rides
+// the structure lifecycle rather than a parallel entity. Owner is the builder's
+// agent index (permanent — no transfer/inheritance in v1); its zero-value
+// round-trips unambiguously to agent 0 because every chest has an owner and
+// non-chests never read the field. Store is the chest's contents, capped at
+// chestCap via the same derived bulk() used for agents — chests preserve food
+// indefinitely, so it needs no batches. Both omitempty keep non-chest and
+// pre-013 snapshots byte-identical.
 type Structure struct {
-	Kind      string `json:"kind"` // "fire" | "shelter" | "oven"
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	FuelUntil int64  `json:"fuel_until,omitempty"` // fires only
+	Kind      string     `json:"kind"` // "fire" | "shelter" | "oven" | "chest"
+	X         int        `json:"x"`
+	Y         int        `json:"y"`
+	FuelUntil int64      `json:"fuel_until,omitempty"` // fires only
+	Owner     int        `json:"owner,omitempty"`      // chests only: builder agent index, permanent
+	Store     *Inventory `json:"store,omitempty"`      // chests only: contents (no rot inside)
+}
+
+// FoodBatch is one drop of food on the ground with its own spoilage deadline —
+// rot is per-drop (spec 013 US5), so ground food is batch-tracked (chests
+// preserve food and need no batches). Kind ∈ food_raw|food_cooked|meals.
+type FoodBatch struct {
+	Kind    string `json:"kind"`
+	N       int    `json:"n"`
+	SpoilAt int64  `json:"spoil_at"` // drop/death tick + rotWindowTicks
+}
+
+// Pile is the per-tile commons of dropped/spilled goods (spec 013 US2,
+// research R1) — event-sourced overlay state like Quarried, never a tile
+// mutation. Non-food is flat counts (it never decays); food is batch-tracked
+// in drop order (batches with identical (Kind, SpoilAt) merge). Spears carry
+// their remaining uses, sorted ascending (most-worn moves first). One pile per
+// tile is a reducer invariant; a pile drained to nothing is removed in the same
+// reducer application. omitempty keeps the canonical bytes stable for empty
+// kinds.
+type Pile struct {
+	X            int         `json:"x"`
+	Y            int         `json:"y"`
+	Wood         int         `json:"wood,omitempty"`
+	Stone        int         `json:"stone,omitempty"`
+	Water        int         `json:"water,omitempty"`
+	Planks       int         `json:"planks,omitempty"`
+	RefinedStone int         `json:"refined_stone,omitempty"`
+	Spears       []int       `json:"spears,omitempty"` // remaining uses, sorted ascending
+	Food         []FoodBatch `json:"food,omitempty"`   // drop order; same (Kind,SpoilAt) merges
+}
+
+// empty reports whether a pile holds nothing — the reducer removes such a pile
+// in the same application that drains it (one pile per tile, zero-content piles
+// removed; data-model.md).
+func (p *Pile) empty() bool {
+	return p.Wood == 0 && p.Stone == 0 && p.Water == 0 && p.Planks == 0 &&
+		p.RefinedStone == 0 && len(p.Spears) == 0 && len(p.Food) == 0
+}
+
+// addFood merges n of a food kind into the pile: an existing batch with the
+// identical (Kind, SpoilAt) absorbs the count, else a new batch appends in drop
+// order (data-model.md: "same (Kind,SpoilAt) merges"). A non-positive count is
+// a no-op.
+func (p *Pile) addFood(kind string, n int, spoilAt int64) {
+	if n <= 0 {
+		return
+	}
+	for i := range p.Food {
+		if p.Food[i].Kind == kind && p.Food[i].SpoilAt == spoilAt {
+			p.Food[i].N += n
+			return
+		}
+	}
+	p.Food = append(p.Food, FoodBatch{Kind: kind, N: n, SpoilAt: spoilAt})
+}
+
+// canonicalKinds is the fixed iteration order for "all kinds" storage transfers
+// (data-model.md): the Inventory field order. Determinism depends on it — a
+// Kind-empty pick_up/withdraw walks these in this exact order (spec 013 US2).
+var canonicalKinds = []string{
+	"wood", "stone", "water", "planks", "refined_stone",
+	"food_raw", "food_cooked", "meals", "spears",
+}
+
+// isFoodKind reports whether a kind is one of the batch-tracked food forms
+// (the only kinds that rot in ground piles).
+func isFoodKind(kind string) bool {
+	return kind == "food_raw" || kind == "food_cooked" || kind == "meals"
+}
+
+// foodKinds is the fixed iteration order the rot sweep walks each pile with
+// (spec 013 US5, T032): the food subset of canonicalKinds, in canonical field
+// order. Determinism depends on it — a sweep emits at most one sim.food_rotted
+// per (pile, kind), and the kinds are always visited in this exact order.
+var foodKinds = []string{"food_raw", "food_cooked", "meals"}
+
+// carriedCount is how many units of a kind an agent carries: spears counted
+// (durability lives in the slice), every other kind its flat inventory field.
+func carriedCount(inv Inventory, kind string) int {
+	if kind == "spears" {
+		return len(inv.Spears)
+	}
+	return invField(inv, kind)
+}
+
+// avail is how many units of a kind the pile holds — food summed across
+// batches, spears counted, non-food the flat field. The executor reads it to
+// size a pick_up; the reducer to clamp defensively (staying total).
+func (p *Pile) avail(kind string) int {
+	switch kind {
+	case "wood":
+		return p.Wood
+	case "stone":
+		return p.Stone
+	case "water":
+		return p.Water
+	case "planks":
+		return p.Planks
+	case "refined_stone":
+		return p.RefinedStone
+	case "spears":
+		return len(p.Spears)
+	case "food_raw", "food_cooked", "meals":
+		n := 0
+		for _, b := range p.Food {
+			if b.Kind == kind {
+				n += b.N
+			}
+		}
+		return n
+	}
+	return 0
+}
+
+// addNonFood adds n units of a flat (non-food, non-spear) kind. Food rides
+// addFood (batches + rot deadlines); spears carry durabilities and are
+// appended directly by the caller. A non-positive count is a no-op.
+func (p *Pile) addNonFood(kind string, n int) {
+	if n <= 0 {
+		return
+	}
+	switch kind {
+	case "wood":
+		p.Wood += n
+	case "stone":
+		p.Stone += n
+	case "water":
+		p.Water += n
+	case "planks":
+		p.Planks += n
+	case "refined_stone":
+		p.RefinedStone += n
+	}
+}
+
+// takeNonFood removes up to n of a flat kind, returning the actual amount
+// removed (clamped to what the pile holds — the reducer stays total).
+func (p *Pile) takeNonFood(kind string, n int) int {
+	if a := p.avail(kind); n > a {
+		n = a
+	}
+	if n <= 0 {
+		return 0
+	}
+	switch kind {
+	case "wood":
+		p.Wood -= n
+	case "stone":
+		p.Stone -= n
+	case "water":
+		p.Water -= n
+	case "planks":
+		p.Planks -= n
+	case "refined_stone":
+		p.RefinedStone -= n
+	}
+	return n
+}
+
+// takeFood removes up to n units of a food kind from the OLDEST matching
+// batches first (drop order = creation order = oldest), returning the actual
+// amount removed. Emptied batches are compacted out, preserving drop order.
+func (p *Pile) takeFood(kind string, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	taken := 0
+	out := p.Food[:0]
+	for _, b := range p.Food {
+		if b.Kind == kind && taken < n {
+			t := b.N
+			if t > n-taken {
+				t = n - taken
+			}
+			b.N -= t
+			taken += t
+		}
+		if b.N > 0 {
+			out = append(out, b)
+		}
+	}
+	if len(out) == 0 {
+		p.Food = nil
+	} else {
+		p.Food = out
+	}
+	return taken
+}
+
+// takeSpoiled removes up to n units of a food kind from the batches already
+// spoiled at tick (SpoilAt <= tick), oldest matching batch first (drop order),
+// returning the actual amount removed. Emptied batches are compacted out,
+// preserving drop order. The rot sweep's reducer primitive (spec 013 US5,
+// T032): it mirrors takeFood but only ever drains batches whose deadline has
+// arrived, so a fresh batch dropped this same tick (spoil_at far in the future)
+// is never touched, and it stays total (clamped to the spoiled units present —
+// a same-tick pickup that applied first leaves only the remainder).
+func (p *Pile) takeSpoiled(kind string, n int, tick int64) int {
+	if n <= 0 {
+		return 0
+	}
+	taken := 0
+	out := p.Food[:0]
+	for _, b := range p.Food {
+		if b.Kind == kind && b.SpoilAt <= tick && taken < n {
+			t := b.N
+			if t > n-taken {
+				t = n - taken
+			}
+			b.N -= t
+			taken += t
+		}
+		if b.N > 0 {
+			out = append(out, b)
+		}
+	}
+	if len(out) == 0 {
+		p.Food = nil
+	} else {
+		p.Food = out
+	}
+	return taken
+}
+
+// takeSpears removes the n most-worn spears (front of the ascending-sorted
+// slice) and returns their durabilities; the pile stays sorted ascending.
+func (p *Pile) takeSpears(n int) []int {
+	if n > len(p.Spears) {
+		n = len(p.Spears)
+	}
+	if n <= 0 {
+		return nil
+	}
+	taken := append([]int(nil), p.Spears[:n]...)
+	rest := append([]int(nil), p.Spears[n:]...)
+	if len(rest) == 0 {
+		p.Spears = nil
+	} else {
+		p.Spears = rest
+	}
+	return taken
 }
 
 // Harvest marks a foraged tile regrowing at Regrow.
@@ -264,6 +522,66 @@ const (
 	batheTicks       = 240
 )
 
+// --- spec 013 inventory/storage v1 tuning ---
+//
+// The scalar tuning surface for the storage layer, mirrored in
+// specs/013-inventory-storage/data-model.md. Ticks are game-seconds. Phase 2
+// only declares these; behavior is wired to them in later phases (US1–US5,
+// migration), so several are intentionally unused until then.
+const (
+	bulkCap        = 24     // per-villager carried bulk ceiling
+	chestCap       = 48     // per-chest stored bulk ceiling
+	chestPlankCost = 6      // build_chest recipe input
+	rotWindowTicks = 172800 // 2 game days: ground-pile food batch lifetime
+
+	// Taking (theft) social marks — the deltas a non-owner withdrawal lays
+	// through the existing relation/memory machinery (research R5).
+	theftTrustDelta     = -120 // owner→taker trust on a taking
+	theftAffectionDelta = -40  // owner→taker affection on a taking
+	theftMemoryTone     = -60  // owner/witness memory tone (gossip seed)
+)
+
+// bulk is an agent's (or a chest's) carried load: one per unit of every
+// inventory kind plus one per carried spear (data-model.md). Derived, never
+// stored — same doctrine as fire lit-ness from FuelUntil: a derived value
+// cannot drift from its parts. bulkCap (24) exceeds the largest single yield
+// (spear hunt, 12), so no completion is unsatisfiable from empty (research R2).
+// Chest capacity uses this same function over *Store.
+func bulk(inv Inventory) int {
+	return inv.Wood + inv.Stone + inv.Water + inv.Planks + inv.RefinedStone +
+		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears)
+}
+
+// freeBulk is the remaining carry capacity under the cap: bulkCap − bulk(inv),
+// floored at zero (a defensively over-cap inventory reports no free space, never
+// a negative). The reducer yield clamps (US1-AS2) and the executor completion
+// re-validation (US1-AS1) share it: a full pouch reports zero, a partially full
+// one the exact remainder (research R2). Pure function of pre-event Inv, so
+// replay is byte-identical.
+func freeBulk(inv Inventory) int {
+	if f := bulkCap - bulk(inv); f > 0 {
+		return f
+	}
+	return 0
+}
+
+// BulkCap and Bulk are bulkCap/bulk exported for internal/tui (SC-006: "how
+// full a villager's hands are" must be answerable from the TUI alone),
+// mirroring the MetatronChargeCap export pattern for the same purpose —
+// the sim package stays the single source of truth for the derived value
+// and its ceiling.
+const BulkCap = bulkCap
+
+// ChestCap is chestCap exported for internal/tui (SC-006: "what's in a given
+// chest, and is it full" must be answerable from the TUI alone), mirroring the
+// BulkCap export — sim stays the single source of truth for the per-chest
+// stored-bulk ceiling and its display.
+const ChestCap = chestCap
+
+func Bulk(inv Inventory) int {
+	return bulk(inv)
+}
+
 func intentDuration(goal string) int64 {
 	switch goal {
 	case "forage":
@@ -293,6 +611,10 @@ func intentDuration(goal string) int64 {
 		return craftSpearTicks
 	case "build_oven":
 		return buildOvenTicks
+	case "build_chest":
+		// Spec 013 US3: fire-comparable build time (the build_chest recipe row's
+		// Duration). Timed work, unlike the instant deposit/withdraw goals.
+		return buildFireTicks
 	case "bathe":
 		return batheTicks
 	}
@@ -310,6 +632,10 @@ type (
 		ResX    int    `json:"res_x"`
 		ResY    int    `json:"res_y"`
 		Source  string `json:"source,omitempty"` // "reflex" | "planner"
+		// Kind/Qty (spec 013 R4) carry a storage goal's argument onto the intent;
+		// omitempty keeps pre-013 and non-storage intent_set payloads byte-identical.
+		Kind string `json:"kind,omitempty"`
+		Qty  int    `json:"qty,omitempty"`
 	}
 	WorkStartedPayload struct {
 		Agent int   `json:"agent"`
@@ -429,5 +755,58 @@ type (
 	FireBurnedOutPayload struct {
 		X int `json:"x"`
 		Y int `json:"y"`
+	}
+
+	// --- spec 013 inventory/storage v1 payloads ---
+	// Field order below is the canonical serialization order (see
+	// contracts/events.md); every count is the ACTUAL post-clamp moved amount
+	// (outcome-only), never a request.
+
+	// DroppedPayload: n of kind left on the agent's tile, created-or-merged into
+	// the tile's pile (food becomes a batch stamped tick + rotWindowTicks;
+	// spears move most-worn-first with their durabilities).
+	DroppedPayload struct {
+		Agent int    `json:"agent"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+		Kind  string `json:"kind"`
+		N     int    `json:"n"`
+	}
+	// PickedUpPayload: n of kind taken from the tile's pile (food oldest-batch-
+	// first), truncated to free bulk; one event per kind moved in the batch.
+	PickedUpPayload struct {
+		Agent int    `json:"agent"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+		Kind  string `json:"kind"`
+		N     int    `json:"n"`
+	}
+	// DepositedPayload: n of kind moved from inventory into the chest at (x,y),
+	// truncated to chest free space (chestCap − bulk(*Store)).
+	DepositedPayload struct {
+		Agent int    `json:"agent"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+		Kind  string `json:"kind"`
+		N     int    `json:"n"`
+	}
+	// WithdrewPayload: n of kind taken from the chest at (x,y) into inventory,
+	// truncated to the taker's free bulk. Owner is the chest's owner index; a
+	// non-owner taker co-emits the theft companion batch (contracts/events.md).
+	WithdrewPayload struct {
+		Agent int    `json:"agent"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+		Kind  string `json:"kind"`
+		N     int    `json:"n"`
+		Owner int    `json:"owner"`
+	}
+	// FoodRottedPayload: n of a food kind removed from the pile at (x,y) by the
+	// per-game-minute rot sweep (same-kind batches merged per pile per sweep).
+	FoodRottedPayload struct {
+		X    int    `json:"x"`
+		Y    int    `json:"y"`
+		Kind string `json:"kind"`
+		N    int    `json:"n"`
 	}
 )

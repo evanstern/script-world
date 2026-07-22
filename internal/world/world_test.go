@@ -49,9 +49,9 @@ func TestOpenRejectsBadFormat(t *testing.T) {
 	}
 }
 
-// TestOpenRefusesV1WithMigrateHint is spec 012 FR-027 / quickstart §5: the v2
-// daemon refuses an un-migrated v1 world, and the error names the migrate
-// command as the remedy.
+// TestOpenRefusesV1WithMigrateHint is spec 012 FR-027 / quickstart §5: the
+// current-build daemon refuses an un-migrated v1 world, and the error names the
+// migrate command as the remedy.
 func TestOpenRefusesV1(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ManifestName),
@@ -60,10 +60,28 @@ func TestOpenRefusesV1(t *testing.T) {
 	}
 	_, err := Open(dir)
 	if err == nil {
-		t.Fatal("Open should refuse a v1 world under the v2 build")
+		t.Fatal("Open should refuse a v1 world under the v3 build")
 	}
 	if !strings.Contains(err.Error(), "migrate") {
 		t.Errorf("v1-refusal error should name the migrate command, got: %v", err)
+	}
+}
+
+// TestOpenRefusesV2 is spec 013 T008 / quickstart §Post-merge: the v3 build
+// refuses an un-migrated v2 world (the inventory/storage format break), and the
+// error names the migrate command as the remedy.
+func TestOpenRefusesV2(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ManifestName),
+		[]byte(`{"name":"x","seed":1,"format_version":2,"tick_game_seconds":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Open(dir)
+	if err == nil {
+		t.Fatal("Open should refuse a v2 world under the v3 build")
+	}
+	if !strings.Contains(err.Error(), "migrate") {
+		t.Errorf("v2-refusal error should name the migrate command, got: %v", err)
 	}
 }
 
@@ -104,7 +122,7 @@ func TestMeetingConfigSeconds(t *testing.T) {
 func TestOpenRejectsBadMeeting(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ManifestName),
-		[]byte(`{"name":"x","seed":1,"format_version":2,"tick_game_seconds":1,"meeting":{"convene":"13:00","open":"12:00"}}`), 0o644); err != nil {
+		[]byte(`{"name":"x","seed":1,"format_version":3,"tick_game_seconds":1,"meeting":{"convene":"13:00","open":"12:00"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Open(dir); err == nil {
@@ -115,7 +133,7 @@ func TestOpenRejectsBadMeeting(t *testing.T) {
 func TestOpenAcceptsMeeting(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ManifestName),
-		[]byte(`{"name":"x","seed":1,"format_version":2,"tick_game_seconds":1,"meeting":{"convene":"11:30","open":"12:00","x":7,"y":9}}`), 0o644); err != nil {
+		[]byte(`{"name":"x","seed":1,"format_version":3,"tick_game_seconds":1,"meeting":{"convene":"11:30","open":"12:00","x":7,"y":9}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	w, err := Open(dir)

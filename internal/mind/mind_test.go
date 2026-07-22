@@ -373,3 +373,124 @@ func TestParseReply(t *testing.T) {
 		t.Errorf("talk_to parse: %+v %v", r, err)
 	}
 }
+
+// TestParseReplyDropPickUpKindQty covers spec 013 T022: drop/pick_up carry
+// Kind/Qty, validated against the sim executor's canonicalKinds so a
+// malformed kind never reaches InjectIntent (the same "reject unknown at
+// the door" discipline validGoals applies to goal strings).
+func TestParseReplyDropPickUpKindQty(t *testing.T) {
+	r, err := parseReply(`{"goal": "drop", "kind": "wood", "qty": 5, "reason": "lighten the load"}`)
+	if err != nil || r.Kind != "wood" || r.Qty != 5 {
+		t.Errorf("drop kind/qty parse: %+v %v", r, err)
+	}
+	// Case-insensitive, matching goal normalization.
+	r, err = parseReply(`{"goal": "drop", "kind": "WOOD", "reason": "x"}`)
+	if err != nil || r.Kind != "wood" {
+		t.Errorf("drop kind should normalize to lowercase: %+v %v", r, err)
+	}
+	// pick_up with no kind = everything that fits.
+	r, err = parseReply(`{"goal": "pick_up", "reason": "gather it up"}`)
+	if err != nil || r.Kind != "" {
+		t.Errorf("pick_up with no kind should parse as Kind==\"\": %+v %v", r, err)
+	}
+	// pick_up on spears (plural — matches sim.canonicalKinds, not "spear").
+	r, err = parseReply(`{"goal": "pick_up", "kind": "spears", "reason": "x"}`)
+	if err != nil || r.Kind != "spears" {
+		t.Errorf("pick_up spears kind parse: %+v %v", r, err)
+	}
+	// A goal that doesn't take kind/qty ignores whatever the model sends —
+	// not a rejection (only drop/pick_up are validated).
+	if _, err := parseReply(`{"goal": "forage", "kind": "wood", "reason": "x"}`); err != nil {
+		t.Errorf("non-storage goal should ignore kind: %v", err)
+	}
+	bad := []string{
+		`{"goal": "drop", "kind": "gold", "reason": "x"}`,     // unknown kind
+		`{"goal": "pick_up", "kind": "spear", "reason": "x"}`, // singular — not what the executor reads
+		`{"goal": "drop", "kind": "wood", "qty": -1, "reason": "x"}`,
+	}
+	for _, b := range bad {
+		if _, err := parseReply(b); err == nil {
+			t.Errorf("parseReply(%q) should reject an invalid kind/qty", b)
+		}
+	}
+	// The plan form validates each step's kind/qty too.
+	plan, err := parseReply(`{"plan": [{"goal": "drop", "kind": "stone", "qty": 3}], "reason": "x"}`)
+	if err != nil || len(plan.Plan) != 1 || plan.Plan[0].Kind != "stone" || plan.Plan[0].Qty != 3 {
+		t.Errorf("plan step kind/qty parse: %+v %v", plan, err)
+	}
+	if _, err := parseReply(`{"plan": [{"goal": "pick_up", "kind": "gold"}], "reason": "x"}`); err == nil {
+		t.Error("plan step with unknown kind should be rejected")
+	}
+}
+
+// TestParseReplyChestGoals covers spec 013 T027: build_chest/deposit/
+// withdraw join validGoals, and deposit/withdraw carry Kind/Qty validated
+// exactly like drop/pick_up (T022) — build_chest takes neither.
+func TestParseReplyChestGoals(t *testing.T) {
+	// build_chest takes no kind/qty; whatever the model sends is ignored,
+	// same as any other non-storage goal.
+	r, err := parseReply(`{"goal": "build_chest", "reason": "keep things safe"}`)
+	if err != nil || r.Goal != "build_chest" {
+		t.Errorf("build_chest parse: %+v %v", r, err)
+	}
+	if _, err := parseReply(`{"goal": "build_chest", "kind": "gold", "reason": "x"}`); err != nil {
+		t.Errorf("build_chest should ignore an invalid kind: %v", err)
+	}
+
+	// deposit carries Kind/Qty like drop; empty Kind still parses (the
+	// executor resolves it to intent_done only — not a parse-time error;
+	// the "deposit needs a kind" rule is prompt guidance, not rejection).
+	r, err = parseReply(`{"goal": "deposit", "kind": "planks", "qty": 6, "reason": "stash the surplus"}`)
+	if err != nil || r.Kind != "planks" || r.Qty != 6 {
+		t.Errorf("deposit kind/qty parse: %+v %v", r, err)
+	}
+	r, err = parseReply(`{"goal": "deposit", "reason": "x"}`)
+	if err != nil || r.Kind != "" {
+		t.Errorf("deposit with no kind should still parse as Kind==\"\": %+v %v", r, err)
+	}
+	// Case-insensitive, matching drop/pick_up normalization.
+	r, err = parseReply(`{"goal": "deposit", "kind": "PLANKS", "reason": "x"}`)
+	if err != nil || r.Kind != "planks" {
+		t.Errorf("deposit kind should normalize to lowercase: %+v %v", r, err)
+	}
+
+	// withdraw with no kind = everything that fits, matching pick_up.
+	r, err = parseReply(`{"goal": "withdraw", "reason": "take back what I need"}`)
+	if err != nil || r.Kind != "" {
+		t.Errorf("withdraw with no kind should parse as Kind==\"\": %+v %v", r, err)
+	}
+	r, err = parseReply(`{"goal": "withdraw", "kind": "spears", "qty": 1, "reason": "x"}`)
+	if err != nil || r.Kind != "spears" || r.Qty != 1 {
+		t.Errorf("withdraw kind/qty parse: %+v %v", r, err)
+	}
+
+	bad := []string{
+		`{"goal": "deposit", "kind": "gold", "reason": "x"}`,
+		`{"goal": "withdraw", "kind": "spear", "reason": "x"}`, // singular — not canonicalKinds
+		`{"goal": "deposit", "kind": "wood", "qty": -1, "reason": "x"}`,
+		`{"goal": "withdraw", "kind": "wood", "qty": -1, "reason": "x"}`,
+	}
+	for _, b := range bad {
+		if _, err := parseReply(b); err == nil {
+			t.Errorf("parseReply(%q) should reject an invalid kind/qty", b)
+		}
+	}
+
+	// The plan form validates build_chest/deposit/withdraw steps too.
+	plan, err := parseReply(`{"plan": [{"goal": "build_chest"}, {"goal": "deposit", "kind": "wood", "qty": 4}, {"goal": "withdraw", "kind": "meals"}], "reason": "x"}`)
+	if err != nil || len(plan.Plan) != 3 {
+		t.Fatalf("chest plan parse: %+v %v", plan, err)
+	}
+	if plan.Plan[0].Goal != "build_chest" {
+		t.Errorf("plan step 0 should be build_chest: %+v", plan.Plan[0])
+	}
+	if plan.Plan[1].Kind != "wood" || plan.Plan[1].Qty != 4 {
+		t.Errorf("plan step 1 deposit kind/qty parse: %+v", plan.Plan[1])
+	}
+	if plan.Plan[2].Kind != "meals" {
+		t.Errorf("plan step 2 withdraw kind parse: %+v", plan.Plan[2])
+	}
+	if _, err := parseReply(`{"plan": [{"goal": "withdraw", "kind": "gold"}], "reason": "x"}`); err == nil {
+		t.Error("plan step with unknown kind should be rejected")
+	}
+}

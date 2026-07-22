@@ -95,6 +95,22 @@ func TestChronicleNoteWindowing(t *testing.T) {
 	}
 }
 
+// TestChronicleNoteChestTaken (T034, spec 013 FR-016): social.chest_taken —
+// the theft story — becomes a notable log line naming taker and owner, the
+// same narrative treatment as social.gave/social.promise_broken.
+func TestChronicleNoteChestTaken(t *testing.T) {
+	md, _, _ := narrMind(t)
+	md.chronicleNote(mustEvent(t, 1000, "social.chest_taken", sim.ChestTakenPayload{
+		Owner: 0, Taker: 3, X: 5, Y: 5,
+	}))
+	if len(md.narrLines) != 1 {
+		t.Fatalf("lines = %d, want 1", len(md.narrLines))
+	}
+	if !strings.Contains(md.narrLines[0], "Rowan took from Ash's chest without asking.") {
+		t.Errorf("chest_taken line: %q", md.narrLines[0])
+	}
+}
+
 // TestRunNarrationLands: good model output becomes one atomic batch of
 // chronicle.entry events with names resolved to indices and threads slugified.
 func TestRunNarrationLands(t *testing.T) {

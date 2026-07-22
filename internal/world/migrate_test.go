@@ -397,6 +397,311 @@ func TestMigrateRefusesRunningDaemon(t *testing.T) {
 	assertUntouched(t, dir)
 }
 
+// --- v2→v3 migration (spec 013 T036/T037) ----------------------------------
+
+// v2StateJSON builds a representative v2 covering-snapshot state as a marshaled
+// sim.State. v2 is structurally a subset of v3 (no piles; structures without
+// Owner/Store; intents without Kind/Qty), so this is exactly what a v2 daemon
+// would have written. It carries an over-cap living agent (agent 0, bulk 30), a
+// dead agent holding goods (agent 3), a mid-flight intent (agent 1), a fire with
+// FuelUntil, all three overlay kinds, and the social fabric.
+func v2StateJSON(t *testing.T, seed uint64, tick int64) []byte {
+	t.Helper()
+	names := []string{"Ash", "Birch", "Cedar", "Rowan", "Fern", "Hazel", "Oak", "Sage"}
+	agents := make([]sim.Agent, sim.AgentCount)
+	for i := range agents {
+		agents[i] = sim.Agent{
+			Name:     names[i],
+			X:        20 + i,
+			Y:        20 + i,
+			Needs:    sim.Needs{Health: 800, Food: 500, Rest: 600, Warmth: 700, Morale: 550},
+			Inv:      sim.Inventory{Wood: 2},
+			Memories: []sim.Memory{{Text: "we survived the frost", Salience: 5, Tick: 1000, Subject: -1}},
+			LastTalk: 400,
+		}
+	}
+	agents[0].X, agents[0].Y = 5, 5
+	agents[0].Inv = sim.Inventory{FoodRaw: 5, FoodCooked: 5, Meals: 20} // bulk 30 → over cap
+	agents[1].Intent = &sim.Intent{Goal: "chop", TargetX: 2, TargetY: 2, ResX: 2, ResY: 3, WorkStart: tick - 10}
+	agents[3].X, agents[3].Y = 9, 9
+	agents[3].Dead = true
+	agents[3].Inv = sim.Inventory{Wood: 3, Meals: 2, Spears: []int{8}}
+
+	s := sim.State{
+		Tick:            tick,
+		Speed:           clock.Speed4x,
+		Seed:            seed,
+		Night:           true,
+		Agents:          agents,
+		Structures:      []sim.Structure{{Kind: "fire", X: 10, Y: 10, FuelUntil: 5000}},
+		Quarried:        []sim.Point{{X: 1, Y: 1}},
+		Cleared:         []sim.Point{{X: 2, Y: 2}},
+		Harvested:       []sim.Harvest{{X: 3, Y: 3, Regrow: tick + 1000}},
+		Relations:       []sim.Relation{{From: 0, To: 1, Trust: 250, Affection: 150}},
+		MetatronCharges: 3,
+	}
+	return s.Marshal()
+}
+
+// writeV2World lays down a v2 world directory: a format_version-2 manifest, a
+// contiguous event log, and a covering snapshot holding a v2 sim.State.
+func writeV2World(t *testing.T, dir string, seed uint64, tick int64, nEvents int, covering bool) {
+	t.Helper()
+	manifest := `{"name":"fixture2","seed":` + strconv.FormatUint(seed, 10) +
+		`,"created_at":"2026-07-21T00:00:00Z","format_version":2,"tick_game_seconds":1,"map_width":64,"map_height":64}`
+	if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, "world.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	appendDummy(t, st, nEvents)
+	if err := st.SaveSnapshot(tick, st.LastSeq(), v2StateJSON(t, seed, tick)); err != nil {
+		t.Fatal(err)
+	}
+	if !covering {
+		appendDummy(t, st, 2)
+	}
+}
+
+// TestMigrateV2HappyPath is spec 013 T037: a cleanly-stopped v2 world migrates
+// 2→3 with people AND land verbatim (positions unchanged), over-cap carry
+// spilled to a ground pile, the dead agent's goods spilled, world.v2.db
+// archived, and the manifest at v3.
+func TestMigrateV2HappyPath(t *testing.T) {
+	dir := t.TempDir()
+	const seed = uint64(42)
+	const tick = int64(300000)
+	writeV2World(t, dir, seed, tick, 5, true)
+
+	res, err := Migrate(dir)
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if res.AgentsCarried != sim.AgentCount || res.Tick != tick || res.SourceEvents != 5 {
+		t.Errorf("result = %+v, want %d agents / tick %d / 5 events", res, sim.AgentCount, tick)
+	}
+	// The archive is the v2-named one (source format keys the archive name).
+	if filepath.Base(res.ArchivePath) != "world.v2.db" {
+		t.Errorf("archive = %s, want world.v2.db", res.ArchivePath)
+	}
+	if _, err := os.Stat(res.ArchivePath); err != nil {
+		t.Errorf("archive %s missing: %v", res.ArchivePath, err)
+	}
+	// No v1 archive is created for a v2 source.
+	if _, err := os.Stat(filepath.Join(dir, "world.v1.db")); err == nil {
+		t.Error("a v2→v3 migration should not create world.v1.db")
+	}
+
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open after migrate: %v", err)
+	}
+	if w.Manifest.FormatVersion != FormatVersion {
+		t.Errorf("manifest format_version = %d, want %d", w.Manifest.FormatVersion, FormatVersion)
+	}
+
+	st, err := store.Open(w.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	snap, err := st.LatestValidSnapshot()
+	if err != nil || snap == nil {
+		t.Fatalf("no covering snapshot after migrate: %v", err)
+	}
+	if snap.Tick != tick {
+		t.Errorf("snapshot tick = %d, want %d (continuity)", snap.Tick, tick)
+	}
+	var s sim.State
+	if err := json.Unmarshal(snap.State, &s); err != nil {
+		t.Fatal(err)
+	}
+
+	// Land carried verbatim — NO reset (unlike v1→v2).
+	if len(s.Structures) != 1 || s.Structures[0].Kind != "fire" || s.Structures[0].FuelUntil != 5000 {
+		t.Errorf("fire not carried verbatim: %+v", s.Structures)
+	}
+	if len(s.Quarried) != 1 || len(s.Cleared) != 1 || len(s.Harvested) != 1 {
+		t.Errorf("overlays should carry verbatim: q=%v c=%v h=%v", s.Quarried, s.Cleared, s.Harvested)
+	}
+	if len(s.Relations) != 1 || s.MetatronCharges != 3 {
+		t.Errorf("fabric not carried: rel=%v charges=%d", s.Relations, s.MetatronCharges)
+	}
+	// Positions verbatim — exact coordinates, no re-placement.
+	if s.Agents[0].X != 5 || s.Agents[0].Y != 5 || s.Agents[3].X != 9 || s.Agents[3].Y != 9 {
+		t.Errorf("positions moved: a0=(%d,%d) a3=(%d,%d)", s.Agents[0].X, s.Agents[0].Y, s.Agents[3].X, s.Agents[3].Y)
+	}
+	if s.Agents[1].Intent == nil || s.Agents[1].Intent.Goal != "chop" {
+		t.Errorf("mid-flight intent not carried: %+v", s.Agents[1].Intent)
+	}
+	// Over-cap living agent spilled to exactly the cap; a pile exists at its tile.
+	if sim.Bulk(s.Agents[0].Inv) != sim.BulkCap {
+		t.Errorf("agent 0 bulk = %d, want %d (spilled to cap)", sim.Bulk(s.Agents[0].Inv), sim.BulkCap)
+	}
+	if s.Agents[0].Inv.Meals != 20 {
+		t.Errorf("agent 0 should keep its meals (best food), got %d", s.Agents[0].Inv.Meals)
+	}
+	if pileAtXY(s.Piles, 5, 5) == nil {
+		t.Error("no over-cap spill pile at (5,5)")
+	}
+	// Dead agent emptied; its goods spilled at the death tile (spear included).
+	if sim.Bulk(s.Agents[3].Inv) != 0 {
+		t.Errorf("dead agent 3 should be emptied, inv = %+v", s.Agents[3].Inv)
+	}
+	dp := pileAtXY(s.Piles, 9, 9)
+	if dp == nil {
+		t.Fatal("no death-spill pile at (9,9)")
+	}
+	if dp.Wood != 3 || len(dp.Spears) != 1 || dp.Spears[0] != 8 {
+		t.Errorf("death-spill pile = wood %d spears %v, want wood 3 / [8]", dp.Wood, dp.Spears)
+	}
+}
+
+// pileAtXY finds the pile on (x,y) in a slice (test-side; the reducer keeps one
+// pile per tile). nil when the tile holds none.
+func pileAtXY(piles []sim.Pile, x, y int) *sim.Pile {
+	for i := range piles {
+		if piles[i].X == x && piles[i].Y == y {
+			return &piles[i]
+		}
+	}
+	return nil
+}
+
+// TestMigrateV2ReplayDeterminism is SC-005/SC-007 for the v2→v3 door: delete
+// every snapshot from the migrated world and rebuild from genesis
+// (world.created → world.migrated) — byte-identical to the post-migration
+// snapshot.
+func TestMigrateV2ReplayDeterminism(t *testing.T) {
+	dir := t.TempDir()
+	const seed = uint64(7)
+	const tick = int64(180000)
+	writeV2World(t, dir, seed, tick, 4, true)
+	if _, err := Migrate(dir); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(w.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	snap, err := st.LatestValidSnapshot()
+	if err != nil || snap == nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	var want sim.State
+	if err := json.Unmarshal(snap.State, &want); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.PruneSnapshots(0); err != nil {
+		t.Fatal(err)
+	}
+	got := sim.NewState(w.Manifest.Seed, w.Map())
+	if err := st.ReplayEvents(0, func(e store.Event) error {
+		if err := got.Apply(e); err != nil {
+			return err
+		}
+		if e.Tick > got.Tick {
+			got.Tick = e.Tick
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if got.Hash() != want.Hash() {
+		t.Fatalf("zero-snapshot replay diverged:\nwant %s\ngot  %s", want.Hash(), got.Hash())
+	}
+}
+
+// TestMigrateRefusesAlreadyCurrent is the v3-side of the already-migrated guard:
+// a world already at the current format has nothing to migrate.
+func TestMigrateRefusesAlreadyCurrent(t *testing.T) {
+	dir := t.TempDir()
+	const seed = uint64(42)
+	const tick = int64(300000)
+	writeV2World(t, dir, seed, tick, 4, true)
+	if _, err := Migrate(dir); err != nil {
+		t.Fatalf("first Migrate (2→3): %v", err)
+	}
+	// The world is now v3; a second run refuses on the version gate.
+	_, err := Migrate(dir)
+	if err == nil {
+		t.Fatal("Migrate should refuse an already-current (v3) world")
+	}
+	if !strings.Contains(err.Error(), "already") {
+		t.Errorf("error should say the world is already current, got: %v", err)
+	}
+}
+
+// TestMigrateV2RefusesExistingArchive: a v2 world already carrying a world.v2.db
+// (an interrupted prior run) is refused without clobbering the archive.
+func TestMigrateV2RefusesExistingArchive(t *testing.T) {
+	dir := t.TempDir()
+	writeV2World(t, dir, 42, 300000, 4, true)
+	if err := os.WriteFile(filepath.Join(dir, "world.v2.db"), []byte("prior v2 archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Migrate(dir)
+	if err == nil {
+		t.Fatal("Migrate should refuse when world.v2.db already exists")
+	}
+	data, rerr := os.ReadFile(filepath.Join(dir, "world.v2.db"))
+	if rerr != nil || string(data) != "prior v2 archive" {
+		t.Errorf("existing v2 archive was clobbered: %q err=%v", string(data), rerr)
+	}
+}
+
+// TestMigrateV2RefusesRunningDaemon: a live daemon pidfile refuses a v2
+// migration untouched (manifest stays v2).
+func TestMigrateV2RefusesRunningDaemon(t *testing.T) {
+	dir := t.TempDir()
+	writeV2World(t, dir, 42, 300000, 4, true)
+	if err := os.WriteFile(filepath.Join(dir, "daemon.pid"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Migrate(dir)
+	if err == nil {
+		t.Fatal("Migrate should refuse while a daemon holds the world")
+	}
+	if !strings.Contains(err.Error(), "daemon is running") {
+		t.Errorf("error should name the running daemon, got: %v", err)
+	}
+	// Untouched: world.db present, no archive, manifest still v2.
+	if _, err := os.Stat(filepath.Join(dir, "world.db")); err != nil {
+		t.Errorf("world.db should be untouched: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "world.v2.db")); err == nil {
+		t.Error("no archive should exist after a refused migration")
+	}
+	assertManifestVersion(t, dir, 2)
+}
+
+// assertManifestVersion checks the on-disk manifest's format_version.
+func assertManifestVersion(t *testing.T, dir string, want int) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, ManifestName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.FormatVersion != want {
+		t.Errorf("manifest format_version = %d, want %d", m.FormatVersion, want)
+	}
+}
+
 // assertUntouched verifies a refused migration left the world exactly as it was:
 // world.db present, no archive, manifest still v1.
 func assertUntouched(t *testing.T, dir string) {

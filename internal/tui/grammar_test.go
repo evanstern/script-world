@@ -139,6 +139,41 @@ func TestFormatChronicleLineHail(t *testing.T) {
 	}
 }
 
+// TestFormatChronicleLineStorage (T034): spec 013's storage events land in
+// classDefault; agent.withdrew's "owner" and social.chest_taken's
+// "owner"/"taker" resolve to names via the grammar table extension —
+// before the fix these rendered as bare integers (the T034 gap).
+func TestFormatChronicleLineStorage(t *testing.T) {
+	cases := []struct {
+		eventType string
+		payload   string
+		want      string
+	}{
+		{"agent.dropped", `{"agent":0,"x":3,"y":4,"kind":"wood","n":2}`,
+			`{"agent":"Ash","x":3,"y":4,"kind":"wood","n":2}`},
+		{"agent.picked_up", `{"agent":1,"x":3,"y":4,"kind":"wood","n":2}`,
+			`{"agent":"Birch","x":3,"y":4,"kind":"wood","n":2}`},
+		{"agent.deposited", `{"agent":2,"x":5,"y":5,"kind":"planks","n":6}`,
+			`{"agent":"Cedar","x":5,"y":5,"kind":"planks","n":6}`},
+		{"agent.withdrew", `{"agent":3,"x":5,"y":5,"kind":"planks","n":1,"owner":0}`,
+			`{"agent":"Rowan","x":5,"y":5,"kind":"planks","n":1,"owner":"Ash"}`},
+		{"social.chest_taken", `{"owner":0,"taker":3,"x":5,"y":5}`,
+			`{"owner":"Ash","taker":"Rowan","x":5,"y":5}`},
+		{"sim.food_rotted", `{"x":6,"y":6,"kind":"food_raw","n":4}`,
+			`{"x":6,"y":6,"kind":"food_raw","n":4}`},
+	}
+	for _, c := range cases {
+		e := store.Event{Seq: 1, Tick: 1, Type: c.eventType, Payload: json.RawMessage(c.payload)}
+		l := formatChronicleLine(e, testNames)
+		if l.Class != classDefault {
+			t.Errorf("%s class = %v, want classDefault", c.eventType, l.Class)
+		}
+		if l.Payload != c.want {
+			t.Errorf("%s payload = %q, want %q", c.eventType, l.Payload, c.want)
+		}
+	}
+}
+
 // TestResolvePayloadNames: order preserved, unrelated fields untouched,
 // out-of-range indices fall back to the raw match.
 func TestResolvePayloadNames(t *testing.T) {

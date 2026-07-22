@@ -26,6 +26,12 @@ type PlanStep struct {
 	Target int    `json:"target,omitempty"` // agent index for talk_to; -1/absent otherwise
 	When   *Guard `json:"when,omitempty"`   // gate to start; nil = immediately
 	Until  int64  `json:"until"`            // validity deadline (tick)
+	// Kind/Qty (spec 013 R4) argue a storage plan step (drop/pick_up/deposit/
+	// withdraw): Kind is an inventory item key ("" = all kinds), Qty the amount
+	// (0 = all of kind / as much as fits). Both omitempty keep pre-013 and every
+	// non-storage plan step byte-identical.
+	Kind string `json:"kind,omitempty"`
+	Qty  int    `json:"qty,omitempty"`
 }
 
 // planGoals mirrors the planner goal vocabulary — the loop validates plan
@@ -35,6 +41,10 @@ var planGoals = map[string]bool{
 	"build_fire": true, "build_shelter": true,
 	"eat": true, "sleep": true, "wander": true,
 	"goto_warmth": true, "talk_to": true,
+	// Storage goals (spec 013 US2/US3, FR-014): planner/plan-only — never in the
+	// reflex ladder.
+	"drop": true, "pick_up": true,
+	"build_chest": true, "deposit": true, "withdraw": true,
 }
 
 // PlanSetPayload — agent.plan_set (loop-emitted on a plan landing).
@@ -71,7 +81,7 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 			return nil // holding — deterministically re-checked next tick
 		}
 	}
-	intent, direct, err := resolveGoal(s, m, idx, st.Goal, st.Target, tick)
+	intent, direct, err := resolveGoal(s, m, idx, st.Goal, st.Target, st.Kind, st.Qty, tick)
 	if err != nil {
 		return []store.Event{ev("agent.plan_expired", PlanStepPayload{
 			Agent: idx, Job: st.Job, Step: st.Goal, Reason: err.Error()})}
@@ -88,6 +98,7 @@ func planStepEvents(s *State, m *worldmap.Map, idx int, tick int64) []store.Even
 			Agent: idx, Goal: intent.Goal,
 			TargetX: intent.TargetX, TargetY: intent.TargetY,
 			ResX: intent.ResX, ResY: intent.ResY,
+			Kind: intent.Kind, Qty: intent.Qty,
 			Source: "plan",
 		}))
 	}

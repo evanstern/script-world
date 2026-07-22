@@ -75,6 +75,13 @@ const (
 	salSpearBroke = 8 // US3: the spear that spent its last use
 	salBath       = 5 // US4: medium, positive tone
 	salOvenBuilt  = 7 // US4: high, village-visible (builder + nearby witnesses)
+	// Spec 013 (inventory & storage, research R5). Same "high = memorable, not
+	// generation-interrupting" band as salOvenBuilt (below GenerationBumpSalience).
+	salChestBuilt = 7 // US4/T030: high, village-visible (oven precedent)
+	// salTaking: a taking from an owned chest — suffered by the owner and
+	// witnessed by neighbors; high and negative, above rumorMinSalience so the
+	// owner's subject-tagged memory is a live gossip seed (FR-012).
+	salTaking = 7
 	// salFireOut: low-salience — a fire going cold nearby is background
 	// texture, not formative (contracts/events.md: "fire burned out while
 	// agents nearby, low"). Purely personal (no gossip subject).
@@ -84,8 +91,9 @@ const (
 // Tone constants for the spec 012 memories above (governance.go/social.go/
 // gru.go each declare their own tone band the same way).
 const (
-	toneBath      = 40 // positive, matching toneSaved's magnitude
-	toneOvenBuilt = 30 // positive; witnesses take pride, less personal than bathing
+	toneBath       = 40 // positive, matching toneSaved's magnitude
+	toneOvenBuilt  = 30 // positive; witnesses take pride, less personal than bathing
+	toneChestBuilt = 20 // positive; a neighbor's larder is welcome but modestly so
 )
 
 // WindowK is the working-memory bound: prompts never carry more than this

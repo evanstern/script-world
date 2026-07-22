@@ -47,7 +47,7 @@ per-tile map keyed by coordinates (rejected: maps are banned in serialized state
 | Site | Rule |
 |---|---|
 | gather completions (forage/chop/hunt/quarry/collect_water) | executor re-validates free bulk at completion: zero free ⇒ `agent.intent_done` only (no harvest event, **no depletion** — US1-AS1); partial ⇒ harvest event emitted, reducer clamps yield to free bulk, overlay/depletion applies, remainder forfeit (US1-AS2) |
-| craft completions (planks/stone/spear) | completion re-validation extends to net bulk delta: if outputs−inputs won't fit, no event, intent cleared (crafts don't truncate — they don't happen). Only `craft_planks` has positive net (+1 with plankYield 2) |
+| craft completions (planks/stone/spear) | completion re-validation extends to net bulk delta: if outputs−inputs won't fit, no event, intent cleared (crafts don't truncate — they don't happen). Only `craft_planks` has positive net (+3 with plankYield 4; the implementation derives the net from the recipe table, so the number here is informational) |
 | cook / bathe / refuel / build | net delta ≤ 0 always — no check needed (assert in tests) |
 | `social.gave` (executor give rule) | executor skips the give when receiver has zero free bulk; reducer clamps defensively |
 | pick_up / withdraw | truncate to taker's free bulk (partial moves; payload records actual counts) |
@@ -78,6 +78,17 @@ at the agent's tile (R2). Migration of a v1 world chains 1→2→3.
 **Rationale**: reuses the entire R10/012 mechanism; the snapshot-cut's one
 expensive property (land reset) is simply not triggered because no map inputs
 changed.
+
+**Decisions taken at implementation (v3-invariant principle)**: (a) over-cap
+spill removes goods in canonical kind order — within food, least-nutritious
+first (food_raw → food_cooked → meals) so a capped villager keeps its best
+food; spears spill most-worn-first, mirroring the transfer idiom; (b) dead
+agents' entire frozen inventory spills to a pile at their tile — v3's death
+invariant carried forward, so a migrated world matches what v3 would have
+produced; (c) mid-flight intents carry verbatim (unlike 1→2's wipe) — no map
+inputs changed, so targets stay valid and the cap simply applies at completion;
+(d) no separate v2 decoder — v3's additions are all additive omitempty, so
+`sim.State` decodes v2 JSON exactly.
 
 **Alternatives**: no bump, cap applies only to new acquisitions (rejected:
 FR-001 says carried bulk MUST never exceed the cap, and old-log replay under new

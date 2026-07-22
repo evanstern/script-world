@@ -93,6 +93,119 @@ func TestMapRendersWanderers(t *testing.T) {
 	}
 }
 
+// TestMapRendersPilesAndStockpileZones covers spec 013 T021 (US2-AS5,
+// SC-006): the pile glyph appears on the map, adjacent piles are grouped
+// into one stockpile zone by the render-side flood fill, and the legend
+// (the map panel's one inspection surface — map.md "legend stays pinned as
+// the panel's last row") reports each zone's/lone pile's contents as
+// non-food counts + food batch totals.
+func TestMapRendersPilesAndStockpileZones(t *testing.T) {
+	m := testModel(t)
+	cx, cy := m.gameMap.W/2, m.gameMap.H/2
+	m.replica.Agents = []sim.Agent{{Name: "Ash", X: cx, Y: cy}}
+	m.replica.Piles = []sim.Pile{
+		{X: cx, Y: cy, Wood: 3, Stone: 1},
+		{X: cx + 1, Y: cy, Planks: 2}, // Manhattan-adjacent to the pile above → one zone
+		{X: cx - 6, Y: cy - 6, Food: []sim.FoodBatch{{Kind: "food_raw", N: 5, SpoilAt: 100}}}, // isolated
+	}
+	view := m.mapView()
+	lines := strings.Split(view, "\n")
+	gridOnly := strings.Join(lines[:len(lines)-1], "\n")
+	legend := lines[len(lines)-1]
+
+	if !strings.Contains(gridOnly, "%") {
+		t.Error("pile glyph % missing from map grid")
+	}
+	if !strings.Contains(legend, "zone[2]") {
+		t.Errorf("legend should report the 2-pile adjacent zone, got: %s", legend)
+	}
+	if !strings.Contains(legend, "3w") || !strings.Contains(legend, "1st") || !strings.Contains(legend, "2pl") {
+		t.Errorf("legend should summarize the zone's non-food counts, got: %s", legend)
+	}
+	if !strings.Contains(legend, "food 5r/0c/0m") {
+		t.Errorf("legend should summarize the isolated pile's food batch totals, got: %s", legend)
+	}
+	if !strings.Contains(legend, "%pile") {
+		t.Error("legend key should explain the % pile glyph")
+	}
+}
+
+// TestPileZonesGroupsOnlyManhattanAdjacentPiles is a focused unit test on
+// the flood fill itself (spec 013 T021): diagonal neighbors must NOT merge
+// (data-model.md / spec.md restrict adjacency to the sim package's own
+// Manhattan convention), while a chain of orthogonal drops does.
+func TestPileZonesGroupsOnlyManhattanAdjacentPiles(t *testing.T) {
+	piles := []sim.Pile{
+		{X: 0, Y: 0, Wood: 1},
+		{X: 1, Y: 0, Wood: 1}, // adjacent to (0,0)
+		{X: 2, Y: 1, Wood: 1}, // diagonal to (1,0) only — not adjacent
+		{X: 9, Y: 9, Wood: 1}, // far away, its own zone
+	}
+	zones := pileZones(piles)
+	if len(zones) != 3 {
+		t.Fatalf("want 3 zones (2-chain, diagonal-isolated, far-isolated), got %d: %+v", len(zones), zones)
+	}
+	if len(zones[0]) != 2 {
+		t.Errorf("first zone should merge the two orthogonally adjacent piles, got %d piles", len(zones[0]))
+	}
+	if len(zones[1]) != 1 || zones[1][0].X != 2 {
+		t.Errorf("diagonal neighbor must not merge into the chain, got %+v", zones[1])
+	}
+	if len(zones[2]) != 1 || zones[2][0].X != 9 {
+		t.Errorf("far pile should be its own zone, got %+v", zones[2])
+	}
+}
+
+// TestMapRendersChestGlyphAndInspection covers spec 013 T026 (SC-006): the
+// chest glyph appears on the map, and the legend (the map panel's one
+// inspection surface, T021's precedent) reports each visible chest's owner
+// name, contents, and a fullness hint.
+func TestMapRendersChestGlyphAndInspection(t *testing.T) {
+	m := testModel(t)
+	cx, cy := m.gameMap.W/2, m.gameMap.H/2
+	m.replica.Agents = []sim.Agent{{Name: "Ash", X: cx, Y: cy}, {Name: "Birch", X: cx + 2, Y: cy}}
+	m.replica.Structures = []sim.Structure{
+		// Off the agents' own tiles: the agent glyph outranks the structure
+		// glyph on a shared tile (tile()'s priority order), so a chest at an
+		// agent's own position would hide the glyph the test asserts on.
+		{Kind: "chest", X: cx + 1, Y: cy, Owner: 1, Store: &sim.Inventory{Wood: 3, Planks: 2, FoodRaw: 5}},
+	}
+	view := m.mapView()
+	lines := strings.Split(view, "\n")
+	gridOnly := strings.Join(lines[:len(lines)-1], "\n")
+	legend := lines[len(lines)-1]
+
+	if !strings.Contains(gridOnly, "☐") {
+		t.Error("chest glyph ☐ missing from map grid")
+	}
+	if !strings.Contains(legend, "☐chest") {
+		t.Errorf("legend key should explain the ☐ chest glyph, got: %s", legend)
+	}
+	wantOwner := fmt.Sprintf("chest(%d,%d) [Birch]", cx+1, cy)
+	if !strings.Contains(legend, wantOwner) {
+		t.Errorf("legend should name the chest's owner by agent Name, got: %s", legend)
+	}
+	if !strings.Contains(legend, "3w") || !strings.Contains(legend, "2pl") || !strings.Contains(legend, "food 5r/0c/0m") {
+		t.Errorf("legend should summarize the chest's contents, got: %s", legend)
+	}
+	if !strings.Contains(legend, "10/48") {
+		t.Errorf("legend should show a fullness hint (3+2+5 = 10 of 48), got: %s", legend)
+	}
+}
+
+// TestDescribeChestEmptyStore covers the empty-chest and out-of-range-owner
+// edges of T026's inspection line: an empty Store reads "empty" rather than
+// a blank/zero-padded contents string, and an owner index outside the
+// roster (a defensive case, not one the sim package should ever produce)
+// renders via agentName's "#N" fallback instead of panicking.
+func TestDescribeChestEmptyStore(t *testing.T) {
+	got := describeChest(sim.Structure{X: 1, Y: 2, Owner: 5, Store: &sim.Inventory{}}, []string{"Ash"})
+	want := "chest(1,2) [#5] empty 0/48"
+	if got != want {
+		t.Errorf("describeChest empty store: got %q, want %q", got, want)
+	}
+}
+
 // TestSoulsBodyShowsFullInventory covers SC-006 (spec 012 T043): the souls
 // pane must surface every carried resource kind — wood/stone/water/planks/
 // refined stone, the food triplet, and the most-worn spear's remaining uses.
