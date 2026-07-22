@@ -152,8 +152,12 @@ user asked for a path for `myworld-01`, which holds ~3 game days of lived histor
 
 **Decision**: `scriptworld migrate <world>` (client-side, daemon must be stopped):
 
-1. **Read**: `Store.LatestValidSnapshot` must cover the whole log (`snapshot.seq ==
-   max(events.seq)`) — guaranteed by `finalSnapshot` on any clean shutdown; otherwise
+1. **Read**: `Store.LatestValidSnapshot` must cover the whole log, tolerating a
+   trailing tail of `daemon.*` process-bookkeeping events only (reducer no-ops,
+   excluded from determinism comparisons — the v1 daemon appends `daemon.stopped`
+   AFTER its shutdown snapshot, so exact `snapshot.seq == max(events.seq)` coverage
+   is unsatisfiable for every real cleanly-stopped world; amended 2026-07-22 during
+   the live myworld-01 migration). Any sim-affecting event past the snapshot ⇒
    refuse with "start and stop this world once with the v1 binary". v1 events are
    NEVER replayed by v2 code. The v1 state JSON is decoded via a small legacy-shape
    reader (notably `Inventory.Food int`), not the v2 structs.

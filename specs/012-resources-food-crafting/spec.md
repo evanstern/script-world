@@ -350,8 +350,13 @@ exists, and the migrated world runs and replays deterministically.
   deterministically on passable tiles of the regenerated map, wood carried 1:1, legacy
   meal-food converted at the pinned rate.
 - **FR-024**: Migration MUST require a latest valid snapshot covering the entire event
-  log (the clean-shutdown guarantee) and MUST refuse otherwise with instructions;
-  v1 events are never replayed under v2 rules.
+  log — where trailing process-bookkeeping events (`daemon.*`, reducer no-ops excluded
+  from determinism comparisons) after the snapshot are tolerated, since they carry no
+  sim state — and MUST refuse any tail containing sim-affecting events, with
+  instructions; v1 events are never replayed under v2 rules. (Amended 2026-07-22:
+  the v1 daemon appends `daemon.stopped` after its shutdown snapshot, so exact
+  coverage is unsatisfiable for every real cleanly-stopped world — found migrating
+  `myworld-01`.)
 - **FR-025**: Migration MUST archive the original database intact next to the world
   (the directory remains a complete restorable archive) and MUST refuse to run twice.
 - **FR-026**: The migration MUST be recorded as an event in the new log carrying the
