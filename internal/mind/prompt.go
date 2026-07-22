@@ -68,7 +68,10 @@ func userPrompt(s *sim.State, idx int, k int) string {
 	fmt.Fprintf(&b, "It is %s (%s). You are at (%d, %d).\n", clock.Format(s.Tick), phase, a.X, a.Y)
 	fmt.Fprintf(&b, "Needs (0-100): health %d, food %d, rest %d, warmth %d, morale %d.\n",
 		a.Needs.Health/10, a.Needs.Food/10, a.Needs.Rest/10, a.Needs.Warmth/10, a.Needs.Morale/10)
-	fmt.Fprintf(&b, "Carrying: %d wood, %d meals.\n", a.Inv.Wood, a.Inv.Food)
+	// TODO(T025/T035): surface the full v2 inventory (stone/water/planks/refined
+	// stone, food triplet, spears). Phase 2 keeps the legacy line, re-expressed
+	// over FoodRaw as the carried-food count.
+	fmt.Fprintf(&b, "Carrying: %d wood, %d food.\n", a.Inv.Wood, a.Inv.FoodRaw)
 
 	if len(s.Structures) > 0 {
 		var parts []string

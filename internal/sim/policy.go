@@ -25,7 +25,8 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 	a := &s.Agents[idx]
 
 	// Eat from inventory the moment hunger bites.
-	if a.Needs.Food < hungryAt && a.Inv.Food > 0 {
+	// TODO(T018): eat over the full food triplet (Meals/FoodCooked/FoodRaw).
+	if a.Needs.Food < hungryAt && a.Inv.FoodRaw > 0 {
 		return decision{directEvent: "agent.ate"}
 	}
 
@@ -90,7 +91,8 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 			return decision{intent: d}
 		}
 	}
-	if a.Inv.Food < stockFoodTo {
+	// TODO(T018/T020): larder stocking in raw units for now.
+	if a.Inv.FoodRaw < stockFoodTo {
 		if d, ok := foodIntent(s, m, a, tick); ok {
 			return decision{intent: d}
 		}
@@ -137,7 +139,8 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 	a := &s.Agents[idx]
 	switch goal {
 	case "eat":
-		if a.Inv.Food <= 0 {
+		// TODO(T018): eat over the full food triplet.
+		if a.Inv.FoodRaw <= 0 {
 			return nil, "", fmt.Errorf("%s has nothing to eat", a.Name)
 		}
 		return nil, "agent.ate", nil

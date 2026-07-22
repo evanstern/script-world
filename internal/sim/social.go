@@ -241,11 +241,13 @@ func (s *State) applySocial(e store.Event) error {
 			return fmt.Errorf("apply %s: %w", e.Type, err)
 		}
 		giver, recv := &s.Agents[p.From], &s.Agents[p.To]
-		if giver.Inv.Food <= 0 {
+		// TODO(T018): giving is denominated in raw food for now; the food rewrite
+		// may reconsider which form is shared. Behavior-equivalent re-expression.
+		if giver.Inv.FoodRaw <= 0 {
 			return fmt.Errorf("apply %s: %s has no food", e.Type, giver.Name)
 		}
-		giver.Inv.Food--
-		recv.Inv.Food++
+		giver.Inv.FoodRaw--
+		recv.Inv.FoodRaw++
 		giver.LastGive = e.Tick
 		// Ledger transition (reducer-internal): repayment first, else debt.
 		for i := range s.Debts {

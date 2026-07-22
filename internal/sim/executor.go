@@ -361,7 +361,8 @@ func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
 }
 
 func canGive(a *Agent, tick int64) bool {
-	return a.Inv.Food >= giveKeepsAtLeast &&
+	// TODO(T018): giving keys on raw food for now (see social.go apply).
+	return a.Inv.FoodRaw >= giveKeepsAtLeast &&
 		(a.LastGive == 0 || tick-a.LastGive >= giveCooldownSec)
 }
 
@@ -477,7 +478,8 @@ func wakeReason(a *Agent, night bool) bool {
 	if !night && a.Needs.Rest >= 600 {
 		return true
 	}
-	return a.Needs.Food < 150 && a.Inv.Food > 0
+	// TODO(T018): wake-to-eat over the full food triplet.
+	return a.Needs.Food < 150 && a.Inv.FoodRaw > 0
 }
 
 func minInt(a, b int) int {

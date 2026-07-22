@@ -144,6 +144,17 @@ type (
 	DaemonStoppedPayload struct {
 		Tick int64 `json:"tick"`
 	}
+	// WorldMigratedPayload (spec 012, US6) carries the full transformed v2 state
+	// of a migrated v1 world. Appended once to the fresh v2 log right after
+	// world.created; the reducer replaces State wholesale (after validating
+	// name/seed), so the log alone reproduces the migrated world with zero
+	// snapshots. State is the full canonical sim.State (struct-embedded).
+	WorldMigratedPayload struct {
+		FromFormat   int   `json:"from_format"`
+		SourceEvents int64 `json:"source_events"`
+		SourceTick   int64 `json:"source_tick"`
+		State        State `json:"state"`
+	}
 )
 
 func mustPayload(v any) json.RawMessage {
@@ -332,7 +343,9 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Food += forageYield
+		// TODO(T017): rescale to +forageYieldV2 (2) FoodRaw. Phase 2 keeps the
+		// legacy yield, only re-expressed over FoodRaw (behavior-equivalent).
+		a.Inv.FoodRaw += forageYield
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
@@ -358,7 +371,9 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		a.Inv.Food += huntYield
+		// TODO(T017/T027): rescale to +huntYieldBare (8) / +huntYieldSpear (12)
+		// and spend Spears[0]. Phase 2 keeps the legacy yield over FoodRaw.
+		a.Inv.FoodRaw += huntYield
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		out := s.DenUses[:0]
@@ -394,10 +409,37 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		if a.Inv.Food > 0 {
-			a.Inv.Food--
+		// TODO(T018): rewrite to AtePayload (most-nutritious-first to satietyAt,
+		// absolute food_after). Phase 2 keeps the legacy one-unit +eatFoodValue
+		// eat, re-expressed over FoodRaw so behavior is unchanged.
+		if a.Inv.FoodRaw > 0 {
+			a.Inv.FoodRaw--
 			a.Needs.Food = minInt(1000, a.Needs.Food+eatFoodValue)
 		}
+
+	// --- spec 012 resources/food/crafting v2 event surface ---
+	// Registered as explicit no-ops in Phase 2 so each later story fills its own
+	// case without merge collisions, and so the reducer documents the v2 event
+	// vocabulary. Until wired, behavior is identical to the unknown-type
+	// fall-through: recorded history, zero state effect (contracts/events.md).
+	case "agent.quarried":
+		// TODO(T013): Inv.Stone += quarryYield; append (x,y) to Quarried; clear intent.
+	case "agent.collected_water":
+		// TODO(T013): Inv.Water += collectWaterYield; clear intent (water inexhaustible).
+	case "agent.crafted":
+		// TODO(T026): apply recipeFor(kind) delta (spear appends spearDurability); clear intent.
+	case "agent.cooked":
+		// TODO(T021/T031): FoodRaw -= consumed; Kind += produced; oven also Wood -= 1; clear intent.
+	case "agent.bathed":
+		// TODO(T032): Water -1, Wood -1; set Morale/Warmth to the absolute after-values.
+	case "agent.refueled":
+		// TODO(T020): Wood -1; set the fire's FuelUntil to the absolute deadline (relights if cold).
+	case "agent.spear_broke":
+		// TODO(T027): remove Spears[0] (spent to zero); companion memory rides the same batch.
+	case "sim.fire_burned_out":
+		// TODO(T019): no state effect — lit-ness is derived from FuelUntil; chronicle/TUI signal only.
+	case "world.migrated":
+		// TODO(T038): validate name/seed match, then replace State wholesale from the payload.
 
 	case "agent.slept":
 		var p AgentPayload

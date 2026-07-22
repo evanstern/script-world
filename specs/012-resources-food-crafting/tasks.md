@@ -24,7 +24,7 @@ TASK-50 at each dispatch.
 **Purpose**: branch/worktree and a green baseline.
 
 - [ ] T001 Fetch/ff-pull root main, then create worktree: `git worktree add .worktrees/task-50 -b task-50-resources-food-crafting origin/main`
-- [ ] T002 Baseline `go test ./...` green in the worktree; note current `internal/worldmap` hash-test seeds for later comparison
+- [X] T002 Baseline `go test ./...` green in the worktree; note current `internal/worldmap` hash-test seeds for later comparison
 
 ---
 
@@ -32,12 +32,12 @@ TASK-50 at each dispatch.
 
 **Purpose**: shared state shapes, recipe table, format gate — every story builds on these. No behavior changes yet.
 
-- [ ] T003 Extend `Inventory` struct in `internal/sim/agents.go` per data-model.md (Stone/Water/Planks/RefinedStone/FoodRaw/FoodCooked/Meals ints + `Spears []int`, omitempty; DELETE legacy `Food int`) and fix all compile-touched references
-- [ ] T004 Add `FuelUntil int64` to `Structure` in `internal/sim/agents.go`; add tuning-constant block per contracts/recipes.md (yields, durations, restore values, fireBurnPerWood, fireFuelCap, spearDurability, restRegenShelter, satiety 900)
-- [ ] T005 [P] Create `internal/sim/recipes.go`: authoritative recipe table (inputs/outputs/duration/site rule) matching contracts/recipes.md exactly, with a table-driven test asserting the mirror
-- [ ] T006 [P] Add new payload structs in `internal/sim/agents.go` with canonical field order per contracts/events.md: `CraftedPayload`, `AtePayload` (replaces empty-shape use), `CookedPayload`, `BathedPayload`, `RefueledPayload`, `SpearBrokePayload`, `FireBurnedOutPayload`
-- [ ] T007 [P] Bump `FormatVersion` 1→2 in `internal/world/world.go`; extend `internal/world/world_test.go`: v1 manifest refused with the unsupported-version error (quickstart §5)
-- [ ] T008 Reducer scaffolding in `internal/sim/state.go`: register all new event type cases as explicit no-ops-for-now with TODO-per-story markers, so each story fills its own case without merge collisions — then `go test ./...` green
+- [X] T003 Extend `Inventory` struct in `internal/sim/agents.go` per data-model.md (Stone/Water/Planks/RefinedStone/FoodRaw/FoodCooked/Meals ints + `Spears []int`, omitempty; DELETE legacy `Food int`) and fix all compile-touched references
+- [X] T004 Add `FuelUntil int64` to `Structure` in `internal/sim/agents.go`; add tuning-constant block per contracts/recipes.md (yields, durations, restore values, fireBurnPerWood, fireFuelCap, spearDurability, restRegenShelter, satiety 900)
+- [X] T005 [P] Create `internal/sim/recipes.go`: authoritative recipe table (inputs/outputs/duration/site rule) matching contracts/recipes.md exactly, with a table-driven test asserting the mirror
+- [X] T006 [P] Add new payload structs in `internal/sim/agents.go` with canonical field order per contracts/events.md: `CraftedPayload`, `AtePayload` (replaces empty-shape use), `CookedPayload`, `BathedPayload`, `RefueledPayload`, `SpearBrokePayload`, `FireBurnedOutPayload`
+- [X] T007 [P] Bump `FormatVersion` 1→2 in `internal/world/world.go`; extend `internal/world/world_test.go`: v1 manifest refused with the unsupported-version error (quickstart §5)
+- [X] T008 Reducer scaffolding in `internal/sim/state.go`: register all new event type cases as explicit no-ops-for-now with TODO-per-story markers, so each story fills its own case without merge collisions — then `go test ./...` green
 
 ---
 

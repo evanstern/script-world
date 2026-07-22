@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	ManifestName  = "world.json"
-	FormatVersion = 1
+	ManifestName = "world.json"
+	// FormatVersion 2 is the resources/food/crafting break (spec 012): the
+	// terrain change (rock outcrops) and food rescale invalidate v1 worlds. A
+	// v1 world is refused with instructions to run `scriptworld migrate`.
+	FormatVersion = 2
 )
 
 type Manifest struct {
@@ -122,7 +125,7 @@ func Open(dir string) (*World, error) {
 		return nil, fmt.Errorf("corrupt %s: %w", ManifestName, err)
 	}
 	if m.FormatVersion != FormatVersion {
-		return nil, fmt.Errorf("world format_version %d unsupported (this build supports %d)", m.FormatVersion, FormatVersion)
+		return nil, fmt.Errorf("world format_version %d unsupported (this build supports %d); run 'scriptworld migrate <world>' to upgrade a v1 world", m.FormatVersion, FormatVersion)
 	}
 	if m.TickGameSeconds != 1 {
 		return nil, fmt.Errorf("tick_game_seconds %d unsupported (must be 1)", m.TickGameSeconds)

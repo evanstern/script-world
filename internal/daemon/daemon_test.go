@@ -14,7 +14,7 @@ import (
 func openWorldWithMeeting(t *testing.T, meeting string) *world.World {
 	t.Helper()
 	dir := t.TempDir()
-	manifest := `{"name":"w","seed":42,"format_version":1,"tick_game_seconds":1` + meeting + `}`
+	manifest := `{"name":"w","seed":42,"format_version":2,"tick_game_seconds":1` + meeting + `}`
 	if err := os.WriteFile(filepath.Join(dir, world.ManifestName), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
