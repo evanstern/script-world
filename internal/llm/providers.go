@@ -67,6 +67,22 @@ func (o *openaiCompat) call(ctx context.Context, req Request) (string, int64, in
 	if o.reasoningEffort != "" {
 		payload["reasoning_effort"] = o.reasoningEffort
 	}
+	// Structured outputs (TASK-58): when the caller supplies a schema, pin the
+	// reply to it at the sampler level. Absent a schema the payload is
+	// byte-identical to before — only planner calls set one.
+	if len(req.ResponseSchema) > 0 {
+		name := req.SchemaName
+		if name == "" {
+			name = "reply"
+		}
+		payload["response_format"] = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   name,
+				"schema": req.ResponseSchema,
+			},
+		}
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", 0, 0, err
