@@ -11,7 +11,7 @@ sources:
   - internal/ipc/ipc_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 8a5604f0e875b4475193b05458871dc1490e8cc8
 ---
 
 # Testing strategy
@@ -80,7 +80,11 @@ error (via `net.Pipe` against `session.writeResponse`); and both the substituted
 error and a raw over-long line surface promptly as `ErrReplyTooLarge` — never a
 hang or silent scanner death.
 
-**E2E** (`e2e/`): `TestMain` builds the binary once; worlds drop `llm.json`
+**E2E** (`e2e/`): `TestMain` builds the binary once and sets a package-wide
+hermetic `PROMPTWORLD_HOME` (a temp dir) before running — every subprocess the
+package execs inherits it, so no test can write the developer's real
+`~/.promptworld` registry (TASK-49; `manager_e2e_test.go`'s `isolatedHome`
+layers a per-test override on top). Worlds drop `llm.json`
 right after `new` so they are pure-sim — a precondition for `speed max` under
 the TASK-20 policy. Scenarios mirror
 `specs/001-world-daemon/quickstart.md` — A: always-on + detach-is-not-pause; B:
