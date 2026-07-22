@@ -12,7 +12,18 @@ import (
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 )
+
+// nudgeTextMax is the nudge rendering cap, read from the tool registry (spec
+// 014 T021): tool.Lookup("nudge_dream").Cost.TextCapBytes (400). It matches the
+// sim reducer's NudgeTextMax enforcer — both derive from the same registry
+// entry, so the metatron-side truncation and the door-side enforcement can
+// never diverge.
+var nudgeTextMax = func() int {
+	t, _ := tool.Lookup("nudge_dream")
+	return t.Cost.TextCapBytes
+}()
 
 // One console turn: player text in, charter-voiced reply out, at most one
 // mediated nudge. The player's words have exactly one sink — the user turn
@@ -135,8 +146,8 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 	if text == "" {
 		return nil, "the rendering was empty"
 	}
-	if len(text) > sim.NudgeTextMax {
-		text = text[:sim.NudgeTextMax]
+	if len(text) > nudgeTextMax {
+		text = text[:nudgeTextMax]
 	}
 	var targets []int
 	switch form {

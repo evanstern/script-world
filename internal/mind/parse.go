@@ -46,6 +46,26 @@ const planStepCap = 3
 // at package init; the registry is immutable after startup.
 var worldGoals = tool.WorldGoals()
 
+// Expressive text caps are read from the tool registry (spec 014 T020/R7) so
+// the parser and the registry never carry divergent literals. Values are
+// byte-identical to the old local literals (say 300 bytes, gist 200 bytes,
+// muse 200 runes); the registry is now their single source.
+var (
+	sayCapBytes  = capBytes("say")
+	gistCapBytes = capBytes("gist")
+	museCapRunes = capRunes("muse")
+)
+
+func capBytes(name string) int {
+	t, _ := tool.Lookup(name)
+	return t.Cost.TextCapBytes
+}
+
+func capRunes(name string) int {
+	t, _ := tool.Lookup(name)
+	return t.Cost.TextCapRunes
+}
+
 // validKinds are the inventory item keys drop/pick_up/deposit/withdraw
 // accept as Kind — exactly internal/sim's canonicalKinds
 // (internal/sim/agents.go), the set the executor actually reads counts by
@@ -182,9 +202,8 @@ func parseMusing(text string) (string, error) {
 	if t == "" || strings.HasPrefix(t, "{") {
 		return "", fmt.Errorf("unusable musing %q", text)
 	}
-	const museMaxRunes = 200
-	if r := []rune(t); len(r) > museMaxRunes {
-		t = string(r[:museMaxRunes])
+	if r := []rune(t); len(r) > museCapRunes {
+		t = string(r[:museCapRunes])
 	}
 	return t, nil
 }
@@ -226,8 +245,8 @@ func parseSay(text string) (string, error) {
 	if r.Say == "" {
 		return "", fmt.Errorf("empty utterance")
 	}
-	if len(r.Say) > 300 {
-		r.Say = r.Say[:300]
+	if len(r.Say) > sayCapBytes {
+		r.Say = r.Say[:sayCapBytes]
 	}
 	return r.Say, nil
 }
@@ -256,8 +275,8 @@ func parseOutcome(text string) (convoOutcome, error) {
 	if o.Gist == "" {
 		return convoOutcome{}, fmt.Errorf("empty gist")
 	}
-	if len(o.Gist) > 200 {
-		o.Gist = o.Gist[:200]
+	if len(o.Gist) > gistCapBytes {
+		o.Gist = o.Gist[:gistCapBytes]
 	}
 	clamp := func(v float64) int {
 		r := int(math.Round(v))

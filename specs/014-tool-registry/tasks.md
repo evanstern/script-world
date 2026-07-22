@@ -71,11 +71,11 @@ replay-identical (the FR-012 delta excepted).
 **Independent Test**: replay suite passes unmodified; caps enforced at same values;
 whitelist diff empty; live smoke world behaves as before.
 
-- [ ] T020 [P] [US2] Expressive caps from registry: replace utterance/gist/musing cap literals in `internal/mind/parse.go` (300 bytes `parseSay`, 200 bytes `parseOutcome`, 200 runes `parseMusing`) with `tool.Lookup` Cost reads; parse behavior byte-identical (FR-010, R7)
-- [ ] T021 [P] [US2] Metatron from registry: in `internal/metatron/turn.go` validate nudge form against `tool.RosterMetatron` and text cap via `tool.Lookup("nudge_…").Cost`; keep `internal/sim/metatron.go` charge economy + reducer dry-run as enforcers, reading the 400 cap from the registry constant (FR-010, R7)
-- [ ] T022 [US2] Whitelist-subset startup check in `internal/sim/toolcheck.go`: every Expressive tool's declared Events ⊆ `injectSocialWhitelist`; assert in test that the whitelist map itself is diff-identical to pre-refactor (zero entries added/removed — FR-013)
-- [ ] T023 [US2] Identity verification pass: full replay suite (`internal/sim/whole_feature_test.go`, `sim_test.go` determinism/replay, per-capability replay tests incl. `metatron_test.go` charges, `internal/mind/convo_test.go` golden path) passes with ZERO test-file edits; `go test ./...` green (SC-002, FR-011)
-- [ ] T024 [US2] Live smoke per quickstart step 7: new world runs one planner cadence; villagers plan/speak/muse, metatron nudge lands, a multi-step plan with `cook`/`quarry` lands (the delta, visible live); record observation in TASK-53 notes
+- [X] T020 [P] [US2] Expressive caps from registry: replace utterance/gist/musing cap literals in `internal/mind/parse.go` (300 bytes `parseSay`, 200 bytes `parseOutcome`, 200 runes `parseMusing`) with `tool.Lookup` Cost reads; parse behavior byte-identical (FR-010, R7)
+- [X] T021 [P] [US2] Metatron from registry: in `internal/metatron/turn.go` validate nudge form against `tool.RosterMetatron` and text cap via `tool.Lookup("nudge_…").Cost`; keep `internal/sim/metatron.go` charge economy + reducer dry-run as enforcers, reading the 400 cap from the registry constant (FR-010, R7)
+- [X] T022 [US2] Whitelist-subset startup check in `internal/sim/toolcheck.go`: every Expressive tool's declared Events ⊆ `injectSocialWhitelist`; assert in test that the whitelist map itself is diff-identical to pre-refactor (zero entries added/removed — FR-013)
+- [X] T023 [US2] Identity verification pass: full replay suite (`internal/sim/whole_feature_test.go`, `sim_test.go` determinism/replay, per-capability replay tests incl. `metatron_test.go` charges, `internal/mind/convo_test.go` golden path) passes with ZERO test-file edits; `go test ./...` green (SC-002, FR-011)
+- [X] T024 [US2] Live smoke per quickstart step 7: new world runs one planner cadence; villagers plan/speak/muse, metatron nudge lands, a multi-step plan with `cook`/`quarry` lands (the delta, visible live); record observation in TASK-53 notes
 
 **Checkpoint**: migration proven behavior-identical; both doors and ladder untouched.
 
