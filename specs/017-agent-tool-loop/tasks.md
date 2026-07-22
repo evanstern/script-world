@@ -48,23 +48,23 @@ constitution Principle V — `(Opus 4.8)` for cross-package/concurrency/doctrine
       `resolveGoal` (discovered by T004: daemon boot + e2e red without this); update
       TestToolCoverageClean/TestWorldToolDurationsMatchSimConstants accordingly and
       restore full-suite green including e2e
-- [ ] T005 (Opus 4.8) Extend llm transport types: `Request.Tools/Turns/SkipObserve`,
+- [x] T005 (Opus 4.8) Extend llm transport types: `Request.Tools/Turns/SkipObserve`,
       `Response.ToolCalls/Stop`, Role/Turn/Block/ToolCall/StopReason per
       contracts/loop-api.md; config `loop_max_rounds` (+`Rounds()` clamp 1–16 default 8)
       and `local.tool_mode`/`cloud.tool_mode` in internal/llm/llm.go +
       internal/llm/config.go; nil-Tools/nil-Turns behavior byte-identical (regression
       fixture test)
-- [ ] T006 [P] (Opus 4.8) anthropicCaller native tool exchange (tools param,
+- [x] T006 [P] (Opus 4.8) anthropicCaller native tool exchange (tools param,
       tool_use/tool_result blocks, stop_reason mapping, cache-control preserved) per
       contracts/provider-wire.md §1, fixture round-trip tests, in
       internal/llm/providers.go (depends on T005)
-- [ ] T007 [P] (Opus 4.8) openaiCompat native function calling (tools/tool_calls,
+- [x] T007 [P] (Opus 4.8) openaiCompat native function calling (tools/tool_calls,
       arguments-as-string decode, finish_reason mapping) AND `tool_mode:"json"`
       fallback envelope (system-prompt tool rendering from tool.InputSchema,
       response_format envelope, synthesized call IDs, user-turn result feedback) per
       provider-wire.md §2–3, fixture tests for both modes, in internal/llm/providers.go
       (depends on T005)
-- [ ] T008 (Opus 4.8) Governor observation seam: `Orchestrator.ObserveCognition(kind,
+- [x] T008 (Opus 4.8) Governor observation seam: `Orchestrator.ObserveCognition(kind,
       totalMillis)`; worker skips estimator feeding when `SkipObserve` (metering,
       admission, breaker untouched — test-pinned) in internal/llm/llm.go (depends on
       T005)

@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 19:42'
+updated_date: '2026-07-22 20:15'
 labels:
   - agent-mind
   - llm
@@ -73,4 +73,6 @@ Full Spec Kit at specs/017-agent-tool-loop: spec (3 clarifications resolved with
 2026-07-22 planning session (Fable 5): spec 017 authored+clarified+planned+tasked; linked via spec-bridge. Clarification decisions (Evan): local tier native-first w/ per-model json fallback; scheduled musing channel removed NOW; scope = villager planner + metatron turn. Tier decision per constitution v1.1.0 Principle V rubric: Opus 4.8 for T005-T015, T018, T020, T023-T025 (cross-package llm/cognition/mind/metatron orchestration, concurrency, doctrine-adjacent landing-door behavior); Sonnet for T002-T004, T016-T017, T019, T021-T022, T026 (single-package registry additions, additive sim payloads with pinned byte-stability contracts, docs). Justification: the loop driver, transport, and channel removal touch internal/llm + internal/cognition + internal/mind orchestration = senior tier per rubric; registry/payload slices are routine with explicit contracts.
 
 2026-07-22 implementation underway in .worktrees/task-52 (branch task-52-agent-tool-loop, forked c0206a6). T001 baseline green (full suite incl e2e). Sonnet spec-implementer landed T002 (4c96954: Number ParamKind, qty params on 4 storage verbs, Validate extensions, Read-roster legal), T003 (64fceea: tool.InputSchema derivation), T004 (0915fb8: set_plan entry w/ authored schema, LoopRosterVillager/Metatron, legacy surfaces byte-stable), T004b (a607896: implementer-found plan gap cured — spec-014 boot gate ValidateToolCoverage re-keyed on goal-door vocabulary so non-goal-door World tools like set_plan are deliberately exempt; daemon boot verified, full suite incl e2e green). Known pre-existing flake: internal/metatron TestDigestFailureCarries under full-suite load. Phases Setup + Foundational-registry portion complete; next: T005-T008 llm transport (Opus 4.8).
+
+2026-07-22 Opus 4.8 spec-implementer landed the llm transport slice: T005 (da95388: Turn/Block/ToolDecl/ToolCall/StopReason types, Request.Tools/Turns/SkipObserve, Response.ToolCalls/Stop, loop_max_rounds + tool_mode config w/ warn-not-error normalizers, caller interface returns callResult), T006 (373c16b: anthropic native tools; SDK v1.58.0 drops unknown schema keywords — routed via ExtraFields), T007 (561ccad: openaiCompat native function calling + tool_mode:json fallback envelope; ToolResult→user-turn mapping transport-side; env-<round> IDs derived from assistant-turn count — T009 driver must record one assistant Turn per round, pinned in driver contract), T008 (7d1a354: ObserveCognition + SkipObserve estimator seam; metering/admission/breaker untouched). Full suite incl e2e green. Foundational phase complete. Follow-up candidate noted: pre-existing flake TestEstimatorSampleCountUnderConcurrency (capacity-boundary race, reproduced on base commit).
 <!-- SECTION:NOTES:END -->
