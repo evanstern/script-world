@@ -4,7 +4,7 @@ title: 'Tool registry: single source of truth for agent capabilities (Layer 1)'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:49'
-updated_date: '2026-07-22 05:33'
+updated_date: '2026-07-22 05:49'
 labels:
   - llm
 dependencies: []
@@ -40,4 +40,16 @@ Spec: specs/014-tool-registry
 - [ ] #2 Existing capabilities (10 verbs, say, muse, gist, metatron nudge) are registry entries; behavior- and replay-identical (existing event logs reproduce identical state)
 - [ ] #3 Per-agent tool rosters exist; villager and metatron rosters expressed as data; an action outside an agent's roster is rejected at the door
 - [ ] #4 Injection doors and landing-ladder validation (generation, staleness, guards) unchanged and covered by tests
+- [ ] #5 Spec phase: Setup
+- [ ] #6 Spec phase: Foundational — the registry package (blocks all stories)
+- [ ] #7 Spec phase: User Story 1 — One place to define a capability (P1) 🎯 MVP
+- [ ] #8 Spec phase: User Story 2 — Existing capabilities migrate unchanged (P2)
+- [ ] #9 Spec phase: User Story 3 — Capability is roster membership (P3)
+- [ ] #10 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync: Setup: 0/4 · Foundational — the registry package (blocks all stories): 0/6 · User Story 1 — One place to define a capability (P1) 🎯 MVP: 0/9 · User Story 2 — Existing capabilities migrate unchanged (P2): 0/5 · User Story 3 — Capability is roster membership (P3): 0/4 · Polish & Cross-Cutting: 0/5
+<!-- SECTION:NOTES:END -->
