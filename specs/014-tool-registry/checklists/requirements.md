@@ -36,8 +36,7 @@
 - Current-state file references (the three duplicate maps) appear only in the
   problem statement as evidence, not as requirements; requirements themselves are
   implementation-agnostic.
-- One deliberate open question is carried in Assumptions rather than a
-  [NEEDS CLARIFICATION] marker: whether the plan-step drift cure lands with this
-  layer (default, FR-012) or is preserved-then-fixed separately. Flagged for
-  `/speckit-clarify`.
+- The one deliberate open question (drift cure in-scope vs preserved) was resolved
+  in the 2026-07-22 clarification session: cured here, FR-012 stands; TASK-55
+  closes with this feature. Migration scope and TASK-51 sequencing also clarified.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`

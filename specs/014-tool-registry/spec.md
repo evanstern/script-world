@@ -35,6 +35,14 @@ exception), no change to replay.
 REQUEST; an event is the FACT; the gate decides; the executor grounds work in time
 and space. The model never asserts outcomes.
 
+## Clarifications
+
+### Session 2026-07-22
+
+- Q: Should the plan-step drift cure (TASK-55) land with this layer, or should the layer reproduce today's behavior exactly? → A: Cure it here — the derivation fixes it, recorded as the sole permitted behavioral delta (FR-012); TASK-55 closes with this task.
+- Q: What migrates to registry tools in this layer beyond the board-AC set? → A: Nothing — world verbs + say + muse + conversation gist + metatron nudges only; governance rephrase, consolidation writes, chronicle entries, and cognition telemetry keep riding the preserved whitelist door unchanged.
+- Q: When does TASK-53 implementation start relative to TASK-51 (spec 013, In Progress, owns vocabulary growth)? → A: Planning proceeds now; implementation branches from main only after TASK-51 merges, so the migration enumerates a stable vocabulary once.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - One place to define a capability (Priority: P1)
@@ -270,22 +278,21 @@ are expressed as data listing registry names.
 
 ## Assumptions
 
-- **Drift cure is in scope**: the plan-step vocabulary drift is treated as a
-  defect (spec 012 FR-020 proves intent) and is cured by derivation, recorded as
-  the single permitted behavioral delta (FR-012) and filed as its own board task
-  for traceability. If the project prefers strict behavior-preservation (drift
-  reproduced as data, cured in a separate change), FR-012 flips to "preserve,
-  fix separately" — flagged for clarification.
-- **Migration scope**: the capabilities migrating are the world verbs + say +
-  muse + conversation gist + metatron nudges (per the board task's acceptance
-  criteria). Other whitelist traffic — nightly consolidation writes, chronicle
-  entries, governance rephrase, cognition telemetry — continues to ride the
-  preserved whitelist door unchanged and is NOT re-expressed as registry tools in
-  this layer.
+- **Drift cure is in scope** (clarified 2026-07-22): the plan-step vocabulary
+  drift is a defect (spec 012 FR-020 proves intent) and is cured by derivation,
+  recorded as the single permitted behavioral delta (FR-012). TASK-55 tracks the
+  defect and closes with this feature.
+- **Migration scope** (clarified 2026-07-22): the capabilities migrating are
+  exactly the world verbs + say + muse + conversation gist + metatron nudges (the
+  board task's acceptance criteria). All other whitelist traffic — nightly
+  consolidation writes, chronicle entries, governance rephrase
+  (proposal re-texting), cognition telemetry — continues to ride the preserved
+  whitelist door unchanged and is explicitly NOT re-expressed as registry tools
+  in this layer.
 - **Verb count is a snapshot**: 19 world verbs as of this writing; spec 013
   (inventory/storage, in progress) may add more before integration. The migration
-  enumerates the vocabulary at integration time; the registry is rebased over
-  whatever main then holds.
+  enumerates the vocabulary as it stands when implementation starts (see
+  Dependencies: after TASK-51 merges).
 - **Muse scheduling unchanged**: muse joins the registry and the villager roster,
   but its trigger/cadence mechanism is untouched; agent-chosen musing arrives with
   the tool-use loop (TASK-52).
@@ -302,7 +309,9 @@ are expressed as data listing registry names.
 
 - **De-risks**: TASK-52 (agent tool-use loop) and TASK-16 (journal tools) build on
   this registry; neither is implemented here.
-- **Sequencing**: spec 013 / TASK-51 (inventory & storage) is In Progress and owns
-  vocabulary growth; this feature integrates after (or rebases over) it.
+- **Sequencing** (clarified 2026-07-22): spec 013 / TASK-51 (inventory & storage)
+  is In Progress and owns vocabulary growth. Planning for this feature proceeds
+  now; implementation branches from main only after TASK-51's PR merges, so the
+  vocabulary is enumerated once, against a stable main.
 - **Cross-reference**: the plan-step drift defect is filed as its own board task;
   FR-012 records its cure here.
