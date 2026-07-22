@@ -33,12 +33,12 @@ PR merges. T001 enforces this.
 **Purpose**: `internal/tool` leaf package per contracts/registry-api.md; no consumer
 changes yet, so the world is bit-for-bit unchanged at this checkpoint.
 
-- [ ] T005 [P] Create `internal/tool/tool.go`: `Tool`, `EffectClass` (World/Expressive/Read), `Param`/`ParamKind`, `GateClass` (Resolvable/Charge/Scene/None), `Cost` types per data-model.md
-- [ ] T006 Create `internal/tool/registry.go`: all catalog entries in `goalVocabulary` registration order (world verbs with durations + PromptGloss strings carried byte-exact from `internal/mind/prompt.go:27–33`; say/gist/muse with caps 300B/200B/200 runes and Events; converse/nudge_dream/nudge_omen with charge cost + 400 cap + Events) + `All()`, `Lookup()` per contracts/registry-api.md
-- [ ] T007 [P] Create `internal/tool/roster.go`: `RosterVillager` (world verbs in registration order + say, muse, gist), `RosterMetatron` (converse, nudge_dream, nudge_omen), `OnRoster()`
-- [ ] T008 Create `internal/tool/derive.go`: `VocabularyLine()`, `PromptGlossBlock()`, `WorldGoals()`, `PlanStepGoals()` — each one walk of the registry (data-model.md derived-surfaces table)
-- [ ] T009 Create `internal/tool/validate.go`: `Validate()` per R9 (unique non-empty names; known effect class; Events non-empty iff Expressive; PlanStep/ReflexEligible only on World; roster names resolve; no Read tools on rosters) returning ALL violations
-- [ ] T010 Registry unit tests in `internal/tool/registry_test.go` + `internal/tool/validate_test.go`: catalog completeness vs contracts/tool-catalog.md (every row present, nothing extra), single-walk invariant (VocabularyLine names ≡ WorldGoals ≡ PlanStepGoals — TASK-55 AC #2), Validate() rejects each malformed-fixture case (FR-003)
+- [X] T005 [P] Create `internal/tool/tool.go`: `Tool`, `EffectClass` (World/Expressive/Read), `Param`/`ParamKind`, `GateClass` (Resolvable/Charge/Scene/None), `Cost` types per data-model.md
+- [X] T006 Create `internal/tool/registry.go`: all catalog entries in `goalVocabulary` registration order (world verbs with durations + PromptGloss strings carried byte-exact from `internal/mind/prompt.go:27–33`; say/gist/muse with caps 300B/200B/200 runes and Events; converse/nudge_dream/nudge_omen with charge cost + 400 cap + Events) + `All()`, `Lookup()` per contracts/registry-api.md
+- [X] T007 [P] Create `internal/tool/roster.go`: `RosterVillager` (world verbs in registration order + say, muse, gist), `RosterMetatron` (converse, nudge_dream, nudge_omen), `OnRoster()`
+- [X] T008 Create `internal/tool/derive.go`: `VocabularyLine()`, `PromptGlossBlock()`, `WorldGoals()`, `PlanStepGoals()` — each one walk of the registry (data-model.md derived-surfaces table)
+- [X] T009 Create `internal/tool/validate.go`: `Validate()` per R9 (unique non-empty names; known effect class; Events non-empty iff Expressive; PlanStep/ReflexEligible only on World; roster names resolve; no Read tools on rosters) returning ALL violations
+- [X] T010 Registry unit tests in `internal/tool/registry_test.go` + `internal/tool/validate_test.go`: catalog completeness vs contracts/tool-catalog.md (every row present, nothing extra), single-walk invariant (VocabularyLine names ≡ WorldGoals ≡ PlanStepGoals — TASK-55 AC #2), Validate() rejects each malformed-fixture case (FR-003)
 
 **Checkpoint**: `go test ./internal/tool` green; `go test ./...` still green (nothing consumes the registry yet).
 
