@@ -378,6 +378,17 @@ func freeBulk(inv Inventory) int {
 	return 0
 }
 
+// BulkCap and Bulk are bulkCap/bulk exported for internal/tui (SC-006: "how
+// full a villager's hands are" must be answerable from the TUI alone),
+// mirroring the MetatronChargeCap export pattern for the same purpose —
+// the sim package stays the single source of truth for the derived value
+// and its ceiling.
+const BulkCap = bulkCap
+
+func Bulk(inv Inventory) int {
+	return bulk(inv)
+}
+
 func intentDuration(goal string) int64 {
 	switch goal {
 	case "forage":

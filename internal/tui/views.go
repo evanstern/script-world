@@ -978,8 +978,13 @@ func (m Model) soulsBody(width, height int) string {
 			// triplet, and spear count (with the most-worn spear's
 			// remaining uses when at least one is carried — Spears is kept
 			// sorted ascending by the reducer, so Spears[0] is the one
-			// closest to breaking).
-			carry := fmt.Sprintf("carry %dw %dst %dwt %dpl %drs · food %dr/%dc/%dm",
+			// closest to breaking). Leading bulk n/24 (spec 013 T015,
+			// SC-006) answers "how full are this villager's hands" from
+			// the TUI alone — sim.Bulk is the same derived-load function
+			// the reducer/executor clamp against, so the number never
+			// drifts from what a gather/craft/give will actually do.
+			carry := fmt.Sprintf("bulk %d/%d · carry %dw %dst %dwt %dpl %drs · food %dr/%dc/%dm",
+				sim.Bulk(a.Inv), sim.BulkCap,
 				a.Inv.Wood, a.Inv.Stone, a.Inv.Water, a.Inv.Planks, a.Inv.RefinedStone,
 				a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)
 			if n := len(a.Inv.Spears); n > 0 {
