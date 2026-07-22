@@ -371,3 +371,232 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 			string(live.Marshal()), string(replayed.Marshal()))
 	}
 }
+
+// TestReplayByteIdentityWholeFeatureStorage is SC-005 over the ENTIRE spec 013
+// surface (T038, Phase 9): ONE scripted run that exercises every new event type
+// introduced by inventory/storage v1 — agent.dropped, agent.picked_up,
+// agent.deposited, agent.withdrew (an owner fetch AND a non-owner theft with its
+// full companion batch: social.chest_taken, a reason-"theft" social.relation_
+// changed, and owner + witness agent.memory_added), sim.food_rotted, and
+// agent.built{kind: chest} — plus a death spill — then replays from genesis (log
+// only) to a byte-identical state hash. It complements (does not replace) the
+// spec-012 whole-feature test above, which still exercises its own event set.
+//
+// Idiom: the loop's driveTicks + a command timeline (ground_pile_test.go /
+// chest_test.go / theft_test.go), so every scripted goal is a genuine
+// planner-sourced agent.intent_set driven to completion through the executor,
+// exactly as the live layer does. Scripted intents are spaced so no idle gap for
+// a scripted agent exceeds reflexGraceTicks(120) before its next command, so the
+// reflex never preempts the script; any trailing reflex churn is post-script,
+// deterministic, and reproduced identically on replay.
+func TestReplayByteIdentityWholeFeatureStorage(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+
+	// Fixed tiles from the genesis spawns: the thief/chest tile (t1), the
+	// drop/pickup tile (t2), the death-spill tile (t3), and the rot-pile tile
+	// (t6). The live chest is built on a scanned build tile kept clear of all of
+	// them so no pile ever blocks the build (FR-007).
+	base := NewState(seed, m)
+	t1x, t1y := base.Agents[1].X, base.Agents[1].Y
+	t2x, t2y := base.Agents[2].X, base.Agents[2].Y
+	t3x, t3y := base.Agents[3].X, base.Agents[3].Y
+	t6x, t6y := base.Agents[6].X, base.Agents[6].Y
+	avoid := map[[2]int]bool{{t1x, t1y}: true, {t2x, t2y}: true, {t3x, t3y}: true, {t6x, t6y}: true}
+	bx, by, ok := -1, -1, false
+	for yy := 0; yy < m.H && !ok; yy++ {
+		for xx := 0; xx < m.W; xx++ {
+			if buildSite(m, base, xx, yy) && !avoid[[2]int{xx, yy}] {
+				bx, by, ok = xx, yy, true
+				break
+			}
+		}
+	}
+	if !ok {
+		t.Skip("no buildable tile clear of the scripted pile tiles on this map")
+	}
+
+	genesis := func() *State {
+		s := NewState(seed, m)
+		// Quiet the crowd to the scripted cast (0,1,2,3,4); agent 6's tile hosts
+		// the rot pile, so it is dead too.
+		s.Agents[5].Dead = true
+		s.Agents[6].Dead = true
+		s.Agents[7].Dead = true
+		// Agent 0: owner/builder — stands on the build tile, holds planks for the
+		// chest (6) plus wood to deposit and fetch back.
+		a0 := &s.Agents[0]
+		a0.X, a0.Y = bx, by
+		a0.Inv = Inventory{Planks: 8, Wood: 6}
+		// Agent 1: the thief — co-located with the genesis chest C1.
+		s.Agents[1].Inv = Inventory{}
+		// Agent 4: a living, awake witness co-located with C1 (distance 0 ≤
+		// witnessRadius), so the theft batch includes a witness memory.
+		s.Agents[4].Dead = false
+		s.Agents[4].X, s.Agents[4].Y = t1x, t1y
+		// Agent 2: dropper/picker on its own tile.
+		s.Agents[2].Inv = Inventory{Wood: 8}
+		// Agent 3: dies carrying goods → a death-spill pile (spears riding along).
+		s.Agents[3].Inv = Inventory{Wood: 5, FoodRaw: 2, Spears: []int{2}}
+		// C1: a genesis chest owned by agent 0, on the thief's tile, stocked so a
+		// non-owner withdrawal is a real theft.
+		s.Structures = append(s.Structures, Structure{
+			Kind: "chest", X: t1x, Y: t1y, Owner: 0, Store: &Inventory{Wood: 10},
+		})
+		// A ground food batch stamped to spoil early (tick 60), on the dead
+		// agent 6's tile, so the per-game-minute rot sweep fires within the run.
+		s.Piles = []Pile{{X: t6x, Y: t6y, Food: []FoodBatch{{Kind: "food_raw", N: 4, SpoilAt: 60}}}}
+		return s
+	}
+
+	pl := func(v any) []byte { return mustPayload(v) }
+	commands := map[int64][]store.Event{
+		30: {
+			// Agent 0 builds the live chest C2 (fire-comparable duration).
+			{Tick: 30, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+				Agent: 0, Goal: "build_chest", TargetX: bx, TargetY: by, Source: "planner"})},
+			// Agent 2 drops 4 wood onto its tile → a ground pile.
+			{Tick: 30, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+				Agent: 2, Goal: "drop", TargetX: t2x, TargetY: t2y, Kind: "wood", Qty: 4, Source: "planner"})},
+			// Agent 1 (non-owner) withdraws from C1 → theft companion batch.
+			{Tick: 30, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+				Agent: 1, Goal: "withdraw", TargetX: t1x, TargetY: t1y, Kind: "wood", Qty: 3, Source: "planner"})},
+		},
+		// Agent 2 picks the wood back up (< 120 ticks after the drop).
+		90: {{Tick: 90, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+			Agent: 2, Goal: "pick_up", TargetX: t2x, TargetY: t2y, Kind: "wood", Source: "planner"})}},
+		// Agent 3 dies with goods → death spill.
+		100: {{Tick: 100, Type: "agent.died", Payload: pl(DiedPayload{Agent: 3, Cause: "starvation"})}},
+		// Owner deposits into C2, then fetches from it (own chest → no social).
+		700: {{Tick: 700, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+			Agent: 0, Goal: "deposit", TargetX: bx, TargetY: by, Kind: "wood", Qty: 3, Source: "planner"})}},
+		760: {{Tick: 760, Type: "agent.intent_set", Payload: pl(IntentSetPayload{
+			Agent: 0, Goal: "withdraw", TargetX: bx, TargetY: by, Kind: "wood", Qty: 2, Source: "planner"})}},
+	}
+
+	const ticks = 900
+	live := genesis()
+	log := driveTicks(t, live, m, ticks, commands)
+
+	// Every new 013 event type actually occurred, and the two withdrawal shapes
+	// (owner fetch vs. non-owner theft) are both present.
+	seen := map[string]bool{}
+	builtKinds := map[string]bool{}
+	var withdrewOwnerFetch, withdrewTheft, sawTheftReason bool
+	for _, e := range log {
+		seen[e.Type] = true
+		switch e.Type {
+		case "agent.built":
+			var p BuiltPayload
+			mustUnmarshal(t, e.Payload, &p)
+			builtKinds[p.Kind] = true
+		case "agent.withdrew":
+			var p WithdrewPayload
+			mustUnmarshal(t, e.Payload, &p)
+			if p.Agent == p.Owner {
+				withdrewOwnerFetch = true
+			} else {
+				withdrewTheft = true
+			}
+		case "social.relation_changed":
+			var p RelationChangedPayload
+			mustUnmarshal(t, e.Payload, &p)
+			if p.Reason == "theft" {
+				sawTheftReason = true
+			}
+		}
+	}
+	required := []string{
+		"agent.dropped", "agent.picked_up", "agent.deposited", "agent.withdrew",
+		"social.chest_taken", "sim.food_rotted", "agent.built",
+		"agent.memory_added", "social.relation_changed",
+	}
+	for _, typ := range required {
+		if !seen[typ] {
+			t.Errorf("required event type %q never occurred in the scripted storage run", typ)
+		}
+	}
+	if !builtKinds["chest"] {
+		t.Error("agent.built never occurred with kind \"chest\"")
+	}
+	if !withdrewOwnerFetch {
+		t.Error("no owner self-fetch agent.withdrew (agent == owner) occurred")
+	}
+	if !withdrewTheft {
+		t.Error("no non-owner theft agent.withdrew (agent != owner) occurred")
+	}
+	if !sawTheftReason {
+		t.Error("no reason-\"theft\" social.relation_changed occurred in the companion batch")
+	}
+	if !live.Agents[3].Dead || live.pileAt(t3x, t3y) == nil {
+		t.Error("agent 3's death did not leave a spill pile at its tile")
+	}
+
+	// Replay the log over a fresh genesis, re-live the quiet tail, compare hashes
+	// (SC-005): byte-identical including piles, chests, owners, and rot deadlines.
+	replay := genesis()
+	for _, e := range log {
+		if err := replay.Apply(e); err != nil {
+			t.Fatalf("replay apply %s: %v", e.Type, err)
+		}
+		replay.Tick = e.Tick
+	}
+	driveTicks(t, replay, m, ticks, nil)
+	if live.Hash() != replay.Hash() {
+		t.Fatalf("storage replay diverged:\nlive:     %s\nreplayed: %s",
+			string(live.Marshal()), string(replay.Marshal()))
+	}
+}
+
+// TestStorageEventsNoOpUnderUnknownConvention is the SC-005 forward-compat clause
+// (T038): every new 013 event type no-ops under pre-feature replay code. A
+// pre-013 reducer has no case for these types, so — by the reducer's unknown-type
+// convention (Apply's switch has no default; an unmatched type returns nil,
+// mutating nothing, exactly like daemon.* and foreign migration records) — each
+// is recorded history with zero state effect. We can't instantiate the retired
+// reducer, so we mirror the convention faithfully: feed each new-013 payload
+// under a type string the current switch does NOT recognize and assert the
+// reducer neither errors nor mutates, on a substrate where the real 013 case
+// WOULD have (a stocked chest, a pile, carried goods). That is precisely the
+// behavior old code exhibits for these types.
+func TestStorageEventsNoOpUnderUnknownConvention(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+
+	substrate := func() *State {
+		s := NewState(seed, m)
+		a := &s.Agents[0]
+		a.Inv = Inventory{Wood: 6, FoodRaw: 4}
+		s.Structures = append(s.Structures, Structure{
+			Kind: "chest", X: a.X, Y: a.Y, Owner: 1, Store: &Inventory{Wood: 8},
+		})
+		s.Piles = []Pile{{X: a.X, Y: a.Y, Wood: 5, Food: []FoodBatch{{Kind: "food_raw", N: 3, SpoilAt: 60}}}}
+		return s
+	}
+
+	x, y := substrate().Agents[0].X, substrate().Agents[0].Y
+	cases := []struct {
+		typ     string
+		payload any
+	}{
+		{"agent.dropped", DroppedPayload{Agent: 0, X: x, Y: y, Kind: "wood", N: 3}},
+		{"agent.picked_up", PickedUpPayload{Agent: 0, X: x, Y: y, Kind: "wood", N: 3}},
+		{"agent.deposited", DepositedPayload{Agent: 0, X: x, Y: y, Kind: "wood", N: 3}},
+		{"agent.withdrew", WithdrewPayload{Agent: 0, X: x, Y: y, Kind: "wood", N: 3, Owner: 1}},
+		{"social.chest_taken", ChestTakenPayload{Owner: 1, Taker: 0, X: x, Y: y}},
+		{"sim.food_rotted", FoodRottedPayload{X: x, Y: y, Kind: "food_raw", N: 3}},
+	}
+	for _, c := range cases {
+		s := substrate()
+		before := s.Hash()
+		// "unknown:" prefix ⇒ the switch does not match, exactly as a pre-013
+		// reducer sees these type names: fall through to the total no-op.
+		e := store.Event{Tick: 61, Type: "unknown:" + c.typ, Payload: mustPayload(c.payload)}
+		if err := s.Apply(e); err != nil {
+			t.Errorf("%s under the unknown-type convention errored, want a total no-op: %v", c.typ, err)
+		}
+		if s.Hash() != before {
+			t.Errorf("%s under the unknown-type convention mutated state, want a total no-op", c.typ)
+		}
+	}
+}
