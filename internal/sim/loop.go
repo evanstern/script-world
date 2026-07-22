@@ -11,6 +11,7 @@ import (
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -520,8 +521,14 @@ func (l *Loop) handleCommand(cmd command) error {
 				reject(OutcomeRejectedGuard, fmt.Sprintf("plan has %d steps (cap %d)", len(in.Plan), PlanStepCap))
 				break
 			}
+			// The plan-step accept set is DERIVED from the tool registry
+			// (spec 014, FR-006): names carrying PlanStep == true. This cures
+			// the shipped drift (FR-012 / TASK-55) — the 9 spec-012 verbs the
+			// old hand-maintained plan map dropped are now accepted, the sole
+			// permitted behavioral delta.
+			planStepGoals := tool.PlanStepGoals()
 			for si := range in.Plan {
-				if !planGoals[in.Plan[si].Goal] {
+				if !planStepGoals[in.Plan[si].Goal] {
 					reject(OutcomeRejectedGuard, fmt.Sprintf("plan step %d: unknown goal %q", si, in.Plan[si].Goal))
 					break
 				}

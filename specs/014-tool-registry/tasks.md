@@ -51,15 +51,15 @@ from the registry; duplicate maps die; adding a tool touches ≤2 sites.
 derived surfaces with zero other edits; grep finds no duplicate maps; golden prompt
 unchanged; drift-cure test passes.
 
-- [ ] T011 [US1] Derive the prompt: replace `goalVocabulary` const and gloss prose in `internal/mind/prompt.go` with `tool.VocabularyLine()` / `tool.PromptGlossBlock()`; `prompt_golden_test.go` fixture must pass UNCHANGED (SC-003)
-- [ ] T012 [US1] Derive mind parse validation: replace `validGoals` map in `internal/mind/parse.go` with `tool.WorldGoals()` (accept set identical — FR-005)
-- [ ] T013 [US1] Derive the sim door: in `internal/sim/loop.go` validate plan steps via `tool.PlanStepGoals()` and single goals via registry membership; delete `planGoals` from `internal/sim/plan.go`; generation/staleness/guard rungs byte-untouched (FR-006, FR-014)
-- [ ] T014 [US1] Table-ize durations: replace `intentDuration` switch in `internal/sim/agents.go` with a table built from `tool.All()` Cost.DurationTicks at init; `workDuration` context overrides in `internal/sim/executor.go` untouched (R2, R7)
-- [ ] T015 [US1] Table-ize goal resolution: restructure `resolveGoal` switch in `internal/sim/policy.go` into a name-keyed resolver table with identical per-verb semantics; `decideIntent` (reflex ladder) untouched (R2)
-- [ ] T016 [US1] Create `internal/sim/toolcheck.go`: startup coverage check — every World tool on a roster has a resolver-table entry and a duration; wire `tool.Validate()` + this check into daemon boot in `internal/daemon` (error aborts boot, FR-003/R9)
-- [ ] T017 [P] [US1] Test-only-tool exercise in `internal/sim/toolreg_test.go` (or `internal/tool` export_test pattern): a tool registered only in the test appears in VocabularyLine/WorldGoals/PlanStepGoals and is accepted at the door; removing it removes it everywhere (US1 acceptance scenario 4, SC-001)
-- [ ] T018 [P] [US1] Drift-cure test `TestPlanStepVocabulary` in `internal/sim/plan_test.go`: plan steps naming each of the 9 spec-012 verbs are ACCEPTED at the door and execute; documents FR-012 as the sole delta (TASK-55 AC #1)
-- [ ] T019 [US1] Dead-map sweep: `grep -rn "goalVocabulary\|validGoals\|planGoals" internal/` returns nothing in non-test code (SC-004, quickstart step 2); fix any stragglers
+- [X] T011 [US1] Derive the prompt: replace `goalVocabulary` const and gloss prose in `internal/mind/prompt.go` with `tool.VocabularyLine()` / `tool.PromptGlossBlock()`; `prompt_golden_test.go` fixture must pass UNCHANGED (SC-003)
+- [X] T012 [US1] Derive mind parse validation: replace `validGoals` map in `internal/mind/parse.go` with `tool.WorldGoals()` (accept set identical — FR-005)
+- [X] T013 [US1] Derive the sim door: in `internal/sim/loop.go` validate plan steps via `tool.PlanStepGoals()` and single goals via registry membership; delete `planGoals` from `internal/sim/plan.go`; generation/staleness/guard rungs byte-untouched (FR-006, FR-014)
+- [X] T014 [US1] Table-ize durations: replace `intentDuration` switch in `internal/sim/agents.go` with a table built from `tool.All()` Cost.DurationTicks at init; `workDuration` context overrides in `internal/sim/executor.go` untouched (R2, R7)
+- [X] T015 [US1] Table-ize goal resolution: restructure `resolveGoal` switch in `internal/sim/policy.go` into a name-keyed resolver table with identical per-verb semantics; `decideIntent` (reflex ladder) untouched (R2)
+- [X] T016 [US1] Create `internal/sim/toolcheck.go`: startup coverage check — every World tool on a roster has a resolver-table entry and a duration; wire `tool.Validate()` + this check into daemon boot in `internal/daemon` (error aborts boot, FR-003/R9)
+- [X] T017 [P] [US1] Test-only-tool exercise in `internal/sim/toolreg_test.go` (or `internal/tool` export_test pattern): a tool registered only in the test appears in VocabularyLine/WorldGoals/PlanStepGoals and is accepted at the door; removing it removes it everywhere (US1 acceptance scenario 4, SC-001)
+- [X] T018 [P] [US1] Drift-cure test `TestPlanStepVocabulary` in `internal/sim/plan_test.go`: plan steps naming each of the 9 spec-012 verbs are ACCEPTED at the door and execute; documents FR-012 as the sole delta (TASK-55 AC #1)
+- [X] T019 [US1] Dead-map sweep: `grep -rn "goalVocabulary\|validGoals\|planGoals" internal/` returns nothing in non-test code (SC-004, quickstart step 2); fix any stragglers
 
 **Checkpoint**: `go test ./...` green; golden prompt unchanged; US1 fully demonstrable.
 

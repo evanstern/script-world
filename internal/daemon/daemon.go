@@ -25,6 +25,7 @@ import (
 	"github.com/evanstern/promptworld/internal/scribe"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 	"github.com/evanstern/promptworld/internal/world"
 	"github.com/evanstern/promptworld/internal/worlds"
 )
@@ -33,6 +34,16 @@ import (
 // SIGTERM/SIGINT or a shutdown command, then snapshot and exit cleanly.
 func Run(dir string) error {
 	startWall := time.Now()
+
+	// Tool registry gate (spec 014, FR-003/R9): a malformed registry or roster,
+	// or a world tool missing its sim resolver/duration, aborts boot before the
+	// world runs — never at tick time. World-independent, so it runs first.
+	if err := tool.Validate(); err != nil {
+		return fmt.Errorf("tool registry invalid: %w", err)
+	}
+	if err := sim.ValidateToolCoverage(); err != nil {
+		return fmt.Errorf("tool registry coverage: %w", err)
+	}
 
 	w, err := world.Open(dir)
 	if err != nil {

@@ -34,18 +34,11 @@ type PlanStep struct {
 	Qty  int    `json:"qty,omitempty"`
 }
 
-// planGoals mirrors the planner goal vocabulary — the loop validates plan
-// steps against it at the door so garbage never enters state.
-var planGoals = map[string]bool{
-	"forage": true, "chop": true, "hunt": true,
-	"build_fire": true, "build_shelter": true,
-	"eat": true, "sleep": true, "wander": true,
-	"goto_warmth": true, "talk_to": true,
-	// Storage goals (spec 013 US2/US3, FR-014): planner/plan-only — never in the
-	// reflex ladder.
-	"drop": true, "pick_up": true,
-	"build_chest": true, "deposit": true, "withdraw": true,
-}
+// The hand-maintained plan-step accept map that once lived here is gone: the
+// loop now validates plan steps against tool.PlanStepGoals(), derived from the
+// tool registry (spec 014, FR-006). That cures the shipped drift the old map
+// carried — it admitted only 15 of the vocabulary's verbs, silently rejecting
+// the 9 spec-012 verbs as plan steps (FR-012 / TASK-55).
 
 // PlanSetPayload — agent.plan_set (loop-emitted on a plan landing).
 type PlanSetPayload struct {

@@ -1,7 +1,7 @@
 package tool
 
 // registry is the authoritative collection of every tool, in registration
-// order. The world tools come first, in exactly today's goalVocabulary order
+// order. The world tools come first, in exactly today's goal-vocabulary order
 // (internal/mind/prompt.go) — that order is the byte-identity anchor for the
 // derived prompt string (SC-003, R3). The expressive tools and the metatron
 // tools follow.
@@ -45,7 +45,7 @@ const (
 // table (agents.go) derives from these. Context overrides (spear hunt, oven
 // cook) stay in the executor's workDuration and are not registry data (R7).
 var registry = []Tool{
-	// --- World tools (villager roster; goalVocabulary order) ---
+	// --- World tools (villager roster; goal-vocabulary order) ---
 	{Name: "forage", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 120}, PlanStep: true, ReflexEligible: true},
 	{Name: "chop", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, ReflexEligible: true},
 	{Name: "hunt", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, ReflexEligible: true},
