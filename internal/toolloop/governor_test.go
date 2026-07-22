@@ -29,11 +29,80 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/tool"
 )
+
+// preSeededMeter reports a spend already over budget for every plausible month
+// key, so the FIRST cloud Submit is refused with ErrBudgetExhausted before any
+// HTTP — a loop that does zero completed model work.
+type preSeededMeter struct{ m map[string]string }
+
+func newExhaustedMeter() *preSeededMeter {
+	now := time.Now().UTC()
+	m := map[string]string{}
+	for _, mo := range []time.Time{now.AddDate(0, -1, 0), now, now.AddDate(0, 1, 0)} {
+		m["llm_spend_"+mo.Format("2006-01")] = "9999"
+	}
+	return &preSeededMeter{m: m}
+}
+
+func (s *preSeededMeter) GetMeta(key string) (string, error) { return s.m[key], nil }
+func (s *preSeededMeter) SetMeta(key, value string) error    { s.m[key] = value; return nil }
+
+// TestRefusedLoopDoesNotFeedEstimatorSC004b (spec 017 T025b, FILED-1): the
+// estimator's feed is SUCCESSES-ONLY, mirroring the worker path's doctrine
+// (internal/llm/llm.go: "a fast failure is not a latency observation of
+// completed thought"). A loop refused before any HTTP (budget exhausted →
+// admission_refused, zero rounds, zero completed thought) must feed NOTHING, so
+// the tier estimate stays at its bootstrap. Before the fix, the loop's defer
+// fed ObserveCognition on every return path, dragging cloud sec/pt 10.0 → 8.0
+// on a cognition that did no work — a governor-truthfulness skew that collapses
+// the estimate toward zero under sustained refusal.
+func TestRefusedLoopDoesNotFeedEstimatorSC004b(t *testing.T) {
+	cfg := llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: "http://unused", Model: "unused"},
+		Cloud:            llm.CloudConfig{Provider: llm.ProviderOpenAICompat, Endpoint: "http://unused", Model: "unused"},
+	}
+	orch, err := llm.New(cfg, newExhaustedMeter())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer orch.Close()
+
+	before := orch.SecondsPerPoint(llm.TierCloud)
+	if math.Abs(before-cognition.BootstrapCloudSecPerPt) > 1e-9 {
+		t.Fatalf("pre-run cloud estimate = %g, want bootstrap %g", before, cognition.BootstrapCloudSecPerPt)
+	}
+
+	// A metatron cognition routes to cloud; the budget is exhausted, so the
+	// first Submit is refused before any HTTP — the loop did zero work.
+	res, rerr := Run(context.Background(), orch, Job{
+		JobID:     "metatron-0-1",
+		Kind:      llm.KindMetatron,
+		System:    "s",
+		Seed:      "hi",
+		Roster:    []tool.Tool{lookup(t, "forage")},
+		Handlers:  map[string]Handler{"forage": landHandler("ok")},
+		MaxRounds: 8,
+	})
+	if res.Term != TermAdmissionRefused || rerr == nil {
+		t.Fatalf("term = %q err = %v, want admission_refused / budget error", res.Term, rerr)
+	}
+	if res.Rounds != 0 {
+		t.Fatalf("rounds = %d, want 0 (refused before any completed round)", res.Rounds)
+	}
+
+	after := orch.SecondsPerPoint(llm.TierCloud)
+	if math.Abs(after-before) > 1e-9 {
+		t.Errorf("a refused loop (zero completed work) moved cloud sec/pt %g → %g; "+
+			"the estimator feed must be successes-only (landed/model_done/cap_exhausted)", before, after)
+	}
+}
 
 // TestWholeLoopFeedsEstimatorOnceSC004 drives a real orchestrator through a
 // two-round loop (read → act) and reads the tier's live seconds-per-point to

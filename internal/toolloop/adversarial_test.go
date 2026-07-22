@@ -114,7 +114,8 @@ func TestHandlerLandsButErrors(t *testing.T) {
 	if !eqVerdicts(h.verdicts(), VerdictUnlanded) {
 		t.Errorf("verdicts = %v, want [unlanded]", h.verdicts())
 	}
-	h.assertObservedOnce(t)
+	// provider_error is a failure termination — successes-only feed (T025b).
+	h.assertNotObserved(t)
 }
 
 // --- Invariant 4: cap off-by-one and mixed final-round batch ---

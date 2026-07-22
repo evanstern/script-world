@@ -139,12 +139,23 @@ func driveCtx(t *testing.T, ctx context.Context, maxRounds int, roster []tool.To
 	return h
 }
 
-// assertObservedOnce is the item-11 pin applied to every path: exactly one
-// whole-loop observation per Run.
+// assertObservedOnce pins the successes-only feed (T025b): a COMPLETED
+// termination (landed / model_done / cap_exhausted) feeds the estimator exactly
+// once. Failure terminations feed nothing — see assertNotObserved.
 func (h *harness) assertObservedOnce(t *testing.T) {
 	t.Helper()
 	if len(h.orch.observes) != 1 {
-		t.Errorf("ObserveCognition called %d times, want exactly 1", len(h.orch.observes))
+		t.Errorf("ObserveCognition called %d times, want exactly 1 (completed termination)", len(h.orch.observes))
+	}
+}
+
+// assertNotObserved pins the other half of the successes-only rule: a failure
+// termination (admission_refused / provider_error / ctx_done) did no completed
+// model work and must NOT feed the estimator, so it cannot skew the EWMA.
+func (h *harness) assertNotObserved(t *testing.T) {
+	t.Helper()
+	if len(h.orch.observes) != 0 {
+		t.Errorf("ObserveCognition called %d times on a failure path, want 0 (successes-only feed)", len(h.orch.observes))
 	}
 }
 
@@ -404,7 +415,7 @@ func TestAdmissionRefusedMidLoop(t *testing.T) {
 	if !eqVerdicts(h.verdicts(), VerdictReadOK) {
 		t.Errorf("verdicts = %v, want [read_ok]", h.verdicts())
 	}
-	h.assertObservedOnce(t)
+	h.assertNotObserved(t)
 }
 
 // (8a) A generic Submit failure terminates provider_error.
@@ -423,7 +434,7 @@ func TestProviderErrorFromSubmit(t *testing.T) {
 	if h.res.Rounds != 0 || len(h.recs) != 0 {
 		t.Errorf("rounds = %d recs = %d, want 0/0", h.res.Rounds, len(h.recs))
 	}
-	h.assertObservedOnce(t)
+	h.assertNotObserved(t)
 }
 
 // (8b) A handler infrastructure failure (not a rejection) terminates
@@ -449,7 +460,7 @@ func TestProviderErrorFromHandler(t *testing.T) {
 	if h.recs[0].Reason != down.Error() {
 		t.Errorf("failing call reason = %q, want the infra error", h.recs[0].Reason)
 	}
-	h.assertObservedOnce(t)
+	h.assertNotObserved(t)
 }
 
 // (9) Context cancellation between rounds terminates ctx_done.
@@ -478,7 +489,7 @@ func TestContextCancelled(t *testing.T) {
 	if !eqVerdicts(h.verdicts(), VerdictReadOK) {
 		t.Errorf("verdicts = %v, want [read_ok]", h.verdicts())
 	}
-	h.assertObservedOnce(t)
+	h.assertNotObserved(t)
 }
 
 // (10) Transcript invariant: after N rounds the transcript holds exactly N

@@ -100,22 +100,34 @@ type submitter interface {
 // terminates within MaxRounds provider rounds; at most one acting call lands;
 // every model tool call yields exactly one CallRecord via j.Record (ordinals
 // 1-based, dense, emission-ordered); read-effect tools never consume the
-// action; SkipObserve rides every internal Submit; and exactly one
-// ObserveCognition report fires on every return path, carrying the whole-Run
-// wall time.
+// action; SkipObserve rides every internal Submit; and the governor estimator
+// is fed the whole-Run wall time on completed terminations only (successes-only:
+// landed / model_done / cap_exhausted), never on the failure family
+// (admission_refused / provider_error / ctx_done) — mirroring the worker path's
+// "a fast failure is not a latency observation of completed thought".
 func Run(ctx context.Context, orch *llm.Orchestrator, j Job) (Result, error) {
 	return run(ctx, orch, j)
 }
 
 func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 	start := time.Now()
-	// The whole-loop governor observation (data-model.md §8): exactly one
-	// report on every return path — success, cap, or error — carrying the
-	// summed wall time. Per-round Submits set SkipObserve so no fractional
-	// samples reach the estimator.
+	// The whole-loop governor observation (data-model.md §8): SUCCESSES-ONLY,
+	// mirroring the worker path's doctrine (internal/llm/llm.go — "a fast
+	// failure is not a latency observation of completed thought"). res.TotalMillis
+	// is always recorded (it is part of the Result), but the estimator is fed
+	// ONLY on a completed termination — landed / model_done / cap_exhausted, each
+	// of which measured completed model work (cap_exhausted did N full provider
+	// rounds). The failure family — admission_refused / provider_error / ctx_done —
+	// did no completed thought and feeds NOTHING, so a refused/errored loop cannot
+	// skew the EWMA toward zero. Per-round Submits set SkipObserve so no fractional
+	// samples reach the estimator either. This is a single exit-path mechanism, so
+	// it still fires at most once (never double-fires).
 	defer func() {
 		res.TotalMillis = time.Since(start).Milliseconds()
-		s.ObserveCognition(j.Kind, res.TotalMillis)
+		switch res.Term {
+		case TermLanded, TermModelDone, TermCapExhausted:
+			s.ObserveCognition(j.Kind, res.TotalMillis)
+		}
 	}()
 
 	// MaxRounds <= 0 is treated as 1 defensively; config (llm.Config.Rounds())
