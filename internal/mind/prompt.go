@@ -12,7 +12,7 @@ import (
 // system prefix (persona + instruction block — prompt-cache friendly) and a
 // variable user suffix (situation + the bounded working-memory window).
 
-const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water, cook, refuel_fire, craft_planks, craft_stone, craft_spear, build_oven, bathe, drop, pick_up"
+const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water, cook, refuel_fire, craft_planks, craft_stone, craft_spear, build_oven, bathe, drop, pick_up, build_chest, deposit, withdraw"
 
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
@@ -22,15 +22,16 @@ func systemPrompt(name, personaText string) string {
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, `You decide what %s does next. Reply with ONLY a JSON object:
-{"goal": "<goal>", "target": "<agent name, only for talk_to>", "kind": "<item kind, only for drop/pick_up>", "qty": <amount, only for drop/pick_up>, "reason": "<one short sentence in your voice>"}
+{"goal": "<goal>", "target": "<agent name, only for talk_to>", "kind": "<item kind, only for drop/pick_up/deposit/withdraw>", "qty": <amount, only for drop/pick_up/deposit/withdraw>, "reason": "<one short sentence in your voice>"}
 Goals: %s.
 quarry gathers stone from a rock outcrop; collect_water gathers water from a water tile.
 cook turns raw food into fire-cooked food (worth double) at a lit fire, or into meals (the best food) at an oven; refuel_fire feeds one wood to a fire to keep it burning (or relight a cold one).
 craft_planks turns 1 wood into 4 planks; craft_stone turns 1 stone into 1 refined stone; craft_spear needs 1 wood + 1 refined stone and makes a spear (breaks after 3 hunts) — all hand-crafted anywhere, no travel needed.
 build_oven needs 4 refined stone + 2 planks and lets you cook meals and bathe; bathe at an oven spends 1 water + 1 wood for warmth and morale.
 drop puts down goods where you stand, creating or adding to a ground pile there anyone can take from; pick_up takes from a pile on or next to you. Name what with "kind" (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, or spears) and how much with "qty" (omit or 0 = all of that kind); pick_up with no "kind" takes everything that fits.
+build_chest needs 6 planks; chests preserve food (it never rots there, unlike a ground pile) and you keep the chest permanently once built. deposit stores goods in the nearest chest — always name a "kind" or nothing moves; withdraw takes goods back out of the nearest chest that has them ("kind" omitted or empty takes everything that fits). Taking from another villager's chest is possible too, but they will remember who took it.
 For a short sequence instead, reply:
-{"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "kind": "<item kind, only for drop/pick_up>", "qty": <amount, only for drop/pick_up>, "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
+{"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "kind": "<item kind, only for drop/pick_up/deposit/withdraw>", "qty": <amount, only for drop/pick_up/deposit/withdraw>, "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
 At most %d steps; steps run in order, each waits for its time.
 `, name, goalVocabulary, planStepCap)
 	return b.String()

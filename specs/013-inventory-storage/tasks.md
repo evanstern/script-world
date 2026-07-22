@@ -99,8 +99,8 @@ chest food never spoils.
 - [X] T023 [US3] `build_chest` goal in `internal/sim/policy.go` (build_shelter pattern + pile-tile exclusion); `agent.built{kind: chest}` reducer case in `internal/sim/state.go` consumes `chestPlankCost` planks and adds the structure with `Owner = builder`, `Store = &Inventory{}`
 - [X] T024 [US3] `deposit` + `withdraw` goals in `internal/sim/policy.go` (nearest chest / nearest chest containing Kind, instant on arrival); executor completions truncate to chest space (`chestCap − bulk(*Store)`) / taker's free bulk and emit `agent.deposited`/`agent.withdrew` with actual counts in `internal/sim/executor.go`; reducer cases in `internal/sim/state.go`
 - [X] T025 [US3] Tests in `internal/sim`: build cost + permanent owner, deposit/withdraw truncation both sides, full-chest partial deposit (US3-AS4), chest food unaffected by any time passage (FR-010), spear durability round-trip through a chest, replay byte-identity over a chest run
-- [ ] T026 [P] [US3] TUI: chest glyph + contents/owner inspection in `internal/tui/views.go` (SC-006; Sonnet-ok)
-- [ ] T027 [P] [US3] Planner vocabulary: `build_chest`, `deposit`, `withdraw` + larder guidance in `internal/mind/prompt.go` (Sonnet-ok)
+- [X] T026 [P] [US3] TUI: chest glyph + contents/owner inspection in `internal/tui/views.go` (SC-006; Sonnet-ok)
+- [X] T027 [P] [US3] Planner vocabulary: `build_chest`, `deposit`, `withdraw` + larder guidance in `internal/mind/prompt.go` (Sonnet-ok)
 
 **Checkpoint**: ownership exists mechanically; the larder works.
 

@@ -346,6 +346,8 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
 			case "oven":
 				structures[[2]int{st.X, st.Y}] = styleOven.Render("▣")
+			case "chest":
+				structures[[2]int{st.X, st.Y}] = styleChest.Render("☐")
 			}
 		}
 		for _, q := range m.replica.Quarried {
@@ -462,10 +464,97 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 			pilesInfo = " · " + strings.Join(bits, " · ")
 		}
 	}
+	// Chest inspection (spec 013 T026, SC-006): chests currently in view get
+	// an owner + contents entry appended to the same legend line, following
+	// the pile inspection precedent above (T021) — the map panel's one
+	// designated inspection surface, content grows the line rather than
+	// adding a second row.
+	chestsInfo := ""
+	if m.replica != nil {
+		var visible []sim.Structure
+		for _, st := range m.replica.Structures {
+			if st.Kind != "chest" {
+				continue
+			}
+			if st.X >= x0 && st.X < x0+vw && st.Y >= y0 && st.Y < y0+vh {
+				visible = append(visible, st)
+			}
+		}
+		if len(visible) > 0 {
+			names := m.agentNames()
+			var bits []string
+			for _, ch := range visible {
+				bits = append(bits, describeChest(ch, names))
+			}
+			chestsInfo = " · " + strings.Join(bits, " · ")
+		}
+	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s",
-		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H, pilesInfo))
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
+		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H, pilesInfo, chestsInfo))
 	return grid, legend
+}
+
+// chestCapDisplay mirrors internal/sim's private chestCap (spec 013
+// data-model.md: per-chest stored bulk ceiling, 48) for the TUI's fullness
+// hint. Not exported from internal/sim by this task (T026 is TUI-only, no
+// internal/sim edits) — the same "mirrored, single source of truth stays in
+// sim" caveat as BulkCap/Bulk applies in spirit, but this constant is
+// display-only and never used to clamp or gate anything, so a private
+// mirror is safe here.
+const chestCapDisplay = 48
+
+// describeChest renders one chest's inspection entry (spec 013 T026,
+// SC-006): "chest(x,y) [Owner] <contents> <bulk>/<cap>" — owner resolved to
+// the agent's Name via the same agentName helper the chronicle grammar uses
+// (grammar.go), contents via summarizeInventoryContents (mirroring the pile
+// zone summary's "non-food counts + food batch totals" shape, T021), and a
+// fullness hint so "is the chest full" is answerable without opening state.
+func describeChest(ch sim.Structure, names []string) string {
+	owner := agentName(names, ch.Owner)
+	contents := "empty"
+	full := 0
+	if ch.Store != nil {
+		full = sim.Bulk(*ch.Store)
+		contents = summarizeInventoryContents(*ch.Store)
+	}
+	return fmt.Sprintf("chest(%d,%d) [%s] %s %d/%d", ch.X, ch.Y, owner, contents, full, chestCapDisplay)
+}
+
+// summarizeInventoryContents renders a chest's Store the same way
+// summarizePileContents renders a pile's aggregate contents (T021): each
+// non-zero resource count, a spear count, and the food triplet as one
+// "food Nr/Nc/Nm" entry when any food is held. A chest's Store is a plain
+// sim.Inventory (counts, not FoodBatch — chests preserve food forever, no
+// spoilage deadlines to track, FR-010), so this reads the counts directly
+// rather than summing batches.
+func summarizeInventoryContents(inv sim.Inventory) string {
+	var parts []string
+	if inv.Wood > 0 {
+		parts = append(parts, fmt.Sprintf("%dw", inv.Wood))
+	}
+	if inv.Stone > 0 {
+		parts = append(parts, fmt.Sprintf("%dst", inv.Stone))
+	}
+	if inv.Water > 0 {
+		parts = append(parts, fmt.Sprintf("%dwt", inv.Water))
+	}
+	if inv.Planks > 0 {
+		parts = append(parts, fmt.Sprintf("%dpl", inv.Planks))
+	}
+	if inv.RefinedStone > 0 {
+		parts = append(parts, fmt.Sprintf("%drs", inv.RefinedStone))
+	}
+	if n := len(inv.Spears); n > 0 {
+		parts = append(parts, fmt.Sprintf("%dspear", n))
+	}
+	if inv.FoodRaw+inv.FoodCooked+inv.Meals > 0 {
+		parts = append(parts, fmt.Sprintf("food %dr/%dc/%dm", inv.FoodRaw, inv.FoodCooked, inv.Meals))
+	}
+	if len(parts) == 0 {
+		return "empty"
+	}
+	return strings.Join(parts, " ")
 }
 
 // pileZones groups piles into stockpile zones by 4-neighbor Manhattan
@@ -609,7 +698,13 @@ var (
 	// reads as "cache" without colliding with fire's orange (208), oven's
 	// burnt orange (166), or shelter's brown (130).
 	stylePile = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("178"))
-	styleGru  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	// Chest (spec 013 US3): "☐" (empty box) reads as a container distinct
+	// from every existing glyph — unlike a pile's loose "%", a chest is a
+	// built structure with a lid. Dark goldenrod (136) sits between pile's
+	// tan (178) and shelter's brown (130) without matching either, so a
+	// chest never gets mistaken for a stockpile or a house at a glance.
+	styleChest = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("136"))
+	styleGru   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView is the narrow-fallback map pane: today's vw/vh formula,

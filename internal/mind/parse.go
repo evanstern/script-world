@@ -52,29 +52,37 @@ var validGoals = map[string]bool{
 	// spec 013 (US2): drop/pick_up — planner/plan-only, never reflex-chosen
 	// (FR-014), mirroring internal/sim/plan.go's planGoals.
 	"drop": true, "pick_up": true,
+	// spec 013 (US3): build_chest/deposit/withdraw — planner/plan-only,
+	// never reflex-chosen, mirroring internal/sim/plan.go's planGoals.
+	"build_chest": true, "deposit": true, "withdraw": true,
 }
 
-// validKinds are the inventory item keys drop/pick_up accept as Kind —
-// exactly internal/sim's canonicalKinds (internal/sim/agents.go), the set
-// the executor actually reads counts by ("spears" plural: durability lives
-// in the slice, there is no singular "spear" field). "" is valid too: for
-// pick_up it means every kind (canonical order); for drop the executor
-// resolves an empty Kind to a no-op (agent.intent_done, no pile touched) —
-// not a parse-time error either way.
+// validKinds are the inventory item keys drop/pick_up/deposit/withdraw
+// accept as Kind — exactly internal/sim's canonicalKinds
+// (internal/sim/agents.go), the set the executor actually reads counts by
+// ("spears" plural: durability lives in the slice, there is no singular
+// "spear" field). "" is valid too: for pick_up/withdraw it means every kind
+// (canonical order); for drop/deposit the executor resolves an empty Kind
+// to a no-op (agent.intent_done, no pile/chest touched) — not a parse-time
+// error either way (the deposit-needs-a-kind rule is carried as prompt
+// guidance, not parser rejection — see prompt.go).
 var validKinds = map[string]bool{
 	"": true,
 	"wood": true, "stone": true, "water": true, "planks": true, "refined_stone": true,
 	"food_raw": true, "food_cooked": true, "meals": true, "spears": true,
 }
 
-// validateKindQty normalizes and validates a drop/pick_up step's Kind/Qty
-// against what the sim executor actually accepts (canonicalKinds) — the
-// same "reject unknown at the door" discipline validGoals applies to goal
-// strings, so a malformed kind never reaches InjectIntent. Only drop/
-// pick_up carry a Kind; every other goal's Kind/Qty are ignored (zero-value
-// from a model that didn't emit them).
+// validateKindQty normalizes and validates a drop/pick_up/deposit/withdraw
+// step's Kind/Qty against what the sim executor actually accepts
+// (canonicalKinds) — the same "reject unknown at the door" discipline
+// validGoals applies to goal strings, so a malformed kind never reaches
+// InjectIntent. build_chest takes no Kind/Qty (like every other goal not
+// listed here): its Kind/Qty are ignored (zero-value from a model that
+// didn't emit them).
 func validateKindQty(goal, kind string, qty int) (string, error) {
-	if goal != "drop" && goal != "pick_up" {
+	switch goal {
+	case "drop", "pick_up", "deposit", "withdraw":
+	default:
 		return kind, nil
 	}
 	kind = strings.ToLower(strings.TrimSpace(kind))
