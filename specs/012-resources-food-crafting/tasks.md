@@ -86,10 +86,10 @@ TASK-50 at each dispatch.
 
 **Independent test**: craft planks → refined stone → spear; hunt with spear (12 yield, 600 ticks, use spent); third hunt breaks it with a memory.
 
-- [ ] T026 [US3] Hand-craft goals `craft_planks, craft_stone, craft_spear` in `internal/sim/policy.go` (target = current tile) + durations; executor completion re-validates inputs via the recipes table and emits `agent.crafted{agent, kind}`; reducer applies recipe deltas (spear appends 3 uses to `Spears`, sorted)
-- [ ] T027 [US3] Spear-aware hunting in `internal/sim/executor.go` + `internal/sim/state.go`: carrying a spear ⇒ hunt duration 600 and yield 12; completion spends `Spears[0]`; last use co-emits `agent.spear_broke{agent}` + high-salience memory entry in `internal/sim/memory.go`
-- [ ] T028 [US3] Tests in `internal/sim`: recipe re-validation (insufficient inputs ⇒ no event), spend-lowest ordering, break-at-zero with memory, bare-vs-spear hunt parameters, replay byte-identity over a craft+hunt run
-- [ ] T029 [P] [US3] Planner vocabulary: `craft_planks, craft_stone, craft_spear` + chain guidance ("planks from wood; spear needs wood + refined stone") in `internal/mind/prompt.go`
+- [X] T026 [US3] Hand-craft goals `craft_planks, craft_stone, craft_spear` in `internal/sim/policy.go` (target = current tile) + durations; executor completion re-validates inputs via the recipes table and emits `agent.crafted{agent, kind}`; reducer applies recipe deltas (spear appends 3 uses to `Spears`, sorted)
+- [X] T027 [US3] Spear-aware hunting in `internal/sim/executor.go` + `internal/sim/state.go`: carrying a spear ⇒ hunt duration 600 and yield 12; completion spends `Spears[0]`; last use co-emits `agent.spear_broke{agent}` + high-salience memory entry in `internal/sim/memory.go`
+- [X] T028 [US3] Tests in `internal/sim`: recipe re-validation (insufficient inputs ⇒ no event), spend-lowest ordering, break-at-zero with memory, bare-vs-spear hunt parameters, replay byte-identity over a craft+hunt run
+- [X] T029 [P] [US3] Planner vocabulary: `craft_planks, craft_stone, craft_spear` + chain guidance ("planks from wood; spear needs wood + refined stone") in `internal/mind/prompt.go`
 
 **Checkpoint**: two-step chain proven end to end.
 
@@ -101,12 +101,12 @@ TASK-50 at each dispatch.
 
 **Independent test**: build oven from 4 refined stone + 2 planks; cook batch (1 wood + ≤8 raw → meals); bathe (1 water + 1 wood → +150 morale/+300 warmth absolute); no wood ⇒ no effect.
 
-- [ ] T030 [US4] `build_oven` goal (build_shelter pattern, duration 900) in `internal/sim/policy.go`; `agent.built{kind: oven}` reducer case consumes 4 RefinedStone + 2 Planks and adds the structure
-- [ ] T031 [US4] Oven cooking: extend `cook` resolution to prefer/accept ovens (station from target structure), duration 360, completion consumes 1 Wood fuel + ≤8 FoodRaw → Meals via `agent.cooked{station: oven, kind: meals}`; fuel-absent ⇒ no-effect resolution
-- [ ] T032 [US4] `bathe` goal at oven (duration 240): completion consumes 1 Water + 1 Wood, emits `agent.bathed{agent, morale_after, warmth_after}` (absolute, capped) + positive-tone memory entry in `internal/sim/memory.go`; oven-built high-salience memory too
-- [ ] T033 [US4] Tests in `internal/sim`: oven build costs, meal batch, bath effects absolute/capped, no-fuel no-ops for both batch actions, replay byte-identity over an oven run
-- [ ] T034 [P] [US4] TUI: oven glyph in `internal/tui/views.go`
-- [ ] T035 [P] [US4] Planner vocabulary: `build_oven, bathe` + guidance in `internal/mind/prompt.go`
+- [X] T030 [US4] `build_oven` goal (build_shelter pattern, duration 900) in `internal/sim/policy.go`; `agent.built{kind: oven}` reducer case consumes 4 RefinedStone + 2 Planks and adds the structure
+- [X] T031 [US4] Oven cooking: extend `cook` resolution to prefer/accept ovens (station from target structure), duration 360, completion consumes 1 Wood fuel + ≤8 FoodRaw → Meals via `agent.cooked{station: oven, kind: meals}`; fuel-absent ⇒ no-effect resolution
+- [X] T032 [US4] `bathe` goal at oven (duration 240): completion consumes 1 Water + 1 Wood, emits `agent.bathed{agent, morale_after, warmth_after}` (absolute, capped) + positive-tone memory entry in `internal/sim/memory.go`; oven-built high-salience memory too
+- [X] T033 [US4] Tests in `internal/sim`: oven build costs, meal batch, bath effects absolute/capped, no-fuel no-ops for both batch actions, replay byte-identity over an oven run
+- [X] T034 [P] [US4] TUI: oven glyph in `internal/tui/views.go`
+- [X] T035 [P] [US4] Planner vocabulary: `build_oven, bathe` + guidance in `internal/mind/prompt.go`
 
 **Checkpoint**: full economy loop (stone → oven → meals; water → baths) live.
 
@@ -118,8 +118,8 @@ TASK-50 at each dispatch.
 
 **Independent test**: build consumes 8 planks; sleeping on shelter regenerates rest at 6/min vs 4.
 
-- [ ] T036 [US5] Re-cost `build_shelter` (resolveGoal validation + reducer) to 8 Planks in `internal/sim/policy.go` + `internal/sim/state.go`
-- [ ] T037 [US5] Shelter rest bonus: `decayNeeds` in `internal/sim/executor.go` uses `restRegenShelter` (6) when asleep on a shelter tile; test both rates + plank cost in `internal/sim`
+- [X] T036 [US5] Re-cost `build_shelter` (resolveGoal validation + reducer) to 8 Planks in `internal/sim/policy.go` + `internal/sim/state.go`
+- [X] T037 [US5] Shelter rest bonus: `decayNeeds` in `internal/sim/executor.go` uses `restRegenShelter` (6) when asleep on a shelter tile; test both rates + plank cost in `internal/sim`
 
 **Checkpoint**: all five items live.
 

@@ -38,6 +38,10 @@ var validGoals = map[string]bool{
 	// spec 012 (US2): cook is planner-only; refuel_fire is also reflex-chosen
 	// (the one shared goal, FR-020).
 	"cook": true, "refuel_fire": true,
+	// spec 012 (US3/US4): the crafting chain and the oven's actions —
+	// planner-only, never reflex-chosen (FR-020, degraded-mode doctrine).
+	"craft_planks": true, "craft_stone": true, "craft_spear": true,
+	"build_oven": true, "bathe": true,
 }
 
 // parseMusing accepts one plain line of interiority (TASK-21): first line,

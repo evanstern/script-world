@@ -281,8 +281,20 @@ func intentDuration(goal string) int64 {
 	case "collect_water":
 		return collectWaterTicks
 	case "cook":
-		// Fire cooking (T021); the oven raises this in Phase 6 (T031).
+		// Fire cooking base case; a cook intent resolved at an oven takes
+		// longer — that override happens in the executor (workDuration,
+		// T031), since the station is only known from the intent's target.
 		return cookFireTicks
+	case "craft_planks":
+		return craftPlanksTicks
+	case "craft_stone":
+		return craftStoneTicks
+	case "craft_spear":
+		return craftSpearTicks
+	case "build_oven":
+		return buildOvenTicks
+	case "bathe":
+		return batheTicks
 	}
 	return 0 // sleep / goto_warmth / wander / seek / refuel_fire complete on arrival
 }

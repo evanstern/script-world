@@ -249,8 +249,8 @@ func TestNightWarmthMechanics(t *testing.T) {
 	a0 := s.Agents[0]
 
 	// The decay mechanic in isolation.
-	coldNight := decayNeeds(a0.Needs, false, true, false)
-	day := decayNeeds(a0.Needs, false, false, false)
+	coldNight := decayNeeds(a0.Needs, false, true, false, false)
+	day := decayNeeds(a0.Needs, false, false, false, false)
 	if coldNight.Warmth >= a0.Needs.Warmth {
 		t.Error("night outdoors should drain warmth")
 	}
@@ -264,7 +264,7 @@ func TestNightWarmthMechanics(t *testing.T) {
 		t.Fatal("agent beside a lit fire should be warm")
 	}
 	byFire := decayNeeds(Needs{Health: 1000, Food: 500, Rest: 500, Warmth: 500, Morale: 500},
-		false, true, warmAt(s, a0.X, a0.Y, s.Tick))
+		false, true, warmAt(s, a0.X, a0.Y, s.Tick), false)
 	if byFire.Warmth <= 500 {
 		t.Error("fire should restore warmth at night")
 	}

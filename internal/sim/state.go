@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/store"
@@ -374,9 +375,19 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// TODO(T027): spear-aware hunting — carrying a spear yields huntYieldSpear
-		// (12) at the shorter duration and spends Spears[0] (Phase 5).
-		a.Inv.FoodRaw += huntYieldBare
+		// T027: spear-aware hunting — carrying a spear yields huntYieldSpear
+		// (12) and spends the most-worn spear's (Spears[0]) last use. This is
+		// re-derived from the SAME pre-mutation state the emitter checked
+		// (contracts/events.md: "no new types" for this — yield/spend are
+		// state-derived, not payload-carried). A companion agent.spear_broke,
+		// if any, applies right after this in the same batch and removes the
+		// now-zero spear.
+		if len(a.Inv.Spears) > 0 {
+			a.Inv.FoodRaw += huntYieldSpear
+			a.Inv.Spears[0]--
+		} else {
+			a.Inv.FoodRaw += huntYieldBare
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		out := s.DenUses[:0]
@@ -395,11 +406,13 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		cost := fireWoodCost
-		if p.Kind == "shelter" {
-			cost = shelterWoodCost
+		// T030/T036: costs come from the recipes table (the single source) by
+		// its "build_<kind>" goal — shelter (planks, re-costed from wood) and
+		// oven (refined stone + planks) both fall out of this the same way
+		// fire always has.
+		if r, ok := recipeFor("build_" + p.Kind); ok {
+			addItems(&a.Inv, r.Inputs, -1)
 		}
-		a.Inv.Wood = maxInt(0, a.Inv.Wood-cost)
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		st := Structure{Kind: p.Kind, X: p.X, Y: p.Y}
@@ -458,7 +471,33 @@ func (s *State) Apply(e store.Event) error {
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.crafted":
-		// TODO(T026): apply recipeFor(kind) delta (spear appends spearDurability); clear intent.
+		// T026: recipe delta re-derived from recipes.go by the crafted kind's
+		// goal (recipes.go stays the single source — no duplicated numbers
+		// here). Spear durability doesn't fit a plain int field: a fresh
+		// spear (spearDurability uses) is appended to Spears, kept sorted
+		// ascending so hunts always spend the most-worn spear first.
+		var p CraftedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		goal := craftGoalFor(p.Kind)
+		r, ok := recipeFor(goal)
+		if !ok {
+			return fmt.Errorf("apply %s: no recipe for crafted kind %q", e.Type, p.Kind)
+		}
+		addItems(&a.Inv, r.Inputs, -1)
+		if p.Kind == "spear" {
+			a.Inv.Spears = append(a.Inv.Spears, spearDurability)
+			sort.Ints(a.Inv.Spears)
+		} else {
+			addItems(&a.Inv, r.Outputs, 1)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.cooked":
 		// T021: a cook batch. FoodRaw -= consumed; the produced kind gains the
 		// same count (fire → food_cooked; oven → meals, wired in Phase 6). The
@@ -485,7 +524,23 @@ func (s *State) Apply(e store.Event) error {
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.bathed":
-		// TODO(T032): Water -1, Wood -1; set Morale/Warmth to the absolute after-values.
+		// T032: water's only v1 consumer. Morale/Warmth are absolute post-cap
+		// values (gru-pattern) — the emitter already applied the cap, so the
+		// reducer never recomputes arithmetic that could drift on replay.
+		var p BathedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Water = maxInt(0, a.Inv.Water-1)
+		a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		a.Needs.Morale = p.MoraleAfter
+		a.Needs.Warmth = p.WarmthAfter
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.refueled":
 		// T020: 1 Wood spent; the fire's FuelUntil is set to the absolute
 		// deadline the emitter already capped. Relighting a cold fire is the
@@ -509,7 +564,21 @@ func (s *State) Apply(e store.Event) error {
 		a.Intent = nil
 		a.IdleSince = e.Tick
 	case "agent.spear_broke":
-		// TODO(T027): remove Spears[0] (spent to zero); companion memory rides the same batch.
+		// T027: the batch's preceding agent.hunted already decremented
+		// Spears[0] to zero (spent its last use) — this event just removes
+		// the now-empty entry. The companion memory rides alongside as its
+		// own agent.memory_added event, not part of this payload.
+		var p SpearBrokePayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Inv.Spears) > 0 {
+			a.Inv.Spears = a.Inv.Spears[1:]
+		}
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).

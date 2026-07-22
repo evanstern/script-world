@@ -35,6 +35,18 @@ func memoryAboutEvent(tick int64, agent, subject, tone, salience int, format str
 	}
 }
 
+// memoryEventToned is memoryEvent with an explicit tone — for a personal
+// memory (no gossip subject, Subject stays -1) that still carries a
+// positive/negative flavor, like a bath's contentment (spec 012 T032).
+func memoryEventToned(tick int64, agent, salience, tone int, format string, args ...any) store.Event {
+	return store.Event{
+		Tick: tick, Type: "agent.memory_added",
+		Payload: mustPayload(MemoryAddedPayload{
+			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience, Subject: -1, Tone: tone,
+		}),
+	}
+}
+
 // Salience table (1..10). Kept small and legible on purpose — consolidation
 // (TASK-9) is the layer that reweighs and rewrites.
 const (
@@ -56,6 +68,20 @@ const (
 	salMeetingOutcome = 5
 	salNormViolation  = 6
 	salExiled         = 9
+	// Spec 012 (crafting economy, research R8): "high" here means memorable,
+	// not generation-interrupting — both sit below GenerationBumpSalience (9),
+	// the same band as SalDream, so a broken spear or a new oven doesn't
+	// outrank real trauma at cognition-landing time.
+	salSpearBroke = 8 // US3: the spear that spent its last use
+	salBath       = 5 // US4: medium, positive tone
+	salOvenBuilt  = 7 // US4: high, village-visible (builder + nearby witnesses)
+)
+
+// Tone constants for the spec 012 memories above (governance.go/social.go/
+// gru.go each declare their own tone band the same way).
+const (
+	toneBath      = 40 // positive, matching toneSaved's magnitude
+	toneOvenBuilt = 30 // positive; witnesses take pride, less personal than bathing
 )
 
 // WindowK is the working-memory bound: prompts never carry more than this

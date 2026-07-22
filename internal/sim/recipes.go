@@ -72,3 +72,98 @@ func recipeFor(goal string) (Recipe, bool) {
 	}
 	return Recipe{}, false
 }
+
+// invField reads one inventory count by its recipes-table item key. "spear"
+// has no matching int field (durability lives in Inventory.Spears) — callers
+// that touch spears handle that kind directly, never through this helper.
+func invField(inv Inventory, kind string) int {
+	switch kind {
+	case "wood":
+		return inv.Wood
+	case "stone":
+		return inv.Stone
+	case "water":
+		return inv.Water
+	case "planks":
+		return inv.Planks
+	case "refined_stone":
+		return inv.RefinedStone
+	case "food_raw":
+		return inv.FoodRaw
+	case "food_cooked":
+		return inv.FoodCooked
+	case "meals":
+		return inv.Meals
+	}
+	return 0
+}
+
+// hasItems reports whether inv carries at least each item's count — the
+// completion-time input re-validation predicate shared by every hand-craft
+// and build recipe (contested-resource pattern, spec 012 FR-014).
+func hasItems(inv Inventory, items []Item) bool {
+	for _, it := range items {
+		if invField(inv, it.Kind) < it.N {
+			return false
+		}
+	}
+	return true
+}
+
+// addItems applies a signed delta to inv for every item kind except "spear"
+// (sign -1 spends recipe inputs, +1 adds recipe outputs); durability for a
+// crafted spear is appended by the caller directly via Inventory.Spears.
+// Every field is clamped at 0 (maxInt), matching every other reducer
+// decrement in this package (agent.ate, agent.cooked, agent.built) — inputs
+// are re-validated before this ever runs, so the clamp is a defensive floor,
+// not expected behavior.
+func addItems(inv *Inventory, items []Item, sign int) {
+	for _, it := range items {
+		n := sign * it.N
+		switch it.Kind {
+		case "wood":
+			inv.Wood = maxInt(0, inv.Wood+n)
+		case "stone":
+			inv.Stone = maxInt(0, inv.Stone+n)
+		case "water":
+			inv.Water = maxInt(0, inv.Water+n)
+		case "planks":
+			inv.Planks = maxInt(0, inv.Planks+n)
+		case "refined_stone":
+			inv.RefinedStone = maxInt(0, inv.RefinedStone+n)
+		case "food_raw":
+			inv.FoodRaw = maxInt(0, inv.FoodRaw+n)
+		case "food_cooked":
+			inv.FoodCooked = maxInt(0, inv.FoodCooked+n)
+		case "meals":
+			inv.Meals = maxInt(0, inv.Meals+n)
+		}
+	}
+}
+
+// craftKindFor maps a hand-craft goal to its CraftedPayload.Kind, and
+// craftGoalFor is its inverse (the reducer only sees the kind, and re-derives
+// the recipe by goal — recipes.go stays the single source).
+func craftKindFor(goal string) string {
+	switch goal {
+	case "craft_planks":
+		return "planks"
+	case "craft_stone":
+		return "refined_stone"
+	case "craft_spear":
+		return "spear"
+	}
+	return ""
+}
+
+func craftGoalFor(kind string) string {
+	switch kind {
+	case "planks":
+		return "craft_planks"
+	case "refined_stone":
+		return "craft_stone"
+	case "spear":
+		return "craft_spear"
+	}
+	return ""
+}

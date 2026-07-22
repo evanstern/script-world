@@ -211,18 +211,45 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return &Intent{Goal: "collect_water", TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no water reachable")
-	case "build_fire", "build_shelter":
-		cost := fireWoodCost
-		if goal == "build_shelter" {
-			cost = shelterWoodCost
-		}
-		if a.Inv.Wood < cost {
-			return nil, "", fmt.Errorf("%s lacks wood (%d < %d)", a.Name, a.Inv.Wood, cost)
+	case "build_fire":
+		if a.Inv.Wood < fireWoodCost {
+			return nil, "", fmt.Errorf("%s lacks wood (%d < %d)", a.Name, a.Inv.Wood, fireWoodCost)
 		}
 		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
 			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no build site reachable")
+	case "build_shelter":
+		// T036: re-costed to planks (was wood) — shelter joins the plank
+		// economy; planner-only (FR-012), never reflex-chosen.
+		if a.Inv.Planks < shelterPlankCost {
+			return nil, "", fmt.Errorf("%s lacks planks (%d < %d)", a.Name, a.Inv.Planks, shelterPlankCost)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no build site reachable")
+	case "build_oven":
+		// T030: the flagship stone-cost station, on-site like fire/shelter.
+		r, _ := recipeFor("build_oven")
+		if !hasItems(a.Inv, r.Inputs) {
+			return nil, "", fmt.Errorf("%s lacks inputs for an oven (%d refined stone + %d planks)", a.Name, r.Inputs[0].N, r.Inputs[1].N)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no build site reachable")
+	case "craft_planks", "craft_stone", "craft_spear":
+		// T026: hand-crafts anywhere — target is the agent's own tile, no
+		// travel. Planner-only (FR-020); never enters the reflex ladder.
+		r, ok := recipeFor(goal)
+		if !ok {
+			return nil, "", fmt.Errorf("unknown recipe %q", goal)
+		}
+		if !hasItems(a.Inv, r.Inputs) {
+			return nil, "", fmt.Errorf("%s lacks inputs for %s", a.Name, goal)
+		}
+		return &Intent{Goal: goal, TargetX: a.X, TargetY: a.Y}, "", nil
 	case "refuel_fire":
 		// T020: planner OR reflex (the one shared goal, FR-020). Target the
 		// nearest fire, lit or cold — the completion relights a cold one.
@@ -234,15 +261,30 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 		}
 		return nil, "", fmt.Errorf("no fire reachable to refuel")
 	case "cook":
-		// T021: cook raw food at a LIT fire. TODO(T031): Phase 6 extends the
-		// station resolution to prefer/accept an oven (produces meals).
+		// T031: cook raw food at the nearest valid station — a lit fire or an
+		// oven, whichever is nearer (the shared `nearest` BFS helper's fixed
+		// neighbor order makes the tie-break deterministic). Station-specific
+		// duration/output (fire → food_cooked, oven → meals + 1 wood fuel) is
+		// resolved from the target at the executor (workDuration/completion).
 		if a.Inv.FoodRaw <= 0 {
 			return nil, "", fmt.Errorf("%s has no raw food to cook", a.Name)
 		}
-		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return litFireAt(s, x, y, tick) }); ok {
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool {
+			return litFireAt(s, x, y, tick) || s.structureAt("oven", x, y)
+		}); ok {
 			return &Intent{Goal: "cook", TargetX: p.X, TargetY: p.Y}, "", nil
 		}
-		return nil, "", fmt.Errorf("no lit fire reachable to cook at")
+		return nil, "", fmt.Errorf("no lit fire or oven reachable to cook at")
+	case "bathe":
+		// T032: water's only v1 consumer — bathe at an oven.
+		r, _ := recipeFor("bathe")
+		if !hasItems(a.Inv, r.Inputs) {
+			return nil, "", fmt.Errorf("%s lacks water/wood to bathe", a.Name)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return s.structureAt("oven", x, y) }); ok {
+			return &Intent{Goal: "bathe", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no oven reachable to bathe at")
 	case "sleep":
 		return &Intent{Goal: "sleep", TargetX: a.X, TargetY: a.Y}, "", nil
 	case "goto_warmth":

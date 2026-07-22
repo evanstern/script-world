@@ -341,6 +341,8 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 				}
 			case "shelter":
 				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
+			case "oven":
+				structures[[2]int{st.X, st.Y}] = styleOven.Render("▣")
 			}
 		}
 		for _, q := range m.replica.Quarried {
@@ -423,7 +425,7 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		phase = styleNight.Render("night")
 	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
 	return grid, legend
 }
@@ -439,6 +441,7 @@ var (
 	styleFire     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
 	styleFireCold = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
 	styleShelter  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
+	styleOven     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("166"))
 	styleGru      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
