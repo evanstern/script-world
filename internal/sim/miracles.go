@@ -105,9 +105,137 @@ func (s *State) applyMiracle(e store.Event) error {
 	return fmt.Errorf("apply %s: unknown miracle type", e.Type)
 }
 
-// applyTimeSnapped — stub (spec 016 US3, T016). Rejected cleanly until wired.
+// applyTimeSnapped jumps the clock forward to ToTick with shift semantics
+// (spec 016 US3, FR-008/009/010): the world is frozen and only re-labelled, so
+// every in-progress relative duration is preserved (rebaseTicks) while history
+// stays put. Forward-only — a target at or before the current tick is rejected
+// whole, before any charge spend or mutation. The snap costs 2 charges (the
+// dearest miracle) unless gratis. FR-010 (a snap mints no charges across the
+// skipped regeneration boundaries) needs no code: regeneration is emitted only
+// when the executor *processes* a boundary crossing, and a snap processes no
+// interval — the skipped boundaries simply never fire.
 func (s *State) applyTimeSnapped(e store.Event) error {
-	return fmt.Errorf("apply %s: not implemented", e.Type)
+	var p TimeSnappedPayload
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return fmt.Errorf("apply %s: %w", e.Type, err)
+	}
+	if p.ToTick <= s.Tick {
+		return fmt.Errorf("apply %s: target tick %d is not after the current tick %d (time only moves forward)", e.Type, p.ToTick, s.Tick)
+	}
+	if err := s.spendMiracleCharge(e.Type, p.Gratis); err != nil {
+		return err
+	}
+	rebaseTicks(s, p.ToTick-s.Tick)
+	s.Tick = p.ToTick
+	return nil
+}
+
+// rebaseTicks shifts every relative-duration field in the state tree forward by
+// delta, so a time snap preserves remaining durations while history stays put
+// (FR-009). It is the SINGLE authority for shift semantics; State.Tick itself is
+// set by the caller (applyTimeSnapped), never here.
+//
+// DOCTRINE — every tick-anchored int64 field in the sim state tree MUST be
+// classified here, SHIFT or KEEP, and the taxonomy guard test
+// (TestRebaseTaxonomyComplete) fails the build when a new int64 field appears in
+// the state structs without a classification entry. The rule:
+//
+//   SHIFT (+delta) — a future deadline, or an anchor from which an elapsed/
+//     remaining duration is measured; shifting preserves that duration across
+//     the jump. A SHIFT field whose zero value is an "unset/never" sentinel is
+//     shifted ONLY when non-zero (shifting the sentinel would fabricate a value).
+//   KEEP — a historical timestamp (when something happened) or an identity/
+//     counter; rewriting it would rewrite history or break a reference.
+//
+// SHIFT fields:
+//   Agent.IdleSince      reflex-grace anchor (elapsed = tick-IdleSince); shifted
+//                        UNCONDITIONALLY — its zero is genesis-idle, a real tick
+//                        read by raw subtraction, not a "never" sentinel.
+//   Agent.LastTalk       talk cooldown; ONLY non-zero (0 = never, canTalk-checked)
+//   Agent.LastGive       gift cooldown; ONLY non-zero (0 = never, canGive-checked)
+//   Intent.WorkStart     work-in-progress; ONLY non-zero (0 = not started)
+//   AgentHail.Until       courtesy-pause deadline (a present hail is non-zero)
+//   PlanStep.Until        plan-step validity deadline; ONLY when > 0 (0 = no
+//                         expiry). NOT in data-model.md — see NOTE.
+//   Guard.Tick            after_tick/before_tick boundary; ONLY non-zero (0 for
+//                         the non-timed guard types). NOT in data-model.md — see NOTE.
+//   Structure.FuelUntil   fire burn deadline; ONLY non-zero
+//   Harvest.Regrow        forage regrowth deadline
+//   DenUse.Ready          den cooldown deadline
+//   FoodBatch.SpoilAt     ground-food rot deadline
+//   Debt.Due              repayment deadline; ONLY non-zero
+//   Gru.LastAttack        attack-cooldown anchor; ONLY non-zero (0 = never) and
+//                         only while the gru is abroad
+//   Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
+//   Meeting.GatherStart   emergent-gathering-watch anchor; ONLY non-zero
+//
+// KEEP (history/identity — never rewritten): Agent.Generation,
+//   Agent.LastGoalTick, Agent.LastConsolidatedNight, Agent.ConsolidatedUpTo,
+//   Agent.LastConsolidateMark, Memory.Tick, Belief.Tick, KnownRumor.Tick,
+//   Guard.Generation, Rumor.OriginTick, ConvoRecord.Conv (identity — the
+//   founding-talk tick doubles as the conversation id), ConvoRecord.Tick,
+//   ChronicleEntry.Tick/Day/FromTick/ToTick, Meeting.LastMeetingDay,
+//   MeetingConvention.EstablishedDay, Norm.DayPassed/DayRepealed/DayAmended,
+//   NormViolation.Tick. Day-denominated governance fields re-arm naturally under
+//   the new clock.
+//
+// PHASE-ANCHORED behavior (day/night, meeting times of day, charge-regen
+// boundaries) is a pure function of the absolute clock and stores no field here.
+//
+// NOTE (deviation from data-model.md, recorded for the planning tier):
+// PlanStep.Until (internal/sim/plan.go:28) and Guard.Tick (internal/sim/guard.go:26)
+// are reachable from State via Agent.Plan[].When but were NOT listed in the
+// data-model.md taxonomy. They are genuine future deadlines — plan.go calls
+// timed guards "the sole act-at-time-T mechanism" — so FR-009's catch-all ("any
+// future duration-anchored state") requires shifting them: left unshifted, a
+// snap that jumped past their absolute tick would expire a pending plan step or
+// fire a timed guard the instant it landed, exactly the drift the feature forbids.
+func rebaseTicks(s *State, delta int64) {
+	shift := func(p *int64) { // shift a deadline, honoring the zero=never sentinel
+		if *p != 0 {
+			*p += delta
+		}
+	}
+	for i := range s.Agents {
+		a := &s.Agents[i]
+		a.IdleSince += delta // unconditional: zero is genesis-idle, not "never"
+		shift(&a.LastTalk)
+		shift(&a.LastGive)
+		if a.Intent != nil {
+			shift(&a.Intent.WorkStart)
+		}
+		if a.Hail != nil {
+			shift(&a.Hail.Until)
+		}
+		for j := range a.Plan {
+			shift(&a.Plan[j].Until)
+			if a.Plan[j].When != nil {
+				shift(&a.Plan[j].When.Tick)
+			}
+		}
+	}
+	for i := range s.Structures {
+		shift(&s.Structures[i].FuelUntil)
+	}
+	for i := range s.Harvested {
+		shift(&s.Harvested[i].Regrow)
+	}
+	for i := range s.DenUses {
+		shift(&s.DenUses[i].Ready)
+	}
+	for i := range s.Piles {
+		for j := range s.Piles[i].Food {
+			shift(&s.Piles[i].Food[j].SpoilAt)
+		}
+	}
+	for i := range s.Debts {
+		shift(&s.Debts[i].Due)
+	}
+	if s.Gru != nil {
+		shift(&s.Gru.LastAttack)
+	}
+	shift(&s.Meeting.OpenedTick)
+	shift(&s.Meeting.GatherStart)
 }
 
 // applyItemGranted — stub (spec 016 US4, T020). Rejected cleanly until wired.
