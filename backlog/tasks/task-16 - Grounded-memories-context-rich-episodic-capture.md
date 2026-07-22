@@ -4,11 +4,12 @@ title: 'Grounded memories: context-rich episodic capture'
 status: To Do
 assignee: []
 created_date: '2026-07-19 15:56'
-updated_date: '2026-07-22 02:18'
+updated_date: '2026-07-22 02:20'
 labels:
   - memory
   - agent-mind
-dependencies: []
+dependencies:
+  - TASK-52
 ordinal: 16000
 ---
 
@@ -37,3 +38,9 @@ Second layer on top of the deterministic episodic capture: give each agent a per
 - [ ] #6 Journal is size-capped (fixed character/page budget) enforced at write time; no other usage rules imposed on the agent
 - [ ] #7 Journal mutations are event-sourced and reducer-applied — replay reproduces identical journals with no model calls
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-07-21: Journal tools decided as tool-driven, not prompt stuffing — search results enter context only when the agent calls search_journal. This requires an agent tool-use loop, which does not exist (llm.Orchestrator is single-shot). Created TASK-52 as the prerequisite; TASK-16 now depends on it.
+<!-- SECTION:NOTES:END -->
