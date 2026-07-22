@@ -67,7 +67,11 @@ memory is skipped (the dead don't remember; the village does).
   re-validation, spec edge case).
 - Payloads carry **actual** moved counts (post-clamp outcomes), never requests;
   the reducer applies recorded counts and stays total (absent pile/chest/batch
-  ⇒ no-op).
+  ⇒ no-op). One bounded exception, inherited from the contested-gather idiom:
+  when two takers hit one pile in the same tick, both events are emitted against
+  the pre-tick pile and the reducer's deterministic agent-order clamp decides
+  the actual split — the second event's `n` is an upper bound, the reducer's
+  applied amount is the truth, and replay is byte-identical either way.
 - `drop`/`pick_up`/`deposit`/`withdraw` are planner/plan-only goals — the five
   new goals are in `planGoals` + inject_intent validation, and none appear in
   the reflex ladder (FR-014). Reflex code is untouched.
