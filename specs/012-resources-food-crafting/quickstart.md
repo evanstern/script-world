@@ -47,11 +47,26 @@ Stop the daemon, replay the log (existing replay/verify tooling), and compare st
 hashes — must be byte-identical including `Quarried` overlay, `FuelUntil` values, and
 `Spears` slices.
 
-## 5. Old-world refusal
+## 5. Old-world refusal & migration (US6)
 
-Point the build at any pre-feature world dir: daemon must refuse with
-`world format_version 1 unsupported (this build supports 2)` and leave the world
-untouched.
+Point the v2 build at an un-migrated v1 world: daemon must refuse with the
+unsupported-version error naming `scriptworld migrate`, leaving the world untouched.
+
+Then the real thing (SC-007), against `~/.scriptworld/worlds/myworld-01`:
+
+```sh
+cp -R ~/.scriptworld/worlds/myworld-01 ~/.scriptworld/worlds/myworld-01.backup
+# ensure cleanly stopped (v1 binary stop → finalSnapshot covers the log)
+go run ./cmd/scriptworld migrate myworld-01
+go run ./cmd/scriptworld start myworld-01
+```
+
+Expected: `world.v1.db` archived beside the new `world.db`; manifest at
+`format_version: 2`; villagers keep their souls (memories/beliefs/relations/debts,
+chronicle continues, same tick/day); map is the v2 regeneration (outcrops present);
+no structures, everyone awake on passable tiles; second `migrate` run refuses.
+Determinism proof: delete all rows from `snapshots`, restart — replay from genesis
+(`world.created` → `world.migrated`) reproduces the identical state hash.
 
 ## 6. Post-merge (Definition of Done tail)
 

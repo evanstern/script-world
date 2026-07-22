@@ -12,10 +12,11 @@ meals, fuel-burning fires that cook, and a crafting layer (planks, refined stone
 with durability, plank shelter with rest bonus, wood-fueled oven with meals and baths).
 Every mechanic lands in the established shape — (goal, duration, completion event,
 reducer case) through the executor's intent state machine — with a world format-version
-bump (1→2) as the pinned refuse-don't-migrate compatibility story. The reflex gains
-exactly one rule (refuel fires); everything else is planner-initiated. Storage/carry
-caps are explicitly deferred to spec 013 (designed, linked as TASK-51): 012 ships with
-unbounded inventories.
+bump (1→2) plus a snapshot-cut migration command that carries an existing world's
+people across the break while the land resets (decision #12; reference target
+`myworld-01`, research R10). The reflex gains exactly one rule (refuel fires);
+everything else is planner-initiated. Storage/carry caps are explicitly deferred to
+spec 013 (designed, linked as TASK-51): 012 ships with unbounded inventories.
 
 ## Technical Context
 
@@ -94,6 +95,7 @@ internal/sim/
 ├── agents.go            # Inventory expansion, Structure.FuelUntil, tuning consts,
 │                        #   new payload structs, intentDuration additions
 ├── recipes.go           # NEW: the authoritative recipe table (R6)
+├── migrate.go           # NEW: v1 legacy decode + pure v1→v2 state transform (R10)
 ├── state.go             # Reducer cases for new events; agent.ate rewrite
 ├── executor.go          # Fuel sweep (burnout events), completion handling for new
 │                        #   goals, warmAt lit-ness, shelter rest bonus in decayNeeds
@@ -106,7 +108,11 @@ internal/mind/
 └── prompt.go            # goalVocabulary + prompt guidance for new goals
 
 internal/world/
-└── world.go             # FormatVersion 1→2 (existing rejection path)
+└── world.go             # FormatVersion 1→2 (rejection message names migrate);
+                         #   migrate orchestration (archive, fresh log, manifest bump)
+
+cmd/scriptworld/
+└── (migrate command)    # `scriptworld migrate <world>` per R10
 
 internal/tui/
 └── views.go             # Rock/quarried glyphs, oven glyph, cold-fire styling,

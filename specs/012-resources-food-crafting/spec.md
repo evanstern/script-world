@@ -42,6 +42,10 @@ pinned as tunable defaults in the Assumptions section.
 11. **Storage is out of scope**: carry capacity, stacking, chests, and stockpiles are
     deferred to the TASK-26 inventory & storage spec; this feature treats inventory as
     an abstract "agents hold items" interface.
+12. **Migration keeps the people, resets the land** (user, 2026-07-22): existing v1
+    worlds (specifically `myworld-01`) get a migration path rather than refusal-only.
+    A full map reset is acceptable; the agents are not reset — souls, memories,
+    relationships, and the village's lived history carry across the format break.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -201,6 +205,48 @@ for an existing structure and completes the five-item roster.
 
 ---
 
+### User Story 6 - An old world's people survive the new world (Priority: P6)
+
+The player migrates an existing pre-feature world (the reference case: `myworld-01`,
+~3 game days of lived history) into the new format with one command. The villagers —
+their memories, beliefs, relationships, debts, rumors, chronicle, and the clock — carry
+over intact; the land is reborn under the new generation rules (outcrops included), and
+map-bound state (structures, terrain overlays, positions, in-flight intents) resets
+with it. The old database is archived in place, so the migration is inspectable and
+reversible by restoring the archive.
+
+**Why this priority**: the format break is this feature's own doing; giving a loved
+world a door through it is part of shipping the break honestly. Priced last among the
+stories because every mechanic must exist before a world can be migrated into them.
+
+**Independent Test**: copy a real v1 world; run the migrate command; confirm the people
+and their histories are intact, the map is the new-format regeneration, the archive
+exists, and the migrated world runs and replays deterministically.
+
+**Acceptance Scenarios**:
+
+1. **Given** a cleanly-stopped v1 world, **When** the player runs the migrate command,
+   **Then** the world opens under the new format with every villager's needs, memories,
+   beliefs, narratives, relationships, debts, rumors, secrets, conversation records,
+   norms, village charter, Metatron state, chronicle, and current tick/day preserved.
+2. **Given** the migrated world, **When** the map is inspected, **Then** it is the
+   new-format regeneration of the same seed (outcrops present); terrain overlays,
+   structures, and the gru are reset; villagers stand on valid passable tiles with
+   cleared intents/plans; carried wood is preserved and legacy food is converted at the
+   pinned rate.
+3. **Given** the migration ran, **Then** the original database is archived alongside
+   the world (restorable), and the migration itself is recorded in the new event log
+   such that replay from genesis — with no snapshots at all — reproduces the migrated
+   state byte-identically.
+4. **Given** a v1 world with events newer than its latest valid snapshot (unclean
+   stop), **When** migration is attempted, **Then** it refuses with instructions to
+   start+stop the world once under the old binary (producing a covering shutdown
+   snapshot) — migration never guesses at un-snapshotted history.
+5. **Given** an already-migrated world, **When** migration is attempted again, **Then**
+   it refuses (nothing to do; the archive is not overwritten).
+
+---
+
 ### Edge Cases
 
 - **Fire burns out mid-cook**: the cook re-validates its station at completion; a fire
@@ -294,6 +340,28 @@ for an existing structure and completes the five-item roster.
 - **FR-019**: Sleeping on a shelter MUST recover rest at the pinned boosted rate;
   shelters MUST remain usable by any villager (no ownership).
 
+**Migration (v1 → v2 worlds)**
+
+- **FR-023**: A migrate command MUST convert a stopped v1 world in place: people-state
+  carried (agents' needs/memories/beliefs/narratives/generation, relations, ledger,
+  rumors, secrets, conversation records, norms, village charter, Metatron state,
+  chronicle ring, tick/day/speed), map-bound state reset (terrain overlays, structures,
+  gru, meeting-convention coordinates, intents/plans/hails), villagers re-placed
+  deterministically on passable tiles of the regenerated map, wood carried 1:1, legacy
+  meal-food converted at the pinned rate.
+- **FR-024**: Migration MUST require a latest valid snapshot covering the entire event
+  log (the clean-shutdown guarantee) and MUST refuse otherwise with instructions;
+  v1 events are never replayed under v2 rules.
+- **FR-025**: Migration MUST archive the original database intact next to the world
+  (the directory remains a complete restorable archive) and MUST refuse to run twice.
+- **FR-026**: The migration MUST be recorded as an event in the new log carrying the
+  full transformed state, applied wholesale by the reducer — so the log alone (no
+  snapshots) reproduces the migrated world byte-identically, preserving the
+  log-is-truth invariant across the format break.
+- **FR-027**: An un-migrated v1 world MUST still be refused by the v2 daemon (the
+  existing unsupported-version error), with the error message naming the migrate
+  command as the remedy.
+
 **Minds, events & observability**
 
 - **FR-020**: Every new goal (quarry, collect water, craft planks, craft refined stone,
@@ -347,6 +415,10 @@ for an existing structure and completes the five-item roster.
 - **SC-006**: A player watching the TUI can distinguish, without reading raw logs: an
   outcrop from a depleted one, a lit fire from a cold one, and what a villager is
   carrying across all new kinds.
+- **SC-007**: `myworld-01` (107k+ events, ~3 game days) migrates successfully: 100% of
+  villagers retain their memories, beliefs, relationships, and debts; the chronicle and
+  clock continue; the migrated world runs under the new rules and replays
+  byte-identically from its new log with all snapshots deleted.
 
 ## Assumptions
 
@@ -376,11 +448,14 @@ survival holds):
   (TASK-26); v1 inventories are unbounded and lost on death, as today.
 - No thirst need, no new death causes, no water containers in v1.
 - **Compatibility story**: this feature is a world-format break — the terrain change and
-  food rescale invalidate pre-feature worlds. v1 declares a format version bump; the
-  daemon refuses to load pre-feature worlds rather than migrating them (worlds are
-  regenerable dev artifacts today; no in-place migration). Old replay code remains safe
-  against new logs only in the trivial sense (unknown events no-op); cross-version
-  replay equivalence is explicitly not promised.
+  food rescale invalidate pre-feature worlds. The format version bumps and the daemon
+  refuses un-migrated v1 worlds; a **migrate command** (US6, decision #12) carries a
+  world's people across the break while the land resets: snapshot-cut (clean-shutdown
+  snapshot required, v1 events never replayed under v2 rules), original database
+  archived in place, migration recorded as a full-state event so the new log alone is
+  sufficient truth. Legacy meal-food converts at **1 old food → 3 Meals**; wood 1:1.
+  Cross-version replay equivalence (replaying v1 events with v2 code) is explicitly
+  not promised — the archive preserves the old history verbatim instead.
 - The planner's action vocabulary and prompt grow to cover the new goals; prompt-side
   budget/shaping details are the plan phase's concern.
 - The gru, social fabric, governance, and consolidation systems are untouched except

@@ -131,20 +131,67 @@ tuning lives today (top of agents.go).
 **Alternatives**: recipes in world.json (config-driven behavior changes would break
 replay-vs-code assumptions; nothing needs per-world recipes).
 
-## R7. Compatibility: format version bump
+## R7. Compatibility: format version bump + migration door
 
 **Decision**: Bump `internal/world.FormatVersion` 1 → 2. The existing manifest check
-(`world.go:125`) already refuses mismatched worlds with a clear error — that IS the
-compatibility story the spec pinned (refuse, don't migrate). New event types are
-reducer no-ops for old code by the existing unknown-type convention; changed semantics
-(`agent.ate` payload, yields, `agent.built` oven kind) are shielded by the version gate.
+(`world.go:125`) refuses un-migrated worlds — its error message gains a pointer to
+`scriptworld migrate`. New event types are reducer no-ops for old code by the existing
+unknown-type convention; changed semantics (`agent.ate` payload, yields, `agent.built`
+oven kind) are shielded by the version gate. Existing worlds get the snapshot-cut
+migration in R10 (spec decision #12: keep the people, reset the land).
 
-**Rationale**: machinery already exists and is tested (`world_test.go` asserts
-rejection of unknown versions); the spec explicitly chose refuse-over-migrate.
+**Rationale**: refusal machinery already exists and is tested (`world_test.go`);
+migration rides beside it rather than replacing it — an un-migrated world is still
+never half-loaded.
 
-**Alternatives**: dual-path reducer keyed on log version (real work, zero payoff for
-regenerable dev worlds); silent regeneration (destroys user intent — refusal with a
-message lets the user decide to delete).
+**Alternatives**: dual-path reducer keyed on log version (real work; still couldn't
+survive the terrain change); refuse-only (original pin — revised 2026-07-22 when the
+user asked for a path for `myworld-01`, which holds ~3 game days of lived history).
+
+## R10. Snapshot-cut world migration (v1 → v2)
+
+**Decision**: `scriptworld migrate <world>` (client-side, daemon must be stopped):
+
+1. **Read**: `Store.LatestValidSnapshot` must cover the whole log (`snapshot.seq ==
+   max(events.seq)`) — guaranteed by `finalSnapshot` on any clean shutdown; otherwise
+   refuse with "start and stop this world once with the v1 binary". v1 events are
+   NEVER replayed by v2 code. The v1 state JSON is decoded via a small legacy-shape
+   reader (notably `Inventory.Food int`), not the v2 structs.
+2. **Transform** (`internal/sim/migrate.go`, pure function v1-state → v2-state):
+   - *Carried*: Tick/Day/Night/Speed/pause flags; per-agent Name, Needs, Memories,
+     Beliefs, Narrative, Generation, consolidation marks, LastTalk/LastGive, Known
+     rumors; Relations, Ledger, Rumors, Secrets, Conversations ring; Norms +
+     governance charter state; MetatronCharges; Chronicle ring. Inventory: Wood 1:1,
+     legacy Food × 3 → Meals (350→300 mild haircut, flavored as preserved meals),
+     new fields zero.
+   - *Reset*: Cleared/Harvested/Quarried empty; Structures empty; Gru zeroed;
+     MeetingConvention + MeetingPlace cleared (re-seeded from world.json `meeting`
+     block on next boot, or re-emerges); all Intents/Plans/Hails/WorkStart/Asleep
+     cleared (everyone wakes standing); IdleSince = migration tick.
+   - *Re-place*: agents positioned genesis-style (the existing deterministic
+     passable-tile placement) on the v2 regeneration of the same seed.
+3. **Write**: archive `world.db` → `world.v1.db` (refuse if it already exists —
+   idempotence guard); create fresh `world.db`; append `world.created` (same
+   name/seed) then `world.migrated{from_format: 1, source_events, source_tick,
+   state: <full canonical v2 state>}`; save an initial snapshot; bump manifest
+   `format_version` to 2.
+4. **Reducer**: `world.migrated` replaces state wholesale (validating name/seed
+   match). This keeps the snapshots-are-never-authority invariant: with every
+   snapshot deleted, replay-from-genesis (`world.created` → `world.migrated`) still
+   reproduces the migrated world byte-identically.
+
+**Rationale**: the one-directory-one-world archive philosophy (world-save-directory
+note: "archiving = cp -R") extends naturally to `world.v1.db` — the old history stays
+verbatim and restorable, instead of being lossily rewritten. Carrying tick continuity
+keeps memory ticks, consolidation marks, and day counts meaningful. The full-state
+event is ~1–2 MB once — trivial for SQLite, priceless for the determinism contract.
+
+**Alternatives**: event-log rewrite (transform 107k v1 events into v2 equivalents —
+enormous surface, and the map change invalidates every coordinate anyway); migration
+snapshot as replay root without a state event (breaks "all snapshots can be discarded";
+a pruned/corrupt snapshot chain would silently resurrect a pre-migration world);
+carry structures by relocating them (user explicitly accepted a full map reset —
+fires/shelters are cheap to rebuild and relocation heuristics are guess-work).
 
 ## R8. TUI and observability
 

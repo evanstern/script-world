@@ -94,4 +94,22 @@ new:      quarry, collect_water, craft_planks, craft_stone, craft_spear,
 ## world.Manifest
 
 `FormatVersion`: 1 → 2. No shape change; existing rejection path
-(`world format_version %d unsupported`) is the compatibility behavior.
+(`world format_version %d unsupported`) is the behavior for un-migrated worlds, with
+the error text extended to name `scriptworld migrate`.
+
+## Migration artifacts (research R10)
+
+- `world.v1.db`: the archived original database, created by `scriptworld migrate`
+  beside `world.db`; its existence is the already-migrated guard. Restoring = delete
+  `world.db`, rename back, reset manifest to 1.
+- `world.migrated` event: `WorldMigratedPayload{FromFormat int, SourceEvents int64,
+  SourceTick int64, State sim.State}` — full transformed state, reducer applies
+  wholesale. Appended exactly once, immediately after `world.created`, in the fresh
+  v2 log.
+- v1 legacy decode: a migration-only reader for the v1 snapshot state shape (notably
+  `Inventory.Food int`, no FuelUntil/Quarried); lives with the transform in
+  `internal/sim/migrate.go`, never in the live reducer path.
+- Transform invariants: people-state carried verbatim (ticks preserved — memory ticks,
+  consolidation marks, day counts stay meaningful); map-bound state reset; agents
+  re-placed via the genesis placement routine against the v2 map; Wood 1:1; legacy
+  Food × 3 → Meals.

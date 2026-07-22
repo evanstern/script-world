@@ -12,9 +12,10 @@ constitution tier guidance.
 increment. All work happens on TASK-50's single branch in `.worktrees/task-50`
 (constitution II); phases are internal breakdown, never separate PRs.
 
-**Model tiers (research R9)**: Phase 2 and Phase 4 → Opus 4.8 (cross-package substrate;
-degraded-mode doctrine). Phases 3, 5, 6, 7, 8 → Sonnet unless a gate fails. Record tier
-+ justification on TASK-50 at each dispatch.
+**Model tiers (research R9)**: Phases 2, 4, and 8 → Opus 4.8 (cross-package substrate;
+degraded-mode doctrine; migration is determinism-critical across sim/store/world).
+Phases 3, 5, 6, 7, 9 → Sonnet unless a gate fails. Record tier + justification on
+TASK-50 at each dispatch.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -124,15 +125,33 @@ degraded-mode doctrine). Phases 3, 5, 6, 7, 8 → Sonnet unless a gate fails. Re
 
 ---
 
-## Phase 8: Polish & Cross-Cutting
+## Phase 8: User Story 6 — An old world's people survive the new world (P6)
+
+**Goal**: `scriptworld migrate` carries a v1 world's people across the format break;
+the land resets. Reference target: `myworld-01` (107k events, tick 257,400).
+
+**Independent test**: copy a v1 world fixture; migrate; people intact, map reborn,
+archive present, zero-snapshot replay byte-identical; unclean/second runs refused.
+
+- [ ] T038 [US6] `world.migrated` event: `WorldMigratedPayload{from_format, source_events, source_tick, state}` in `internal/sim/state.go` with wholesale state-replace reducer case (validates name/seed match); registered per contracts/events.md
+- [ ] T039 [US6] v1 legacy decode + transform in `internal/sim/migrate.go`: migration-only reader for the v1 state shape (`Inventory.Food int`, no FuelUntil/Quarried); pure transform per research R10 — carry people-state verbatim (tick continuity), reset map-bound state, re-place agents via genesis placement on the v2 map, Wood 1:1, legacy Food × 3 → Meals
+- [ ] T040 [US6] `scriptworld migrate <world>` command in `cmd/scriptworld` + `internal/world`: refuse running daemon (pid/sock check); require `LatestValidSnapshot.seq == max(events.seq)` else refuse with start+stop-under-v1 instructions; archive `world.db` → `world.v1.db` (existing archive ⇒ refuse, the already-migrated guard); write fresh db with `world.created` + `world.migrated` + initial snapshot; bump manifest `format_version` to 2; extend the v2 daemon's unsupported-version error to name the command
+- [ ] T041 [US6] Migration tests: build a v1 fixture via legacy-shaped JSON (memories, relations, debts, rumors, structures, mid-flight intents, carried food/wood); migrate; assert people carried + map-state reset + conversion math + agents on passable tiles; delete all snapshots and replay from genesis ⇒ byte-identical state (SC-007's determinism half); refusal cases: uncovered tail events, second migration, running daemon
+- [ ] T042 [US6] Migrate the real `myworld-01` (after `cp -R` backup): run the command, start the world under v2, verify souls/chronicle/relationships intact and outcrops present; record the run's observations on TASK-50 (SC-007)
+
+**Checkpoint**: the format break has a door; myworld-01 lives on new land.
+
+---
+
+## Phase 9: Polish & Cross-Cutting
 
 **Purpose**: full-surface observability, whole-feature verification, DoD tail.
 
-- [ ] T038 [P] TUI inventory pane full expansion in `internal/tui/views.go` (wood/stone/water/planks/rstone + food triplet + spear count with min uses; SC-006)
-- [ ] T039 [P] Whole-feature replay test in `internal/sim`: one scripted run exercising EVERY new event type, byte-identical state hash on replay (SC-004); confirm new types no-op under unknown-type convention
-- [ ] T040 Quickstart smoke: run quickstart.md §2 (deterministic, no LLM) and §3 (planner progression toward SC-003) against a fresh world; record observations on TASK-50
-- [ ] T041 `go test ./...` + full determinism suite green; open TASK-50's single PR from `.worktrees/task-50`
-- [ ] T042 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots), `spec-bridge:sync`, worktree cleanup
+- [ ] T043 [P] TUI inventory pane full expansion in `internal/tui/views.go` (wood/stone/water/planks/rstone + food triplet + spear count with min uses; SC-006)
+- [ ] T044 [P] Whole-feature replay test in `internal/sim`: one scripted run exercising EVERY new event type, byte-identical state hash on replay (SC-004); confirm new types no-op under unknown-type convention
+- [ ] T045 Quickstart smoke: run quickstart.md §2 (deterministic, no LLM) and §3 (planner progression toward SC-003) against a fresh world; record observations on TASK-50
+- [ ] T046 `go test ./...` + full determinism suite green; open TASK-50's single PR from `.worktrees/task-50`
+- [ ] T047 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots, world-save-directory, cli-scriptworld), `spec-bridge:sync`, worktree cleanup
 
 ---
 
@@ -146,15 +165,19 @@ degraded-mode doctrine). Phases 3, 5, 6, 7, 8 → Sonnet unless a gate fails. Re
   hunt yields.
 - **US4 (Phase 6)** needs US3 (refined stone + planks) and US2 (raw food, fuel pattern).
 - **US5 (Phase 7)** needs US3's planks only.
-- **Phase 8** last.
+- **US6 (Phase 8)** needs the full v2 state shape settled — after US1–US5, so the
+  transform targets the final format (a migration into a half-built format would need
+  re-migrating). T042 (real myworld-01) ideally runs after T044's whole-feature replay
+  test is green.
+- **Phase 9** last.
 
-Story completion order: US1 → US2 → US3 → US4 → US5.
+Story completion order: US1 → US2 → US3 → US4 → US5 → US6.
 
 ## Parallel Opportunities
 
 - Phase 2: T005, T006, T007 in parallel after T003/T004.
 - Within each story: TUI + vocabulary tasks ([P]) parallel to each other and after the
-  mechanics land (T015∥T016, T024∥T025, T029, T034∥T035, T038∥T039).
+  mechanics land (T015∥T016, T024∥T025, T029, T034∥T035, T043∥T044).
 - Cross-story parallelism is intentionally NOT recommended: reducer/policy/executor are
   shared files; sequential stories keep the single branch clean.
 
@@ -162,4 +185,6 @@ Story completion order: US1 → US2 → US3 → US4 → US5.
 
 MVP = Phase 2 + Phase 3 (US1): the world gains stone and water, provably deterministic —
 demonstrable alone. Then US2 (the balance-sensitive slice, Opus tier, guarded by the
-degraded-mode regression T023), then the chain stories US3→US5, polish, one PR.
+degraded-mode regression T023), then the chain stories US3→US5, the migration door
+US6 (Opus tier — determinism-critical, touches state/store/world cross-package), polish,
+one PR. The real myworld-01 migration (T042) is the feature's closing ceremony.

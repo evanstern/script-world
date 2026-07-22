@@ -452,14 +452,19 @@
   <h2>Scope edges</h2>
 
   <div class="callout warn">
-    <p><strong>Compatibility: this is a world-format break.</strong> Outcrops change every
-    seed's terrain and the food rescale changes every yield constant, so pre-feature
-    worlds are invalidated — the daemon refuses to load them rather than migrating
-    (worlds are regenerable dev artifacts today). New event types remain no-ops under
-    old replay code; cross-version replay equivalence is explicitly not promised.</p>
-    <p>All the substrate guarantees hold within the new format: every happening is an
-    event through the reducer, payloads record outcomes (never dice rolls), integer math
-    only, and replaying a log reproduces byte-identical state.</p>
+    <p><strong>Compatibility: a format break with a door.</strong> Outcrops change every
+    seed's terrain and the food rescale changes every yield constant, so the format
+    version bumps and the daemon refuses un-migrated old worlds. But existing worlds
+    (myworld-01 and its three days of lived history) get a migration path:
+    <strong>the people carry over, the land is reborn</strong>.</p>
+    <p><code>scriptworld migrate</code> takes a cleanly-stopped old world and carries
+    every villager's memories, beliefs, relationships, debts, rumors, the chronicle,
+    and the clock into the new format; the map regenerates under the new rules, and
+    map-bound state (structures, overlays, positions) resets — villagers wake standing
+    on the new land, carrying their wood and their preserved meals (1 old meal → 3).
+    The old database is archived beside the world, and the migration is recorded as a
+    full-state event, so the new log alone reproduces the migrated world byte-for-byte
+    with every snapshot deleted. The determinism contract survives the break.</p>
   </div>
 
   <footer>
