@@ -411,6 +411,7 @@ func (md *Mind) runPlan(job planJob) {
 	// re-plan (the agent noticed the plan failed), floored by the debounce.
 	if err := md.loop.InjectIntent(sim.InjectArgs{
 		Agent: job.agent, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
+		Kind: reply.Kind, Qty: reply.Qty,
 		Class: job.meta.class.Class, JobID: job.meta.job,
 		SnapshotTick: job.meta.snapshotTick, Generation: job.meta.generation,
 		PredictedWallMs: job.meta.predictedWallMs, ActualWallMs: resp.Millis,
@@ -439,7 +440,7 @@ func (md *Mind) injectPlan(job planJob, reply planReply, actualMs int64) {
 				return
 			}
 		}
-		st := sim.PlanStep{Job: job.meta.job, Goal: sr.Goal, Target: target}
+		st := sim.PlanStep{Job: job.meta.job, Goal: sr.Goal, Target: target, Kind: sr.Kind, Qty: sr.Qty}
 		start := job.meta.snapshotTick
 		if sr.AfterMin > 0 {
 			start += int64(sr.AfterMin * 60)

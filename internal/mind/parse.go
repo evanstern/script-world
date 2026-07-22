@@ -12,6 +12,11 @@ import (
 type planReply struct {
 	Goal   string          `json:"goal"`
 	Target string          `json:"target,omitempty"`
+	// Kind/Qty (spec 013 T022) argue drop/pick_up: Kind is an inventory item
+	// key ("" = all kinds, pick_up only), Qty a per-kind cap (0 = all of
+	// kind / as much as fits) — mirrors sim.Intent.Kind/Qty (data-model.md).
+	Kind   string          `json:"kind,omitempty"`
+	Qty    int             `json:"qty,omitempty"`
 	Reason string          `json:"reason"`
 	Plan   []planStepReply `json:"plan,omitempty"`
 }
@@ -21,6 +26,8 @@ type planReply struct {
 type planStepReply struct {
 	Goal     string  `json:"goal"`
 	Target   string  `json:"target,omitempty"`
+	Kind     string  `json:"kind,omitempty"`
+	Qty      int     `json:"qty,omitempty"`
 	AfterMin float64 `json:"after_min,omitempty"`
 	ForMin   float64 `json:"for_min,omitempty"`
 }
@@ -42,6 +49,42 @@ var validGoals = map[string]bool{
 	// planner-only, never reflex-chosen (FR-020, degraded-mode doctrine).
 	"craft_planks": true, "craft_stone": true, "craft_spear": true,
 	"build_oven": true, "bathe": true,
+	// spec 013 (US2): drop/pick_up — planner/plan-only, never reflex-chosen
+	// (FR-014), mirroring internal/sim/plan.go's planGoals.
+	"drop": true, "pick_up": true,
+}
+
+// validKinds are the inventory item keys drop/pick_up accept as Kind —
+// exactly internal/sim's canonicalKinds (internal/sim/agents.go), the set
+// the executor actually reads counts by ("spears" plural: durability lives
+// in the slice, there is no singular "spear" field). "" is valid too: for
+// pick_up it means every kind (canonical order); for drop the executor
+// resolves an empty Kind to a no-op (agent.intent_done, no pile touched) —
+// not a parse-time error either way.
+var validKinds = map[string]bool{
+	"": true,
+	"wood": true, "stone": true, "water": true, "planks": true, "refined_stone": true,
+	"food_raw": true, "food_cooked": true, "meals": true, "spears": true,
+}
+
+// validateKindQty normalizes and validates a drop/pick_up step's Kind/Qty
+// against what the sim executor actually accepts (canonicalKinds) — the
+// same "reject unknown at the door" discipline validGoals applies to goal
+// strings, so a malformed kind never reaches InjectIntent. Only drop/
+// pick_up carry a Kind; every other goal's Kind/Qty are ignored (zero-value
+// from a model that didn't emit them).
+func validateKindQty(goal, kind string, qty int) (string, error) {
+	if goal != "drop" && goal != "pick_up" {
+		return kind, nil
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if !validKinds[kind] {
+		return "", fmt.Errorf("goal %q: unknown kind %q", goal, kind)
+	}
+	if qty < 0 {
+		return "", fmt.Errorf("goal %q: negative qty %d", goal, qty)
+	}
+	return kind, nil
 }
 
 // parseMusing accepts one plain line of interiority (TASK-21): first line,
@@ -282,6 +325,11 @@ func parseReply(text string) (planReply, error) {
 			if r.Plan[i].AfterMin < 0 || r.Plan[i].ForMin < 0 {
 				return planReply{}, fmt.Errorf("plan step %d: negative time", i)
 			}
+			kind, kerr := validateKindQty(r.Plan[i].Goal, r.Plan[i].Kind, r.Plan[i].Qty)
+			if kerr != nil {
+				return planReply{}, fmt.Errorf("plan step %d: %w", i, kerr)
+			}
+			r.Plan[i].Kind = kind
 		}
 		r.Goal = ""
 		return r, nil
@@ -290,6 +338,11 @@ func parseReply(text string) (planReply, error) {
 	if !validGoals[r.Goal] {
 		return planReply{}, fmt.Errorf("unknown goal %q", r.Goal)
 	}
+	kind, kerr := validateKindQty(r.Goal, r.Kind, r.Qty)
+	if kerr != nil {
+		return planReply{}, kerr
+	}
+	r.Kind = kind
 	return r, nil
 }
 

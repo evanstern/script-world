@@ -373,3 +373,52 @@ func TestParseReply(t *testing.T) {
 		t.Errorf("talk_to parse: %+v %v", r, err)
 	}
 }
+
+// TestParseReplyDropPickUpKindQty covers spec 013 T022: drop/pick_up carry
+// Kind/Qty, validated against the sim executor's canonicalKinds so a
+// malformed kind never reaches InjectIntent (the same "reject unknown at
+// the door" discipline validGoals applies to goal strings).
+func TestParseReplyDropPickUpKindQty(t *testing.T) {
+	r, err := parseReply(`{"goal": "drop", "kind": "wood", "qty": 5, "reason": "lighten the load"}`)
+	if err != nil || r.Kind != "wood" || r.Qty != 5 {
+		t.Errorf("drop kind/qty parse: %+v %v", r, err)
+	}
+	// Case-insensitive, matching goal normalization.
+	r, err = parseReply(`{"goal": "drop", "kind": "WOOD", "reason": "x"}`)
+	if err != nil || r.Kind != "wood" {
+		t.Errorf("drop kind should normalize to lowercase: %+v %v", r, err)
+	}
+	// pick_up with no kind = everything that fits.
+	r, err = parseReply(`{"goal": "pick_up", "reason": "gather it up"}`)
+	if err != nil || r.Kind != "" {
+		t.Errorf("pick_up with no kind should parse as Kind==\"\": %+v %v", r, err)
+	}
+	// pick_up on spears (plural — matches sim.canonicalKinds, not "spear").
+	r, err = parseReply(`{"goal": "pick_up", "kind": "spears", "reason": "x"}`)
+	if err != nil || r.Kind != "spears" {
+		t.Errorf("pick_up spears kind parse: %+v %v", r, err)
+	}
+	// A goal that doesn't take kind/qty ignores whatever the model sends —
+	// not a rejection (only drop/pick_up are validated).
+	if _, err := parseReply(`{"goal": "forage", "kind": "wood", "reason": "x"}`); err != nil {
+		t.Errorf("non-storage goal should ignore kind: %v", err)
+	}
+	bad := []string{
+		`{"goal": "drop", "kind": "gold", "reason": "x"}`,     // unknown kind
+		`{"goal": "pick_up", "kind": "spear", "reason": "x"}`, // singular — not what the executor reads
+		`{"goal": "drop", "kind": "wood", "qty": -1, "reason": "x"}`,
+	}
+	for _, b := range bad {
+		if _, err := parseReply(b); err == nil {
+			t.Errorf("parseReply(%q) should reject an invalid kind/qty", b)
+		}
+	}
+	// The plan form validates each step's kind/qty too.
+	plan, err := parseReply(`{"plan": [{"goal": "drop", "kind": "stone", "qty": 3}], "reason": "x"}`)
+	if err != nil || len(plan.Plan) != 1 || plan.Plan[0].Kind != "stone" || plan.Plan[0].Qty != 3 {
+		t.Errorf("plan step kind/qty parse: %+v %v", plan, err)
+	}
+	if _, err := parseReply(`{"plan": [{"goal": "pick_up", "kind": "gold"}], "reason": "x"}`); err == nil {
+		t.Error("plan step with unknown kind should be rejected")
+	}
+}
