@@ -66,15 +66,15 @@ TASK-50 at each dispatch.
 
 **Independent test**: yields land in new units; eating is most-nutritious-first to satiety; fire burnout/refuel/relight cycle works; planner-less village survives 3 game days, zero crafting/cooking events.
 
-- [ ] T017 [US2] Reducer yield changes in `internal/sim/state.go`: `agent.foraged` → +2 FoodRaw; `agent.hunted` → +8 FoodRaw (bare); delete `eatFoodValue`
-- [ ] T018 [US2] Eat rewrite: reflex/planner instant eat in `internal/sim/policy.go` + `internal/sim/executor.go` emits `agent.ate` with `AtePayload{meals, cooked, raw, food_after}` (most-nutritious-first to satiety 900, absolute after-value); reducer applies counts + absolute need
-- [ ] T019 [US2] Fire fuel: `build_fire` completion sets `FuelUntil = tick + 2×fireBurnPerWood` (reducer, `internal/sim/state.go`); per-tick fuel sweep in `internal/sim/executor.go` emits `sim.fire_burned_out{x,y}` exactly once on the `tick−1 < FuelUntil ≤ tick` transition; `warmAt` in `internal/sim/terrain.go` requires lit
-- [ ] T020 [US2] `refuel_fire` goal (instant on arrival): resolveGoal case in `internal/sim/policy.go`, `agent.refueled{agent,x,y,fuel_until}` absolute + cap now+12h, reducer relights; REFLEX addition per R5 — refuel dying/cold fire when carrying wood (night-cold step + prep step); also REMOVE shelter-building from the reflex prep ladder (shelter is planner-only now) and restate larder-stocking in raw units
-- [ ] T021 [US2] `cook` at fire: resolveGoal (nearest lit fire), duration 240, completion re-validates lit-ness, `agent.cooked{agent, station: fire, consumed, produced, kind: food_cooked}` (batch ≤8), reducer case
-- [ ] T022 [US2] Tests in `internal/sim`: eat ordering/satiety/absolute payload; burnout emits once + refuel re-arms + cold fire refuses cook (contested pattern); reflex refuels; replay byte-identity over a food+fire run
-- [ ] T023 [US2] Degraded-mode regression test: planner-less village of 8 survives ≥3 game days with zero `agent.crafted`/`agent.cooked`/`agent.bathed` events (SC-002) — the doctrine gate for this feature
-- [ ] T024 [P] [US2] TUI: lit vs cold fire styling in `internal/tui/views.go`; inventory pane shows food triplet
-- [ ] T025 [P] [US2] Planner vocabulary: `cook, refuel_fire` + guidance in `internal/mind/prompt.go`
+- [X] T017 [US2] Reducer yield changes in `internal/sim/state.go`: `agent.foraged` → +2 FoodRaw; `agent.hunted` → +8 FoodRaw (bare); delete `eatFoodValue`
+- [X] T018 [US2] Eat rewrite: reflex/planner instant eat in `internal/sim/policy.go` + `internal/sim/executor.go` emits `agent.ate` with `AtePayload{meals, cooked, raw, food_after}` (most-nutritious-first to satiety 900, absolute after-value); reducer applies counts + absolute need
+- [X] T019 [US2] Fire fuel: `build_fire` completion sets `FuelUntil = tick + 2×fireBurnPerWood` (reducer, `internal/sim/state.go`); per-tick fuel sweep in `internal/sim/executor.go` emits `sim.fire_burned_out{x,y}` exactly once on the `tick−1 < FuelUntil ≤ tick` transition; `warmAt` in `internal/sim/terrain.go` requires lit
+- [X] T020 [US2] `refuel_fire` goal (instant on arrival): resolveGoal case in `internal/sim/policy.go`, `agent.refueled{agent,x,y,fuel_until}` absolute + cap now+12h, reducer relights; REFLEX addition per R5 — refuel dying/cold fire when carrying wood (night-cold step + prep step); also REMOVE shelter-building from the reflex prep ladder (shelter is planner-only now) and restate larder-stocking in raw units
+- [X] T021 [US2] `cook` at fire: resolveGoal (nearest lit fire), duration 240, completion re-validates lit-ness, `agent.cooked{agent, station: fire, consumed, produced, kind: food_cooked}` (batch ≤8), reducer case
+- [X] T022 [US2] Tests in `internal/sim`: eat ordering/satiety/absolute payload; burnout emits once + refuel re-arms + cold fire refuses cook (contested pattern); reflex refuels; replay byte-identity over a food+fire run
+- [X] T023 [US2] Degraded-mode regression test: planner-less village of 8 survives ≥3 game days with zero `agent.crafted`/`agent.cooked`/`agent.bathed` events (SC-002) — the doctrine gate for this feature
+- [X] T024 [P] [US2] TUI: lit vs cold fire styling in `internal/tui/views.go`; inventory pane shows food triplet
+- [X] T025 [P] [US2] Planner vocabulary: `cook, refuel_fire` + guidance in `internal/mind/prompt.go`
 
 **Checkpoint**: survival economy rebalanced and proven safe.
 

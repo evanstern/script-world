@@ -543,7 +543,10 @@ func (l *Loop) handleCommand(cmd command) error {
 				emit("agent.thought", ThoughtPayload{Agent: in.Agent, Text: in.Reason, Source: "planner"})
 			}
 			if direct == "agent.ate" {
-				emit("agent.ate", AgentPayload{Agent: in.Agent})
+				if p, ok := eatOutcome(&l.state.Agents[in.Agent]); ok {
+					p.Agent = in.Agent
+					emit("agent.ate", p)
+				}
 			} else if intent != nil {
 				emit("agent.intent_set", IntentSetPayload{
 					Agent: in.Agent, Goal: intent.Goal,

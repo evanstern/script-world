@@ -12,7 +12,7 @@ import (
 // system prefix (persona + instruction block — prompt-cache friendly) and a
 // variable user suffix (situation + the bounded working-memory window).
 
-const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water"
+const goalVocabulary = "forage, chop, hunt, build_fire, build_shelter, eat, sleep, wander, goto_warmth, talk_to, quarry, collect_water, cook, refuel_fire"
 
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
@@ -25,6 +25,7 @@ func systemPrompt(name, personaText string) string {
 {"goal": "<goal>", "target": "<agent name, only for talk_to>", "reason": "<one short sentence in your voice>"}
 Goals: %s.
 quarry gathers stone from a rock outcrop; collect_water gathers water from a water tile.
+cook turns raw food into fire-cooked food (worth double) at a lit fire; refuel_fire feeds one wood to a fire to keep it burning (or relight a cold one).
 For a short sequence instead, reply:
 {"plan": [{"goal": "<goal>", "target": "<name, only for talk_to>", "after_min": <optional: wait this many minutes before starting>, "for_min": <optional: give up after this many minutes>}], "reason": "..."}
 At most %d steps; steps run in order, each waits for its time.
@@ -69,10 +70,11 @@ func userPrompt(s *sim.State, idx int, k int) string {
 	fmt.Fprintf(&b, "It is %s (%s). You are at (%d, %d).\n", clock.Format(s.Tick), phase, a.X, a.Y)
 	fmt.Fprintf(&b, "Needs (0-100): health %d, food %d, rest %d, warmth %d, morale %d.\n",
 		a.Needs.Health/10, a.Needs.Food/10, a.Needs.Rest/10, a.Needs.Warmth/10, a.Needs.Morale/10)
-	// TODO(T025/T035): surface the full v2 inventory (stone/water/planks/refined
-	// stone, food triplet, spears). Phase 2 keeps the legacy line, re-expressed
-	// over FoodRaw as the carried-food count.
-	fmt.Fprintf(&b, "Carrying: %d wood, %d food.\n", a.Inv.Wood, a.Inv.FoodRaw)
+	// Carried inventory (T025): wood + the food triplet, always shown so the
+	// planner can reason about cooking/eating. TODO(T035): stone/water/planks/
+	// refined stone/spears join here in Phases 5–6 (crafting economy).
+	fmt.Fprintf(&b, "Carrying: %d wood, food (%d raw, %d cooked, %d meals).\n",
+		a.Inv.Wood, a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)
 
 	if len(s.Structures) > 0 {
 		var parts []string

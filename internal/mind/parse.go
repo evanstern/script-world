@@ -35,6 +35,9 @@ var validGoals = map[string]bool{
 	"goto_warmth": true, "talk_to": true,
 	// spec 012 (US1): planner-only, never reflex-chosen.
 	"quarry": true, "collect_water": true,
+	// spec 012 (US2): cook is planner-only; refuel_fire is also reflex-chosen
+	// (the one shared goal, FR-020).
+	"cook": true, "refuel_fire": true,
 }
 
 // parseMusing accepts one plain line of interiority (TASK-21): first line,

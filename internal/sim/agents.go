@@ -162,12 +162,9 @@ const (
 	healthLoss     = 3 // per minute while starving or freezing (~5.5h to die)
 	healthRegen    = 1 // fed and rested
 
-	eatFoodValue = 350 // one food item
-
 	// Thresholds the reflex policy keys on.
-	hungryAt    = 350
-	tiredAt     = 250
-	stockFoodTo = 3
+	hungryAt = 350
+	tiredAt  = 250
 
 	// Action durations in ticks (game seconds).
 	forageTicks       = 120
@@ -178,8 +175,6 @@ const (
 
 	// Yields and costs.
 	chopWood        = 2
-	forageYield     = 1
-	huntYield       = 3
 	fireWoodCost    = 2
 	shelterWoodCost = 5
 
@@ -217,6 +212,15 @@ const (
 	mealRestore       = 100
 	satietyAt         = 900
 
+	// Reflex larder target (T018): idle agents top up carried raw food to this
+	// many units before wandering. Restates the legacy stock-3-meals prep rule
+	// over the finer raw unit (contracts/recipes.md sizing).
+	stockFoodRawTo = 8
+
+	// refuelDyingBelow (T020): the reflex refuels a fire whose remaining fuel
+	// has dropped below this window (1 game-hour) when carrying wood.
+	refuelDyingBelow = 3600
+
 	// Fire fuel window. A fresh fire (2 wood) burns 2×fireBurnPerWood; each
 	// refuel (1 wood) adds fireBurnPerWood, truncated to now + fireFuelCap.
 	fireBurnPerWood = 4 * 3600  // 4 game-hours per wood
@@ -235,8 +239,8 @@ const (
 	bathWarmth = 300
 
 	// v2 gather rescale (wired T013 quarry/water, T017 forage/hunt). The legacy
-	// forageYield (1) / huntYield (3) above stay in force through Phase 2 so
-	// agent.foraged/agent.hunted behavior is unchanged until the food rewrite.
+	// forageYield/huntYield constants are gone (T017): agent.foraged now yields
+	// forageYieldV2 FoodRaw, agent.hunted huntYieldBare (spear boost is T027).
 	quarryYield       = 2
 	quarryTicks       = 400
 	collectWaterYield = 1
@@ -276,8 +280,11 @@ func intentDuration(goal string) int64 {
 		return quarryTicks
 	case "collect_water":
 		return collectWaterTicks
+	case "cook":
+		// Fire cooking (T021); the oven raises this in Phase 6 (T031).
+		return cookFireTicks
 	}
-	return 0 // sleep / goto_warmth / wander / seek complete on arrival
+	return 0 // sleep / goto_warmth / wander / seek / refuel_fire complete on arrival
 }
 
 // --- event payloads ---

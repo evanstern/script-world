@@ -24,9 +24,8 @@ type decision struct {
 func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 	a := &s.Agents[idx]
 
-	// Eat from inventory the moment hunger bites.
-	// TODO(T018): eat over the full food triplet (Meals/FoodCooked/FoodRaw).
-	if a.Needs.Food < hungryAt && a.Inv.FoodRaw > 0 {
+	// Eat from inventory the moment hunger bites (most-nutritious-first, T018).
+	if a.Needs.Food < hungryAt && hasAnyFood(a) {
 		return decision{directEvent: "agent.ate"}
 	}
 
@@ -38,10 +37,15 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 	}
 
 	if s.Night {
-		if !warmAt(s, a.X, a.Y) {
+		if !warmAt(s, a.X, a.Y, tick) {
 			// Reach warmth, or make it, or get the wood to make it.
-			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y) && passable(m, s, x, y) }); ok {
+			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y, tick) && passable(m, s, x, y) }); ok {
 				return decision{intent: &Intent{Goal: "goto_warmth", TargetX: p.X, TargetY: p.Y}}
+			}
+			// The one reflex addition (T020, FR-012): a cold/dying fire nearby
+			// and wood in hand — relight it (cheaper than a fresh build).
+			if in, ok := reflexRefuelIntent(s, m, a, tick); ok {
+				return decision{intent: in}
 			}
 			if a.Inv.Wood >= fireWoodCost {
 				if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
@@ -61,16 +65,17 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 	// Daytime. Exhausted agents nap somewhere warm if possible.
 	if a.Needs.Rest < tiredAt {
 		tx, ty := a.X, a.Y
-		if !warmAt(s, tx, ty) {
-			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y) && passable(m, s, x, y) }); ok {
+		if !warmAt(s, tx, ty, tick) {
+			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y, tick) && passable(m, s, x, y) }); ok {
 				tx, ty = p.X, p.Y
 			}
 		}
 		return decision{intent: &Intent{Goal: "sleep", TargetX: tx, TargetY: ty}}
 	}
 
-	// Village prep: a fire before the first night, then a shelter, then a
-	// full larder.
+	// Village prep: a fire before the first night, then keep it burning, then a
+	// full larder. Shelter-building is planner-only now (T020, FR-012): it costs
+	// planks, and the reflex never enters the crafting economy.
 	if !s.hasStructure("fire") {
 		if a.Inv.Wood >= fireWoodCost {
 			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
@@ -81,18 +86,11 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 			return decision{intent: d}
 		}
 	}
-	if !s.hasStructure("shelter") {
-		if a.Inv.Wood >= shelterWoodCost {
-			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
-				return decision{intent: &Intent{Goal: "build_shelter", TargetX: p.X, TargetY: p.Y}}
-			}
-		}
-		if d, ok := chopIntent(s, m, a); ok {
-			return decision{intent: d}
-		}
+	// Keep the fire alive (T020): top up a dying/cold fire while carrying wood.
+	if in, ok := reflexRefuelIntent(s, m, a, tick); ok {
+		return decision{intent: in}
 	}
-	// TODO(T018/T020): larder stocking in raw units for now.
-	if a.Inv.FoodRaw < stockFoodTo {
+	if a.Inv.FoodRaw < stockFoodRawTo {
 		if d, ok := foodIntent(s, m, a, tick); ok {
 			return decision{intent: d}
 		}
@@ -111,6 +109,29 @@ func decideIntent(s *State, m *worldmap.Map, idx int, tick int64) decision {
 		}
 	}
 	return decision{} // stay idle this round
+}
+
+// hasAnyFood reports whether the agent carries any edible unit (T018): the
+// eat/wake checks key on the full triplet, not raw food alone.
+func hasAnyFood(a *Agent) bool {
+	return a.Inv.Meals+a.Inv.FoodCooked+a.Inv.FoodRaw > 0
+}
+
+// reflexRefuelIntent is the reflex's one new rule (T020, FR-012): when carrying
+// wood, refuel the nearest fire that is cold (tick ≥ FuelUntil) or dying
+// (under refuelDyingBelow left). Returns no intent when the agent has no wood
+// or no such fire is reachable — the reflex never chops just to refuel.
+func reflexRefuelIntent(s *State, m *worldmap.Map, a *Agent, tick int64) (*Intent, bool) {
+	if a.Inv.Wood < 1 {
+		return nil, false
+	}
+	if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool {
+		st, ok := fireStructAt(s, x, y)
+		return ok && st.FuelUntil-tick < refuelDyingBelow
+	}); ok {
+		return &Intent{Goal: "refuel_fire", TargetX: p.X, TargetY: p.Y}, true
+	}
+	return nil, false
 }
 
 func foodIntent(s *State, m *worldmap.Map, a *Agent, tick int64) (*Intent, bool) {
@@ -139,9 +160,14 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 	a := &s.Agents[idx]
 	switch goal {
 	case "eat":
-		// TODO(T018): eat over the full food triplet.
-		if a.Inv.FoodRaw <= 0 {
+		// T018: eat over the full food triplet, most-nutritious-first to
+		// satiety. Refuse if empty-handed or already sated (no unit is ever
+		// consumed at satiety — the eating-overshoot edge case).
+		if !hasAnyFood(a) {
 			return nil, "", fmt.Errorf("%s has nothing to eat", a.Name)
+		}
+		if a.Needs.Food >= satietyAt {
+			return nil, "", fmt.Errorf("%s is already sated", a.Name)
 		}
 		return nil, "agent.ate", nil
 	case "forage":
@@ -197,10 +223,30 @@ func resolveGoal(s *State, m *worldmap.Map, idx int, goal string, targetAgent in
 			return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no build site reachable")
+	case "refuel_fire":
+		// T020: planner OR reflex (the one shared goal, FR-020). Target the
+		// nearest fire, lit or cold — the completion relights a cold one.
+		if a.Inv.Wood < 1 {
+			return nil, "", fmt.Errorf("%s lacks wood to refuel a fire", a.Name)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return s.structureAt("fire", x, y) }); ok {
+			return &Intent{Goal: "refuel_fire", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no fire reachable to refuel")
+	case "cook":
+		// T021: cook raw food at a LIT fire. TODO(T031): Phase 6 extends the
+		// station resolution to prefer/accept an oven (produces meals).
+		if a.Inv.FoodRaw <= 0 {
+			return nil, "", fmt.Errorf("%s has no raw food to cook", a.Name)
+		}
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return litFireAt(s, x, y, tick) }); ok {
+			return &Intent{Goal: "cook", TargetX: p.X, TargetY: p.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no lit fire reachable to cook at")
 	case "sleep":
 		return &Intent{Goal: "sleep", TargetX: a.X, TargetY: a.Y}, "", nil
 	case "goto_warmth":
-		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y) && passable(m, s, x, y) }); ok {
+		if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return warmAt(s, x, y, tick) && passable(m, s, x, y) }); ok {
 			return &Intent{Goal: "goto_warmth", TargetX: p.X, TargetY: p.Y}, "", nil
 		}
 		return nil, "", fmt.Errorf("no warmth anywhere")

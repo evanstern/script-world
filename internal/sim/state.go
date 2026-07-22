@@ -348,9 +348,7 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// TODO(T017): rescale to +forageYieldV2 (2) FoodRaw. Phase 2 keeps the
-		// legacy yield, only re-expressed over FoodRaw (behavior-equivalent).
-		a.Inv.FoodRaw += forageYield
+		a.Inv.FoodRaw += forageYieldV2
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Harvested = append(s.Harvested, Harvest{X: p.X, Y: p.Y, Regrow: e.Tick + forageRegrowSec})
@@ -376,9 +374,9 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// TODO(T017/T027): rescale to +huntYieldBare (8) / +huntYieldSpear (12)
-		// and spend Spears[0]. Phase 2 keeps the legacy yield over FoodRaw.
-		a.Inv.FoodRaw += huntYield
+		// TODO(T027): spear-aware hunting — carrying a spear yields huntYieldSpear
+		// (12) at the shorter duration and spends Spears[0] (Phase 5).
+		a.Inv.FoodRaw += huntYieldBare
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		out := s.DenUses[:0]
@@ -404,9 +402,19 @@ func (s *State) Apply(e store.Event) error {
 		a.Inv.Wood = maxInt(0, a.Inv.Wood-cost)
 		a.Intent = nil
 		a.IdleSince = e.Tick
-		s.Structures = append(s.Structures, Structure{Kind: p.Kind, X: p.X, Y: p.Y})
+		st := Structure{Kind: p.Kind, X: p.X, Y: p.Y}
+		if p.Kind == "fire" {
+			// T019: a fresh fire (2 wood) burns 2×fireBurnPerWood from now; the
+			// fuel sweep burns it out and refuel pushes FuelUntil forward.
+			st.FuelUntil = e.Tick + 2*fireBurnPerWood
+		}
+		s.Structures = append(s.Structures, st)
 	case "agent.ate":
-		var p AgentPayload
+		// T018: outcome-payload eat — the emitter computed the
+		// most-nutritious-first consumption (Meals → FoodCooked → FoodRaw) to
+		// satiety; the reducer decrements the counts and sets the absolute
+		// post-eat food need. No arithmetic that could drift on replay.
+		var p AtePayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
 			return fmt.Errorf("apply %s: %w", e.Type, err)
 		}
@@ -414,13 +422,10 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// TODO(T018): rewrite to AtePayload (most-nutritious-first to satietyAt,
-		// absolute food_after). Phase 2 keeps the legacy one-unit +eatFoodValue
-		// eat, re-expressed over FoodRaw so behavior is unchanged.
-		if a.Inv.FoodRaw > 0 {
-			a.Inv.FoodRaw--
-			a.Needs.Food = minInt(1000, a.Needs.Food+eatFoodValue)
-		}
+		a.Inv.Meals = maxInt(0, a.Inv.Meals-p.Meals)
+		a.Inv.FoodCooked = maxInt(0, a.Inv.FoodCooked-p.Cooked)
+		a.Inv.FoodRaw = maxInt(0, a.Inv.FoodRaw-p.Raw)
+		a.Needs.Food = p.FoodAfter
 
 	// --- spec 012 resources/food/crafting v2 event surface ---
 	// Registered as explicit no-ops in Phase 2 so each later story fills its own
@@ -455,15 +460,59 @@ func (s *State) Apply(e store.Event) error {
 	case "agent.crafted":
 		// TODO(T026): apply recipeFor(kind) delta (spear appends spearDurability); clear intent.
 	case "agent.cooked":
-		// TODO(T021/T031): FoodRaw -= consumed; Kind += produced; oven also Wood -= 1; clear intent.
+		// T021: a cook batch. FoodRaw -= consumed; the produced kind gains the
+		// same count (fire → food_cooked; oven → meals, wired in Phase 6). The
+		// oven also burns 1 Wood (T031). Station lit-ness was re-validated by
+		// the emitter (contested pattern) — the reducer applies the outcome.
+		var p CookedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.FoodRaw = maxInt(0, a.Inv.FoodRaw-p.Consumed)
+		switch p.Kind {
+		case "food_cooked":
+			a.Inv.FoodCooked += p.Produced
+		case "meals":
+			a.Inv.Meals += p.Produced
+		}
+		if p.Station == "oven" {
+			a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.bathed":
 		// TODO(T032): Water -1, Wood -1; set Morale/Warmth to the absolute after-values.
 	case "agent.refueled":
-		// TODO(T020): Wood -1; set the fire's FuelUntil to the absolute deadline (relights if cold).
+		// T020: 1 Wood spent; the fire's FuelUntil is set to the absolute
+		// deadline the emitter already capped. Relighting a cold fire is the
+		// same assignment (lit-ness is derived from FuelUntil vs tick).
+		var p RefueledPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		a.Inv.Wood = maxInt(0, a.Inv.Wood-1)
+		for i := range s.Structures {
+			st := &s.Structures[i]
+			if st.Kind == "fire" && st.X == p.X && st.Y == p.Y {
+				st.FuelUntil = p.FuelUntil
+				break
+			}
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
 	case "agent.spear_broke":
 		// TODO(T027): remove Spears[0] (spent to zero); companion memory rides the same batch.
 	case "sim.fire_burned_out":
-		// TODO(T019): no state effect — lit-ness is derived from FuelUntil; chronicle/TUI signal only.
+		// T019: no state effect — lit-ness is derived from FuelUntil; the event
+		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
 	case "world.migrated":
 		// TODO(T038): validate name/seed match, then replace State wholesale from the payload.
 

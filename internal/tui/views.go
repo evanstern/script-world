@@ -331,7 +331,14 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		for _, st := range m.replica.Structures {
 			switch st.Kind {
 			case "fire":
-				structures[[2]int{st.X, st.Y}] = styleFire.Render("▲")
+				// Lit vs cold (spec 012 T019/T024): lit iff current tick <
+				// FuelUntil. A cold fire shows a hollow, faint glyph so the
+				// player can tell a dead fire from a burning one (SC-006).
+				if m.replica.Tick < st.FuelUntil {
+					structures[[2]int{st.X, st.Y}] = styleFire.Render("▲")
+				} else {
+					structures[[2]int{st.X, st.Y}] = styleFireCold.Render("△")
+				}
 			case "shelter":
 				structures[[2]int{st.X, st.Y}] = styleShelter.Render("⌂")
 			}
@@ -416,7 +423,7 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		phase = styleNight.Render("night")
 	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter · agents by initial (lowercase asleep, †dead) · arrows pan, c center",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H))
 	return grid, legend
 }
@@ -430,6 +437,7 @@ var (
 	styleDepleted = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
 	styleDen      = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 	styleFire     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+	styleFireCold = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
 	styleShelter  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("130"))
 	styleGru      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
@@ -962,6 +970,11 @@ func (m Model) soulsBody(width, height int) string {
 				"         health %s food %s rest %s warmth %s morale %s",
 				bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
 				bar(a.Needs.Warmth), bar(a.Needs.Morale))))
+			// Carried inventory (spec 012 T024): wood + the food triplet,
+			// compact. T043 (Phase 9) expands to stone/water/planks/spears.
+			lines = append(lines, styleDim.Render(fmt.Sprintf(
+				"         carry %dw · food %dr/%dc/%dm",
+				a.Inv.Wood, a.Inv.FoodRaw, a.Inv.FoodCooked, a.Inv.Meals)))
 			lines = append(lines, "")
 		} else {
 			// Narrow dock width: drop goal/position/memory, keep name + status + health.

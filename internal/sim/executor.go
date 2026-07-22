@@ -62,6 +62,17 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		}
 	}
 
+	// Fire fuel burnout (T019): a fire whose deadline falls in this tick's
+	// window goes cold — emit sim.fire_burned_out exactly once on the
+	// transition (tick-1 < FuelUntil <= tick). Pure function of (state, tick);
+	// lit-ness stays derived from FuelUntil, so the event carries no state
+	// effect. Refuel pushes FuelUntil forward, re-arming this detection.
+	for _, st := range s.Structures {
+		if st.Kind == "fire" && st.FuelUntil > nextTick-1 && st.FuelUntil <= nextTick {
+			emit("sim.fire_burned_out", FireBurnedOutPayload{X: st.X, Y: st.Y})
+		}
+	}
+
 	// Per-game-minute needs heartbeat: decay, warmth, death.
 	if nextTick%60 == 0 {
 		for i := range s.Agents {
@@ -69,7 +80,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			if a.Dead {
 				continue
 			}
-			n := decayNeeds(a.Needs, a.Asleep, night, warmAt(s, a.X, a.Y))
+			n := decayNeeds(a.Needs, a.Asleep, night, warmAt(s, a.X, a.Y, nextTick))
 			emit("agent.needs_changed", NeedsPayload{
 				Agent: i, Health: n.Health, Food: n.Food, Rest: n.Rest, Warmth: n.Warmth, Morale: n.Morale,
 			})
@@ -175,7 +186,10 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 				d := decideIntent(s, m, i, nextTick)
 				switch {
 				case d.directEvent == "agent.ate":
-					emit("agent.ate", AgentPayload{Agent: i})
+					if p, ok := eatOutcome(a); ok {
+						p.Agent = i
+						emit("agent.ate", p)
+					}
 				case d.intent != nil:
 					emit("agent.intent_set", IntentSetPayload{
 						Agent: i, Goal: d.intent.Goal,
@@ -361,7 +375,9 @@ func giveable(s *State, i, j int, tick int64) (giver, recv int, ok bool) {
 }
 
 func canGive(a *Agent, tick int64) bool {
-	// TODO(T018): giving keys on raw food for now (see social.go apply).
+	// Give-to-starving stays on raw food (T018 decision: simplest re-expression
+	// of the pre-feature gift; the food triplet's least-nutritious form is what
+	// a subsistence village shares — see social.go apply).
 	return a.Inv.FoodRaw >= giveKeepsAtLeast &&
 		(a.LastGive == 0 || tick-a.LastGive >= giveCooldownSec)
 }
@@ -388,6 +404,31 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	case "wander", "goto_warmth", "seek":
 		emit("agent.intent_done", AgentPayload{Agent: i})
 		return events
+	case "refuel_fire":
+		// T020: instant on arrival (like eat/sleep). Re-validate at completion
+		// (contested pattern): fire still present and wood still carried, else
+		// resolve with no effect. The new deadline is absolute and capped; a
+		// cold fire relights. At-cap refuels are a no-op (edge case: consumes
+		// and extends nothing) — detected as no gain over the current deadline.
+		st, ok := fireStructAt(s, in.TargetX, in.TargetY)
+		if !ok || a.Inv.Wood < 1 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		base := st.FuelUntil
+		if base < nextTick {
+			base = nextTick // cold or expired: relight from now
+		}
+		deadline := base + fireBurnPerWood
+		if capAt := nextTick + fireFuelCap; deadline > capAt {
+			deadline = capAt
+		}
+		if deadline <= st.FuelUntil {
+			emit("agent.intent_done", AgentPayload{Agent: i}) // already at the fuel cap
+			return events
+		}
+		emit("agent.refueled", RefueledPayload{Agent: i, X: in.TargetX, Y: in.TargetY, FuelUntil: deadline})
+		return events
 	case "attend_meeting":
 		// Assembled: stand at the meeting place until it closes (the
 		// executor clears the pin once the meeting ends).
@@ -411,6 +452,11 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// have quarried this outcrop while this agent walked over.
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Rock
 		// collect_water: no depletion check — water sources are inexhaustible.
+	case "cook":
+		// T021: the station must still be a LIT fire — a fire that went cold
+		// while walking over (or during the work) yields no cooked food
+		// (edge case: fire burns out mid-cook). Re-validated every tick.
+		valid = litFireAt(s, in.TargetX, in.TargetY, nextTick)
 	}
 	if !valid {
 		emit("agent.intent_done", AgentPayload{Agent: i})
@@ -447,6 +493,20 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "collect_water":
 		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+	case "cook":
+		// T021: convert up to a batch of raw food to fire-cooked. Nothing to
+		// cook (no raw carried) resolves without effect.
+		consumed := a.Inv.FoodRaw
+		if consumed > ovenBatchSize {
+			consumed = ovenBatchSize
+		}
+		if consumed <= 0 {
+			emit("agent.intent_done", AgentPayload{Agent: i})
+			return events
+		}
+		emit("agent.cooked", CookedPayload{
+			Agent: i, Station: "fire", Consumed: consumed, Produced: consumed, Kind: "food_cooked",
+		})
 	}
 	return events
 }
@@ -487,8 +547,43 @@ func wakeReason(a *Agent, night bool) bool {
 	if !night && a.Needs.Rest >= 600 {
 		return true
 	}
-	// TODO(T018): wake-to-eat over the full food triplet.
-	return a.Needs.Food < 150 && a.Inv.FoodRaw > 0
+	// Wake to a hunger emergency the agent can act on: any food in hand (T018).
+	return a.Needs.Food < 150 && hasAnyFood(a)
+}
+
+// eatOutcome computes the most-nutritious-first eat (T018, FR-007): Meals →
+// FoodCooked → FoodRaw, one unit at a time, until the Food need reaches
+// satietyAt or the inventory runs out. It returns the outcome payload
+// (consumed counts per form + the absolute post-eat need) and whether anything
+// is eaten — false when already sated or carrying no food, so no unit is ever
+// consumed at satiety (the eating-overshoot edge case). The caller sets Agent.
+func eatOutcome(a *Agent) (AtePayload, bool) {
+	food := a.Needs.Food
+	if food >= satietyAt {
+		return AtePayload{}, false
+	}
+	availM, availC, availR := a.Inv.Meals, a.Inv.FoodCooked, a.Inv.FoodRaw
+	var meals, cooked, raw int
+	for food < satietyAt && (availM > 0 || availC > 0 || availR > 0) {
+		switch {
+		case availM > 0:
+			availM--
+			meals++
+			food = minInt(1000, food+mealRestore)
+		case availC > 0:
+			availC--
+			cooked++
+			food = minInt(1000, food+foodCookedRestore)
+		default: // availR > 0
+			availR--
+			raw++
+			food = minInt(1000, food+foodRawRestore)
+		}
+	}
+	if meals == 0 && cooked == 0 && raw == 0 {
+		return AtePayload{}, false
+	}
+	return AtePayload{Meals: meals, Cooked: cooked, Raw: raw, FoodAfter: food}, true
 }
 
 func minInt(a, b int) int {
