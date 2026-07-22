@@ -3,9 +3,10 @@ id: TASK-59
 title: >-
   Metatron miracles: time-snap, item grant, entity move/remove + gratis (cheat)
   door
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-22 16:58'
+updated_date: '2026-07-22 18:13'
 labels: []
 dependencies: []
 ordinal: 52000
@@ -24,6 +25,10 @@ Design decisions (agreed 2026-07-22):
 - Move validates destination with existing passable/buildSite helpers; item grant validates item kind + bulk cap (reject over cap, consistent with validate-not-clamp).
 
 Non-trivial: requires full Spec Kit (specify -> clarify -> plan -> tasks) linked via spec-bridge:link before implementation. Doctrine-adjacent (whitelist/isolation boundary, charge economy) -> Opus tier per constitution Principle V rubric.
+
+Clarified 2026-07-22 (5 Qs, see spec Clarifications): tiered pricing (snap 2, rest 1); chest removal spills contents to ground pile; villager move cancels intent (replan); miracles land memories for affected villagers; operator surface is a dedicated `promptworld miracle` subcommand.
+
+Spec: specs/016-metatron-miracles
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -34,4 +39,23 @@ Non-trivial: requires full Spec Kit (specify -> clarify -> plan -> tasks) linked
 - [ ] #4 Angel turn surface exposes the miracles charge-gated; a player console command lands the same events with --force
 - [ ] #5 entity_removed cannot target agents in v1
 - [ ] #6 Spec Kit spec authored and linked to this task via spec-bridge:link before implementation starts
+- [ ] #7 Spec phase: Setup
+- [ ] #8 Spec phase: Foundational (blocking prerequisites for all stories)
+- [ ] #9 Spec phase: User Story 1 — Rescue a stuck villager: entity move/remove (P1) 🎯 MVP
+- [ ] #10 Spec phase: User Story 2 — Operator force door: gratis miracles (P2)
+- [ ] #11 Spec phase: User Story 3 — Time snap with shift semantics (P2)
+- [ ] #12 Spec phase: User Story 4 — Item grant (P3)
+- [ ] #13 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Execute specs/016-metatron-miracles/tasks.md in .worktrees/task-59 on branch task-59-metatron-miracles via spec-implementer (Opus 4.8), phase-gated: (1) T001 worktree [orchestrator]; (2) T002–T011 foundation + US1 MVP; (3) T012–T019 US2 gratis + US3 time snap; (4) T020–T025 US4 + polish; orchestrator gates each batch with build/test/review, then spec-bridge:sync, one PR.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Tier decision (constitution V rubric): Opus 4.8 for implementation — doctrine-adjacent (injectSocialWhitelist isolation boundary + charge economy in reducer), cross-package (internal/sim, internal/metatron, internal/ipc, cmd/promptworld), and rebaseTicks touches replay determinism. Spec Kit complete: spec (5 clarifications) → plan (Constitution Check PASS ×2) → tasks (25, T001–T025). MVP = Phases 1–3 (US1 move/remove).
+<!-- SECTION:NOTES:END -->
