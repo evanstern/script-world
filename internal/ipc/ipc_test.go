@@ -441,6 +441,81 @@ func TestOversizedRawLineFailsFastNotForever(t *testing.T) {
 	}
 }
 
+// TestMiracleMoveRoundTrip (spec 016 T011): the operator "miracle" command
+// lands a villager move over the wire on a pure-sim world (no LLM/angel), spends
+// a charge, and the move is visible in the next state fetch. The world is paused
+// first so the villagers hold still for a deterministic before/after.
+func TestMiracleMoveRoundTrip(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	if _, err := c.Status("pause", nil); err != nil {
+		t.Fatal(err)
+	}
+	sd, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before sim.State
+	if err := json.Unmarshal(sd.State, &before); err != nil {
+		t.Fatal(err)
+	}
+	ax, ay := before.Agents[0].X, before.Agents[0].Y
+	// Another villager's tile is a guaranteed-passable destination (villagers
+	// may share a tile), so the test needs no map to pick a valid target.
+	var bx, by int
+	found := false
+	for i := 1; i < len(before.Agents); i++ {
+		if before.Agents[i].X != ax || before.Agents[i].Y != ay {
+			bx, by = before.Agents[i].X, before.Agents[i].Y
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Skip("all villagers share agent 0's tile")
+	}
+
+	data, err := c.Call("miracle", MiracleArgs{Kind: "move", Class: "villager", X: ax, Y: ay, ToX: bx, ToY: by})
+	if err != nil {
+		t.Fatalf("miracle move rejected over the wire: %v", err)
+	}
+	var md MiracleData
+	if err := json.Unmarshal(data, &md); err != nil {
+		t.Fatal(err)
+	}
+	if md.Kind != "move" || md.Gratis {
+		t.Errorf("miracle data wrong: %+v", md)
+	}
+	if md.Charges != 0 {
+		t.Errorf("charges after a charged move = %d, want 0 (genesis 1 spent)", md.Charges)
+	}
+	if !strings.Contains(md.Summary, "moved") {
+		t.Errorf("summary = %q, want a human rendering", md.Summary)
+	}
+
+	// The move is visible in the next state fetch.
+	sd2, err := c.FetchState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after sim.State
+	if err := json.Unmarshal(sd2.State, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Agents[0].X != bx || after.Agents[0].Y != by {
+		t.Errorf("villager at (%d,%d) after move, want (%d,%d)", after.Agents[0].X, after.Agents[0].Y, bx, by)
+	}
+
+	// Unknown kinds are refused cleanly; the connection survives.
+	if _, err := c.Call("miracle", MiracleArgs{Kind: "smite", X: ax, Y: ay}); err == nil {
+		t.Error("unknown miracle kind should be refused")
+	}
+	if _, err := c.Status("status", nil); err != nil {
+		t.Errorf("connection should survive a refused miracle: %v", err)
+	}
+}
+
 func waitForSeq(t *testing.T, c *Client, seq int64) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
