@@ -121,7 +121,7 @@ is unaffected by carried bulk (out of scope).
 ## world.Manifest
 
 `FormatVersion`: 2 → 3. Existing rejection path text continues to name
-`scriptworld migrate`. Migration artifacts: `world.v2.db` archive beside
+`promptworld migrate`. Migration artifacts: `world.v2.db` archive beside
 `world.db`; fresh log `world.created` → `world.migrated{from_format: 2, state}`.
 Transform (pure, in `internal/sim/migrate.go`): everything carries verbatim —
 **no land reset** (no map inputs changed) — except carried bulk over `bulkCap`

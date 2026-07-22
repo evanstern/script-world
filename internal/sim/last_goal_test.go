@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // --- TASK-56: LastGoal/LastGoalTick reducer lifecycle (research.md R1) ---

@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/evanstern/script-world/internal/cognition"
+	"github.com/evanstern/promptworld/internal/cognition"
 )
 
 // Kind classifies a call; routing to a tier follows the grounding decisions.

@@ -36,7 +36,7 @@ by `llm_call`; client read deadline extended for this request).
 | Empty/oversized `text` | rejected before any model call |
 | Unusable model output | `ok:true` with an apologetic `reply`, `nudge:null` — a safe turn, not a protocol error |
 
-## CLI: `scriptworld metatron <dir> <message…>`
+## CLI: `promptworld metatron <dir> <message…>`
 
 One-shot console turn against the running daemon (the proof path for tests/scripts).
 Prints the reply, any landed nudge line (`⚡ dream → Fern: …`), surfaced moments, and the

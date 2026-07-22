@@ -24,7 +24,7 @@ events vs files (truth vs view), and mind vs loop (I/O vs determinism).
 ## How it works
 
 **Personas** (`internal/persona`): eight authored natures, written exactly once by
-`scriptworld new` at mode 0444 into `agents/<name>/persona.md` — no post-genesis
+`promptworld new` at mode 0444 into `agents/<name>/persona.md` — no post-genesis
 write path exists anywhere (the structural half of the persona firewall; the
 validation half is [[nightly-consolidation]]'s validator, fed by the authored
 `persona.Anchors` and `persona.DriftMarkers`). `Load` reads them as the mind's

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 func nudgeEvent(t *testing.T, tick int64, p MetatronNudgedPayload) store.Event {

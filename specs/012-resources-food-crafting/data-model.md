@@ -95,11 +95,11 @@ new:      quarry, collect_water, craft_planks, craft_stone, craft_spear,
 
 `FormatVersion`: 1 → 2. No shape change; existing rejection path
 (`world format_version %d unsupported`) is the behavior for un-migrated worlds, with
-the error text extended to name `scriptworld migrate`.
+the error text extended to name `promptworld migrate`.
 
 ## Migration artifacts (research R10)
 
-- `world.v1.db`: the archived original database, created by `scriptworld migrate`
+- `world.v1.db`: the archived original database, created by `promptworld migrate`
   beside `world.db`; its existence is the already-migrated guard. Restoring = delete
   `world.db`, rename back, reset manifest to 1.
 - `world.migrated` event: `WorldMigratedPayload{FromFormat int, SourceEvents int64,

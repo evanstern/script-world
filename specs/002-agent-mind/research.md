@@ -92,7 +92,7 @@
 ## R7. Persona firewall v1: structural + filesystem
 
 - **Decision**: personas are authored constants in `internal/persona`, written once
-  by `scriptworld new` with mode 0444; no other code path references the file for
+  by `promptworld new` with mode 0444; no other code path references the file for
   writing. The mind reads persona content at startup (and on soul-dir change) into
   an in-memory map used as the stable prompt prefix.
 - **Rationale**: "outside every write path" is the grounding's mechanization (a);

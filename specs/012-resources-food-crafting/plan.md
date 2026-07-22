@@ -111,8 +111,8 @@ internal/world/
 └── world.go             # FormatVersion 1→2 (rejection message names migrate);
                          #   migrate orchestration (archive, fresh log, manifest bump)
 
-cmd/scriptworld/
-└── (migrate command)    # `scriptworld migrate <world>` per R10
+cmd/promptworld/
+└── (migrate command)    # `promptworld migrate <world>` per R10
 
 internal/tui/
 └── views.go             # Rock/quarried glyphs, oven glyph, cold-fire styling,

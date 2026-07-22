@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 // --- T011: grammar/focus — j/k/g/G/⏎/esc scoped to the villagers tab ---

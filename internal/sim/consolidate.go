@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Nightly consolidation substrate (TASK-9): the model-free half. Beliefs,

@@ -80,12 +80,12 @@ zero edits; `injectSocialWhitelist` diff against main is empty.
 ## 7. Live smoke (optional but recommended before PR)
 
 ```sh
-go run ./cmd/scriptworld new /tmp/sw-014 && go run ./cmd/scriptworld run /tmp/sw-014
+go run ./cmd/promptworld new /tmp/sw-014 && go run ./cmd/promptworld run /tmp/sw-014
 ```
 
 Watch one planner cadence: villagers plan/speak/muse as before; a multi-step plan
 containing `cook` or `quarry` now lands (step 4's delta, visible live). Then
-`scriptworld tail` shows the same event vocabulary as a pre-refactor world.
+`promptworld tail` shows the same event vocabulary as a pre-refactor world.
 
 ## Done means
 

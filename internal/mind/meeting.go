@@ -7,9 +7,9 @@ import (
 	"log"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Governance phrasing (TASK-13): the ONLY model involvement in the norms

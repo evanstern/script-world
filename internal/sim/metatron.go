@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Metatron's world-visible surface (TASK-12): the charge economy and the

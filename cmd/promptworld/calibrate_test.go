@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/llm"
+	"github.com/evanstern/promptworld/internal/llm"
 )
 
 // fakeSubmitter answers every call after a fixed simulated duration.

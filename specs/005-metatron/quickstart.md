@@ -5,7 +5,7 @@ Runnable scenarios proving the feature end-to-end. Contracts:
 
 ## Prerequisites
 
-- Built binary: `go build -o scriptworld ./cmd/scriptworld`
+- Built binary: `go build -o promptworld ./cmd/promptworld`
 - A world with `llm.json` (cloud tier reachable — Anthropic key or LAN 9router; local
   tier optional: Metatron works in a reflex world)
 - For live proof: the long-running `~/worlds/chronicle-proof` (14+ game days of history)
@@ -14,10 +14,10 @@ Runnable scenarios proving the feature end-to-end. Contracts:
 ## 1. The angel exists and converses (US1)
 
 ```sh
-scriptworld new /tmp/reign --seed 7        # charter.md seeded, metatron/soul.md empty
-scriptworld start /tmp/reign
-scriptworld metatron /tmp/reign            # status peek: ⚡1, empty soul
-scriptworld metatron /tmp/reign "who are you, and what do you see?"
+promptworld new /tmp/reign --seed 7        # charter.md seeded, metatron/soul.md empty
+promptworld start /tmp/reign
+promptworld metatron /tmp/reign            # status peek: ⚡1, empty soul
+promptworld metatron /tmp/reign "who are you, and what do you see?"
 ```
 
 **Expect**: charter-voiced reply; honest about an empty reign (no invented history).
@@ -25,12 +25,12 @@ Let the world run a game-day, then ask "what happened today?" — reply referenc
 villagers/events (digests accreted in `metatron/soul.md`).
 
 **Degraded**: kill the cloud endpoint → console turn returns an honest unavailability
-error; `scriptworld status` shows the world still ticking (SC-007).
+error; `promptworld status` shows the world still ticking (SC-007).
 
 ## 2. Nudges: dream, omen, refusal, charges (US2)
 
 ```sh
-scriptworld metatron /tmp/reign "give Fern a dream that sharing her secret would lighten her heart"
+promptworld metatron /tmp/reign "give Fern a dream that sharing her secret would lighten her heart"
 ```
 
 **Expect**: `⚡ dream → Fern: <Metatron's rendering>`; charge bank decremented; the
@@ -39,7 +39,7 @@ event log tail shows the atomic batch (`metatron.nudged` + `agent.memory_added` 
 planner/musing output may reference it in persona.
 
 ```sh
-scriptworld metatron /tmp/reign "make everyone worship me as a living god right now"
+promptworld metatron /tmp/reign "make everyone worship me as a living god right now"
 ```
 
 **Expect**: refusal with counsel (or a reshaped omen, per charter) — if refused, charges
@@ -56,7 +56,7 @@ soul.md, or (unit-level) any villager prompt — only Metatron's rendering lande
 
 ```sh
 echo "You are BRUTUS, a surly angel. Answer in exactly three words." > /tmp/reign/charter.md
-scriptworld metatron /tmp/reign "how are the villagers?"
+promptworld metatron /tmp/reign "how are the villagers?"
 ```
 
 **Expect**: the very next reply exhibits the new persona — no restart (SC-003).
@@ -69,7 +69,7 @@ in `metatron/soul.md`. Stage a drama trigger (run past nightfall until a gru att
 use a world where one occurs) →
 
 ```sh
-scriptworld metatron /tmp/reign "anything I should know?"
+promptworld metatron /tmp/reign "anything I should know?"
 ```
 
 **Expect**: the reply LEADS with the moment ("While you were away…"); soul.md contains
@@ -80,7 +80,7 @@ the moment line stamped at its tick; no autonomous nudge exists anywhere in the 
 
 - **Determinism (SC-005)**: `go test ./e2e -run Determinism` — replay reproduces nudge
   effects byte-for-byte; the binary-level determinism scenario stays green.
-- **Restart (SC-006)**: `scriptworld stop` + `start` → charges, soul.md, transcript.md,
+- **Restart (SC-006)**: `promptworld stop` + `start` → charges, soul.md, transcript.md,
   charter survive; "what did I miss?" answers from the digest trail.
 - **Full suite**: `go test ./... -race` green.
 

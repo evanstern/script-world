@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 // Prompt construction per contracts/planner-prompt.md: a stable per-agent

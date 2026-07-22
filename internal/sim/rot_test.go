@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Rot: the ground is not a larder (spec 013 US5, T033). Ground-pile food spoils

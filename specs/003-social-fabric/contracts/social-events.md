@@ -8,7 +8,7 @@ All social state changes ride these events; replay needs nothing else.
 | `social.gave` | `{from, to, kind}` | executor (reflex + planner goal `give_food`) | inventory transfer; ledger transition is reducer-internal — settles the oldest matching open debt (kept) or opens a new one (id from NextDebtID, due +2 game days) |
 | `social.promise_broken` | `{id}` | executor hourly due-check | status broken |
 | `social.rumor_told` | `{from, to, rumor_id, subject, tone, text, confidence, secret}` | executor verbatim fallback; convo driver (paraphrase, injected) | rumor_id 0 → registry birth (NextRumorID); add/update listener's KnownRumor; affection shift to subject |
-| `social.secret_seeded` | `{agent, text, tone}` | `scriptworld new` at tick 0 | registry rumor (Secret) + owner's Known |
+| `social.secret_seeded` | `{agent, text, tone}` | `promptworld new` at tick 0 | registry rumor (Secret) + owner's Known |
 | `social.conversation_turn` | `{conv, speaker, listener, text}` | convo driver (injected) | none (chronicle) |
 | `social.conversation` | `{conv, a, b, gist, turns}` | convo driver (injected) | none (chronicle) |
 

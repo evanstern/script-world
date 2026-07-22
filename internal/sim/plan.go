@@ -7,8 +7,8 @@ package sim
 // is recorded state (agent.plan_set), so replay is untouched.
 
 import (
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // PlanStepCap bounds a plan: prompt-expressible in 256 tokens, and per-tick

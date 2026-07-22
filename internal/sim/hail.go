@@ -8,7 +8,7 @@ package sim
 // executor beat. No wall clock, no randomness.
 
 import (
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Hail tunables (constants, like the executor cadences/radii in agents.go).

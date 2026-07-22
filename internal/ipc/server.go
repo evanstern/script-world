@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/metatron"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // pushBufferSize bounds a slow subscriber; overflow cancels the subscription

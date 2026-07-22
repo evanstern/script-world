@@ -82,8 +82,8 @@
 
 ## R6. Daemon lifecycle: detach, stop, crash
 
-- **Decision**: `scriptworld daemon <dir>` runs the loop in the foreground (the
-  primitive). `scriptworld start <dir>` detaches by re-exec'ing itself (`daemon`
+- **Decision**: `promptworld daemon <dir>` runs the loop in the foreground (the
+  primitive). `promptworld start <dir>` detaches by re-exec'ing itself (`daemon`
   subcommand) with stdio to `<savedir>/daemon.log`, writing `<savedir>/daemon.pid`.
   `stop` sends a `shutdown` command over the socket (graceful: final snapshot, clean
   close); SIGTERM does the same; SIGKILL is the crash path recovery is tested against.
@@ -114,9 +114,9 @@
 
 - **Decision**: `world.json` manifest at save-dir root: `{name, seed, created_at,
   format_version, tick_game_seconds: 1}`. The save dir *is* the world identity; no
-  global registry. `scriptworld new <dir> [--name] [--seed]` creates layout + schema;
+  global registry. `promptworld new <dir> [--name] [--seed]` creates layout + schema;
   refuses non-empty dirs.
 - **Rationale**: matches FR-009/"runs cleanly separable" — cp -r of the dir is a full
   archive. Explicit `format_version` buys future migration room now, when it's free.
-- **Alternatives considered**: worlds registry in `~/.scriptworld` (global state the
+- **Alternatives considered**: worlds registry in `~/.promptworld` (global state the
   grounding explicitly rejected: "never global; runs cleanly separable").

@@ -6,16 +6,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/world"
-	"github.com/evanstern/script-world/internal/worlds"
+	"github.com/evanstern/promptworld/internal/world"
+	"github.com/evanstern/promptworld/internal/worlds"
 )
 
-// isolatedHome points SCRIPTWORLD_HOME at a fresh temp dir for one test,
+// isolatedHome points PROMPTWORLD_HOME at a fresh temp dir for one test,
 // mirroring e2e/manager_e2e_test.go's helper of the same purpose.
 func isolatedHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", home)
+	t.Setenv("PROMPTWORLD_HOME", home)
 	return home
 }
 

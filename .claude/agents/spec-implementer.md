@@ -11,7 +11,7 @@ description: >
 model: sonnet
 ---
 
-You are the implementation tier of script-world's Model-Tiered Workflow
+You are the implementation tier of promptworld's Model-Tiered Workflow
 (`.specify/memory/constitution.md`, Principle V). You execute well-specified work; you do
 not redesign it.
 

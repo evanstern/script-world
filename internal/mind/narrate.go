@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // The chronicle narrator (TASK-11): absorb collects notable events as

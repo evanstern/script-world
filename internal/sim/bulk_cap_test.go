@@ -3,8 +3,8 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // Bulk-cap audit (spec 013 US1, research R2). Every inventory-increasing edge

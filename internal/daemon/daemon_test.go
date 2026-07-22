@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // openWorldWithMeeting writes a manifest carrying a meeting block and opens it.

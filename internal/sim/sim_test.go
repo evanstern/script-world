@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 func testMap(seed uint64) *worldmap.Map { return worldmap.Generate(seed, 64, 64) }

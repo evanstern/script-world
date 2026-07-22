@@ -20,13 +20,13 @@ There is no central runtime state today: the pidfile and socket live *inside* th
 dir (`internal/world/world.go` `PidPath()`/`SockPath()`). Machine-wide enumeration
 therefore needs a candidate list; scan + advisory registry provides it without making
 any world depend on external state (FR-008). Registering from `daemon.Run` (not from the
-`start` client) means even foreground `scriptworld daemon <dir>` runs become visible.
+`start` client) means even foreground `promptworld daemon <dir>` runs become visible.
 
 **Alternatives considered**:
-- *Scan the process table* (`ps aux | grep scriptworld`): platform-fragile, breaks on
+- *Scan the process table* (`ps aux | grep promptworld`): platform-fragile, breaks on
   renamed binaries, cannot recover the world dir reliably from argv, and gives no way to
   list stopped worlds (`ps --all`). Rejected.
-- *Central runtime dir of pidfiles* (`~/.scriptworld/run/<name>.pid`): creates a second
+- *Central runtime dir of pidfiles* (`~/.promptworld/run/<name>.pid`): creates a second
   authoritative copy of per-world lifecycle state; a crashed daemon would leave the two
   copies disagreeing. The world dir stays the sole source of truth; the registry is a
   pointer cache only. Rejected.
@@ -64,7 +64,7 @@ with `.` or `~`; otherwise it is a **name**. (This subsumes `..` and `./name`.) 
 resolves: (1) worlds-home entry `<home>/<name>`; (2) registry entry `name`. If both
 exist and point at different directories, the command refuses as ambiguous and prints
 both paths (FR-011). An unresolvable name exits 1 naming the worlds home searched and
-suggesting `scriptworld ps --all` (FR-007). Resolution happens in one shared helper used
+suggesting `promptworld ps --all` (FR-007). Resolution happens in one shared helper used
 by every per-world command; path-shaped arguments bypass it entirely and hit today's
 code path unchanged (FR-006, FR-012, SC-003).
 
@@ -78,9 +78,9 @@ code path unchanged (FR-006, FR-012, SC-003).
 
 ## D4 — Worlds home location and override
 
-**Decision**: The scriptworld home is `~/.scriptworld`, overridable with the
-`SCRIPTWORLD_HOME` environment variable. Derived paths: worlds home
-`$SCRIPTWORLD_HOME/worlds`, registry `$SCRIPTWORLD_HOME/known_worlds.json`. All
+**Decision**: The promptworld home is `~/.promptworld`, overridable with the
+`PROMPTWORLD_HOME` environment variable. Derived paths: worlds home
+`$PROMPTWORLD_HOME/worlds`, registry `$PROMPTWORLD_HOME/known_worlds.json`. All
 discovery, creation, and name resolution read the same helper, so the override is
 honored everywhere consistently (spec edge case).
 
@@ -90,7 +90,7 @@ a home that isn't scanned. Follows the ollama/docker single-home convention the 
 invokes.
 
 **Alternatives considered**:
-- *`SCRIPTWORLD_WORLDS_HOME` (worlds dir only)*: leaves the registry location ambiguous.
+- *`PROMPTWORLD_WORLDS_HOME` (worlds dir only)*: leaves the registry location ambiguous.
   Rejected in favor of the single root.
 - *Config file for the override*: no config file exists today and the spec only demands
   environment/config; env-only is the smallest honest surface. A config file can layer
@@ -98,9 +98,9 @@ invokes.
 
 ## D5 — `new` argument semantics
 
-**Decision**: `scriptworld new <name>` (bare word) creates `<worlds-home>/<name>` with
+**Decision**: `promptworld new <name>` (bare word) creates `<worlds-home>/<name>` with
 manifest name `<name>`, creating the worlds home on first use; it refuses (exit 1) if
-the target directory already exists (FR-004). `scriptworld new <path-shaped-arg>` keeps
+the target directory already exists (FR-004). `promptworld new <path-shaped-arg>` keeps
 today's exact behavior: create at that path, manifest name from `--name` or the basename
 (FR-012 "keep the old create-at-path behavior"). The location override for named
 creation is `--at <dir>`: `new aria --at /tmp/somewhere` creates `/tmp/somewhere` (the

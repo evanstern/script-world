@@ -1,7 +1,7 @@
 {
   "$schema": "https://learnings.local/progress.schema.json",
-  "topic": "script-world-design",
-  "title": "script-world design grounding",
+  "topic": "promptworld-design",
+  "title": "promptworld design grounding",
   "updated": "2026-07-19",
   "mode": "socratic grounding \u00b7 design interrogation (outputs feed the PDLC board, not a delegated build)",
   "lifecycle": [

@@ -1,4 +1,4 @@
-# script-world
+# promptworld
 
 A terminal UI, open-world, top-down game on a procedurally generated map — where the
 inhabitants are small **AI-programmable agents**.
@@ -25,7 +25,7 @@ menus and zones, you tweak your dwarf by talking to it. The prompt *is* the beha
 ## Status
 
 Grounded and building. The design was interrogated in a Socratic grounding session
-(see `docs/design/grounded-assumptions.md`) — script-world is an **ambient, always-on
+(see `docs/design/grounded-assumptions.md`) — promptworld is an **ambient, always-on
 world**: a daemon simulates the village 24/7; the terminal UI is an attachable client;
 all player influence flows through **Metatron**, an editable intermediary agent. The
 board lives in `backlog/`; specs in `specs/`.
@@ -46,30 +46,30 @@ resolving deterministically off the relationship graph, with the agreed law livi
 `village_charter.md` and witnessed violations feeding memories, grudges, and gossip.
 
 ```sh
-go build ./cmd/scriptworld
+go build ./cmd/promptworld
 
-scriptworld new demo --seed 42            # create a world (lands in ~/.scriptworld/worlds/demo)
-scriptworld start demo                    # detached daemon; the world now runs 24/7
-scriptworld ps                            # every running world, machine-wide — name, state, pid,
+promptworld new demo --seed 42            # create a world (lands in ~/.promptworld/worlds/demo)
+promptworld start demo                    # detached daemon; the world now runs 24/7
+promptworld ps                            # every running world, machine-wide — name, state, pid,
                                            # tick, game time, speed, LLM on/off (from any directory)
-scriptworld status demo                   # tick, game time, speed
-scriptworld attach demo                   # watch events live; pause/resume/speed/quit
-scriptworld pause demo                    # pause is a player verb (detaching is not)
-scriptworld resume demo                   # counterpart of pause
-scriptworld speed demo max                # real-time up to as-fast-as-affordable
-scriptworld tail demo --follow            # stream the event log
-scriptworld ui demo                       # full-screen TUI: map, chronicle, metatron, souls
-scriptworld metatron demo "who thrives, who struggles?"   # converse with your angel
-scriptworld stop demo                     # graceful stop; kill -9 also resumes lossless
-scriptworld help                          # full command list incl. daemon, llm, calibrate
+promptworld status demo                   # tick, game time, speed
+promptworld attach demo                   # watch events live; pause/resume/speed/quit
+promptworld pause demo                    # pause is a player verb (detaching is not)
+promptworld resume demo                   # counterpart of pause
+promptworld speed demo max                # real-time up to as-fast-as-affordable
+promptworld tail demo --follow            # stream the event log
+promptworld ui demo                       # full-screen TUI: map, chronicle, metatron, souls
+promptworld metatron demo "who thrives, who struggles?"   # converse with your angel
+promptworld stop demo                     # graceful stop; kill -9 also resumes lossless
+promptworld help                          # full command list incl. daemon, llm, calibrate
 ```
 
 Every `<world>` argument above is a **name** — resolved against the default worlds
-home (`~/.scriptworld/worlds`, overridable with `SCRIPTWORLD_HOME`) and then a
+home (`~/.promptworld/worlds`, overridable with `PROMPTWORLD_HOME`) and then a
 known-worlds list of custom-path worlds. An explicit **path** (`~/worlds/demo`,
 `./demo`, `/srv/games/demo`) still works exactly as before and remains a fully
-self-contained, copyable directory — `scriptworld new ~/worlds/demo --seed 42` and
-`scriptworld start ~/worlds/demo` are unchanged. `scriptworld ps` is what makes running
+self-contained, copyable directory — `promptworld new ~/worlds/demo --seed 42` and
+`promptworld start ~/worlds/demo` are unchanged. `promptworld ps` is what makes running
 several worlds at once safe to reason about: it answers "what's running, and is it
 using the shared LLM host?" in one command, with live-proven state (a crashed daemon
 never shows as running).
@@ -88,7 +88,7 @@ model may decide** by **how stale its answer will be when it lands**:
 - Every model-reaching decision class carries a **Fibonacci thought cost**
   (host-independent) and a **staleness budget in game time** (a property of the
   fiction) — `internal/cognition/registry.go`.
-- `scriptworld calibrate <dir>` benchmarks your host+model to seconds-per-point
+- `promptworld calibrate <dir>` benchmarks your host+model to seconds-per-point
   (`calibration.json`) and prints the horizon your hardware buys ("planner
   suppressed above 16x; musing OK at 32x"). A live estimator follows drift and
   rejects lag spikes; a missing profile means pessimistic bootstrap defaults.

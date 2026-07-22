@@ -25,7 +25,7 @@ Initial values: see [contracts/registry.md](contracts/registry.md).
 | `tiers.<tier>.samples` | array | per-shape raw durations (audit trail) |
 | `tiers.<tier>.model` | string | identity of what was measured |
 
-**Lifecycle**: written only by `scriptworld calibrate`; read once at daemon start to
+**Lifecycle**: written only by `promptworld calibrate`; read once at daemon start to
 seed the live estimator; missing file → pessimistic bootstrap defaults (local 20
 s/pt, cloud 10 s/pt).
 

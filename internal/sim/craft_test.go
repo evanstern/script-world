@@ -3,7 +3,7 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestCraftInsufficientInputsNoOp is spec 012 US3 T026/FR-014: a hand-craft

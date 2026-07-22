@@ -13,22 +13,22 @@ import (
 	"strings"
 )
 
-// homeEnv overrides the scriptworld home; it moves the worlds home and the
+// homeEnv overrides the promptworld home; it moves the worlds home and the
 // registry together (research.md D4) so the override is honored
 // consistently by discovery, creation, and name resolution.
-const homeEnv = "SCRIPTWORLD_HOME"
+const homeEnv = "PROMPTWORLD_HOME"
 
-// Root returns the scriptworld home: $SCRIPTWORLD_HOME if set, else
-// ~/.scriptworld.
+// Root returns the promptworld home: $PROMPTWORLD_HOME if set, else
+// ~/.promptworld.
 func Root() (string, error) {
 	if v := os.Getenv(homeEnv); v != "" {
 		return filepath.Abs(v)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve scriptworld home: %w", err)
+		return "", fmt.Errorf("resolve promptworld home: %w", err)
 	}
-	return filepath.Join(home, ".scriptworld"), nil
+	return filepath.Join(home, ".promptworld"), nil
 }
 
 // WorldsHome returns <root>/worlds — where name-created worlds live and

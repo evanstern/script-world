@@ -3,7 +3,7 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Theft (spec 013 US4, T031): a non-owner chest withdrawal is never blocked and

@@ -9,7 +9,7 @@ verified_against: 004a430ca16d3f31d9d303b5b59b176bde0bae5f
 
 # Deterministic RNG
 
-script-world has no long-lived random stream. Every random decision constructs a fresh
+promptworld has no long-lived random stream. Every random decision constructs a fresh
 `math/rand/v2` PCG seeded purely from its coordinates, making randomness a pure
 function — the key trick that lets crash recovery and replay work without ever
 persisting RNG state.

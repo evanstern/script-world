@@ -7,15 +7,15 @@ build. Contracts: [contracts/cli.md](contracts/cli.md); states/resolution:
 ## Prerequisites
 
 ```bash
-go build -o /tmp/sw ./cmd/scriptworld
-export SCRIPTWORLD_HOME=$(mktemp -d)   # isolated home so the walkthrough is hermetic
+go build -o /tmp/sw ./cmd/promptworld
+export PROMPTWORLD_HOME=$(mktemp -d)   # isolated home so the walkthrough is hermetic
 ```
 
 ## US2 — create and address by name (P2)
 
 ```bash
-/tmp/sw new aria                        # → creates $SCRIPTWORLD_HOME/worlds/aria
-test -f "$SCRIPTWORLD_HOME/worlds/aria/world.json" && echo OK
+/tmp/sw new aria                        # → creates $PROMPTWORLD_HOME/worlds/aria
+test -f "$PROMPTWORLD_HOME/worlds/aria/world.json" && echo OK
 /tmp/sw new aria                        # → exit 1, "already exists", world untouched
 /tmp/sw new ./elsewhere --name 'bad/name'; /tmp/sw new -- '-flag'   # → exit 1, validation messages
 # (a bare `bad/name` argument contains `/` so it is a PATH per D3 — legacy path-form, not a name error)
@@ -35,7 +35,7 @@ cd / && /tmp/sw ps                      # both listed: name, state, pid, tick, g
 /tmp/sw ps --json | jq 'length'        # → 2, machine-readable (FR-014)
 
 # stale-record honesty (FR-002): SIGKILL one daemon, ps must not show it running
-kill -9 "$(cat "$SCRIPTWORLD_HOME/worlds/harbor/daemon.pid")"
+kill -9 "$(cat "$PROMPTWORLD_HOME/worlds/harbor/daemon.pid")"
 /tmp/sw ps                              # harbor absent (or --all: stopped) — never "running"
 /tmp/sw ps --all                        # stopped worlds too, with last-known tick/time
 /tmp/sw stop custom
@@ -61,9 +61,9 @@ rm -rf /tmp/elsewhere/custom
 
 ```bash
 go test ./... && go test ./e2e/         # full suite incl. pre-existing path-based e2e
-cp -R "$SCRIPTWORLD_HOME/worlds/aria" /tmp/aria-copy
-SCRIPTWORLD_HOME=$(mktemp -d) /tmp/sw start /tmp/aria-copy    # runs with zero manager state
-SCRIPTWORLD_HOME=$(mktemp -d) /tmp/sw stop /tmp/aria-copy
+cp -R "$PROMPTWORLD_HOME/worlds/aria" /tmp/aria-copy
+PROMPTWORLD_HOME=$(mktemp -d) /tmp/sw start /tmp/aria-copy    # runs with zero manager state
+PROMPTWORLD_HOME=$(mktemp -d) /tmp/sw stop /tmp/aria-copy
 ```
 
 ## Expected outcomes checklist
@@ -74,5 +74,5 @@ SCRIPTWORLD_HOME=$(mktemp -d) /tmp/sw stop /tmp/aria-copy
 - [ ] `new <name>` creates under the worlds home; duplicate name refused untouched
 - [ ] every per-world command works with a name from any directory
 - [ ] path invocations behave exactly as before (full old suite green)
-- [ ] copied world dir runs on a fresh `SCRIPTWORLD_HOME` with no registry present
+- [ ] copied world dir runs on a fresh `PROMPTWORLD_HOME` with no registry present
 - [ ] ambiguous name refused with both candidate paths printed

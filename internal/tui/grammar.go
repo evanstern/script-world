@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // eventClass is the chronicle-grammar.md class table.

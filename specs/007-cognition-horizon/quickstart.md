@@ -17,8 +17,8 @@ pause-landing-at-zero-staleness, and byte-identical replay all green.
 ## 2. Calibrate a world (US1)
 
 ```sh
-scriptworld new --dir /tmp/horizon-w --name horizon
-scriptworld calibrate --dir /tmp/horizon-w
+promptworld new --dir /tmp/horizon-w --name horizon
+promptworld calibrate --dir /tmp/horizon-w
 cat /tmp/horizon-w/calibration.json
 ```
 
@@ -29,8 +29,8 @@ verdict per class ("planner suppressed above 16x" on a ~17 s/pt host). See
 ## 3. Telemetry + causality (US1, SC-002, SC-007)
 
 ```sh
-scriptworld start --dir /tmp/horizon-w
-scriptworld speed --dir /tmp/horizon-w 4x
+promptworld start --dir /tmp/horizon-w
+promptworld speed --dir /tmp/horizon-w 4x
 sleep 300
 sqlite3 /tmp/horizon-w/world.db \
   "SELECT type, count(*) FROM events WHERE type LIKE 'cog.%' GROUP BY type"
@@ -44,7 +44,7 @@ exactly one `cog.outcome` (audit query in the e2e test); outcomes carry
 ## 4. The horizon at speed (US2, SC-001, SC-006)
 
 ```sh
-scriptworld speed --dir /tmp/horizon-w 32x   # slow local model
+promptworld speed --dir /tmp/horizon-w 32x   # slow local model
 sleep 300
 sqlite3 /tmp/horizon-w/world.db \
   "SELECT json_extract(payload,'$.outcome'), count(*) FROM events
@@ -59,9 +59,9 @@ to the model again (SC-006).
 ## 5. Pause semantics (US5)
 
 ```sh
-scriptworld speed --dir /tmp/horizon-w 4x
+promptworld speed --dir /tmp/horizon-w 4x
 # wait for a conversation to found (tail the log), then:
-scriptworld pause --dir /tmp/horizon-w
+promptworld pause --dir /tmp/horizon-w
 sleep 120
 sqlite3 /tmp/horizon-w/world.db \
   "SELECT type, tick FROM events ORDER BY seq DESC LIMIT 20"
@@ -74,7 +74,7 @@ with no burst.
 ## 6. Replay determinism (SC-003)
 
 ```sh
-scriptworld stop --dir /tmp/horizon-w
+promptworld stop --dir /tmp/horizon-w
 go test ./e2e/ -run Replay   # replays the log, byte-compares derived state
 ```
 

@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // legacyFoodToMeals converts a v1 legacy Food unit into v2 Meals. The design

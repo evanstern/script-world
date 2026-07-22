@@ -7,9 +7,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestConvoRawTruncation (TASK-42 T004): oversized raw replies are cut on a rune

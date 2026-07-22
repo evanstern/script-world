@@ -32,7 +32,7 @@ success criteria only provable by tests.
 
 - [X] T008 [US2] internal/persona — 8 authored personas (constants), Genesis(dir) writing agents/<name>/{persona.md,soul.md} with persona mode 0444; Load(dir) map for the mind
 - [X] T009 [US2] internal/scribe — always-on soul.md writer: replica from notify stream, regenerate on memory/death events per contracts/agent-files.md
-- [X] T010 [US2] Wire genesis + scribe — cmd/scriptworld `new` calls persona.Genesis; daemon fans notify out to server + scribe (always)
+- [X] T010 [US2] Wire genesis + scribe — cmd/promptworld `new` calls persona.Genesis; daemon fans notify out to server + scribe (always)
 - [X] T011 [P] [US2] Tests in internal/persona/persona_test.go + internal/scribe/scribe_test.go — 0444 + content stability, soul render format, regeneration from replayed events
 
 **Checkpoint**: new worlds have villagers with natures and growing souls, LLM or not.

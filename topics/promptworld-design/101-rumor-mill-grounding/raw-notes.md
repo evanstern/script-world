@@ -28,7 +28,7 @@
 ### [2] Tempo: 4× compression, always-on world
 - **Q:** How long is a real-time day, are there speed controls, and does the world run while the app is closed?
 - **A (gist):** Default 1 game-min = 15 real-sec (4× compression → one game day ≈ 6 real hours). Speed adjustable from real-time (1:1) up to "as fast as we can handle." Pausing is A REQUIREMENT. World is always on.
-- **Verdict:** aha — this reframes the whole product. Not a "sitting" game at all: a game day is 6 real hours, so 30+ days means weeks of real time. script-world is an *ambient persistent world* you check in on (Tamagotchi × Dwarf Fortress), with the chronicle as the catch-up mechanism.
+- **Verdict:** aha — this reframes the whole product. Not a "sitting" game at all: a game day is 6 real hours, so 30+ days means weeks of real time. promptworld is an *ambient persistent world* you check in on (Tamagotchi × Dwarf Fortress), with the chronicle as the catch-up mechanism.
 - **Note:** Architectural consequence: the sim must be a long-running process (daemon/server) with the terminal UI as an attachable client — detaching the TUI must not stop the world. "Always on" + "pause required" coexist: pause is a player verb that freezes the sim globally; closing the client is not pause. Cost consequence: LLM spend is now 24/7 — the cost question is $/day of wall-clock, not $/session. Consolidation is cheap at this tempo (~20 calls per 6h); the planner-call cadence at decision points is the dominant cost stream and needs an explicit budget. Speed-up multiplies burn rate at the worst moment — a max-speed cap may need to be cost-derived, not just CPU-derived.
 
 ### [3] Cost ceiling $100/mo, local-first inference, 30-min thought cadence
@@ -95,7 +95,7 @@
 <!-- Pull the "aha"/"wrong→right" beats up here as they happen, so a later review finds them fast. -->
 - **The only editable prompt in the game is your own agent** ([5]): Metatron is a gatekeeper with authority, and its charter is the game's single player-writable prompt — the meta-game is prompt-engineering your intermediary. Fixed personas + sim-written souls + one mutable angel = the whole influence architecture.
 - **Metatron** ([4]): the player's nudges are mediated by a singular long-running god-mode agent that watches the whole sim, keeps notes, and translates divine intent into agent-comprehensible whispers — judging persuadability, societal impact, and method. One component may unify nudge-translation, drama-escalation routing, and the chronicle narrator. Invented live in this session.
-- **script-world is an ambient persistent world, not a session game** ([2]): 4× time compression → a game day ≈ 6 real hours; the world runs 24/7 even with no client attached. Sim = daemon/server; TUI = attachable client; chronicle = catch-up mechanism. LLM cost is $/wall-clock-day.
+- **promptworld is an ambient persistent world, not a session game** ([2]): 4× time compression → a game day ≈ 6 real hours; the world runs 24/7 even with no client attached. Sim = daemon/server; TUI = attachable client; chronicle = catch-up mechanism. LLM cost is $/wall-clock-day.
 
 ## Misconceptions corrected
 <!-- What the learner believed, and the correction. Gold for tuning the next lesson plan. -->

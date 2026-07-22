@@ -29,7 +29,7 @@ world save directory; this extends the `local` object only.
 | Cloud tier | No `parallel` field; always 1 in-flight call. A `parallel` key under `cloud` is ignored (unknown fields are not errors, matching existing config behavior). |
 | Queueing | Requests beyond N wait in today's priority-then-FIFO order (conversations jump via the prio lane); nothing is reordered or lost by concurrency |
 | Best-effort | Drop-when-busy calls (musings) are refused only when no slot is free; contract of "dropped, never retried" unchanged |
-| `scriptworld new` | Generated default llm.json omits the field (default 1) |
+| `promptworld new` | Generated default llm.json omits the field (default 1) |
 
 ## Boot-line surface (operator-visible)
 

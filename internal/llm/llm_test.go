@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/cognition"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/cognition"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // mockLocal is an OpenAI-compatible chat-completions server.
@@ -79,14 +79,14 @@ func testConfig(localURL, cloudURL string, budget float64) Config {
 		Cloud: CloudConfig{
 			Model: "claude-opus-4-8", Endpoint: cloudURL,
 			InputUSDPerMTok: 5, OutputUSDPerMTok: 25,
-			APIKeyEnv: "SCRIPTWORLD_TEST_KEY",
+			APIKeyEnv: "PROMPTWORLD_TEST_KEY",
 		},
 	}
 }
 
 func newOrch(t *testing.T, cfg Config, st *store.Store) *Orchestrator {
 	t.Helper()
-	t.Setenv("SCRIPTWORLD_TEST_KEY", "test-key") // hermetic: never depend on the caller's env
+	t.Setenv("PROMPTWORLD_TEST_KEY", "test-key") // hermetic: never depend on the caller's env
 	o, err := New(cfg, st)
 	if err != nil {
 		t.Fatal(err)

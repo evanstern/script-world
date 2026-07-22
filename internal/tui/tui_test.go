@@ -9,11 +9,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/metatron"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/metatron"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // testModel defaults to a narrow (80-col) terminal — the widescreen tests

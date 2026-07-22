@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Episodic memory: deterministic emission heuristics (research R2) and the

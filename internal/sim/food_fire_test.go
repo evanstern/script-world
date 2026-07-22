@@ -3,7 +3,7 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestEatOrderingSatietyAbsolute is spec 012 US2 AC#1 + FR-007: eating consumes

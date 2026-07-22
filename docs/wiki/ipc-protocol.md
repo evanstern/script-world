@@ -62,7 +62,7 @@ oversized reply → the substituted `reply too large` error above.
 ## Connections
 
 [[ipc-server]] implements the daemon side; [[ipc-client]] the attach side;
-[[event-types]] defines what rides inside event pushes; [[cli-scriptworld]] renders
+[[event-types]] defines what rides inside event pushes; [[cli-promptworld]] renders
 `StatusData` for humans. The [[tui-client]] consumes `state` + `subscribe` to run its
 live replica.
 

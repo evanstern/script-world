@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // registryEntry / registryFile are the on-disk shape of known_worlds.json

@@ -1,6 +1,6 @@
 package sim
 
-import "github.com/evanstern/script-world/internal/worldmap"
+import "github.com/evanstern/promptworld/internal/worldmap"
 
 // Effective terrain = static generated map + event-sourced overlays: chopped
 // trees become clear ground, harvested forage is bare until it regrows.

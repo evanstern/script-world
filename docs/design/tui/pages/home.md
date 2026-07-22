@@ -7,7 +7,7 @@ current "one pane at a time" model as the resting state of the app.
 ## Mockup
 
 ```
- script-world · attached · day 4 · 08:12 · 1×                4 villagers awake
+ promptworld · attached · day 4 · 08:12 · 1×                4 villagers awake
  ┌─ MAP · following centroid ────────────────┐ ┌─ chronicle │ metatron │ villagers ┐
  │ ~ ~ ~ ~ " " ♠ ♠ ♠ ♠ ♠ " " . . . . ▲ . .   │ │ #1198 08:09 agent.talked      │
  │ ~ ~ ~ " " ♠ ♠ A ♠ ♠ " " . . ⌂ ⌂ . . . .   │ │   {"a":"Sable","b":"Birch"}   │

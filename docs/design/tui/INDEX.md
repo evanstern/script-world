@@ -1,6 +1,6 @@
 # TUI design reference — widescreen (TASK-34)
 
-Decision record and index for the script-world TUI redesign. This directory is the
+Decision record and index for the promptworld TUI redesign. This directory is the
 source of truth for implementing the widescreen layout: an implementer should be able
 to build every screen from these files without re-deriving intent.
 
@@ -26,7 +26,7 @@ Visual mockups from the spike: https://claude.ai/code/artifact/dfb04194-b379-473
 Every widescreen frame is composed of exactly five regions:
 
 ```
-┌─ header ─ script-world · day 4 · 08:12 · 1× · [PAUSED] ──────────────────┐
+┌─ header ─ promptworld · day 4 · 08:12 · 1× · [PAUSED] ──────────────────┐
 │ ┌─ MAP ──────────────────────────────┐ ┌─ DOCK ───────────────────────┐  │
 │ │                                    │ │ chronicle │ metatron │ villagers│  │
 │ │  camera viewport over terrain      │ ├──────────────────────────────┤  │

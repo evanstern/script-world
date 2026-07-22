@@ -2,7 +2,7 @@
 
 ## `calibration.json` (save dir root, `world.CalibrationPath()`)
 
-Written **only** by `scriptworld calibrate`. Read once at daemon start. Absent file
+Written **only** by `promptworld calibrate`. Read once at daemon start. Absent file
 is legal (bootstrap defaults apply).
 
 ```json

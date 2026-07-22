@@ -50,7 +50,7 @@ internal/
 ├── mind/convo.go          # NEW: conversation driver (own goroutine, immutable ctx, slot=1)
 ├── mind/prompt.go         # planner prompt social context
 └── scribe/scribe.go       # Bonds section in soul.md
-cmd/scriptworld/           # new: seed secret events at genesis
+cmd/promptworld/           # new: seed secret events at genesis
 ```
 
 **Structure Decision**: social mechanics live in `sim` as pure functions + reducer

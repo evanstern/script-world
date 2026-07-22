@@ -1,6 +1,6 @@
 package sim
 
-import "github.com/evanstern/script-world/internal/worldmap"
+import "github.com/evanstern/promptworld/internal/worldmap"
 
 // Deterministic grid search. Neighbor order is fixed (N, E, S, W) and the
 // frontier is a FIFO queue, so shortest paths and "nearest match" results are

@@ -62,7 +62,7 @@ while systemic drift is followed. The estimator is process-lifetime only.
 
 **Calibration** (`calibration.go`): `Profile` is `calibration.json` in the
 world save directory (`World.CalibrationPath()`), written only by the
-`scriptworld calibrate` subcommand (full-file replace via `Save`) — the daemon
+`promptworld calibrate` subcommand (full-file replace via `Save`) — the daemon
 never writes it, so the recorded baseline moves only under a human's hand.
 `LoadProfile` treats a missing file as legal (nil, nil) and a malformed one as
 a warning the daemon downgrades to bootstrap defaults. `SeedFor` returns a
@@ -83,13 +83,13 @@ an intent whose measured staleness exceeds its class's `BudgetTicks` is
 rejected (`OutcomeRejectedStale`) at the injection door in
 `internal/sim/loop.go`. The daemon ([[daemon-lifecycle]]) runs `ValidateKinds`
 before any model is reachable and seeds the estimators from the profile;
-[[cli-scriptworld]]'s `calibrate` subcommand benchmarks the host+model and
+[[cli-promptworld]]'s `calibrate` subcommand benchmarks the host+model and
 writes the profile.
 
 ## Operational notes
 
 No environment variables; the only file read is `calibration.json` in the
-world directory, and only `scriptworld calibrate` writes it. With no profile,
+world directory, and only `promptworld calibrate` writes it. With no profile,
 bootstrap defaults (local 20 s/pt, cloud 10 s/pt) apply and the daemon prints
 a reminder to run calibrate. Telemetry: router verdicts land as `cog.outcome`
 events with the arithmetic string as the reason; estimator drift surfaces as

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/persona"
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 func validOutput() consolidationOutput {

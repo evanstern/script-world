@@ -29,7 +29,7 @@ event types only)
 **Testing**: `go test ./...` — table-driven unit tests in `internal/sim`, replay
 determinism harness (existing `sim_test.go` patterns)
 
-**Target Platform**: macOS/Linux daemon (`scriptworld` binary)
+**Target Platform**: macOS/Linux daemon (`promptworld` binary)
 
 **Project Type**: single Go module, layered CLI daemon + TUI
 

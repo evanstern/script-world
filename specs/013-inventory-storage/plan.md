@@ -42,7 +42,7 @@ across platforms per integer-math discipline
 
 **Project Type**: single Go module — sim substrate (`internal/sim`), minds
 (`internal/mind`), manifest (`internal/world`), rendering (`internal/tui`), CLI
-(`cmd/scriptworld`)
+(`cmd/promptworld`)
 
 **Performance Goals**: preserve executor throughput headroom; new per-tick cost
 is zero — the rot sweep rides the existing per-game-minute heartbeat, and bulk
@@ -67,7 +67,7 @@ intent/plan-step fields; 7 tuning constants; format bump + one migration step
 | I. Artifact-grounded action | Spec from TASK-26's recorded session decisions; plan/research/data-model/contracts/quickstart in `specs/013-*`; implementation tracked on TASK-51 | PASS |
 | II. One task, one PR | TASK-51 is the single deliverable: one branch (`task-51-inventory-storage` worktree under `.worktrees/task-51`), one PR; spec phases are internal breakdown | PASS |
 | III. Gates over assertions | spec-bridge links TASK-51 ↔ specs/013 (Spec marker on the task); status driven by artifacts; Stop gate active | PASS |
-| IV. Grounding freshness | Post-merge wiki re-pin list pinned in quickstart.md (executor, event-types, sim-state-reducer, reflex-policy, agent-mind, social-fabric, world-migration, world-save-directory, snapshots, tui-client, cli-scriptworld, testing-strategy) | PASS (planned) |
+| IV. Grounding freshness | Post-merge wiki re-pin list pinned in quickstart.md (executor, event-types, sim-state-reducer, reflex-policy, agent-mind, social-fabric, world-migration, world-save-directory, snapshots, tui-client, cli-promptworld, testing-strategy) | PASS (planned) |
 | V. Model-tiered workflow | Planning on Fable 5 (this session); implementation via `spec-implementer` subagents — tier per slice in research.md R9 (Opus 4.8: substrate + executor/social wiring; Sonnet: planner vocabulary, TUI); tier + rubric justification to be recorded on TASK-51 at dispatch | PASS |
 
 **Post-Phase-1 re-check**: design adds no new packages, no config-driven
@@ -120,7 +120,7 @@ internal/sim/
 internal/world/
 └── world.go             # FormatVersion 2→3; migrate orchestration reuse
 
-cmd/scriptworld/
+cmd/promptworld/
 └── (migrate command)    # 2→3 step; chained 1→2→3
 
 internal/mind/

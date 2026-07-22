@@ -32,7 +32,7 @@ persona immutability checks; full `-race` suite; live smoke against real Ollama.
 
 **Target Platform**: unchanged (darwin/arm64 primary).
 
-**Project Type**: extension of the single `scriptworld` binary.
+**Project Type**: extension of the single `promptworld` binary.
 
 **Performance Goals**: planner traffic ≤ 1 call/agent/30 game-min + triggers — at 4x
 ≈ 16+ calls/hour for 8 agents, well inside local-tier throughput; window selection
@@ -89,7 +89,7 @@ internal/
 ├── scribe/              # NEW: always-on soul.md writer (LLM-independent)
 │   └── scribe.go
 └── daemon/daemon.go     # wire scribe (always) + mind (when orchestrator on)
-cmd/scriptworld/         # `new` seeds personas; usage text
+cmd/promptworld/         # `new` seeds personas; usage text
 ```
 
 **Structure Decision**: mind (LLM-gated) and scribe (always-on) are separate daemon

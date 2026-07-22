@@ -26,7 +26,7 @@ validator fixtures incl. a temperament-drifting output rejected 100% (SC-002)
 ## Scenario 2 — live overnight run (SC-001, SC-003)
 
 ```sh
-go build -o /tmp/sw ./cmd/scriptworld
+go build -o /tmp/sw ./cmd/promptworld
 /tmp/sw new ~/worlds/consol-test --seed 11
 # put a cloud tier in ~/worlds/consol-test/llm.json (see prerequisites)
 /tmp/sw start ~/worlds/consol-test

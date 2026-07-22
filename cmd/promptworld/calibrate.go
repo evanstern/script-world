@@ -1,6 +1,6 @@
 package main
 
-// scriptworld calibrate — the cognition horizon's setup stage
+// promptworld calibrate — the cognition horizon's setup stage
 // (specs/007-cognition-horizon/contracts/cli.md): benchmark the configured
 // host+model per tier against a uniform reference workload, write
 // calibration.json, and show the operator the horizon their hardware buys.
@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/evanstern/script-world/internal/cognition"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/cognition"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // refShape is one reference-workload prompt shape: fixed content, so runs
@@ -137,7 +137,7 @@ func cmdCalibrate(args []string) error {
 	samples := fs.Int("samples", 5, "calls per reference shape")
 	dir, err := parseWorldFlags(fs, args)
 	if err != nil {
-		return fmt.Errorf("usage: scriptworld calibrate <world> [--tier local|cloud|all] [--samples N]: %w", err)
+		return fmt.Errorf("usage: promptworld calibrate <world> [--tier local|cloud|all] [--samples N]: %w", err)
 	}
 	w, err := world.Open(dir)
 	if err != nil {
@@ -148,7 +148,7 @@ func cmdCalibrate(args []string) error {
 		return err
 	}
 	if cfg == nil {
-		return fmt.Errorf("no llm.json in %s — nothing to calibrate (create the world with `scriptworld new`, or restore the config)", w.Dir)
+		return fmt.Errorf("no llm.json in %s — nothing to calibrate (create the world with `promptworld new`, or restore the config)", w.Dir)
 	}
 	var tiers []llm.Tier
 	switch *tierFlag {

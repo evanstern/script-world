@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/persona"
+	"github.com/evanstern/promptworld/internal/persona"
 )
 
 // The charter is the game's only player-editable prompt. It is read fresh at

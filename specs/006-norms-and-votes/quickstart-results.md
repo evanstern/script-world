@@ -3,7 +3,7 @@
 **Run**: 2026-07-20, seed 13, model-free (llm.json removed — the SC-007
 degraded-mode posture), `speed max` (~109k ticks/s), ~19 game days in under a
 minute of wall clock. Binary built from this branch; world driven via the
-`scriptworld` CLI; evidence queried from `world.db` with sqlite3.
+`promptworld` CLI; evidence queried from `world.db` with sqlite3.
 
 ## §1–3 Test suites
 

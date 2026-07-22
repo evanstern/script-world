@@ -54,7 +54,7 @@ Startup sequence:
    falls back to pessimistic bootstrap defaults
    (`cognition.BootstrapLocalSecPerPt`/`BootstrapCloudSecPerPt` — fail toward
    reflex, never toward stale action), with a printed hint to run
-   `scriptworld calibrate`. `orch.SetRecalibrateHook(md.RecalibrateSignal)` wires
+   `promptworld calibrate`. `orch.SetRecalibrateHook(md.RecalibrateSignal)` wires
    the drift signal: a tier's estimator breaching its spike-rate threshold lands
    as `cog.recalibration_recommended` telemetry.
 7. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
@@ -77,7 +77,7 @@ without touching the world.
 
 ## Connections
 
-[[cli-scriptworld]] runs this via `daemon` and detaches it via `start`; [[sim-loop]]
+[[cli-promptworld]] runs this via `daemon` and detaches it via `start`; [[sim-loop]]
 is the foreground engine; [[ipc-server]] the concurrent face; [[event-types]] defines
 the `daemon.*` bookkeeping events it emits; [[cognition]] supplies the startup kind
 gate and the calibration profile it seeds into the orchestrator.

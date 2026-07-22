@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // mockOpenAI answers every chat completion instantly with a fixed reply.

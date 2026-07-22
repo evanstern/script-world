@@ -19,7 +19,7 @@ outcomes). Full decisions: [research.md](research.md) R1–R9.
 
 ## Technical Context
 
-**Language/Version**: Go 1.26 (module `github.com/evanstern/script-world`)
+**Language/Version**: Go 1.26 (module `github.com/evanstern/promptworld`)
 
 **Primary Dependencies**: none new — stdlib only; new package `internal/tool` is an
 internal leaf (imports nothing internal, R1), consumed by `internal/sim`,

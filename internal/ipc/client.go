@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/evanstern/script-world/internal/metatron"
+	"github.com/evanstern/promptworld/internal/metatron"
 )
 
 // ErrReplyTooLarge marks a daemon reply that exceeded the protocol's reply

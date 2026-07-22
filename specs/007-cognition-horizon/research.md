@@ -68,7 +68,7 @@ is the integral, already computed by the world itself.
 
 ## R4 — Calibration: reference workload, profile file, live estimator
 
-**Decision**: `scriptworld calibrate` (new CLI subcommand) runs a fixed reference
+**Decision**: `promptworld calibrate` (new CLI subcommand) runs a fixed reference
 workload against the configured tiers — N=5 calls per representative shape (1-point
 musing shape, 3-point planner shape) per tier, fixed prompts, MaxTokens matching the
 real call kinds — and writes `calibration.json` to the save dir

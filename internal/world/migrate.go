@@ -20,9 +20,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // MigrateResult is the human-facing summary of a completed migration.
@@ -99,7 +99,7 @@ func Migrate(dir string) (*MigrateResult, error) {
 	// process holding it. The pidfile liveness check is version-gate-free (the
 	// v1 world cannot be world.Open'd under this build).
 	if running, pid := daemonAlive(w); running {
-		return nil, fmt.Errorf("daemon is running (pid %d) — stop it first: scriptworld stop %s", pid, dir)
+		return nil, fmt.Errorf("daemon is running (pid %d) — stop it first: promptworld stop %s", pid, dir)
 	}
 
 	// Already-migrated guard: the archive is never overwritten (FR-025). The
@@ -255,7 +255,7 @@ func Migrate(dir string) (*MigrateResult, error) {
 // remedy: a clean start+stop under the source-format binary produces the
 // shutdown snapshot migration relies on (FR-024).
 func migrateNeedsCleanStop(dir, why string) error {
-	return fmt.Errorf("%s — start and stop this world once with its own binary so a covering shutdown snapshot exists, then re-run: scriptworld migrate %s", why, dir)
+	return fmt.Errorf("%s — start and stop this world once with its own binary so a covering shutdown snapshot exists, then re-run: promptworld migrate %s", why, dir)
 }
 
 // archiveDB renames the live database (and any WAL/SHM sidecars) to the archive

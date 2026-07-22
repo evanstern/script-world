@@ -67,7 +67,7 @@ state, hash-visible drift risk); clamping only in the reducer with executor unaw
 **Decision**: `world.FormatVersion` 2→3. The bulk cap, yield truncation, death
 spill, and give-guard change reducer/executor behavior for *existing* event
 shapes, so a v2 log replayed under v3 code would diverge — the format gate is the
-shield (same doctrine as 012's v2 gate). `scriptworld migrate` gains a 2→3 step:
+shield (same doctrine as 012's v2 gate). `promptworld migrate` gains a 2→3 step:
 archive `world.db` → `world.v2.db`, fresh log `world.created` + `world.migrated
 {from_format: 2, state}` (existing machinery, world-migration wiki note). The
 transform is pure and people-preserving; **the land is NOT reset** — 013 changes

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 func memAt(tick int64, sal int, text string) Memory {

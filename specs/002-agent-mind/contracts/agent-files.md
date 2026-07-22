@@ -12,7 +12,7 @@ Per-run flat files, inside the save directory, travel with `cp -R` (FR-011).
 
 ## persona.md (immutable)
 
-Authored constants in `internal/persona`; written exactly once by `scriptworld new`.
+Authored constants in `internal/persona`; written exactly once by `promptworld new`.
 
 ```markdown
 # Ash

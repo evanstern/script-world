@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/worlds"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/worlds"
 )
 
 // captureStdout redirects os.Stdout for the duration of fn and returns

@@ -48,7 +48,7 @@
 ## R4. Secrets: authored self-rumors behind a trust gate
 
 - **Decision**: one authored secret per persona (`persona.Secrets`), seeded by
-  `scriptworld new` as tick-0 `social.secret_seeded` events → registry rumor
+  `promptworld new` as tick-0 `social.secret_seeded` events → registry rumor
   (`Secret: true`, subject=owner, strongly negative tone) known only to the owner.
   The conversation driver may pass it only when owner→listener trust ≥ 700 (then a
   seeded 1-in-3 chance per eligible conversation); after that it spreads as an

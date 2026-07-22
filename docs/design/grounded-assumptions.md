@@ -1,7 +1,7 @@
-# Grounded assumptions — script-world v1
+# Grounded assumptions — promptworld v1
 
 **Source:** Socratic grounding session, 2026-07-18 (TASK-1; lesson
-`topics/script-world-design/101-rumor-mill-grounding/`, live log in its `raw-notes.md`).
+`topics/promptworld-design/101-rumor-mill-grounding/`, live log in its `raw-notes.md`).
 **Basis:** README.md + decision-1 (Rumor Mill hybrid) interrogated question by question.
 Each assumption below is marked **confirmed** / **revised** / **rejected** / **new** relative
 to what the README and decision-1 claimed. Bracketed numbers cite raw-notes exchanges.
@@ -18,7 +18,7 @@ to what the README and decision-1 claimed. Bracketed numbers cite raw-notes exch
 | Assumption | Outcome |
 |---|---|
 | "Watch the world run" (README) | **Confirmed — and radicalized.** Live-watched, not day-batched. [1] |
-| Session shape | **Revised.** Not a session game: default 1 game-min = 15 real-sec → a game day ≈ 6 real hours; 30+ days = weeks of wall-clock. script-world is an **ambient persistent world** (Tamagotchi × Dwarf Fortress); the chronicle is the catch-up mechanism. [1][2] |
+| Session shape | **Revised.** Not a session game: default 1 game-min = 15 real-sec → a game day ≈ 6 real hours; 30+ days = weeks of wall-clock. promptworld is an **ambient persistent world** (Tamagotchi × Dwarf Fortress); the chronicle is the catch-up mechanism. [1][2] |
 | Always-on | **New.** The sim runs 24/7 with no client attached. Sim = daemon (homelab); terminal UI = attachable client. Closing the client is not pause; **pause is a player verb** (required), speeds adjustable real-time ↔ as-fast-as-affordable. [2] |
 
 ## Cost & inference

@@ -99,7 +99,7 @@ words).
 **Decision**: new IPC request `metatron_chat{text}` → response `{reply, nudge?, charges,
 moments_surfaced}` — synchronous over the existing JSON-lines protocol (the `llm_call`
 request already established the long-request pattern; the client's read deadline extends
-for it). One-shot CLI: `scriptworld metatron <dir> <message…>`. TUI pane 3 becomes the
+for it). One-shot CLI: `promptworld metatron <dir> <message…>`. TUI pane 3 becomes the
 console: transcript viewport + input line; while the pane is active, printable keys go to
 the input, Enter sends, Esc returns to the map pane (documented in the pane footer).
 Turns are serialized by a single-flight guard in the component; a second concurrent
@@ -114,7 +114,7 @@ needless surface).
 
 ## R7 — Charter file
 
-**Decision**: `charter.md` at the save-dir root, seeded by `scriptworld new` from an
+**Decision**: `charter.md` at the save-dir root, seeded by `promptworld new` from an
 authored default (faithful, competent, professional-almost-robotic; documents the
 4,000-char cap in its header comment). Loaded fresh at the start of every Metatron turn
 and digest. Missing → recreated from default (and the next reply says so); empty/

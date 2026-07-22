@@ -21,12 +21,12 @@ stopped world's directory is a complete, restorable archive.
 `format_version` (currently **3** — spec 013's inventory/storage break bumped it
 from 2, on top of spec 012's resources/food/crafting break that bumped it from 1;
 a v1 or v2 manifest is refused by `Open` with a pointer to
-`scriptworld migrate <world>` — [[world-migration]]), `tick_game_seconds` (fixed 1),
+`promptworld migrate <world>` — [[world-migration]]), `tick_game_seconds` (fixed 1),
 `map_width`/`map_height` (default 64×64; zero/absent values from older saves default
 on `Open`), and an optional `meeting` block (TASK-36, `MeetingConfig`:
 `convene`/`open` as "HH:MM" 24-hour game clock times, optional `x`/`y` meeting
 place) — the per-world meeting convention the daemon seeds on boot
-([[governance]], [[daemon-lifecycle]]); `scriptworld new` never writes it, so
+([[governance]], [[daemon-lifecycle]]); `promptworld new` never writes it, so
 emergent is the default. `World.Map()` regenerates the terrain from the seed and
 dimensions — deterministic, so the map is never stored ([[worldmap-generation]]).
 
@@ -41,7 +41,7 @@ dimensions — deterministic, so the map is never stored ([[worldmap-generation]
 - Path helpers centralize layout: `DBPath()` → `world.db`, `LLMConfigPath()` →
   `llm.json` (the [[llm-orchestrator]] config, written by `new`, deletable to
   disable inference), `CalibrationPath()` → `calibration.json` (the
-  seconds-per-point profile written only by `scriptworld calibrate` —
+  seconds-per-point profile written only by `promptworld calibrate` —
   [[cognition]]; an absent file is legal, pessimistic bootstrap defaults apply),
   `SockPath()` → `daemon.sock`, `PidPath()` → `daemon.pid`,
   `LogPath()` → `daemon.log`, `CharterPath()` → `charter.md` (the player-editable
@@ -75,7 +75,7 @@ manifest).
 
 [[daemon-lifecycle]] opens the world and cross-checks the manifest against store meta;
 [[event-log]] and [[snapshots]] live inside `world.db`; [[ipc-server]] binds the socket
-at `SockPath()`. [[cli-scriptworld]]'s `new` creates worlds and `migrate` upgrades
+at `SockPath()`. [[cli-promptworld]]'s `new` creates worlds and `migrate` upgrades
 an older one ([[world-migration]]).
 
 ## Operational notes

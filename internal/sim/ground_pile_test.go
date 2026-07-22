@@ -3,8 +3,8 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // Ground piles (spec 013 US2, T020): drop creates/merges one pile per tile,

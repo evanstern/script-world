@@ -135,7 +135,7 @@ replay-vs-code assumptions; nothing needs per-world recipes).
 
 **Decision**: Bump `internal/world.FormatVersion` 1 → 2. The existing manifest check
 (`world.go:125`) refuses un-migrated worlds — its error message gains a pointer to
-`scriptworld migrate`. New event types are reducer no-ops for old code by the existing
+`promptworld migrate`. New event types are reducer no-ops for old code by the existing
 unknown-type convention; changed semantics (`agent.ate` payload, yields, `agent.built`
 oven kind) are shielded by the version gate. Existing worlds get the snapshot-cut
 migration in R10 (spec decision #12: keep the people, reset the land).
@@ -150,7 +150,7 @@ user asked for a path for `myworld-01`, which holds ~3 game days of lived histor
 
 ## R10. Snapshot-cut world migration (v1 → v2)
 
-**Decision**: `scriptworld migrate <world>` (client-side, daemon must be stopped):
+**Decision**: `promptworld migrate <world>` (client-side, daemon must be stopped):
 
 1. **Read**: `Store.LatestValidSnapshot` must cover the whole log, tolerating a
    trailing tail of `daemon.*` process-bookkeeping events only (reducer no-ops,

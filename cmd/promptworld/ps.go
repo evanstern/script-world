@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/worlds"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/worlds"
 )
 
-// cmdPs implements `scriptworld ps [--all] [--json]` (specs/008-instance-manager,
+// cmdPs implements `promptworld ps [--all] [--json]` (specs/008-instance-manager,
 // User Story 1): a machine-wide, from-any-directory listing of world daemons,
 // re-proven live at query time (FR-002) — never from records.
 func cmdPs(args []string) error {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/clock"
+	"github.com/evanstern/promptworld/internal/clock"
 )
 
 // TestGruNocturnalOnly is AC#1's frame: the gru exists only between nightfall

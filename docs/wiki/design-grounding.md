@@ -40,7 +40,7 @@ Five candidate Spec Kit specs are listed at the end of the assumptions doc;
 
 [[overview]] shows the shape these decisions produced. Backlog decision-2 (in
 `backlog/decisions/`) is the durable record of the v1 shape; the assumptions doc cites
-the session log in `topics/script-world-design/101-rumor-mill-grounding/raw-notes.md`.
+the session log in `topics/promptworld-design/101-rumor-mill-grounding/raw-notes.md`.
 
 ## Operational notes
 

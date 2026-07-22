@@ -17,9 +17,9 @@ testable increment.
 
 **Purpose**: Go module and binary skeleton so everything after compiles and commits clean.
 
-- [X] T001 Initialize Go module `github.com/evanstern/script-world` (go.mod, Go 1.22+) at repo root; add `modernc.org/sqlite` dependency
-- [X] T002 Create CLI skeleton in cmd/scriptworld/main.go — subcommand dispatch table (new, daemon, start, stop, status, attach, tail, pause, resume, speed) with stub handlers returning "not implemented", usage text, exit-code discipline per contracts/cli.md
-- [X] T003 [P] Extend .gitignore for Go build artifacts and test worlds (scriptworld binary, /tmp test dirs are outside repo — ignore `/scriptworld`, `dist/`)
+- [X] T001 Initialize Go module `github.com/evanstern/promptworld` (go.mod, Go 1.22+) at repo root; add `modernc.org/sqlite` dependency
+- [X] T002 Create CLI skeleton in cmd/promptworld/main.go — subcommand dispatch table (new, daemon, start, stop, status, attach, tail, pause, resume, speed) with stub handlers returning "not implemented", usage text, exit-code discipline per contracts/cli.md
+- [X] T003 [P] Extend .gitignore for Go build artifacts and test worlds (promptworld binary, /tmp test dirs are outside repo — ignore `/promptworld`, `dist/`)
 
 ---
 
@@ -56,7 +56,7 @@ advancing tick at 4x, attach streams events, detach leaves it running.
 - [X] T014 [US1] Implement IPC server in internal/ipc/server.go — UDS listener at world SockPath, JSON-lines framing, per-session goroutines, cmd dispatch (status, subscribe with since-replay then live, unsubscribe), bounded 1024-event push buffer with dropped push + subscription cancel on overflow, malformed-JSON closes connection, session death never touches the loop (FR-011)
 - [X] T015 [US1] Implement daemon lifecycle in internal/daemon/daemon.go — wire world+store+loop+ipc; recovery-on-open (snapshot+replay via store/sim from T005/T007); pidfile write + stale pid/sock sweep; SIGTERM/SIGINT graceful path; daemon.started/daemon.stopped events
 - [X] T016 [US1] Implement client in internal/ipc/client.go — connect, request/response correlation by id, push demux, used by CLI subcommands
-- [X] T017 [US1] Wire CLI subcommands in cmd/scriptworld/main.go — `new` (T004 Create + genesis world.created event), `daemon` (foreground primitive), `start` (re-exec detach, stdio→daemon.log, wait-for-socket ≤5s), `status` (attach-or-offline per contracts/cli.md), `attach` (status header + event stream + stdin commands), `tail` (--since/--follow, read-only when daemon down)
+- [X] T017 [US1] Wire CLI subcommands in cmd/promptworld/main.go — `new` (T004 Create + genesis world.created event), `daemon` (foreground primitive), `start` (re-exec detach, stdio→daemon.log, wait-for-socket ≤5s), `status` (attach-or-offline per contracts/cli.md), `attach` (status header + event stream + stdin commands), `tail` (--since/--follow, read-only when daemon down)
 - [X] T018 [US1] Integration test in internal/ipc/ipc_test.go — in-process server+loop: attach, status <2s, subscribe from seq 0 gapless, abrupt client kill leaves loop ticking (FR-010, FR-011, SC-002)
 - [X] T019 [US1] E2E test in e2e/daemon_e2e_test.go — build binary; Scenario A: new→start→status advancing→attach sees events→detach→status still advancing; event ordinals continuous across detach (SC-001 in miniature, SC-002)
 
@@ -76,7 +76,7 @@ passing, resume continues exactly, speed changes hold their compression ratio.
 
 - [X] T020 [US2] Add time-control commands through the loop in internal/sim/loop.go + internal/ipc/server.go — pause/resume/set_speed intents applied at tick boundary, recorded as clock.* events, idempotent semantics, response returns full status shape
 - [X] T021 [US2] Implement auto-slow in internal/sim/loop.go — measure actual tick duration over 5s window; sustained overrun lowers effective_rate + emits clock.degraded, recovery climbs back + clock.recovered; game time only advances by executed ticks (FR-012, R7)
-- [X] T022 [P] [US2] Wire CLI one-shots in cmd/scriptworld/main.go — `pause`, `resume`, `speed <v>` printing resulting clock state per contracts/cli.md; add same commands to `attach` stdin loop
+- [X] T022 [P] [US2] Wire CLI one-shots in cmd/promptworld/main.go — `pause`, `resume`, `speed <v>` printing resulting clock state per contracts/cli.md; add same commands to `attach` stdin loop
 - [X] T023 [US2] E2E test in e2e/daemon_e2e_test.go — Scenario B: pause → tick frozen across 2s real sleep → resume continues from exact tick; speed 1x vs 4x compression ratio within 5% over measurement window; detach-is-not-pause re-verified (SC-004, SC-005)
 
 **Checkpoint**: US1 + US2 — ambient world with the time dial in hand.
@@ -93,7 +93,7 @@ pause state and full history intact; Scenario E — copied dir is a runnable wor
 
 ### Implementation for User Story 3
 
-- [X] T024 [US3] Implement snapshot cadence + shutdown path in internal/daemon/daemon.go + internal/sim/loop.go — snapshot every 3600 ticks, on pause, on graceful shutdown; `shutdown` IPC cmd + `stop` CLI subcommand in cmd/scriptworld/main.go (idempotent when not running); restart-while-paused wakes paused
+- [X] T024 [US3] Implement snapshot cadence + shutdown path in internal/daemon/daemon.go + internal/sim/loop.go — snapshot every 3600 ticks, on pause, on graceful shutdown; `shutdown` IPC cmd + `stop` CLI subcommand in cmd/promptworld/main.go (idempotent when not running); restart-while-paused wakes paused
 - [X] T025 [US3] Harden recovery in internal/daemon/daemon.go + internal/store/store.go — corrupt-snapshot fallback chain to genesis, seq gap check fatal with guidance (contracts/storage.md recovery procedure), recovery timing surfaced in daemon.started payload
 - [X] T026 [US3] E2E tests in e2e/daemon_e2e_test.go — Scenario C: kill -9, restart, zero event loss, clock continuity, <10s recovery after ≥1 game-day at max speed (SC-003); restart-while-paused case; Scenario E: stop, cp -R, start the copy (FR-009)
 - [X] T027 [P] [US3] Full-binary determinism e2e in e2e/determinism_e2e_test.go — two worlds, same seed, identical command timeline at max speed, N ticks: `SELECT seq,tick,type,payload FROM events` byte-identical (SC-006, quickstart Scenario D)

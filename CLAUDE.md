@@ -1,5 +1,5 @@
 <!-- pdlc:grounding BEGIN v0.8.0 — planted by pdlc:bootstrap; refreshed wholesale on update. Keep project-specific edits OUTSIDE this block. -->
-# script-world — praxis development lifecycle (PDLC)
+# promptworld — praxis development lifecycle (PDLC)
 
 This project is developed with the **praxisflux** plugin suite. This block is the always-on
 grounding: it names the loop, each plugin's role, and the rules that hold between them. The

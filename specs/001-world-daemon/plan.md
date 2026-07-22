@@ -6,7 +6,7 @@
 
 ## Summary
 
-Build the always-on substrate every later script-world feature stands on: a Go daemon
+Build the always-on substrate every later promptworld feature stands on: a Go daemon
 that advances a deterministic fixed-timestep simulation loop, keeps a game clock with
 runtime-adjustable compression (default 1 game-min = 15 real-sec), treats pause as a
 first-class command, records every simulation event in an append-only SQLite log with
@@ -35,7 +35,7 @@ socket, kill -9 it, and verify lossless resume.
 **Target Platform**: macOS homelab (darwin/arm64) primary; nothing platform-specific
 beyond Unix domain sockets, so linux/amd64 works for CI.
 
-**Project Type**: single CLI binary `scriptworld` with subcommands (daemon + client +
+**Project Type**: single CLI binary `promptworld` with subcommands (daemon + client +
 world management) — one Go module at repo root.
 
 **Performance Goals**: placeholder sim sustains ≥ 1,000 ticks/sec at uncapped speed on
@@ -69,7 +69,7 @@ specs/001-world-daemon/
 ├── data-model.md        # Phase 1 output — entities, schema, state machine
 ├── quickstart.md        # Phase 1 output — end-to-end validation guide
 ├── contracts/
-│   ├── cli.md           # scriptworld subcommand contract
+│   ├── cli.md           # promptworld subcommand contract
 │   ├── client-protocol.md  # JSON-lines socket protocol
 │   └── storage.md       # SQLite DDL + save-directory layout
 ├── checklists/requirements.md
@@ -79,9 +79,9 @@ specs/001-world-daemon/
 ### Source Code (repository root)
 
 ```text
-go.mod                       # module github.com/evanstern/script-world
+go.mod                       # module github.com/evanstern/promptworld
 cmd/
-└── scriptworld/
+└── promptworld/
     └── main.go              # CLI dispatch: new|start|stop|status|attach|daemon|pause|resume|speed
 internal/
 ├── world/                   # save-directory layout: manifest, paths, create/open/validate
@@ -113,7 +113,7 @@ e2e/
 └── daemon_e2e_test.go       # builds binary; full attach/kill/resume scenarios (SC-001..005)
 ```
 
-**Structure Decision**: single Go module at repo root, one binary under `cmd/scriptworld`,
+**Structure Decision**: single Go module at repo root, one binary under `cmd/promptworld`,
 all logic in `internal/` packages layered store→clock→sim→ipc→daemon so later features
 (agents, map, LLM orchestrator) mount as new `internal/` packages feeding events into the
 same loop. End-to-end scenarios live in `e2e/` because they exec the built binary rather

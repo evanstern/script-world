@@ -39,7 +39,7 @@ story compiles against.
 - [X] T005 [P] Add derived `bulk(Inventory) int` + tuning constants per data-model.md (`bulkCap` 24, `chestCap` 48, `chestPlankCost` 6, `rotWindowTicks` 172800, `theftTrustDelta` −120, `theftAffectionDelta` −40, `theftMemoryTone` −60) in `internal/sim/agents.go`
 - [X] T006 [P] Add new payload structs with canonical field order per contracts/events.md: `DroppedPayload`, `PickedUpPayload`, `DepositedPayload`, `WithdrewPayload`, `FoodRottedPayload` in `internal/sim/agents.go`; `ChestTakenPayload` in `internal/sim/social.go`
 - [X] T007 [P] Add `build_chest` recipe row ({planks 6} → structure "chest", on_site, fire-comparable duration) in `internal/sim/recipes.go`; extend the mirror test in `internal/sim/recipes_test.go`
-- [X] T008 [P] Bump `FormatVersion` 2→3 in `internal/world/world.go`; extend `internal/world/world_test.go`: v2 manifest refused with the unsupported-version error naming `scriptworld migrate`
+- [X] T008 [P] Bump `FormatVersion` 2→3 in `internal/world/world.go`; extend `internal/world/world_test.go`: v2 manifest refused with the unsupported-version error naming `promptworld migrate`
 - [X] T009 Reducer scaffolding in `internal/sim/state.go`: register `agent.dropped`, `agent.picked_up`, `agent.deposited`, `agent.withdrew`, `social.chest_taken`, `sim.food_rotted` as explicit no-ops-for-now with TODO-per-story markers — then `go test ./...` green
 
 **Checkpoint**: v3 world boots; nothing behaves differently yet.
@@ -145,7 +145,7 @@ minute; chest food and all non-food immortal; rot events chronicle-visible.
 and their belongings — intact.
 
 - [X] T035 v2 legacy decode + pure v2→v3 transform in `internal/sim/migrate.go`: everything carries verbatim (NO land reset — no map inputs changed, research R3); carried bulk over `bulkCap` spills to a pile at the agent's tile (food batches stamped `migration tick + rotWindowTicks`); wire 1→2→3 chaining so a v1 world migrates in one run
-- [X] T036 `scriptworld migrate` 2→3 orchestration in `cmd/scriptworld` + `internal/world/world.go`: archive `world.db` → `world.v2.db` (existing-archive guard), fresh log `world.created` + `world.migrated{from_format: 2}` + initial snapshot, manifest → 3; same refusal set as 1→2 (running daemon, uncovered tail)
+- [X] T036 `promptworld migrate` 2→3 orchestration in `cmd/promptworld` + `internal/world/world.go`: archive `world.db` → `world.v2.db` (existing-archive guard), fresh log `world.created` + `world.migrated{from_format: 2}` + initial snapshot, manifest → 3; same refusal set as 1→2 (running daemon, uncovered tail)
 - [X] T037 Migration tests: v2 fixture (agents incl. over-cap inventory, structures, overlays, mid-flight intents, memories/relations) migrates with people + land state verbatim, spill pile present; v1 fixture chains 1→2→3; snapshot-free replay from genesis ⇒ byte-identical; refusal cases
 
 **Checkpoint**: the format break has a door; no goods are lost crossing it.
