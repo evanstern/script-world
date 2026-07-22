@@ -24,8 +24,8 @@ TASK-51 at dispatch.
 
 **Purpose**: branch isolation and a green baseline.
 
-- [ ] T001 Fetch/ff-pull root main, then create worktree: `git worktree add .worktrees/task-51 -b task-51-inventory-storage origin/main`
-- [ ] T002 Baseline `go test ./...` green in the worktree (planning artifacts ride main per house pattern — the branch forks after they land)
+- [X] T001 Fetch/ff-pull root main, then create worktree: `git worktree add .worktrees/task-51 -b task-51-inventory-storage origin/main`
+- [X] T002 Baseline `go test ./...` green in the worktree (planning artifacts ride main per house pattern — the branch forks after they land)
 
 ---
 
