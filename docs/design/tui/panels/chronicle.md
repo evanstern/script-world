@@ -8,7 +8,7 @@ covers the panel's modes.
 ## Mode 1 — running (clock unpaused)
 
 ```
-┌─ chronicle │ metatron │ souls ──┐
+┌─ chronicle │ metatron │ villagers ┐
 ├─────────────────────────────────┤
 │ #1198 08:09 agent.talked        │
 │   {"a":"Sable","b":"Birch"}     │

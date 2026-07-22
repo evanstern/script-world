@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/evanstern/script-world/internal/clock"
 	"github.com/evanstern/script-world/internal/sim"
 	"github.com/evanstern/script-world/internal/worldmap"
 )
@@ -62,8 +63,8 @@ func (m Model) narrowView() string {
 		b.WriteString(m.chronicleView())
 	case paneMetatron:
 		b.WriteString(m.metatronView())
-	case paneSouls:
-		b.WriteString(m.soulsView())
+	case paneVillagers:
+		b.WriteString(m.villagersView())
 	}
 	b.WriteString("\n" + m.footerView())
 	return b.String()
@@ -113,10 +114,14 @@ func (m Model) footerView() string {
 		return styleDim.Render("esc release · ⏎ send · ↑↓ history")
 	case m.inspecting():
 		return styleDim.Render("j/k select · ⏎ expand · space resume · m ask")
+	case m.villagersVisible() && m.villDetail:
+		return styleDim.Render("esc back · space pause · q quit")
+	case m.villagersVisible():
+		return styleDim.Render("j/k select · ⏎ inspect · space pause · q quit")
 	case isWidescreen(m.width) && m.solo:
 		return styleDim.Render(fmt.Sprintf("%s back to map · space resume · q quit", dockTabKey[m.dockTab]))
 	case isWidescreen(m.width):
-		return styleDim.Render("2 chronicle 3 metatron 4 souls (again: solo) · m ask · space pause · q quit")
+		return styleDim.Render("2 chronicle 3 metatron 4 villagers (again: solo) · m ask · space pause · q quit")
 	default:
 		return styleDim.Render("1-4 panes · space pause · q quit")
 	}
@@ -233,7 +238,7 @@ func (m Model) dockTabsRow() string {
 	}{
 		{paneChronicle, "chronicle"},
 		{paneMetatron, "metatron"},
-		{paneSouls, "souls"},
+		{paneVillagers, "villagers"},
 	}
 	var parts []string
 	for _, t := range tabs {
@@ -269,8 +274,8 @@ func (m Model) dockTabContent(width, height int) string {
 		return m.chronicleBody(width, height, maxWrap)
 	case paneMetatron:
 		return m.metatronTranscriptBody(width, height)
-	case paneSouls:
-		return m.soulsBody(width, height)
+	case paneVillagers:
+		return m.villagersBody(width, height)
 	}
 	return ""
 }
@@ -1192,23 +1197,42 @@ func truncateTail(s string, max int) string {
 	return string(r[len(r)-max:])
 }
 
-// --- souls (panels/dock.md "souls": "content unchanged", width-aware) ---
+// --- villagers (panels/dock.md "Tab: villagers"; TASK-56 roster + per-
+// villager detail, width- and height-aware) ---
 
-func (m Model) soulsView() string {
-	body := m.soulsBody(clampInt(m.width-6, 20, 500), clampInt(m.height-6, 4, 500))
+// villagersView is the narrow-fallback pane — same body renderer the dock
+// tab and solo view share (dockTabContent), boxed like every narrow pane.
+func (m Model) villagersView() string {
+	body := m.villagersBody(clampInt(m.width-6, 20, 500), clampInt(m.height-6, 4, 500))
 	return styleBox.Render(body)
 }
 
-// soulsBody renders the roster, dropping the least important column first
-// as width narrows (dock.md "souls": "wrap/condense columns; drop the
-// least important column first when narrow").
-func (m Model) soulsBody(width, height int) string {
+// villagersBody dispatches to the roster or the selected villager's detail
+// view (data-model.md "New TUI model state": villDetail).
+func (m Model) villagersBody(width, height int) string {
 	if m.replica == nil || len(m.replica.Agents) == 0 {
-		return styleHeader.Render("SOUL READER") + "\n\n" + styleDim.Render("waiting for world state…")
+		return styleHeader.Render("VILLAGERS") + "\n\n" + styleDim.Render("waiting for world state…")
 	}
+	if m.villDetail {
+		return m.villagerDetailBody(width, height)
+	}
+	return m.villagerRosterBody(width, height)
+}
+
+// villagerRosterBody renders the roster with a selection cursor, dropping
+// the least important column first as width narrows (dock.md "wrap/condense
+// columns; drop the least important column first when narrow") — the same
+// columns and drop-trailing-agents height rule as before TASK-56, plus the
+// cursor glyph on the selected row.
+func (m Model) villagerRosterBody(width, height int) string {
+	sel := clampInt(m.villSelected, 0, len(m.replica.Agents)-1)
 	wide := width >= 40
 	var lines []string
-	for _, a := range m.replica.Agents {
+	for i, a := range m.replica.Agents {
+		cursor := "  "
+		if i == sel {
+			cursor = styleFeedSelect.Render("▌") + " "
+		}
 		status := "awake"
 		switch {
 		case a.Dead:
@@ -1221,9 +1245,9 @@ func (m Model) soulsBody(width, height int) string {
 			if a.Intent != nil {
 				goal = a.Intent.Goal
 			}
-			lines = append(lines, fmt.Sprintf("%-8s %s · %s · (%d,%d)", a.Name, status, goal, a.X, a.Y))
+			lines = append(lines, cursor+fmt.Sprintf("%-8s %s · %s · (%d,%d)", a.Name, status, goal, a.X, a.Y))
 			lines = append(lines, styleDim.Render(fmt.Sprintf(
-				"         health %s food %s rest %s warmth %s morale %s",
+				"           health %s food %s rest %s warmth %s morale %s",
 				bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest),
 				bar(a.Needs.Warmth), bar(a.Needs.Morale))))
 			// Carried inventory (spec 012 T043, SC-006): the full raw/refined
@@ -1243,14 +1267,14 @@ func (m Model) soulsBody(width, height int) string {
 			if n := len(a.Inv.Spears); n > 0 {
 				carry += fmt.Sprintf(" · spear %d(%d)", n, a.Inv.Spears[0])
 			}
-			lines = append(lines, styleDim.Render("         "+carry))
+			lines = append(lines, styleDim.Render("           "+carry))
 			lines = append(lines, "")
 		} else {
-			// Narrow dock width: drop goal/position/memory, keep name + status + health.
-			lines = append(lines, fmt.Sprintf("%-8s %s health %s", a.Name, status, bar(a.Needs.Health)))
+			// Narrow dock width: drop goal/position/memory, keep cursor + name + status + health.
+			lines = append(lines, cursor+fmt.Sprintf("%-8s %s health %s", a.Name, status, bar(a.Needs.Health)))
 		}
 	}
-	// B1/B5: "SOUL READER" + blank above spend 2 of `height`'s budget;
+	// B1/B5: "VILLAGERS" + blank above spend 2 of `height`'s budget;
 	// drop trailing agents (rather than partial rows) if the roster
 	// doesn't fit, the same "shed content, never overflow" rule the
 	// chronicle and minibuffer follow.
@@ -1262,7 +1286,161 @@ func (m Model) soulsBody(width, height int) string {
 		lines = lines[:budget]
 	}
 	body := strings.TrimRight(strings.Join(lines, "\n"), "\n")
-	return styleHeader.Render("SOUL READER") + "\n\n" + body
+	return styleHeader.Render("VILLAGERS") + "\n\n" + body
+}
+
+// villagerDetailBody renders the selected villager within the given
+// (width, height) budget. Sections in fixed priority order
+// (contracts/state-and-keys.md "Rendering contract"): identity/vitals →
+// objective → inventory → beliefs/narrative → memories (most recent
+// first). The section list truncates from the bottom — memories shed
+// first — so identity/objective/inventory are never pushed off-screen
+// (spec "Very short pane height" edge case); every line is width-clipped
+// so a long belief/memory/narrative line can never push the panel past its
+// column budget either (SC-004).
+func (m Model) villagerDetailBody(width, height int) string {
+	if height < 1 {
+		height = 1
+	}
+	sel := clampInt(m.villSelected, 0, len(m.replica.Agents)-1)
+	a := m.replica.Agents[sel]
+	wide := width >= 40
+
+	lines := []string{strings.ToUpper(a.Name), ""}
+	lines = append(lines, strings.Split(villagerIdentitySection(a, wide), "\n")...)
+	lines = append(lines, "")
+	lines = append(lines, strings.Split(villagerObjectiveSection(a), "\n")...)
+	lines = append(lines, "")
+	lines = append(lines, strings.Split(villagerInventorySection(a), "\n")...)
+	if s := villagerBeliefsSection(a); s != "" {
+		lines = append(lines, "")
+		lines = append(lines, strings.Split(s, "\n")...)
+	}
+	lines[0] = styleHeader.Render(lines[0])
+
+	if len(lines) > height {
+		// Pathological height: the fixed sections themselves don't fit.
+		// Shed from the bottom like everywhere else rather than ever
+		// emitting more than `height` lines.
+		lines = lines[:height]
+	} else if remaining := height - len(lines); remaining > 1 {
+		if mem := villagerMemoriesLines(a, remaining-1); len(mem) > 0 { // -1: blank separator
+			lines = append(lines, "")
+			lines = append(lines, mem...)
+		}
+	}
+
+	for i, l := range lines {
+		lines[i] = clipLine(l, width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// villagerIdentitySection is FR-003: name, awake/asleep/dead status,
+// position, and needs.
+func villagerIdentitySection(a sim.Agent, wide bool) string {
+	status := "awake"
+	switch {
+	case a.Dead:
+		status = styleErr.Render("dead")
+	case a.Asleep:
+		status = styleAsleep.Render("asleep")
+	}
+	line := fmt.Sprintf("%s · %s · (%d,%d)", a.Name, status, a.X, a.Y)
+	needs := fmt.Sprintf("health %s food %s rest %s warmth %s morale %s",
+		bar(a.Needs.Health), bar(a.Needs.Food), bar(a.Needs.Rest), bar(a.Needs.Warmth), bar(a.Needs.Morale))
+	if !wide {
+		return line + "\n" + needs
+	}
+	return line + "\n" + styleDim.Render(needs)
+}
+
+// villagerObjectiveSection is FR-005/FR-006 and US2's three display states
+// (data-model.md "Derived display state: objective"): active (Intent !=
+// nil), past (LastGoal survives Intent clearing, marked "last"), or "no
+// objective yet" when neither has ever been set.
+func villagerObjectiveSection(a sim.Agent) string {
+	switch {
+	case a.Intent != nil:
+		return fmt.Sprintf("objective: %s → (%d,%d) (current)", a.Intent.Goal, a.Intent.TargetX, a.Intent.TargetY)
+	case a.LastGoal != "":
+		return fmt.Sprintf("objective: %s (last, %s)", a.LastGoal, clock.Format(a.LastGoalTick))
+	default:
+		return "objective: no objective yet"
+	}
+}
+
+// villagerInventorySection is FR-004: every carried kind itemized with
+// counts (spear wear included); empty kinds omitted; an entirely empty
+// pack stated plainly rather than rendering nothing.
+func villagerInventorySection(a sim.Agent) string {
+	var items []string
+	add := func(label string, n int) {
+		if n > 0 {
+			items = append(items, fmt.Sprintf("%s %d", label, n))
+		}
+	}
+	add("wood", a.Inv.Wood)
+	add("stone", a.Inv.Stone)
+	add("water", a.Inv.Water)
+	add("planks", a.Inv.Planks)
+	add("refined stone", a.Inv.RefinedStone)
+	add("raw food", a.Inv.FoodRaw)
+	add("cooked food", a.Inv.FoodCooked)
+	add("meals", a.Inv.Meals)
+	if n := len(a.Inv.Spears); n > 0 {
+		wear := make([]string, n)
+		for i, w := range a.Inv.Spears {
+			wear[i] = fmt.Sprintf("%d", w)
+		}
+		items = append(items, fmt.Sprintf("spears %d (uses left: %s)", n, strings.Join(wear, ",")))
+	}
+	if len(items) == 0 {
+		return "inventory: empty pack"
+	}
+	return "inventory:\n  " + strings.Join(items, "\n  ")
+}
+
+// villagerBeliefsSection is FR-008: consolidated beliefs and narrative,
+// shown only when present (empty string omits the section silently).
+func villagerBeliefsSection(a sim.Agent) string {
+	if len(a.Beliefs) == 0 && a.Narrative == "" {
+		return ""
+	}
+	var b strings.Builder
+	if a.Narrative != "" {
+		b.WriteString("narrative: " + a.Narrative)
+	}
+	if len(a.Beliefs) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("beliefs:")
+		for _, belief := range a.Beliefs {
+			b.WriteString(fmt.Sprintf("\n  %s (%d%%)", belief.Statement, belief.Confidence))
+		}
+	}
+	return b.String()
+}
+
+// villagerMemoriesLines is FR-007: episodic memories most-recent-first
+// (Memories accretes oldest-first, so this walks it in reverse),
+// bounded to at most `budget` lines total including its own header — the
+// section this detail view sheds first when height runs short. budget < 1
+// omits the section entirely; a villager with no memories yet says so
+// plainly rather than showing nothing.
+func villagerMemoriesLines(a sim.Agent, budget int) []string {
+	if budget < 1 {
+		return nil
+	}
+	if len(a.Memories) == 0 {
+		return []string{styleHeader.Render("memories") + " " + styleDim.Render("· no memories yet")}
+	}
+	lines := []string{styleHeader.Render("memories")}
+	for i := len(a.Memories) - 1; i >= 0 && len(lines) < budget; i-- {
+		lines = append(lines, sim.FormatMemory(a.Memories[i]))
+	}
+	return lines
 }
 
 // bar renders a 0..1000 need as a compact five-cell gauge.

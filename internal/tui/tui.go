@@ -33,21 +33,21 @@ import (
 // pane names both the narrow-fallback's single active pane and the
 // widescreen dock's selected tab — paneMap is narrow-only (the widescreen
 // map is always visible, never a dock tab); the dock only ever selects
-// paneChronicle/paneMetatron/paneSouls.
+// paneChronicle/paneMetatron/paneVillagers.
 type pane int
 
 const (
 	paneMap pane = iota
 	paneChronicle
 	paneMetatron
-	paneSouls
+	paneVillagers
 	paneCount
 )
 
-var paneNames = [paneCount]string{"map", "chronicle", "metatron", "souls"}
+var paneNames = [paneCount]string{"map", "chronicle", "metatron", "villagers"}
 
 // dockTabKey is the keymap.md key that selects/solos each dock tab.
-var dockTabKey = map[pane]string{paneChronicle: "2", paneMetatron: "3", paneSouls: "4"}
+var dockTabKey = map[pane]string{paneChronicle: "2", paneMetatron: "3", paneVillagers: "4"}
 
 // speedSteps is the [ / ] cycling order.
 // max is deliberately absent: the watchable ladder tops out at 32x (TASK-20);
@@ -115,6 +115,14 @@ type Model struct {
 	mbFlash   string // one-shot dormant-state message (minibuffer.md "answer arrived — 3 to read")
 
 	metatronUnseen bool // dock tab badge: a reply landed while the tab wasn't visible
+
+	// Villagers tab (TASK-56, data-model.md "New TUI model state"):
+	// villSelected is the roster cursor, clamped to [0, len(replica.Agents))
+	// wherever read (the replica can arrive late or be swapped wholesale on
+	// reconnect); villDetail opens the selected villager's detail view.
+	// Neither field is persisted — client-only, event-sourced from nothing.
+	villSelected int
+	villDetail   bool
 }
 
 func New(w *world.World) Model {
@@ -279,6 +287,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.status
 		m.replica = msg.replica
 		m.lastSeq = msg.lastSeq
+		m.clampVillSelected() // R5: connectedMsg swaps the replica wholesale
 		return m, listen(m.client)
 
 	case disconnectedMsg:
@@ -397,6 +406,17 @@ func (m Model) metatronVisible() bool {
 	return m.active == paneMetatron
 }
 
+// villagersVisible reports whether the villagers tab is the thing currently
+// on screen — the gate for the roster/detail selection keys (contracts/
+// state-and-keys.md "Keys bind only while the villagers tab is the visible
+// dock tab or solo'd").
+func (m Model) villagersVisible() bool {
+	if isWidescreen(m.width) {
+		return m.dockTab == paneVillagers
+	}
+	return m.active == paneVillagers
+}
+
 // mapControllable reports whether arrow keys should pan the map: always in
 // widescreen (pages/home.md: "regardless of which dock tab is selected"),
 // only while the map pane is active in the narrow fallback (unchanged).
@@ -430,6 +450,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return mdl, cmd
 		}
 	}
+	if m.villagersVisible() {
+		if mdl, cmd, handled := m.handleVillagersKey(msg); handled {
+			return mdl, cmd
+		}
+	}
 	return m.handleGlobalKey(msg)
 }
 
@@ -447,7 +472,7 @@ func (m Model) handleGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "3":
 		return m.selectTab(paneMetatron)
 	case "4":
-		return m.selectTab(paneSouls)
+		return m.selectTab(paneVillagers)
 	case "tab":
 		return m.selectTab(nextDockTab(m.dockTab))
 	case "shift+tab":
@@ -536,7 +561,7 @@ func nextDockTab(cur pane) pane {
 	case paneChronicle:
 		return paneMetatron
 	case paneMetatron:
-		return paneSouls
+		return paneVillagers
 	default:
 		return paneChronicle
 	}
@@ -545,7 +570,7 @@ func nextDockTab(cur pane) pane {
 func prevDockTab(cur pane) pane {
 	switch cur {
 	case paneChronicle:
-		return paneSouls
+		return paneVillagers
 	case paneMetatron:
 		return paneChronicle
 	default:
@@ -554,7 +579,7 @@ func prevDockTab(cur pane) pane {
 }
 
 // selectTab implements the solo-views.md state machine for k ∈
-// {chronicle, metatron, souls}: same key on the already-selected tab zooms
+// {chronicle, metatron, villagers}: same key on the already-selected tab zooms
 // solo; same key again returns home. A different key while solo switches
 // which tab is solo'd rather than dropping back to home — the state
 // machine only specifies the same-key case, so this keeps solo a pure
@@ -706,6 +731,96 @@ func (m Model) handleInspectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	return m, nil, false
+}
+
+// handleVillagersKey is contracts/state-and-keys.md's key grammar table,
+// layered on top of the global mode exactly like handleInspectKey — j/k/g/G
+// select in the roster, ⏎ opens the detail view, esc closes it. Unlike
+// inspect mode this does not require the clock to be paused: it is gated
+// purely on villagersVisible() (dock.md "Each tab keeps its own state").
+// esc on the roster returns handled=false so it falls through to the
+// global esc (focus-contract.md rule 3: minibuffer → detail → solo → home).
+func (m Model) handleVillagersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	m.clampVillSelected()
+	switch msg.String() {
+	case "esc":
+		if m.villDetail {
+			m.villDetail = false
+			return m, nil, true
+		}
+		return m, nil, false
+	case "j":
+		if !m.villDetail {
+			m.villMoveSelection(1)
+		}
+		return m, nil, true
+	case "k":
+		if !m.villDetail {
+			m.villMoveSelection(-1)
+		}
+		return m, nil, true
+	case "g":
+		if !m.villDetail {
+			m.villJumpFirst()
+		}
+		return m, nil, true
+	case "G":
+		if !m.villDetail {
+			m.villJumpLast()
+		}
+		return m, nil, true
+	case "enter":
+		if !m.villDetail && m.villCount() > 0 {
+			m.villDetail = true
+		}
+		return m, nil, true
+	}
+	return m, nil, false
+}
+
+// villCount is len(replica.Agents), 0 with a nil/empty replica — the bound
+// every villSelected read clamps against (R5).
+func (m Model) villCount() int {
+	if m.replica == nil {
+		return 0
+	}
+	return len(m.replica.Agents)
+}
+
+// clampVillSelected bounds villSelected to [0, villCount()) — called on
+// reconnect (connectedMsg swaps the replica wholesale) and defensively on
+// every villagers keypress; renderers clamp again at read time the same way
+// chronSelectionBase does for the chronicle.
+func (m *Model) clampVillSelected() {
+	n := m.villCount()
+	if n == 0 {
+		m.villSelected = 0
+		return
+	}
+	m.villSelected = clampInt(m.villSelected, 0, n-1)
+}
+
+func (m *Model) villMoveSelection(delta int) {
+	n := m.villCount()
+	if n == 0 {
+		return
+	}
+	m.villSelected = clampInt(m.villSelected+delta, 0, n-1)
+}
+
+func (m *Model) villJumpFirst() {
+	if m.villCount() == 0 {
+		return
+	}
+	m.villSelected = 0
+}
+
+func (m *Model) villJumpLast() {
+	n := m.villCount()
+	if n == 0 {
+		return
+	}
+	m.villSelected = n - 1
 }
 
 // chronSelectionBase resolves the "current" selection: if nothing is

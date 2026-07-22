@@ -72,7 +72,7 @@ pane + footer, keys `1–4` swap panes exactly as the current `internal/tui` doe
 
 ```
  script-world · day 4 · 08:12 · 1×
- [ map ] chronicle  metatron  souls
+ [ map ] chronicle  metatron  villagers
  ┌───────────────────────────────────┐
  │ ~ ~ " ♠ ♠ A ♠ " . . ⌂ . B . .     │
  │ ~ . . ᴥ . " . . . S . . " " .     │

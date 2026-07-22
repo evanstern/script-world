@@ -99,6 +99,15 @@ type Agent struct {
 	// and un-hailed agents keep byte-identical canonical state (determinism
 	// hash). Written only by the reducer.
 	Hail *AgentHail `json:"hail,omitempty"`
+	// LastGoal/LastGoalTick (TASK-56) remember the most recently pursued
+	// objective so the villagers tab can show "what did they last do?" while
+	// idle. Set by State.Apply on agent.intent_set alongside Intent and never
+	// cleared — every intent-clearing path (intent_done, gru.attacked, hail
+	// interrupts) leaves them untouched by construction, since "most recent
+	// objective" is exactly "last goal set". omitempty keeps pre-feature
+	// snapshots byte-stable (precedent: Generation, Plan, Hail).
+	LastGoal     string `json:"last_goal,omitempty"`
+	LastGoalTick int64  `json:"last_goal_tick,omitempty"`
 }
 
 // AgentHail is the courtesy pause a talk_to landing lays on its target: who

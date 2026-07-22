@@ -206,10 +206,11 @@ func TestDescribeChestEmptyStore(t *testing.T) {
 	}
 }
 
-// TestSoulsBodyShowsFullInventory covers SC-006 (spec 012 T043): the souls
-// pane must surface every carried resource kind — wood/stone/water/planks/
-// refined stone, the food triplet, and the most-worn spear's remaining uses.
-func TestSoulsBodyShowsFullInventory(t *testing.T) {
+// TestVillagersRosterShowsFullInventory covers SC-006 (spec 012 T043): the
+// villagers roster must surface every carried resource kind —
+// wood/stone/water/planks/refined stone, the food triplet, and the
+// most-worn spear's remaining uses.
+func TestVillagersRosterShowsFullInventory(t *testing.T) {
 	m := widescreenModel(t)
 	m.replica.Agents = []sim.Agent{
 		{Name: "Ash", X: 3, Y: 4, Inv: sim.Inventory{
@@ -217,10 +218,10 @@ func TestSoulsBodyShowsFullInventory(t *testing.T) {
 			FoodRaw: 6, FoodCooked: 7, Meals: 8, Spears: []int{1, 3},
 		}},
 	}
-	body := m.soulsBody(m.width-6, m.height-6)
+	body := m.villagerRosterBody(m.width-6, m.height-6)
 	want := "carry 1w 2st 3wt 4pl 5rs · food 6r/7c/8m · spear 2(1)"
 	if !strings.Contains(body, want) {
-		t.Errorf("souls pane missing full inventory line %q, got:\n%s", want, body)
+		t.Errorf("villagers roster missing full inventory line %q, got:\n%s", want, body)
 	}
 }
 
