@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/policy.go
   - internal/sim/path.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Reflex policy & pathfinding
@@ -22,8 +22,14 @@ a dying fire — and one removal — shelter-building dropped out of the reflex
 entirely once it was re-costed in planks. Spec 013 (inventory & storage v1) widened
 `resolveGoal` again — a chest to build, goods to drop/pick up/deposit/withdraw —
 and left the reflex ladder itself completely untouched: all five new goals are
-planner/plan-only (FR-014), added to `resolveGoal` and `planGoals`
-([[executor]]'s guarded-plan validation) but never reachable from `decideIntent`.
+planner/plan-only (FR-014), added to `resolveGoal` but never reachable from
+`decideIntent`. Spec 014 (TASK-53) restructured `resolveGoal` from one large
+switch into `goalResolvers`, a name-keyed resolver table with the old per-verb
+bodies verbatim — the [[tool-registry]]'s boot-time coverage gate
+(`sim.ValidateToolCoverage`) asserts every World tool on the villager roster has
+a table entry, so a registered verb can never lack its resolver. The plan-step
+accept set that once lived beside it (`planGoals`) is gone: the sim door now
+derives it from the registry ([[sim-loop]]).
 
 ## How it works
 

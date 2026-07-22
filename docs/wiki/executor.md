@@ -8,7 +8,7 @@ sources:
   - internal/sim/plan.go
   - internal/sim/terrain.go
   - internal/sim/recipes.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Executor
@@ -75,7 +75,13 @@ into inventory, overlays, structures, or needs.
 `craft_planks`/`craft_stone`/`craft_spear` (hand-crafts, `SiteAnywhere` — no travel,
 work happens on the agent's own tile), `build_oven` (alongside `build_fire`/
 `build_shelter`), and `cook`/`bathe`/`refuel_fire` (station actions at a fire or
-oven). `workDuration` overrides the plain `intentDuration(goal)` lookup for two
+oven). Since spec 014 (TASK-53) `intentDuration` reads `intentDurations`, a table
+built at init from the [[tool-registry]]'s per-tool `Cost.DurationTicks` (values
+hand-equal to the sim constants, pinned by
+`TestWorldToolDurationsMatchSimConstants`); goals with no registry duration — the
+instant verbs and the internal `seek` alias — complete on arrival (0), exactly as
+the old switch's default did. `workDuration` overrides the plain
+`intentDuration(goal)` lookup for two
 context-dependent cases: a spear-carrying hunt takes `huntTicksSpear` (faster than
 the bare-handed default) and cooking at an oven takes `cookOvenTicks` (slower than
 at a fire) — both read off current state (`Agent.Inv.Spears`, the target structure),

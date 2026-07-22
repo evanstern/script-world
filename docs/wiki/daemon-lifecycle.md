@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Daemon lifecycle
@@ -17,6 +17,12 @@ directory in a state the next start can resume from losslessly.
 
 Startup sequence:
 
+0. Tool-registry gates (spec 014, world-independent so they run first):
+   `tool.Validate()` — the [[tool-registry]]'s internal consistency — and
+   `sim.ValidateToolCoverage()` — every World tool on a roster has a sim
+   resolver and duration, every Expressive tool's events are whitelisted. A
+   malformed registry or roster aborts boot with a config error, never a
+   tick-time failure.
 1. `world.Open` — manifest validation ([[world-save-directory]]).
 2. `acquirePidfile` — one daemon per world: an existing pidfile with a live process
    (checked via `kill(pid, 0)`, EPERM counts as alive) is a hard error; a stale one

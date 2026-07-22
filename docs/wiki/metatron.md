@@ -9,7 +9,7 @@ sources:
   - internal/metatron/digest.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Metatron
@@ -37,7 +37,12 @@ nothing lands, nothing spent.
 
 **Nudges**: `dream` (one living villager) or `omen` (all living, recorded
 explicitly). Validation (form, living target, ≤400 chars, charges ≥ 1) downgrades
-failures to refusal-with-counsel — refusals are free. A landed nudge is ONE atomic
+failures to refusal-with-counsel — refusals are free. Since spec 014 (TASK-53) the
+form must be a nudge tool on the [[tool-registry]]'s `RosterMetatron` — checked
+both turn-side (`landNudge`) and in the reducer dry-run, with the same
+unknown-form reason as before — and the 400-byte text cap is a registry read
+(`nudgeTextMax` in turn.go, `sim.NudgeTextMax` reducer-side, both from the same
+`nudge_dream` entry so the truncation and the enforcer can never diverge). A landed nudge is ONE atomic
 `InjectSocial` batch: `metatron.nudged{form, targets, text}` (validating reducer
 spends the charge; the dry-run enforces it at the door) + one prefixed
 (`"You dreamed: "` / `"You witnessed an omen: "`) `agent.memory_added` per target at

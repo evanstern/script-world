@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 367d689446f502d9351ee48959c5397d4db037a0
 ---
 
 # Sim loop
@@ -74,11 +74,18 @@ world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
    proceeds as **adapted** instead of rejecting; a `target_present` guard that
    holds but whose target moved likewise marks the landing **adapted** (the
    repair is `resolveGoal`'s re-resolution);
-5. success: `resolveGoal` resolves coordinates deterministically, recorded as
-   `agent.intent_set (source: planner)` + `agent.thought`, or — for a `Plan` —
-   validated against `PlanStepCap` and the `planGoals` vocabulary (missing
-   `Until` defaults to `state.Tick + PlanDefaultWindowTicks`) and recorded as
-   `agent.plan_set`; a `resolveGoal` failure is itself `rejected-guard`. A
+5. success: the goal must first be a World tool on the [[tool-registry]]'s
+   villager roster (spec 014 US3 — an out-of-roster or unknown name rejects
+   with the same `unknown goal` reason as before; real planner traffic is
+   unaffected), then `resolveGoal` resolves coordinates deterministically,
+   recorded as `agent.intent_set (source: planner)` + `agent.thought`, or —
+   for a `Plan` — validated against `PlanStepCap` and `tool.PlanStepGoals()`,
+   the registry-derived plan-step set (spec 014 FR-006; deriving it cured the
+   TASK-55 drift where the old hand-maintained `planGoals` map silently
+   rejected the nine spec-012 verbs — FR-012, the migration's sole behavioral
+   delta; missing `Until` defaults to `state.Tick + PlanDefaultWindowTicks`)
+   and recorded as `agent.plan_set`; a `resolveGoal` failure is itself
+   `rejected-guard`. A
    successful `talk_to` landing with a `hailable` target additionally emits
    `social.hailed` (in- or out-of-radius — the courtesy pause is uniform;
    [[executor]] enforces it and resolves met/expiry).
