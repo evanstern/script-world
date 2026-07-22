@@ -44,7 +44,7 @@ Key functions:
 
 [[sim-loop]] converts `Speed` to a scheduling interval; [[sim-state-reducer]] stores
 the current `Speed` and pause flag; the [[executor]] and [[event-types]] use
-day/night boundary detection; [[cli-scriptworld]] prints `Format` output.
+day/night boundary detection; [[cli-promptworld]] prints `Format` output.
 
 ## Operational notes
 

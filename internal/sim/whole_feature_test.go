@@ -3,8 +3,8 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // TestReplayByteIdentityWholeFeature is SC-004 over the ENTIRE spec 012

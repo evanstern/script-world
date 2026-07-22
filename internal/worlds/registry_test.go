@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 func setHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", dir)
+	t.Setenv("PROMPTWORLD_HOME", dir)
 	return dir
 }
 

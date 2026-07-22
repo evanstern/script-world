@@ -1,4 +1,4 @@
-// Package e2e drives the built scriptworld binary through the quickstart
+// Package e2e drives the built promptworld binary through the quickstart
 // scenarios (specs/001-world-daemon/quickstart.md).
 package e2e
 
@@ -13,18 +13,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 var bin string
 
 func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "scriptworld-e2e")
+	tmp, err := os.MkdirTemp("", "promptworld-e2e")
 	if err != nil {
 		panic(err)
 	}
-	bin = filepath.Join(tmp, "scriptworld")
-	build := exec.Command("go", "build", "-o", bin, "github.com/evanstern/script-world/cmd/scriptworld")
+	bin = filepath.Join(tmp, "promptworld")
+	build := exec.Command("go", "build", "-o", bin, "github.com/evanstern/promptworld/cmd/promptworld")
 	build.Dir = ".."
 	if out, err := build.CombinedOutput(); err != nil {
 		panic(fmt.Sprintf("build: %v\n%s", err, out))
@@ -38,7 +38,7 @@ func run(t *testing.T, args ...string) string {
 	t.Helper()
 	out, err := exec.Command(bin, args...).CombinedOutput()
 	if err != nil {
-		t.Fatalf("scriptworld %s: %v\n%s", strings.Join(args, " "), err, out)
+		t.Fatalf("promptworld %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return string(out)
 }

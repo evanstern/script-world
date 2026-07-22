@@ -16,16 +16,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/daemon"
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/persona"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/tui"
-	"github.com/evanstern/script-world/internal/world"
-	"github.com/evanstern/script-world/internal/worlds"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/daemon"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tui"
+	"github.com/evanstern/promptworld/internal/world"
+	"github.com/evanstern/promptworld/internal/worlds"
 )
 
 func dirArg(fs *flag.FlagSet, args []string) (string, error) {
@@ -91,7 +91,7 @@ func parseWorldFlags(fs *flag.FlagSet, args []string) (string, error) {
 	return resolveWorld(arg)
 }
 
-// cmdNew implements `scriptworld new` per contracts/cli.md (research.md D5):
+// cmdNew implements `promptworld new` per contracts/cli.md (research.md D5):
 // a bare-word argument is name-form — create <worlds-home>/<name> (or --at
 // DIR exactly), manifest name = the argument. A path-shaped argument
 // (worlds.IsPathArg) is legacy path-form, byte-compatible with today:
@@ -191,7 +191,7 @@ func cmdNew(args []string) error {
 	if nameForm {
 		startHint = worldName
 	}
-	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: scriptworld start %s\n",
+	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: promptworld start %s\n",
 		worldName, dir, *seed, w.LLMConfigPath(), startHint)
 	return nil
 }
@@ -218,7 +218,7 @@ func resolveWorldForMigrate(arg string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("no world named %q (searched %s and the known-worlds list) — try `scriptworld ps --all`", arg, home)
+	return "", fmt.Errorf("no world named %q (searched %s and the known-worlds list) — try `promptworld ps --all`", arg, home)
 }
 
 func hasManifest(dir string) bool {
@@ -226,7 +226,7 @@ func hasManifest(dir string) bool {
 	return err == nil
 }
 
-// cmdMigrate implements `scriptworld migrate <world>` (spec 012 US6, spec 013):
+// cmdMigrate implements `promptworld migrate <world>` (spec 012 US6, spec 013):
 // the offline snapshot-cut migration that upgrades an older world (v1 or v2) to
 // the current format — a v1 world chains 1→2→3 in one run. It resolves the
 // world, then hands the whole archive/transform/rewrite ceremony to
@@ -245,7 +245,7 @@ func cmdMigrate(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("migrated %q (seed %d) to format v%d\n  %d villagers carried across the break at tick %d (%s)\n  %d source events archived in %s\nstart it with: scriptworld start %s\n",
+	fmt.Printf("migrated %q (seed %d) to format v%d\n  %d villagers carried across the break at tick %d (%s)\n  %d source events archived in %s\nstart it with: promptworld start %s\n",
 		res.Name, res.Seed, world.FormatVersion, res.AgentsCarried, res.Tick, clock.Format(res.Tick),
 		res.SourceEvents, res.ArchivePath, arg)
 	return nil
@@ -259,7 +259,7 @@ func cmdLLM(args []string) error {
 		return err
 	}
 	if fs.NArg() < 3 {
-		return fmt.Errorf("usage: scriptworld llm <world> <kind> <prompt...>")
+		return fmt.Errorf("usage: promptworld llm <world> <kind> <prompt...>")
 	}
 	dir, err := resolveWorld(fs.Arg(0))
 	if err != nil {
@@ -299,7 +299,7 @@ func cmdMetatron(args []string) error {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: scriptworld metatron <world> [message...]")
+		return fmt.Errorf("usage: promptworld metatron <world> [message...]")
 	}
 	dir, err := resolveWorld(fs.Arg(0))
 	if err != nil {
@@ -517,7 +517,7 @@ func cmdSpeed(args []string) error {
 		return err
 	}
 	if fs.NArg() < 2 {
-		return fmt.Errorf("usage: scriptworld speed <world> <1x|4x|8x|16x|32x|max>")
+		return fmt.Errorf("usage: promptworld speed <world> <1x|4x|8x|16x|32x|max>")
 	}
 	val := fs.Arg(1)
 	if _, err := clock.ParseSpeed(val); err != nil {

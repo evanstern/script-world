@@ -18,7 +18,7 @@ payloads (absolute values, no dice rolls), unknown types no-op in old reducers,
 | `agent.refueled` | `RefueledPayload{agent, x, y, fuel_until}` (absolute deadline) | executor, refuel_fire completion (planner or reflex) | `Wood −1`; fire's `FuelUntil = fuel_until`; relights if cold; intent cleared |
 | `agent.spear_broke` | `SpearBrokePayload{agent}` | executor, alongside the hunt completion that spent the last use | `Spears[0]` removed (post-decrement zero); companion `agent.memory_added` in same batch |
 | `sim.fire_burned_out` | `FireBurnedOutPayload{x, y}` | executor fuel sweep, once per burnout transition | none (lit-ness is derived from `FuelUntil`; event is chronicle/TUI signal) |
-| `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` — `state` is the full canonical v2 `sim.State` JSON (struct-embedded, ~1–2 MB, once per world lifetime) | `scriptworld migrate` command (offline, appended to the fresh log right after `world.created`) | state replaced wholesale after validating name/seed match — the log alone reproduces the migrated world with zero snapshots (research R10) |
+| `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` — `state` is the full canonical v2 `sim.State` JSON (struct-embedded, ~1–2 MB, once per world lifetime) | `promptworld migrate` command (offline, appended to the fresh log right after `world.created`) | state replaced wholesale after validating name/seed match — the log alone reproduces the migrated world with zero snapshots (research R10) |
 
 ## Changed semantics under format v2 (no new types)
 

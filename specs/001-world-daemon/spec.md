@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description: "World daemon & time substrate: the always-on Go daemon that hosts the script-world simulation. Deterministic tick loop; game clock at default 1 game-min = 15 real-sec (4x compression) with speed range from real-time up to as-fast-as-affordable; pause as a first-class player verb; SQLite append-only event log plus periodic snapshots; per-world save directory with per-run flat files so runs are cleanly separable; client attach/detach protocol so a TUI client can connect and disconnect without stopping the world; world resumes from snapshot+log after daemon restart. Grounding: docs/design/grounded-assumptions.md (Time & posture, Stack, Cost & inference resilience). This is spec candidate #1 from the TASK-1 grounding session, linked to Backlog TASK-2."
+**Input**: User description: "World daemon & time substrate: the always-on Go daemon that hosts the promptworld simulation. Deterministic tick loop; game clock at default 1 game-min = 15 real-sec (4x compression) with speed range from real-time up to as-fast-as-affordable; pause as a first-class player verb; SQLite append-only event log plus periodic snapshots; per-world save directory with per-run flat files so runs are cleanly separable; client attach/detach protocol so a TUI client can connect and disconnect without stopping the world; world resumes from snapshot+log after daemon restart. Grounding: docs/design/grounded-assumptions.md (Time & posture, Stack, Cost & inference resilience). This is spec candidate #1 from the TASK-1 grounding session, linked to Backlog TASK-2."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -19,7 +19,7 @@ the configured compression, and everything that happened while they were away is
 record.
 
 **Why this priority**: "Always-on ambient world" is the single most load-bearing revision
-from the grounding session — script-world is a persistent world, not a session game.
+from the grounding session — promptworld is a persistent world, not a session game.
 Every other feature (souls, chronicle, Metatron) assumes a substrate that never stops.
 
 **Independent Test**: Start a world with no client attached; wait a known real-time

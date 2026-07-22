@@ -25,8 +25,8 @@ Must pass, including (new or extended):
 ## 2. Fresh-world smoke (deterministic, no LLM)
 
 ```sh
-go run ./cmd/scriptworld new demo-012 --seed 42   # adjust to actual CLI shape
-go run ./cmd/scriptworld start demo-012
+go run ./cmd/promptworld new demo-012 --seed 42   # adjust to actual CLI shape
+go run ./cmd/promptworld start demo-012
 ```
 
 Expected within the first game days (observe via TUI or log tail):
@@ -50,15 +50,15 @@ hashes — must be byte-identical including `Quarried` overlay, `FuelUntil` valu
 ## 5. Old-world refusal & migration (US6)
 
 Point the v2 build at an un-migrated v1 world: daemon must refuse with the
-unsupported-version error naming `scriptworld migrate`, leaving the world untouched.
+unsupported-version error naming `promptworld migrate`, leaving the world untouched.
 
-Then the real thing (SC-007), against `~/.scriptworld/worlds/myworld-01`:
+Then the real thing (SC-007), against `~/.promptworld/worlds/myworld-01`:
 
 ```sh
-cp -R ~/.scriptworld/worlds/myworld-01 ~/.scriptworld/worlds/myworld-01.backup
+cp -R ~/.promptworld/worlds/myworld-01 ~/.promptworld/worlds/myworld-01.backup
 # ensure cleanly stopped (v1 binary stop → finalSnapshot covers the log)
-go run ./cmd/scriptworld migrate myworld-01
-go run ./cmd/scriptworld start myworld-01
+go run ./cmd/promptworld migrate myworld-01
+go run ./cmd/promptworld start myworld-01
 ```
 
 Expected: `world.v1.db` archived beside the new `world.db`; manifest at

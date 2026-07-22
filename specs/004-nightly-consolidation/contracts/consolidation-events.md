@@ -54,7 +54,7 @@ SC-004).
 
 ## Observability (FR-010)
 
-- Every outcome is an `agent.consolidated` event: visible in `scriptworld tail`, the TUI
+- Every outcome is an `agent.consolidated` event: visible in `promptworld tail`, the TUI
   event feed, and countable from the log.
 - daemon.log lines: `mind: consolidation <agent> night <n> accepted (p/f/b counts, $cost)`
   / `rejected (<reason>)` / `skipped (empty)` / `deferred (<transport error>)`.

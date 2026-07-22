@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // Source distinguishes where a discovered candidate came from.

@@ -6,19 +6,19 @@
 
 ## Summary
 
-Give scriptworld docker/ollama-style instance management without breaking the "one
-directory = one world" grounding: a machine-wide `scriptworld ps` that re-proves
+Give promptworld docker/ollama-style instance management without breaking the "one
+directory = one world" grounding: a machine-wide `promptworld ps` that re-proves
 liveness from pidfile + a bounded daemon `status` round-trip (never from records), a
-default worlds home at `~/.scriptworld/worlds` that `new <name>` creates into, and
+default worlds home at `~/.promptworld/worlds` that `new <name>` creates into, and
 name-or-path acceptance on every per-world command via one shared resolution helper.
 All manager state (a `known_worlds.json` pointer cache) is advisory and self-healing;
 worlds stay fully self-contained. Approach: a new `internal/worlds` package (home,
-registry, resolution, parallel probing) consumed by `cmd/scriptworld`, plus a one-line
+registry, resolution, parallel probing) consumed by `cmd/promptworld`, plus a one-line
 registration hook in `daemon.Run`.
 
 ## Technical Context
 
-**Language/Version**: Go 1.26.4 (single module `github.com/evanstern/script-world`)
+**Language/Version**: Go 1.26.4 (single module `github.com/evanstern/promptworld`)
 
 **Primary Dependencies**: stdlib only for this feature (`flag` CLI, `net` unix sockets,
 `encoding/json`); existing internal packages `internal/world` (save-dir layout),
@@ -26,24 +26,24 @@ registration hook in `daemon.Run`.
 `internal/store` (offline last-known state), `internal/llm` (`Status` presence = LLM on)
 
 **Storage**: Files — per-world dirs with `world.json` manifest (unchanged); new advisory
-`$SCRIPTWORLD_HOME/known_worlds.json` (atomic write, tolerated-corrupt); worlds home dir
+`$PROMPTWORLD_HOME/known_worlds.json` (atomic write, tolerated-corrupt); worlds home dir
 scan. No schema changes to the SQLite store.
 
 **Testing**: `go test ./...` unit tests beside code (`internal/worlds`,
-`cmd/scriptworld`); black-box e2e in `e2e/` (pattern: `daemon_e2e_test.go` builds the
+`cmd/promptworld`); black-box e2e in `e2e/` (pattern: `daemon_e2e_test.go` builds the
 binary and drives real daemons)
 
 **Target Platform**: darwin + linux (unix domain sockets, `syscall.Kill` liveness —
 same portability envelope as today)
 
-**Project Type**: single Go module, one CLI binary (`cmd/scriptworld`)
+**Project Type**: single Go module, one CLI binary (`cmd/promptworld`)
 
 **Performance Goals**: `ps` completes machine-wide in < 2s with zero false "running"
 (SC-001) — parallel per-world probes, ~1s per-world dial+call budget
 
 **Constraints**: worlds remain self-contained copyable directories (SC-004); all
 path-based invocations byte-compatible (SC-003); manager state never required for a
-world to run (FR-008); `SCRIPTWORLD_HOME` env override honored everywhere (edge case)
+world to run (FR-008); `PROMPTWORLD_HOME` env override honored everywhere (edge case)
 
 **Scale/Scope**: single user, single machine, O(tens) of worlds; 13 CLI commands gain
 name resolution; 1 new package + 1 new subcommand + `new` argument change
@@ -63,7 +63,7 @@ name resolution; 1 new package + 1 new subcommand + `new` argument change
 - **III. Gates Over Assertions — PASS.** Board status moves only via `spec-bridge:sync`
   from spec artifacts; ACs tick only against merged, tested behavior.
 - **IV. Grounding Freshness — PASS (obligation registered).** This feature edits files
-  pinned by wiki notes (`cmd/scriptworld/*`, `internal/daemon/daemon.go`,
+  pinned by wiki notes (`cmd/promptworld/*`, `internal/daemon/daemon.go`,
   `internal/world/world.go` sources of `world-save-directory`, `daemon-lifecycle`,
   `design-grounding` notes at minimum) — `/grounding-wiki:wiki-update` is a required
   post-merge step before the task is Done.
@@ -97,7 +97,7 @@ specs/008-instance-manager/
 ### Source Code (repository root)
 
 ```text
-cmd/scriptworld/
+cmd/promptworld/
 ├── main.go              # + "ps" dispatch; usage text: names-or-paths, new <name>
 ├── commands.go          # per-world commands resolve args via internal/worlds
 ├── ps.go                # NEW — cmdPs: discovery + parallel probe + table/JSON render
@@ -105,7 +105,7 @@ cmd/scriptworld/
 └── commands_test.go     # NEW/extended — new-arg semantics, resolution plumbing
 
 internal/worlds/         # NEW package — the manager (client-side only)
-├── home.go              # SCRIPTWORLD_HOME root, worlds-home path, name validation
+├── home.go              # PROMPTWORLD_HOME root, worlds-home path, name validation
 ├── registry.go          # known_worlds.json: load-tolerant, atomic upsert/prune
 ├── resolve.go           # name-vs-path rule, resolution order, ambiguity/missing errors
 ├── discover.go          # candidate enumeration: home scan ∪ registry
@@ -123,7 +123,7 @@ e2e/
 ```
 
 **Structure Decision**: single-project layout (existing). One new leaf package
-`internal/worlds` holds every manager concern so `cmd/scriptworld` stays thin and the
+`internal/worlds` holds every manager concern so `cmd/promptworld` stays thin and the
 daemon's only new duty is a best-effort registry upsert. No changes to the IPC protocol,
 store schema, or world directory layout.
 

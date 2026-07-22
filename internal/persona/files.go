@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Dir returns the agent's directory under the world's agents/ root.
@@ -22,7 +22,7 @@ func PersonaPath(worldDir, name string) string {
 func SoulPath(worldDir, name string) string { return filepath.Join(Dir(worldDir, name), "soul.md") }
 
 // Genesis writes each agent's persona.md (read-only) and an empty soul.md.
-// Called exactly once, by `scriptworld new` — the only write path to
+// Called exactly once, by `promptworld new` — the only write path to
 // persona.md in the entire system.
 func Genesis(worldDir string) error {
 	for _, name := range sim.AgentNames {
@@ -71,7 +71,7 @@ func Load(worldDir string) [sim.AgentCount]string {
 }
 
 // SecretEvents renders the genesis social.secret_seeded events (tick 0).
-// Called once by `scriptworld new` right after world.created.
+// Called once by `promptworld new` right after world.created.
 func SecretEvents() ([]store.Event, error) {
 	var events []store.Event
 	for i, name := range sim.AgentNames {

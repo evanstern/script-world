@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // Chests (spec 013 US3, T025): a chest costs 6 planks and records its builder as

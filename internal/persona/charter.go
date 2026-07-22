@@ -1,7 +1,7 @@
 package persona
 
 // DefaultCharter is the authored default for Metatron's charter (TASK-12) —
-// the game's ONLY player-editable prompt. `scriptworld new` seeds it into
+// the game's ONLY player-editable prompt. `promptworld new` seeds it into
 // <world>/charter.md; the player may rewrite it at any time and the next
 // Metatron turn obeys. CharterMaxChars bounds how much of the file is used.
 const CharterMaxChars = 4000

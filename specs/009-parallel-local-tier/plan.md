@@ -36,7 +36,7 @@ migration — absent field means 1.
 **Testing**: `go test ./internal/llm/ ./internal/cognition/ -race`; live validation
 against the operator's Ollama-compatible server per [quickstart.md](quickstart.md).
 
-**Target Platform**: the `scriptworld` daemon (macOS dev machine; any platform Go
+**Target Platform**: the `promptworld` daemon (macOS dev machine; any platform Go
 targets).
 
 **Project Type**: single Go module; this slice is almost entirely

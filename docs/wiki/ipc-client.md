@@ -50,7 +50,7 @@ its `last_seq`; `MetatronChat(text)` / `MetatronStatus()` carry the console pair
 
 ## Connections
 
-[[ipc-protocol]] defines the wire; [[cli-scriptworld]]'s `status`/`attach`/`tail`/
+[[ipc-protocol]] defines the wire; [[cli-promptworld]]'s `status`/`attach`/`tail`/
 time-control commands and the [[tui-client]] are the callers; [[ipc-server]] is the
 peer.
 

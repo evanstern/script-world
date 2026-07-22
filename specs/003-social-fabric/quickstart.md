@@ -8,9 +8,9 @@ go test -race ./...   # edges/ledger/reputation/rumor-chain units, convo driver 
 
 ## Scenario A — edges and debts (US1+US2)
 ```sh
-scriptworld new /tmp/s1 --seed 42 && scriptworld start /tmp/s1
-scriptworld speed /tmp/s1 16x
-scriptworld tail /tmp/s1 --follow | grep -E "social\.(gave|debt|relation|promise)"
+promptworld new /tmp/s1 --seed 42 && promptworld start /tmp/s1
+promptworld speed /tmp/s1 16x
+promptworld tail /tmp/s1 --follow | grep -E "social\.(gave|debt|relation|promise)"
 # gives to starving neighbors open debts; repayments settle; check soul.md Bonds
 cat /tmp/s1/agents/ash/soul.md
 ```
@@ -18,7 +18,7 @@ cat /tmp/s1/agents/ash/soul.md
 ## Scenario B — conversations and rumors (US3+US4, needs Ollama)
 ```sh
 # llm.json local.model: gemma4:12b-mlx (always-on)
-scriptworld tail /tmp/s1 --follow | grep -E "conversation|rumor_told"
+promptworld tail /tmp/s1 --follow | grep -E "conversation|rumor_told"
 # expect multi-turn exchanges (≤3/side), gists, and paraphrased retellings
 ```
 

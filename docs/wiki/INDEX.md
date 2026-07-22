@@ -1,6 +1,6 @@
-# script-world grounding wiki
+# promptworld grounding wiki
 
-Code-grounded corpus for the script-world daemon substrate. Every note is pinned to the
+Code-grounded corpus for the promptworld daemon substrate. Every note is pinned to the
 commit it was verified against; a change to any file in a note's `sources:` invalidates
 that note (re-pin with `/grounding-wiki:wiki-update`).
 
@@ -8,6 +8,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 
 - [[overview]] — the system's shape: always-on daemon, attachable clients, event-sourced world
 - [[design-grounding]] — the TASK-1 grounded assumptions the code implements
+- [[project-rename]] — the 2026-07-22 rename script-world → promptworld: repo, module, binary, env var, data dir
 
 ## Time & simulation
 
@@ -34,7 +35,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[ipc-server]] — sessions, gapless subscribe-replay, overflow drop, long-path sockets
 - [[ipc-client]] — dial, request correlation, push demux
 - [[tui-client]] — Bubble Tea four-pane client over a live log-shipped replica
-- [[cli-scriptworld]] — the single binary's subcommands and exit discipline
+- [[cli-promptworld]] — the single binary's subcommands and exit discipline
 - [[instance-manager]] — machine-wide ps, worlds home, name-or-path addressing, advisory registry
 
 ## Inference & minds

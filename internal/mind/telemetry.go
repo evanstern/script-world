@@ -13,10 +13,10 @@ import (
 	"log"
 	"unicode/utf8"
 
-	"github.com/evanstern/script-world/internal/cognition"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/cognition"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // thoughtMeta is a job's identity + prediction, snapshotted at enqueue.

@@ -20,7 +20,7 @@ Sync Impact Report
 - Follow-up TODOs: none
 -->
 
-# script-world Constitution
+# promptworld Constitution
 
 ## Core Principles
 

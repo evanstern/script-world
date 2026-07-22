@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 func TestGenesisWritesAllEightReadOnly(t *testing.T) {

@@ -36,7 +36,7 @@ structure order). The watch is itself event-sourced (`sim.gathering_observed`
 advancing `Meeting.GatherStart/X/Y`, so replay reconstructs it); unbroken for
 1800 ticks (`emergentGatherTicks`), the convention is born — place = that
 structure, convene = the observed half-hour, open = a half-hour later.
-`scriptworld new` writes no meeting block: emergent is the default.
+`promptworld new` writes no meeting block: emergent is the default.
 
 **The meeting** (`sim/governance.go`, beats emitted from the [[executor]]'s
 `stepEvents`, all gated on a non-nil convention): at `ConveneSecond`, once per

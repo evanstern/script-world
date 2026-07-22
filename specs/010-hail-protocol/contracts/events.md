@@ -74,4 +74,4 @@ vocabulary itself (`guard.go`) does not change.
 ## Observability
 
 Payloads use `from`/`to` so the chronicle grammar's name resolution renders them
-with agent names in `scriptworld tail` and the TUI feed with no view changes.
+with agent names in `promptworld tail` and the TUI feed with no view changes.

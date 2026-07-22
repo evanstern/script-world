@@ -33,7 +33,7 @@ format_version 2 — [[world-save-directory]]) carries `Wood`, `Stone`, `Water`,
 `Planks`, `RefinedStone`, `FoodRaw`, `FoodCooked`, `Meals` (all `omitempty` ints),
 and `Spears []int` — remaining uses per carried spear, sorted ascending so a hunt
 always spends the most-worn one first. The legacy `Food int` field is gone; a v1
-world must run `scriptworld migrate` ([[world-migration]]) before it can boot under
+world must run `promptworld migrate` ([[world-migration]]) before it can boot under
 this build. All tuning constants (decay rates, action durations, yields, costs,
 thresholds) sit at the top of `agents.go`; the v2 economy's constants (food
 restores, fire fuel, spear durability, gather/craft/build/station magnitudes) are

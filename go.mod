@@ -1,4 +1,4 @@
-module github.com/evanstern/script-world
+module github.com/evanstern/promptworld
 
 go 1.26.4
 

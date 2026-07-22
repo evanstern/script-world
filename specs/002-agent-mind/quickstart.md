@@ -10,10 +10,10 @@ go test -race ./...        # sim units (window, memories, determinism, replay),
 ## Scenario A — minds steer bodies (US1, SC-001)
 
 ```sh
-scriptworld new /tmp/m1 --seed 42          # writes personas + llm.json
+promptworld new /tmp/m1 --seed 42          # writes personas + llm.json
 # point llm.json local.model at a pulled Ollama model, then:
-scriptworld start /tmp/m1
-scriptworld tail /tmp/m1 --follow | grep -E "thought|intent_set"
+promptworld start /tmp/m1
+promptworld tail /tmp/m1 --follow | grep -E "thought|intent_set"
 # expect agent.thought lines with model reasons and intent_set with "source":"planner"
 ```
 
@@ -22,7 +22,7 @@ scriptworld tail /tmp/m1 --follow | grep -E "thought|intent_set"
 ```sh
 shasum /tmp/m1/agents/*/persona.md > /tmp/before
 ls -l /tmp/m1/agents/ash/persona.md        # -r--r--r--
-scriptworld speed /tmp/m1 max; sleep 5; scriptworld speed /tmp/m1 4x
+promptworld speed /tmp/m1 max; sleep 5; promptworld speed /tmp/m1 4x
 cat /tmp/m1/agents/ash/soul.md             # dated, starred memories
 shasum -c /tmp/before                      # all OK after days of sim
 ```
@@ -31,7 +31,7 @@ shasum -c /tmp/before                      # all OK after days of sim
 
 ```sh
 # stop Ollama (or set llm.json local.endpoint to a dead port and restart)
-scriptworld tail /tmp/m1 --follow | grep intent_set
+promptworld tail /tmp/m1 --follow | grep intent_set
 # expect "source":"reflex" intents resuming within ~2 game-minutes of idleness
 ```
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // --- helpers ---

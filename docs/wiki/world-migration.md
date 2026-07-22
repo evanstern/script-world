@@ -10,7 +10,7 @@ verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 
 # World migration
 
-script-world has broken its save format twice. Spec 012 (resources/food/crafting
+promptworld has broken its save format twice. Spec 012 (resources/food/crafting
 v2) widened `Inventory` from the legacy `{wood, food}` pair to the full v2 resource
 set and gave terrain generation rock outcrops — a v1 world's bytes simply don't mean
 the same thing under a v2 build. Spec 013 (inventory/storage v3) added a bulk cap,
@@ -18,8 +18,8 @@ ground piles, chests, theft, and rot, which change how the reducer/executor trea
 *existing* event shapes (yield truncation, death spill, the give-guard) — a v2 log
 replayed under v3 code would diverge even though v2 and v3 land are identical.
 Either way, `internal/world.Open` refuses any manifest whose `format_version` isn't
-the current one ([[world-save-directory]]). `scriptworld migrate <world>`
-([[cli-scriptworld]]) is the one-time, offline door a stopped older world walks
+the current one ([[world-save-directory]]). `promptworld migrate <world>`
+([[cli-promptworld]]) is the one-time, offline door a stopped older world walks
 through to keep running; it admits a v1 **or** v2 source and refuses an
 already-current world outright ("nothing to migrate").
 
@@ -141,7 +141,7 @@ restore is the same rename-back).
 
 ## Connections
 
-[[cli-scriptworld]]'s `migrate` command is the only caller; [[world-save-directory]]
+[[cli-promptworld]]'s `migrate` command is the only caller; [[world-save-directory]]
 defines the format-version gate this bridges and the `world.v1.db`/`world.v2.db`
 archive artifacts; [[sim-state-reducer]]'s `Apply` applies `world.migrated` as a
 wholesale state replace (validated by matching `Seed`); [[event-types]] catalogs the

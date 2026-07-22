@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 func chronicleEvent(t *testing.T, tick int64, p ChronicleEntryPayload) store.Event {

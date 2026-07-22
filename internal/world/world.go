@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 	// yield truncation, death spill, and give-guard change the replay semantics
 	// of existing event shapes, so a v2 log replayed under v3 code would
 	// diverge — the format gate is the shield (research R3). A v2 (or v1) world
-	// is refused with instructions to run `scriptworld migrate`. FormatVersion 2
+	// is refused with instructions to run `promptworld migrate`. FormatVersion 2
 	// was the spec 012 resources/food/crafting break.
 	FormatVersion = 3
 )
@@ -38,7 +38,7 @@ type Manifest struct {
 	// Meeting is an optional per-world meeting convention (TASK-36). When
 	// present, the daemon seeds a meeting.convention_established event on boot
 	// so the convene→open lifecycle honors it. Absent, no meeting convenes
-	// unless one emerges in-world. `scriptworld new` never writes it —
+	// unless one emerges in-world. `promptworld new` never writes it —
 	// emergent is the default.
 	Meeting *MeetingConfig `json:"meeting,omitempty"`
 }
@@ -128,7 +128,7 @@ func Open(dir string) (*World, error) {
 		return nil, fmt.Errorf("corrupt %s: %w", ManifestName, err)
 	}
 	if m.FormatVersion != FormatVersion {
-		return nil, fmt.Errorf("world format_version %d unsupported (this build supports %d); run 'scriptworld migrate <world>' to upgrade an older world", m.FormatVersion, FormatVersion)
+		return nil, fmt.Errorf("world format_version %d unsupported (this build supports %d); run 'promptworld migrate <world>' to upgrade an older world", m.FormatVersion, FormatVersion)
 	}
 	if m.TickGameSeconds != 1 {
 		return nil, fmt.Errorf("tick_game_seconds %d unsupported (must be 1)", m.TickGameSeconds)
@@ -157,7 +157,7 @@ func (w *World) DBPath() string        { return filepath.Join(w.Dir, "world.db")
 func (w *World) LLMConfigPath() string { return filepath.Join(w.Dir, "llm.json") }
 
 // CalibrationPath is the seconds-per-point profile written only by
-// `scriptworld calibrate` (specs/007-cognition-horizon); an absent file is
+// `promptworld calibrate` (specs/007-cognition-horizon); an absent file is
 // legal — pessimistic bootstrap defaults apply.
 func (w *World) CalibrationPath() string { return filepath.Join(w.Dir, "calibration.json") }
 func (w *World) SockPath() string        { return filepath.Join(w.Dir, "daemon.sock") }

@@ -15,16 +15,16 @@ import (
 	"time"
 )
 
-// isolatedHome points SCRIPTWORLD_HOME at a fresh temp dir for the
+// isolatedHome points PROMPTWORLD_HOME at a fresh temp dir for the
 // duration of one test — ps/registry state never leaks across tests or
-// from a developer's real ~/.scriptworld (research.md D4). t.Setenv is
+// from a developer's real ~/.promptworld (research.md D4). t.Setenv is
 // visible to subprocesses started with a nil Env (they inherit
 // os.Environ() at Start time), so it flows through `start`'s detached
 // `daemon` grandchild too.
 func isolatedHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", home)
+	t.Setenv("PROMPTWORLD_HOME", home)
 	return home
 }
 
@@ -258,7 +258,7 @@ func TestManagerNewByNameFullLifecycle(t *testing.T) {
 	if !strings.Contains(out, `created world "aria"`) {
 		t.Fatalf("new aria output = %q", out)
 	}
-	if !strings.Contains(out, "scriptworld start aria") {
+	if !strings.Contains(out, "promptworld start aria") {
 		t.Errorf("expected the name-form success hint to suggest `start aria`, got %q", out)
 	}
 	dir := filepath.Join(home, "worlds", "aria")
@@ -358,7 +358,7 @@ func TestManagerUnknownNameFailsWithHelpfulMessage(t *testing.T) {
 
 // TestManagerCopiedNameWorldRunsUnderFreshHome is SC-004: a stopped
 // name-created world, copied to an arbitrary path under a completely
-// unrelated SCRIPTWORLD_HOME (no worlds-home entry, no registry entry —
+// unrelated PROMPTWORLD_HOME (no worlds-home entry, no registry entry —
 // nothing), starts and runs by path with zero manager state present.
 func TestManagerCopiedNameWorldRunsUnderFreshHome(t *testing.T) {
 	home := isolatedHome(t)

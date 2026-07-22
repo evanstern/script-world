@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 // The persona firewall's automated half (TASK-9): a deterministic,

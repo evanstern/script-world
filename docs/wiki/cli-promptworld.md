@@ -1,16 +1,16 @@
 ---
-name: cli-scriptworld
-description: The single scriptworld binary — subcommand dispatch, world management, daemon control, observation commands, v1→v2→v3 migration, exit discipline
+name: cli-promptworld
+description: The single promptworld binary — subcommand dispatch, world management, daemon control, observation commands, v1→v2→v3 migration, exit discipline
 kind: component
 sources:
-  - cmd/scriptworld/main.go
-  - cmd/scriptworld/commands.go
-  - cmd/scriptworld/calibrate.go
-  - cmd/scriptworld/ps.go
+  - cmd/promptworld/main.go
+  - cmd/promptworld/commands.go
+  - cmd/promptworld/calibrate.go
+  - cmd/promptworld/ps.go
 verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
 ---
 
-# scriptworld CLI
+# promptworld CLI
 
 One binary serves every role: daemon, client tools, world management. `main.go` is a
 plain dispatch table; behavior lives in `commands.go`, except `calibrate` in its own
@@ -21,7 +21,7 @@ plain dispatch table; behavior lives in `commands.go`, except `calibrate` in its
 
 ## How it works
 
-Exit discipline: 0 on success; 1 with a one-line `scriptworld <cmd>: error` on stderr;
+Exit discipline: 0 on success; 1 with a one-line `promptworld <cmd>: error` on stderr;
 2 for usage errors.
 
 Every per-world command takes `<world>` — a name or a path (TASK-43). Arguments

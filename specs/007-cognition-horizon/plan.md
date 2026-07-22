@@ -6,11 +6,11 @@
 
 ## Summary
 
-Scope LLM authority by decision timescale vs turn latency in game time, deterministically. A new pure package `internal/cognition` owns the decision-class registry (Fibonacci points + game-tick staleness budgets + degrade actions), the seconds-per-point calibration profile (baseline from a `scriptworld calibrate` CLI stage, live-re-estimated with spike rejection from real call durations), and the pure routing function. The mind driver consults the router before enqueueing any model work; the sim loop enforces staleness and guards at the two injection doors (`inject_intent`, `inject_social`); every thought terminates in exactly one recorded outcome event carrying causality references. Prompts become future-dated and the planner vocabulary grows guarded conditional steps (timed guards subsume act-at-time-T). Pause is codified as world-freezes-minds-catch-up. Replay stays byte-identical: model output and all cognition telemetry enter deterministic space only as recorded events.
+Scope LLM authority by decision timescale vs turn latency in game time, deterministically. A new pure package `internal/cognition` owns the decision-class registry (Fibonacci points + game-tick staleness budgets + degrade actions), the seconds-per-point calibration profile (baseline from a `promptworld calibrate` CLI stage, live-re-estimated with spike rejection from real call durations), and the pure routing function. The mind driver consults the router before enqueueing any model work; the sim loop enforces staleness and guards at the two injection doors (`inject_intent`, `inject_social`); every thought terminates in exactly one recorded outcome event carrying causality references. Prompts become future-dated and the planner vocabulary grows guarded conditional steps (timed guards subsume act-at-time-T). Pause is codified as world-freezes-minds-catch-up. Replay stays byte-identical: model output and all cognition telemetry enter deterministic space only as recorded events.
 
 ## Technical Context
 
-**Language/Version**: Go (module `scriptworld`, toolchain per go.mod)
+**Language/Version**: Go (module `promptworld`, toolchain per go.mod)
 
 **Primary Dependencies**: stdlib + existing deps only (`modernc.org/sqlite` via internal/store, `anthropic-sdk-go` via internal/llm). No new external dependencies.
 
@@ -20,7 +20,7 @@ Scope LLM authority by decision timescale vs turn latency in game time, determin
 
 **Target Platform**: the always-on daemon (darwin/linux), same as today.
 
-**Project Type**: single Go daemon + CLI; changes span `internal/cognition` (new), `internal/mind`, `internal/sim`, `internal/llm`, `internal/world`, `internal/clock` (read-only use), `cmd/scriptworld`.
+**Project Type**: single Go daemon + CLI; changes span `internal/cognition` (new), `internal/mind`, `internal/sim`, `internal/llm`, `internal/world`, `internal/clock` (read-only use), `cmd/promptworld`.
 
 **Performance Goals**: router is a pure O(1) arithmetic check per decision (called at planner cadence, not per tick); zero measurable impact on tick throughput (~1.65M ticks/s max-speed pure-sim baseline); injection-door checks are per-command, not per-tick.
 
@@ -53,7 +53,7 @@ specs/007-cognition-horizon/
 │   ├── registry.md      # Decision classes: points, budgets, degrade actions
 │   ├── events.md        # New event types + canonical payloads
 │   ├── calibration.md   # calibration.json schema + estimator contract
-│   └── cli.md           # scriptworld calibrate command
+│   └── cli.md           # promptworld calibrate command
 ├── checklists/requirements.md
 └── tasks.md             # Phase 2 output (/speckit-tasks)
 ```
@@ -84,7 +84,7 @@ internal/sim/              # enforce: staleness + guards at the doors; generatio
 └── memory.go              # generation bump on high-salience set
 
 internal/world/            # CalibrationPath() helper
-cmd/scriptworld/           # calibrate subcommand (reference workload, writes calibration.json)
+cmd/promptworld/           # calibrate subcommand (reference workload, writes calibration.json)
 e2e/                       # latency-injection scenario, pause-landing scenario, replay byte-equality
 ```
 

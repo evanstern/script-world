@@ -127,7 +127,7 @@ TASK-50 at each dispatch.
 
 ## Phase 8: User Story 6 — An old world's people survive the new world (P6)
 
-**Goal**: `scriptworld migrate` carries a v1 world's people across the format break;
+**Goal**: `promptworld migrate` carries a v1 world's people across the format break;
 the land resets. Reference target: `myworld-01` (107k events, tick 257,400).
 
 **Independent test**: copy a v1 world fixture; migrate; people intact, map reborn,
@@ -135,7 +135,7 @@ archive present, zero-snapshot replay byte-identical; unclean/second runs refuse
 
 - [X] T038 [US6] `world.migrated` event: `WorldMigratedPayload{from_format, source_events, source_tick, state}` in `internal/sim/state.go` with wholesale state-replace reducer case (validates name/seed match); registered per contracts/events.md
 - [X] T039 [US6] v1 legacy decode + transform in `internal/sim/migrate.go`: migration-only reader for the v1 state shape (`Inventory.Food int`, no FuelUntil/Quarried); pure transform per research R10 — carry people-state verbatim (tick continuity), reset map-bound state, re-place agents via genesis placement on the v2 map, Wood 1:1, legacy Food × 3 → Meals
-- [X] T040 [US6] `scriptworld migrate <world>` command in `cmd/scriptworld` + `internal/world`: refuse running daemon (pid/sock check); require `LatestValidSnapshot` to cover all events except a trailing `daemon.*`-only tail (reducer no-ops; the v1 daemon appends `daemon.stopped` after its shutdown snapshot — amended 2026-07-22) else refuse with start+stop-under-v1 instructions; archive `world.db` → `world.v1.db` (existing archive ⇒ refuse, the already-migrated guard); write fresh db with `world.created` + `world.migrated` + initial snapshot; bump manifest `format_version` to 2; extend the v2 daemon's unsupported-version error to name the command
+- [X] T040 [US6] `promptworld migrate <world>` command in `cmd/promptworld` + `internal/world`: refuse running daemon (pid/sock check); require `LatestValidSnapshot` to cover all events except a trailing `daemon.*`-only tail (reducer no-ops; the v1 daemon appends `daemon.stopped` after its shutdown snapshot — amended 2026-07-22) else refuse with start+stop-under-v1 instructions; archive `world.db` → `world.v1.db` (existing archive ⇒ refuse, the already-migrated guard); write fresh db with `world.created` + `world.migrated` + initial snapshot; bump manifest `format_version` to 2; extend the v2 daemon's unsupported-version error to name the command
 - [X] T041 [US6] Migration tests: build a v1 fixture via legacy-shaped JSON (memories, relations, debts, rumors, structures, mid-flight intents, carried food/wood); migrate; assert people carried + map-state reset + conversion math + agents on passable tiles; delete all snapshots and replay from genesis ⇒ byte-identical state (SC-007's determinism half); refusal cases: uncovered tail events, second migration, running daemon
 - [X] T042 [US6] Migrate the real `myworld-01` (after `cp -R` backup): run the command, start the world under v2, verify souls/chronicle/relationships intact and outcrops present; record the run's observations on TASK-50 (SC-007)
 
@@ -151,7 +151,7 @@ archive present, zero-snapshot replay byte-identical; unclean/second runs refuse
 - [X] T044 [P] Whole-feature replay test in `internal/sim`: one scripted run exercising EVERY new event type, byte-identical state hash on replay (SC-004); confirm new types no-op under unknown-type convention
 - [X] T045 Quickstart smoke: run quickstart.md §2 (deterministic, no LLM) against a fresh world; record observations on TASK-50 (§3 planner progression is out of scope here — the orchestrator runs it separately post-merge)
 - [X] T046 `go test ./...` + full determinism suite green; open TASK-50's single PR from `.worktrees/task-50`
-- [X] T047 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots, world-save-directory, cli-scriptworld), `spec-bridge:sync`, worktree cleanup
+- [X] T047 Post-merge DoD tail: `/grounding-wiki:wiki-update` (executor, event-types, worldmap-generation, reflex-policy, sim-state-reducer, tui-client, agent-mind, snapshots, world-save-directory, cli-promptworld), `spec-bridge:sync`, worktree cleanup
 
 ---
 

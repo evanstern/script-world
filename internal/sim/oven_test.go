@@ -3,7 +3,7 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestOvenBuildCost is spec 012 US4 AC#1 + T030: building an oven consumes

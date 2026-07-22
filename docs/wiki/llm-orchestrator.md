@@ -107,7 +107,7 @@ cognition registry's completeness gate iterates it at daemon start so an
 unregistered kind can never reach a model at runtime.
 
 **Config** (`config.go`): `llm.json` in the save directory, written with defaults by
-`scriptworld new`; deleting the file disables the orchestrator entirely. Hosted-API
+`promptworld new`; deleting the file disables the orchestrator entirely. Hosted-API
 keys are never stored — only the *name* of an environment variable (`api_key_env`,
 default `ANTHROPIC_API_KEY`). The one exception is the optional inline `api_key`
 (both tiers), intended solely for keys that guard LAN-local routers; when both are
@@ -126,7 +126,7 @@ untouched).
 ## Connections
 
 [[daemon-lifecycle]] starts it when config exists; [[ipc-server]] exposes `llm_call`
-and folds `StatusSnapshot` into the protocol status; [[cli-scriptworld]]'s `llm`
+and folds `StatusSnapshot` into the protocol status; [[cli-promptworld]]'s `llm`
 subcommand is the one-shot proof path; the [[tui-client]] metatron pane displays tier
 health and spend; the meter persists via [[event-log]]'s store (meta table). TASK-7
 (agent minds), TASK-9 (consolidation), TASK-11 (narrator), and TASK-12 (Metatron)

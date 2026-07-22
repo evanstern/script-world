@@ -35,7 +35,7 @@ increment. One branch, one PR (task-12-metatron).
 - [x] T009 Sim tests in internal/sim/metatron_test.go: charge invariants 0..3 under regen/spend storms, genesis = 1, regen boundary exactness, nudged+memory batch atomicity via `InjectSocial`, old-snapshot (no field) unmarshal default, replay reproduces charges
 - [x] T010 Charter loading in internal/metatron/charter.go: read per call; missing → recreate default + notice; empty → default + notice; > 4,000 chars → truncate + notice; unit tests in internal/metatron/charter_test.go
 - [x] T011 Component skeleton in internal/metatron/metatron.go: `New(orch, injector, worldDir, seed, map, stateJSON)` with own replica, `Observe` (non-blocking), `Close`, absorb goroutine, single-flight turn guard, `metatron/` dir + empty soul.md creation; wire into internal/daemon/daemon.go behind the LLM-config gate
-- [x] T012 `scriptworld new` seeds charter.md (root) in cmd/scriptworld (via internal/world creation path), never overwriting an existing charter; test in internal/world/world_test.go
+- [x] T012 `promptworld new` seeds charter.md (root) in cmd/promptworld (via internal/world creation path), never overwriting an existing charter; test in internal/world/world_test.go
 
 **Checkpoint**: substrate compiled, charges replayable, component observes a running world
 
@@ -50,7 +50,7 @@ increment. One branch, one PR (task-12-metatron).
 - [x] T013 [US1] Turn pipeline (say-only) in internal/metatron/turn.go: prompt = fixed system frame (role, roster, rubric placeholder) + charter + soul.md tail + transcript tail + live status (clock, charges, alive/dead); one `KindMetatron` call; strict-JSON parse of `{"say": …}`; unusable output → safe apology reply per research R10
 - [x] T014 [US1] Soul/transcript persistence in internal/metatron/metatron.go: append console turns to metatron/transcript.md; bounded tails feed T013's prompt; files survive restart
 - [x] T015 [US1] IPC `metatron_chat` request/response per contracts/console-protocol.md in internal/ipc (server dispatch + client call + long-call read deadline); errors: no-metatron, tier-down reason, turn-in-flight
-- [x] T016 [US1] CLI `scriptworld metatron <dir> [message…]` in cmd/scriptworld: message → one turn (print reply, charges); no message → status peek (charges + last soul entries), no model call
+- [x] T016 [US1] CLI `promptworld metatron <dir> [message…]` in cmd/promptworld: message → one turn (print reply, charges); no message → status peek (charges + last soul entries), no model call
 - [x] T017 [US1] TUI console in internal/tui: metatron pane → transcript viewport + input line + ⚡-charges header (tier health retained); key contract per contracts/console-protocol.md (printable → input, Enter send w/ in-flight spinner, Esc → map, globals only on empty input)
 - [x] T018 [US1] Tests: turn round-trip with mock cloud (charter voice in system prompt, real status in user prompt), degraded honesty (ErrTierDown/ErrBudgetExhausted → clean error, no charge), single-flight rejection, restart keeps transcript/soul, in internal/metatron/turn_test.go + internal/ipc tests + TUI pane tests in internal/tui/tui_test.go
 
@@ -82,7 +82,7 @@ increment. One branch, one PR (task-12-metatron).
 **Independent test**: quickstart §3 — distinctive edit changes the very next reply, no restart; delete → default restored with notice
 
 - [x] T025 [US3] Tests in internal/metatron/charter_test.go + turn_test.go: edited charter text appears in the next turn's system prompt (mock captures prompts); missing file recreated + reply notice; empty → default + notice; oversized → truncated + notice; charter content never appears in any villager-facing prompt (extends T023 audit)
-- [x] T026 [US3] TUI/CLI affordance: `scriptworld metatron <dir>` status peek and the TUI pane header show the charter path and whether the default or a custom charter is active (internal/metatron reports it in status; cmd/scriptworld + internal/tui display)
+- [x] T026 [US3] TUI/CLI affordance: `promptworld metatron <dir>` status peek and the TUI pane header show the charter path and whether the default or a custom charter is active (internal/metatron reports it in status; cmd/promptworld + internal/tui display)
 
 **Checkpoint**: the meta-game is live — prompt-engineer your angel mid-reign
 
@@ -107,8 +107,8 @@ increment. One branch, one PR (task-12-metatron).
 - [x] T030 Full suite `go test ./... -race` green; fix any interaction fallout (mind/scribe/TUI consumers unaffected by the new consumer)
 - [x] T031 Quickstart validation run: execute quickstart.md §1–§5 against a fresh world with mock-free cloud (9router or Anthropic); record outcomes in specs/005-metatron/quickstart-results.md
 - [x] T032 Live acceptance (quickstart §6) on ~/worlds/chronicle-proof with the upgraded binary: converse about real history, land one dream against a live storyline, verify villager interpretation surfaces (soul.md/chronicle), verify charge ledger in the live log; record in quickstart-results.md
-- [x] T033 Wiki re-ground per PDLC: new docs/wiki/metatron.md note; re-verify touched notes (event-types, sim-state-reducer, sim-loop, executor, llm-orchestrator, tui-client, ipc-protocol, cli-scriptworld, agent-mind); freshness gate green
-- [x] T034 README/help touch: `scriptworld metatron` in the usage block (cmd/scriptworld) and README.md feature list
+- [x] T033 Wiki re-ground per PDLC: new docs/wiki/metatron.md note; re-verify touched notes (event-types, sim-state-reducer, sim-loop, executor, llm-orchestrator, tui-client, ipc-protocol, cli-promptworld, agent-mind); freshness gate green
+- [x] T034 README/help touch: `promptworld metatron` in the usage block (cmd/promptworld) and README.md feature list
 
 ---
 

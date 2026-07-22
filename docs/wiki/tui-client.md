@@ -12,7 +12,7 @@ verified_against: 9e0ec8f666f4afb7e536b84d5e7d072a9c0f453a
 
 # TUI client
 
-`internal/tui` is the attachable full-screen client (`scriptworld ui <dir>`), built on
+`internal/tui` is the attachable full-screen client (`promptworld ui <dir>`), built on
 Bubble Tea + Lipgloss. Its core idea: the map renders from a **live replica** of
 `sim.State` that the client maintains by log shipping — fetch the state snapshot, then
 apply every pushed event through the exact `Apply` reducer the daemon runs. The TUI is
@@ -134,7 +134,7 @@ TASK-20); `q` detaches — the world keeps running.
 
 [[ipc-client]] is the transport; [[ipc-protocol]]'s `state` command exists for this
 replica pattern; [[sim-state-reducer]] supplies the shared `Apply`; [[chronicle]]
-fills the story pane and [[event-types]] the raw feed; [[cli-scriptworld]] mounts
+fills the story pane and [[event-types]] the raw feed; [[cli-promptworld]] mounts
 it as the `ui` subcommand.
 
 ## Operational notes

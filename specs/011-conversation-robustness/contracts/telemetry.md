@@ -1,6 +1,6 @@
 # Contract: cog.outcome retry & raw-reply semantics
 
-Consumers: `scriptworld tail`/`attach` readers, the TUI cognition panel, telemetry
+Consumers: `promptworld tail`/`attach` readers, the TUI cognition panel, telemetry
 aggregation (`internal/mind/telemetry.go`), and offline analysis over `world.db`.
 
 ## Event shapes

@@ -3,8 +3,8 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // buildV1Fixture assembles a representative v1 legacyState: eight souls with

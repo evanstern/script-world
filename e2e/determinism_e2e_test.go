@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestDeterminism_FullBinary is quickstart Scenario D at the binary level:

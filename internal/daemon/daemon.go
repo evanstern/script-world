@@ -15,18 +15,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/cognition"
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/metatron"
-	"github.com/evanstern/script-world/internal/mind"
-	"github.com/evanstern/script-world/internal/persona"
-	"github.com/evanstern/script-world/internal/scribe"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
-	"github.com/evanstern/script-world/internal/worlds"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/cognition"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
+	"github.com/evanstern/promptworld/internal/mind"
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/scribe"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
+	"github.com/evanstern/promptworld/internal/worlds"
 )
 
 // Run is the foreground daemon primitive: recover, bind, tick until
@@ -55,7 +55,7 @@ func Run(dir string) error {
 	// Advisory instance-manager registration (specs/008-instance-manager
 	// D1/D6, FR-008): only worlds living outside the worlds home need a
 	// registry entry (the home is scan-owned); registering here, not from
-	// the `start` client, means even a foreground `scriptworld daemon <dir>`
+	// the `start` client, means even a foreground `promptworld daemon <dir>`
 	// run becomes visible to `ps`. Best-effort — a failure never blocks boot.
 	registerWorld(dir, w.Manifest.Name)
 
@@ -136,7 +136,7 @@ func Run(dir string) error {
 			fmt.Printf("daemon: calibration seeded (local %.1fs/pt, cloud %.1fs/pt, calibrated %s)\n",
 				cognition.SeedFor(prof, "local"), cognition.SeedFor(prof, "cloud"), prof.CalibratedAt)
 		} else {
-			fmt.Printf("daemon: no calibration profile — bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt); run `scriptworld calibrate`\n",
+			fmt.Printf("daemon: no calibration profile — bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt); run `promptworld calibrate`\n",
 				cognition.BootstrapLocalSecPerPt, cognition.BootstrapCloudSecPerPt)
 		}
 		cloudDesc := llmCfg.Cloud.Model

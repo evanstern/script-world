@@ -20,16 +20,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 func TestQuickstartResourcesFoodCrafting_FreshWorldSmoke(t *testing.T) {
-	// Hermetic SCRIPTWORLD_HOME (research.md D4 / TASK-49's finding): the
+	// Hermetic PROMPTWORLD_HOME (research.md D4 / TASK-49's finding): the
 	// daemon registers any out-of-home world into the advisory registry on
 	// boot, so — even though the world itself lives at an explicit t.TempDir()
-	// path, never under the real ~/.scriptworld — this keeps that registry
+	// path, never under the real ~/.promptworld — this keeps that registry
 	// write off the developer's real state too. daemon_e2e_test.go's other
 	// tests don't yet do this (TASK-49, filed separately); this one isolates
 	// itself rather than depending on that fix landing first.

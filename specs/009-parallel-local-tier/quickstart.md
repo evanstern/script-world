@@ -28,12 +28,12 @@ and clamp normalization.
 
 ```bash
 # Fresh world in the worktree scratch area
-scriptworld new paralleltest            # or the current world-creation path
+promptworld new paralleltest            # or the current world-creation path
 cp ~/.scratch/calibration.json <world-dir>/calibration.json
 cp ~/worlds/village03/llm.json <world-dir>/llm.json
 # edit <world-dir>/llm.json: add  "parallel": 4  to the "local" object
 
-scriptworld start paralleltest          # watch the boot lines
+promptworld start paralleltest          # watch the boot lines
 ```
 
 Expected boot line includes the effective parallelism (`parallel 4`) and the
@@ -43,7 +43,7 @@ Then, at speed (8×–32×), compare against a `parallel`-absent run of the same
 
 - planner herd after restart: rejected-stale share collapses (SC-001)
 - musings appear while planners are in flight (SC-002 — previously near-total silence)
-- `scriptworld tail` / TUI status shows queue depth no longer pinned at cap
+- `promptworld tail` / TUI status shows queue depth no longer pinned at cap
 
 ## 3. Clamp behavior (FR-007)
 
@@ -60,5 +60,5 @@ calibrate command's probe path) and compare wall clock to a single warm call:
 ## 5. Post-run accounting (SC-005)
 
 After a sustained run: spend meter total equals the sum of per-call costs (cloud
-calls only — local is free), and `scriptworld` status shows both tiers healthy
+calls only — local is free), and `promptworld` status shows both tiers healthy
 (no stuck breaker/probe state).

@@ -18,7 +18,7 @@ injection tests; no orchestrator, routing, or event-schema-breaking changes.
 
 ## Technical Context
 
-**Language/Version**: Go 1.x (repo toolchain; module `github.com/evanstern/script-world`)
+**Language/Version**: Go 1.x (repo toolchain; module `github.com/evanstern/promptworld`)
 
 **Primary Dependencies**: stdlib only in the touched package (`encoding/json`, `strings`,
 `log`); internal deps `internal/llm` (Submitter seam, Request/Response), `internal/sim`
@@ -31,7 +31,7 @@ injection tests; no orchestrator, routing, or event-schema-breaking changes.
 (`mind.go:23-26`) and convo_test.go patterns (`TestConversationRunsAndLands`,
 `TestConversationFailureInjectsNothing`)
 
-**Target Platform**: the `scriptworld` daemon (darwin/arm64 dev; any Go target)
+**Target Platform**: the `promptworld` daemon (darwin/arm64 dev; any Go target)
 
 **Project Type**: single Go module, daemon + CLI
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // Tick math (epoch 06:00): 11:30 day 1 = tick 19800, noon day 1 = tick 21600.

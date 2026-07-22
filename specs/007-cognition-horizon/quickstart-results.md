@@ -13,7 +13,7 @@ byte-equality, plus all pre-existing daemon/determinism scenarios).
 ## §2 Calibrate a world — live model
 
 ```
-$ scriptworld calibrate <dir> (5 samples per shape)
+$ promptworld calibrate <dir> (5 samples per shape)
 tier local  (qwen3:4b-thinking-2507-q4_K_M)
   musing-1pt     5/5 samples   [10.1 10.6 8.6 13.1 13.2s]
   planner-3pt    5/5 samples   [37.0 35.2 42.8 33.1 37.0s]

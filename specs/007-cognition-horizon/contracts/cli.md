@@ -1,7 +1,7 @@
-# Contract: `scriptworld calibrate`
+# Contract: `promptworld calibrate`
 
 ```
-scriptworld calibrate <world-dir> [--tier local|cloud|all] [--samples N]
+promptworld calibrate <world-dir> [--tier local|cloud|all] [--samples N]
 ```
 
 (dir-first like every other subcommand; flags may also precede the dir)

@@ -27,7 +27,7 @@ required for the world to run (FR-008, SC-004).
 
 | Property | Value |
 |---|---|
-| Root | `$SCRIPTWORLD_HOME` if set, else `~/.scriptworld` |
+| Root | `$PROMPTWORLD_HOME` if set, else `~/.promptworld` |
 | Worlds dir | `<root>/worlds` |
 | Created | lazily, on first `new <name>` (FR-004) |
 | Discovery | every immediate subdirectory containing a readable `world.json` |
@@ -97,5 +97,5 @@ otherwise NAME:
   H                        ─▶ home dir
   R                        ─▶ registry path
   neither                  ─▶ error: not found; names worlds home searched;
-                              suggests `scriptworld ps --all`; exit 1
+                              suggests `promptworld ps --all`; exit 1
 ```

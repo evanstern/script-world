@@ -66,7 +66,7 @@ notes, starts empty) and `metatron/transcript.md` (console history) — restart
 survival comes free with files, and world determinism never depends on them.
 
 **Surfaces**: IPC `metatron_chat`/`metatron_status` ([[ipc-protocol]]), CLI
-`scriptworld metatron <dir> [message…]` ([[cli-scriptworld]]), and the
+`promptworld metatron <dir> [message…]` ([[cli-promptworld]]), and the
 [[tui-client]] metatron pane (the console). Protocol status carries the ⚡ bank.
 
 ## Connections

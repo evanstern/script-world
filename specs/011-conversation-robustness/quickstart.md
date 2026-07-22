@@ -32,9 +32,9 @@ go vet ./... && go test ./...
 ## 3. Live-world smoke (optional but recommended)
 
 ```sh
-go build -o scriptworld ./cmd/scriptworld
-./scriptworld new /tmp/robustness-smoke --name robustness-smoke
-./scriptworld start /tmp/robustness-smoke && ./scriptworld speed /tmp/robustness-smoke 8x
+go build -o promptworld ./cmd/promptworld
+./promptworld new /tmp/robustness-smoke --name robustness-smoke
+./promptworld start /tmp/robustness-smoke && ./promptworld speed /tmp/robustness-smoke 8x
 # let conversations run, then:
 sqlite3 "file:/tmp/robustness-smoke/world.db?mode=ro" \
   "SELECT json_extract(payload,'$.outcome'), COUNT(*) FROM events

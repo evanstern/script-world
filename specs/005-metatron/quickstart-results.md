@@ -10,7 +10,7 @@ Run 2026-07-20. Two live worlds, both cloud tier via 9router
 
 ## §1 The angel exists and converses — PASS
 
-- `scriptworld new` seeded `charter.md` (default persona) and `metatron/soul.md`
+- `promptworld new` seeded `charter.md` (default persona) and `metatron/soul.md`
   ("The reign begins. The angel has seen nothing yet.").
 - Status peek (no model call): `charges ⚡·· (1/3) · default charter · <path>`.
 - First turn: charter-voiced self-introduction, correct roster, correct charge
@@ -83,5 +83,5 @@ Run 2026-07-20. Two live worlds, both cloud tier via 9router
 
 macOS kernel kills (`exit 137`, silent) traced to a stale-signature binary copy in
 `~/worlds` — resolved by building directly to the destination
-(`go build -o ~/worlds/scriptworld-task12 ./cmd/scriptworld`). Not a scriptworld
+(`go build -o ~/worlds/promptworld-task12 ./cmd/promptworld`). Not a promptworld
 defect; recorded for future binary distribution.

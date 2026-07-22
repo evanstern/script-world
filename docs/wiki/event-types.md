@@ -28,7 +28,7 @@ the food-rot sweep), plus changed semantics on several existing event types (no 
 types for these — yield clamping on gathers, net-bulk re-validation on crafts, a
 zero-bulk give guard, inventory death-spill) that a v2 replay under this build would
 get wrong; the format gate shields old logs from the new semantics. A v1 world
-cannot boot under this build — it must run `scriptworld migrate` first
+cannot boot under this build — it must run `promptworld migrate` first
 ([[world-migration]]), chaining 1→2→3 in one run; its sole output event,
 `world.migrated`, is also cataloged here.
 
@@ -37,7 +37,7 @@ cannot boot under this build — it must run `scriptworld migrate` first
 | Type | Payload struct | Emitted by | Reducer effect |
 |---|---|---|---|
 | `world.created` | `WorldCreatedPayload{name, seed}` | CLI `new`, tick 0 | none (genesis marker) |
-| `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` (`state` embeds the full canonical `sim.State`) | `scriptworld migrate` (client-side, offline — [[world-migration]]), once, right after a fresh `world.created` | replaces `State` wholesale (after checking `state.Seed` matches — a foreign payload is a no-op); the log alone (`world.created` → `world.migrated`) reproduces the migrated world with zero snapshots |
+| `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` (`state` embeds the full canonical `sim.State`) | `promptworld migrate` (client-side, offline — [[world-migration]]), once, right after a fresh `world.created` | replaces `State` wholesale (after checking `state.Seed` matches — a foreign payload is a no-op); the log alone (`world.created` → `world.migrated`) reproduces the migrated world with zero snapshots |
 | `clock.paused` / `clock.resumed` | `{}` | loop command | pause flag (+ snapshot on pause) |
 | `clock.speed_set` | `SpeedSetPayload{speed}` | loop command | `Speed` updated |
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
@@ -107,8 +107,8 @@ the single record standing in for the whole pre-break history, and the reducer's
 ## Connections
 
 [[sim-state-reducer]] applies these; the [[executor]], [[reflex-policy]], and
-[[sim-loop]] emit the sim/agent/clock families; `scriptworld migrate`
-([[cli-scriptworld]], [[world-migration]]) emits `world.migrated`; the mind driver and the loop's
+[[sim-loop]] emit the sim/agent/clock families; `promptworld migrate`
+([[cli-promptworld]], [[world-migration]]) emits `world.migrated`; the mind driver and the loop's
 landing ladder emit the `cog.*` telemetry ([[cognition]]); [[daemon-lifecycle]]
 emits `daemon.*`; [[event-log]] stores them;
 [[ipc-protocol]] pushes them to subscribers verbatim.

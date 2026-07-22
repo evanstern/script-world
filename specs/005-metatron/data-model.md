@@ -55,7 +55,7 @@ construction; interpretation is the villager's persona's job.
 
 ### `charter.md` (save-dir root)
 
-- Seeded by `scriptworld new` from the authored default persona; never overwritten after.
+- Seeded by `promptworld new` from the authored default persona; never overwritten after.
 - ≤ 4,000 chars used (excess truncated with in-reply notice); missing → recreated from
   default + in-reply notice; empty → default used + notice.
 - Read at the start of every Metatron turn and digest (this IS the edit-liveness mechanism).

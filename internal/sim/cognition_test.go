@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestCognitionTelemetryWhitelisted: the cog.* lifecycle types ride the

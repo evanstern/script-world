@@ -3,7 +3,7 @@ package mind
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/sim"
+	"github.com/evanstern/promptworld/internal/sim"
 )
 
 // TestNextPhasePreservingDue is TASK-44: nextPhasePreservingDue is the

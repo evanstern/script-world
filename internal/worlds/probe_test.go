@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/ipc"
+	"github.com/evanstern/promptworld/internal/ipc"
 )
 
 // shortWorldDir returns a fresh world directory under /tmp (not t.TempDir(),

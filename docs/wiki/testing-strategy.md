@@ -18,7 +18,7 @@ verified_against: d25ca1fdd87b128f7cbb4a44e31694e5cc5bf8f6
 The spec's success criteria (determinism, crash-lossless resume, detach-isolation)
 are only provable by tests, so the suite is layered: pure-logic harnesses at the
 package level, an in-process integration layer, and binary-level e2e that execs the
-real `scriptworld`.
+real `promptworld`.
 
 ## How it works
 
@@ -97,7 +97,7 @@ writer vs IPC readers — now atomic).
 ## Connections
 
 Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
-[[ipc-server]]/[[ipc-client]] (integration), and [[cli-scriptworld]]/
+[[ipc-server]]/[[ipc-client]] (integration), and [[cli-promptworld]]/
 [[daemon-lifecycle]] (e2e). Manual validation results live in
 `specs/001-world-daemon/quickstart-results.md`.
 

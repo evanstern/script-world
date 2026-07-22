@@ -22,7 +22,7 @@ type TierProfile struct {
 }
 
 // Profile is calibration.json (specs/007-cognition-horizon/contracts/
-// calibration.md): written only by `scriptworld calibrate`, read once at
+// calibration.md): written only by `promptworld calibrate`, read once at
 // daemon start to seed the live estimators.
 type Profile struct {
 	CalibratedAt string                 `json:"calibrated_at"`

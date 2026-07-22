@@ -2,7 +2,7 @@
 .worktrees/
 
 # Go build artifacts
-/scriptworld
+/promptworld
 dist/
 *.test
 *.out

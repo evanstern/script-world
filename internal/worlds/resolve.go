@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // IsPathArg reports whether arg should be treated as a path — resolved
@@ -42,7 +42,7 @@ type ErrNotFound struct {
 }
 
 func (e *ErrNotFound) Error() string {
-	return fmt.Sprintf("no world named %q (searched %s and the known-worlds list) — try `scriptworld ps --all`", e.Name, e.WorldsHome)
+	return fmt.Sprintf("no world named %q (searched %s and the known-worlds list) — try `promptworld ps --all`", e.Name, e.WorldsHome)
 }
 
 // ErrMissing is returned by Resolve when a bare name matches only a
@@ -57,7 +57,7 @@ type ErrMissing struct {
 }
 
 func (e *ErrMissing) Error() string {
-	return fmt.Sprintf("world %q was last known at %s, but that directory is gone (deleted or moved) — check `scriptworld ps --all`, or re-create it with `scriptworld new`", e.Name, e.Path)
+	return fmt.Sprintf("world %q was last known at %s, but that directory is gone (deleted or moved) — check `promptworld ps --all`, or re-create it with `promptworld new`", e.Name, e.Path)
 }
 
 // Resolve turns a bare world name into an absolute world directory,

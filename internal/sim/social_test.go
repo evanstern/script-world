@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 func socialEvent(t *testing.T, tick int64, typ string, payload any) store.Event {

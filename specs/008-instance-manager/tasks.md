@@ -14,7 +14,7 @@ alongside code (`*_test.go`) plus black-box e2e in `e2e/`.
 
 ## Path Conventions
 
-Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan.md).
+Single Go module at repo root: `cmd/promptworld/`, `internal/`, `e2e/` (per plan.md).
 
 ---
 
@@ -32,9 +32,9 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [X] T002 [P] Create `internal/worlds/home.go`: `Root()` (`$SCRIPTWORLD_HOME` else `~/.scriptworld`), `WorldsHome()` (`<root>/worlds`), `RegistryPath()` (`<root>/known_worlds.json`), `ValidateName(name)` per data-model.md rules (non-empty, no `/`, no leading `-` or `.`); unit tests in `internal/worlds/home_test.go` covering override env var and every validation rule
+- [X] T002 [P] Create `internal/worlds/home.go`: `Root()` (`$PROMPTWORLD_HOME` else `~/.promptworld`), `WorldsHome()` (`<root>/worlds`), `RegistryPath()` (`<root>/known_worlds.json`), `ValidateName(name)` per data-model.md rules (non-empty, no `/`, no leading `-` or `.`); unit tests in `internal/worlds/home_test.go` covering override env var and every validation rule
 - [X] T003 [P] Create `internal/worlds/registry.go`: registry file shape `{"worlds":{name:{path}}}` per data-model.md; `LoadRegistry()` tolerant of missing/corrupt file (⇒ empty, never error), `Upsert(name, path)` atomic (temp+rename, prunes entries whose dir lacks readable `world.json` and entries whose path is inside the current worlds home); unit tests in `internal/worlds/registry_test.go` including corrupt-file, prune-on-write, and moved-world upsert-by-name repair
-- [X] T004 Create `internal/worlds/resolve.go`: `IsPathArg(arg)` (contains `/` or leading `.`/`~` — D3), `Resolve(arg)` returning the world dir with worlds-home-first order, `ErrAmbiguous` listing both candidate paths, not-found error naming the searched worlds home and suggesting `scriptworld ps --all` (FR-007/FR-011); unit tests in `internal/worlds/resolve_test.go` for the full decision table in data-model.md (depends on T002, T003)
+- [X] T004 Create `internal/worlds/resolve.go`: `IsPathArg(arg)` (contains `/` or leading `.`/`~` — D3), `Resolve(arg)` returning the world dir with worlds-home-first order, `ErrAmbiguous` listing both candidate paths, not-found error naming the searched worlds home and suggesting `promptworld ps --all` (FR-007/FR-011); unit tests in `internal/worlds/resolve_test.go` for the full decision table in data-model.md (depends on T002, T003)
 - [X] T005 Create `internal/worlds/discover.go`: `Discover()` returning deduped candidates = worlds-home scan (immediate subdirs with `world.json`; unreadable manifests flagged, never fatal) ∪ registry entries (missing dirs flagged); unit tests in `internal/worlds/discover_test.go` (depends on T002, T003)
 
 **Checkpoint**: `go test ./internal/worlds/` green — user story phases can begin.
@@ -43,17 +43,17 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 ## Phase 3: User Story 1 — See everything that is running (Priority: P1) 🎯 MVP
 
-**Goal**: `scriptworld ps [--all] [--json]` lists every world machine-wide with live-proven state; stale leftovers never show as running.
+**Goal**: `promptworld ps [--all] [--json]` lists every world machine-wide with live-proven state; stale leftovers never show as running.
 
-**Independent Test**: Start two worlds by path (existing commands), run `scriptworld ps` from an unrelated directory → both listed with live data; SIGKILL one → it no longer shows as running; nothing running → empty listing, exit 0 (spec US1 Independent Test).
+**Independent Test**: Start two worlds by path (existing commands), run `promptworld ps` from an unrelated directory → both listed with live data; SIGKILL one → it no longer shows as running; nothing running → empty listing, exit 0 (spec US1 Independent Test).
 
 ### Implementation for User Story 1
 
-- [X] T006 [P] [US1] Create `internal/worlds/probe.go`: per-candidate classification per the data-model.md state machine (`running|paused|unresponsive|stopped|missing|unreadable`) — pidfile pre-filter (reuse `daemon.IsRunning`), bounded dial+`status` call (~1s per-world budget) run concurrently across candidates (D2, SC-001 < 2s), offline last-known clock via store snapshot + last event tick (extract/share the logic currently in `cmdStatus`'s offline branch, `cmd/scriptworld/commands.go:320-346`); unit tests in `internal/worlds/probe_test.go` for classification (fake pidfiles/sockets)
+- [X] T006 [P] [US1] Create `internal/worlds/probe.go`: per-candidate classification per the data-model.md state machine (`running|paused|unresponsive|stopped|missing|unreadable`) — pidfile pre-filter (reuse `daemon.IsRunning`), bounded dial+`status` call (~1s per-world budget) run concurrently across candidates (D2, SC-001 < 2s), offline last-known clock via store snapshot + last event tick (extract/share the logic currently in `cmdStatus`'s offline branch, `cmd/promptworld/commands.go:320-346`); unit tests in `internal/worlds/probe_test.go` for classification (fake pidfiles/sockets)
 - [X] T007 [US1] Register worlds on daemon boot: in `internal/daemon/daemon.go` `Run()`, after `world.Open`/pidfile acquisition, best-effort `worlds.Upsert(manifest name, dir)` iff dir is outside the current worlds home — failure logs and continues, never fatal (D1/D6, FR-008) (depends on T003)
-- [X] T008 [US1] Create `cmd/scriptworld/ps.go`: `cmdPs` — discovery (T005) + probe (T006), human table per contracts/cli.md (`NAME STATE PID TICK GAME TIME SPEED LLM PATH`, `no worlds running` when empty, exit 0), `--all` adds non-live states, `--json` array reusing `status --json` vocabulary + `name`/`path`/`state` (`llm` presence ⇒ on; stopped worlds get `llm_configured` from `llm.json` existence); output-shaping tests in `cmd/scriptworld/ps_test.go` (depends on T006)
-- [X] T009 [US1] Wire `ps` into `cmd/scriptworld/main.go`: dispatch case + usage text line (`scriptworld ps [--all] [--json]`) (depends on T008)
-- [X] T010 [US1] e2e in `e2e/manager_e2e_test.go` (pattern from `e2e/daemon_e2e_test.go`, isolated `SCRIPTWORLD_HOME` per test): two daemons started by path appear in `ps` from an unrelated CWD with name/state/pid/tick/time/speed/LLM; SIGKILL one → not running in next `ps`; empty home → "no worlds running" exit 0; `ps --json | len == 2`; wedged-daemon timeout budget respected (listing < 2s) (depends on T007, T009)
+- [X] T008 [US1] Create `cmd/promptworld/ps.go`: `cmdPs` — discovery (T005) + probe (T006), human table per contracts/cli.md (`NAME STATE PID TICK GAME TIME SPEED LLM PATH`, `no worlds running` when empty, exit 0), `--all` adds non-live states, `--json` array reusing `status --json` vocabulary + `name`/`path`/`state` (`llm` presence ⇒ on; stopped worlds get `llm_configured` from `llm.json` existence); output-shaping tests in `cmd/promptworld/ps_test.go` (depends on T006)
+- [X] T009 [US1] Wire `ps` into `cmd/promptworld/main.go`: dispatch case + usage text line (`promptworld ps [--all] [--json]`) (depends on T008)
+- [X] T010 [US1] e2e in `e2e/manager_e2e_test.go` (pattern from `e2e/daemon_e2e_test.go`, isolated `PROMPTWORLD_HOME` per test): two daemons started by path appear in `ps` from an unrelated CWD with name/state/pid/tick/time/speed/LLM; SIGKILL one → not running in next `ps`; empty home → "no worlds running" exit 0; `ps --json | len == 2`; wedged-daemon timeout budget respected (listing < 2s) (depends on T007, T009)
 
 **Checkpoint**: US1 fully functional — `ps` answers "who is clobbering the LLM?" (SC-001, SC-005).
 
@@ -63,13 +63,13 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 **Goal**: `new <name>` creates in the worlds home; every per-world command accepts a name or a path; path invocations byte-compatible.
 
-**Independent Test**: `scriptworld new testworld` → complete world under the worlds home; `start`/`status`/`stop testworld` from another directory resolve to it; duplicate `new testworld` refused untouched (spec US2 Independent Test).
+**Independent Test**: `promptworld new testworld` → complete world under the worlds home; `start`/`status`/`stop testworld` from another directory resolve to it; duplicate `new testworld` refused untouched (spec US2 Independent Test).
 
 ### Implementation for User Story 2
 
-- [X] T011 [US2] Rework `cmdNew` in `cmd/scriptworld/commands.go` per contracts/cli.md: bare-word arg = name-form (create `<worlds-home>/<name>` with manifest name = arg, lazily create worlds home, refuse existing dir exit 1 untouched, reject `--name`, validate via `worlds.ValidateName`); path-shaped arg = legacy form verbatim (`--name`/basename, reject `--at`); `--at DIR` = create at exactly DIR with manifest name `<name>` + registry Upsert; success output suggests name-based `start` for name-form; unit tests in `cmd/scriptworld/commands_test.go` for all three forms + validation failures (depends on T002–T004)
-- [X] T012 [US2] Thread name-or-path resolution through every per-world command: add a shared `resolveWorld(arg)` helper in `cmd/scriptworld/commands.go` (path-shaped → unchanged today's behavior; else `worlds.Resolve`) and apply it in `dirArg`/`parseDirFlags` call sites for `daemon`, `start`, `stop`, `status`, `pause`, `resume`, `speed`, `ui`, `attach`, `tail`, `metatron`, `llm` (`cmd/scriptworld/commands.go`) and `calibrate` (`cmd/scriptworld/calibrate.go`); update usage text in `cmd/scriptworld/main.go` (`<dir>` → `<world>`, new `new` synopsis); resolution-plumbing tests in `cmd/scriptworld/commands_test.go` (depends on T004)
-- [X] T013 [US2] e2e in `e2e/manager_e2e_test.go`: full name lifecycle from an unrelated CWD — `new aria` → dir + manifest under home; duplicate refused exit 1; invalid names (`-flag`, empty, and a `/`-bearing value via `--name 'bad/name'` — a bare `bad/name` argument is a *path* per D3 and correctly takes the legacy path-form) exit 1; `start`/`status`/`speed`/`pause`/`resume`/`stop aria`; unknown name exit 1 with worlds-home named and `ps --all` suggested; `stop aria` idempotent exit 0; copied world dir starts under a fresh `SCRIPTWORLD_HOME` with zero manager state (SC-004) (depends on T011, T012)
+- [X] T011 [US2] Rework `cmdNew` in `cmd/promptworld/commands.go` per contracts/cli.md: bare-word arg = name-form (create `<worlds-home>/<name>` with manifest name = arg, lazily create worlds home, refuse existing dir exit 1 untouched, reject `--name`, validate via `worlds.ValidateName`); path-shaped arg = legacy form verbatim (`--name`/basename, reject `--at`); `--at DIR` = create at exactly DIR with manifest name `<name>` + registry Upsert; success output suggests name-based `start` for name-form; unit tests in `cmd/promptworld/commands_test.go` for all three forms + validation failures (depends on T002–T004)
+- [X] T012 [US2] Thread name-or-path resolution through every per-world command: add a shared `resolveWorld(arg)` helper in `cmd/promptworld/commands.go` (path-shaped → unchanged today's behavior; else `worlds.Resolve`) and apply it in `dirArg`/`parseDirFlags` call sites for `daemon`, `start`, `stop`, `status`, `pause`, `resume`, `speed`, `ui`, `attach`, `tail`, `metatron`, `llm` (`cmd/promptworld/commands.go`) and `calibrate` (`cmd/promptworld/calibrate.go`); update usage text in `cmd/promptworld/main.go` (`<dir>` → `<world>`, new `new` synopsis); resolution-plumbing tests in `cmd/promptworld/commands_test.go` (depends on T004)
+- [X] T013 [US2] e2e in `e2e/manager_e2e_test.go`: full name lifecycle from an unrelated CWD — `new aria` → dir + manifest under home; duplicate refused exit 1; invalid names (`-flag`, empty, and a `/`-bearing value via `--name 'bad/name'` — a bare `bad/name` argument is a *path* per D3 and correctly takes the legacy path-form) exit 1; `start`/`status`/`speed`/`pause`/`resume`/`stop aria`; unknown name exit 1 with worlds-home named and `ps --all` suggested; `stop aria` idempotent exit 0; copied world dir starts under a fresh `PROMPTWORLD_HOME` with zero manager state (SC-004) (depends on T011, T012)
 
 **Checkpoint**: US1 + US2 independently green; SC-002 (zero paths typed) demonstrable.
 
@@ -92,8 +92,8 @@ Single Go module at repo root: `cmd/scriptworld/`, `internal/`, `e2e/` (per plan
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [X] T016 [P] Reconcile user-facing docs: README.md command examples and `specs/001-world-daemon/contracts/cli.md` cross-reference note (base contract now extended by `specs/008-instance-manager/contracts/cli.md`); ensure `scriptworld help` usage text matches contracts/cli.md exactly
-- [X] T017 Run the full quickstart.md walkthrough against a fresh build (hermetic `SCRIPTWORLD_HOME`) and the complete suite `go test ./... && go test ./e2e/`; fix anything it surfaces; record the run in the PR description
+- [X] T016 [P] Reconcile user-facing docs: README.md command examples and `specs/001-world-daemon/contracts/cli.md` cross-reference note (base contract now extended by `specs/008-instance-manager/contracts/cli.md`); ensure `promptworld help` usage text matches contracts/cli.md exactly
+- [X] T017 Run the full quickstart.md walkthrough against a fresh build (hermetic `PROMPTWORLD_HOME`) and the complete suite `go test ./... && go test ./e2e/`; fix anything it surfaces; record the run in the PR description
 
 ---
 
@@ -120,7 +120,7 @@ T006 → T008 → T009 → T010; T011/T012 parallelizable after Foundational, th
 ### Post-merge obligations (outside tasks.md, per constitution)
 
 - `/grounding-wiki:wiki-update` — this feature touches wiki-pinned sources
-  (`cmd/scriptworld/*`, `internal/daemon/daemon.go`); TASK-43 is not Done until re-pinned.
+  (`cmd/promptworld/*`, `internal/daemon/daemon.go`); TASK-43 is not Done until re-pinned.
 - `spec-bridge:sync` after each phase lands to keep the board honest.
 
 ---

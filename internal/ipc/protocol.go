@@ -6,8 +6,8 @@ package ipc
 import (
 	"encoding/json"
 
-	"github.com/evanstern/script-world/internal/llm"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 type Request struct {

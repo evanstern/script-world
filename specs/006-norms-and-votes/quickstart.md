@@ -8,7 +8,7 @@ How to prove the feature works, from unit tests to a live world. Contracts:
 ## Prerequisites
 
 - Go 1.26 toolchain; repo root.
-- For live checks: a runnable `scriptworld` binary (`go build ./cmd/scriptworld`)
+- For live checks: a runnable `promptworld` binary (`go build ./cmd/promptworld`)
   and, optionally, an `llm.json` in the world dir (phrasing flavor only — every
   scenario below must also pass with no LLM configured).
 
@@ -47,13 +47,13 @@ Expected: green, including untouched suites (no regression in social/gru/metatro
 ## 4. Live acceptance (a real world, spans a game day)
 
 ```sh
-go build -o scriptworld ./cmd/scriptworld
-./scriptworld new /tmp/norms-world --seed 13
-./scriptworld start /tmp/norms-world
-./scriptworld speed /tmp/norms-world 32   # a game day ≈ 45 real minutes at 32x
+go build -o promptworld ./cmd/promptworld
+./promptworld new /tmp/norms-world --seed 13
+./promptworld start /tmp/norms-world
+./promptworld speed /tmp/norms-world 32   # a game day ≈ 45 real minutes at 32x
 ```
 
-Watch (`./scriptworld attach /tmp/norms-world`, chronicle pane) across a noon:
+Watch (`./promptworld attach /tmp/norms-world`, chronicle pane) across a noon:
 
 - **AC#2 (convening)**: ~11:30 game time, villagers break routines and converge on
   one spot; chronicle narrates the assembly. Verify `meeting.opened` attendance in
@@ -78,7 +78,7 @@ Watch (`./scriptworld attach /tmp/norms-world`, chronicle pane) across a noon:
 ## 5. Cleanup
 
 ```sh
-./scriptworld stop /tmp/norms-world && rm -rf /tmp/norms-world
+./promptworld stop /tmp/norms-world && rm -rf /tmp/norms-world
 ```
 
 ## Results

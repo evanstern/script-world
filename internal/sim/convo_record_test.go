@@ -3,7 +3,7 @@ package sim
 import (
 	"testing"
 
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // TestConversationRecordRing (TASK-22): social.conversation now leaves a

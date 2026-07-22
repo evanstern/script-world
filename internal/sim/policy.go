@@ -3,7 +3,7 @@ package sim
 import (
 	"fmt"
 
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // The reflex policy: a deterministic pure function deciding what an idle,

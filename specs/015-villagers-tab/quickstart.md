@@ -26,7 +26,7 @@ Expected: all green, including
 
 ## Manual validation (against a live world)
 
-1. Start the daemon + TUI (`./scriptworld …` per README) at widescreen size.
+1. Start the daemon + TUI (`./promptworld …` per README) at widescreen size.
 2. Press `4` — the dock tab reads **villagers** (tab row, footer hint); the
    roster shows all 8 with a selection cursor. *(US1-AC1, SC-003)*
 3. `j`/`k` to a villager who is actively working; press `⏎` — detail shows

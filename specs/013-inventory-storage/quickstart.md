@@ -7,7 +7,7 @@ behavior in [contracts/events.md](contracts/events.md); decisions in
 ## Prerequisites
 
 - Go toolchain; repo root on the task worktree (`.worktrees/task-51`).
-- A scratch worlds home so e2e runs never touch `~/.scriptworld` (TASK-49 is
+- A scratch worlds home so e2e runs never touch `~/.promptworld` (TASK-49 is
   open on exactly this — export the worlds-home override the instance manager
   honors, or pass explicit world paths).
 
@@ -42,9 +42,9 @@ Suites the implementation must add (alongside code, per testing-strategy):
 ## Live validation (SC-002, SC-006)
 
 ```sh
-go run ./cmd/scriptworld new smoke-013 --seed 42   # v3 world
-go run ./cmd/scriptworld start smoke-013
-go run ./cmd/scriptworld attach smoke-013          # TUI
+go run ./cmd/promptworld new smoke-013 --seed 42   # v3 world
+go run ./cmd/promptworld start smoke-013
+go run ./cmd/promptworld attach smoke-013          # TUI
 ```
 
 - Within 2 game days of planks existing (planner on): at least one chest built,
@@ -54,7 +54,7 @@ go run ./cmd/scriptworld attach smoke-013          # TUI
   each villager's carried bulk (`n/24`).
 - Chronicle picks up storage stories (first chest, a taking, a death-site
   recovery).
-- Migration smoke: `go run ./cmd/scriptworld migrate <v2-world>` then start +
+- Migration smoke: `go run ./cmd/promptworld migrate <v2-world>` then start +
   attach; villagers, structures, and any spilled piles present.
 
 ## Post-merge (constitution IV)
@@ -62,5 +62,5 @@ go run ./cmd/scriptworld attach smoke-013          # TUI
 Re-pin wiki notes whose sources this touches: executor, event-types,
 sim-state-reducer, reflex-policy (vocabulary tables), agent-mind (goal
 vocabulary), social-fabric (theft wiring), world-migration + world-save-directory
-(format v3), snapshots (state shape), tui-client, cli-scriptworld (migrate 2→3),
+(format v3), snapshots (state shape), tui-client, cli-promptworld (migrate 2→3),
 testing-strategy — via `/grounding-wiki:wiki-update`.

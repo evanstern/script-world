@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // --- focus-contract.md "Acceptance checks", run in both layouts ---

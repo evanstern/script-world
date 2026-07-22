@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/persona"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/worldmap"
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 func mustPayloadJSON(t *testing.T, v any) []byte {

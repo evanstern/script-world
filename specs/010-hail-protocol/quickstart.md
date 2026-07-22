@@ -41,10 +41,10 @@ Baseline is already recorded on TASK-47 (myworld-01 shape: 1 conversation in
 
 ```sh
 # run a fresh world on the local tier at 8x for a comparable wall-clock window
-scriptworld new hail-test && scriptworld start hail-test --llm
-scriptworld speed hail-test 8x
+promptworld new hail-test && promptworld start hail-test --llm
+promptworld speed hail-test 8x
 # ... let it run ~60-75 min ...
-scriptworld tail hail-test   # hails visible: "social.hailed {from:"Hazel", to:"Rowan", ...}"
+promptworld tail hail-test   # hails visible: "social.hailed {from:"Hazel", to:"Rowan", ...}"
 ```
 
 Then count from the event log (world dir SQLite):

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/evanstern/script-world/internal/persona"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
 )
 
 // setupConsol builds a mind whose replica has agent 0 (Ash) carrying a

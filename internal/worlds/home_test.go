@@ -6,14 +6,14 @@ import (
 )
 
 func TestRootDefaultsToUserHome(t *testing.T) {
-	t.Setenv("SCRIPTWORLD_HOME", "")
+	t.Setenv("PROMPTWORLD_HOME", "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	root, err := Root()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(home, ".scriptworld")
+	want := filepath.Join(home, ".promptworld")
 	if root != want {
 		t.Errorf("Root() = %q, want %q", root, want)
 	}
@@ -21,7 +21,7 @@ func TestRootDefaultsToUserHome(t *testing.T) {
 
 func TestRootHonorsOverride(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", dir)
+	t.Setenv("PROMPTWORLD_HOME", dir)
 	root, err := Root()
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestRootHonorsOverride(t *testing.T) {
 
 func TestWorldsHomeAndRegistryPathDeriveFromRoot(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", dir)
+	t.Setenv("PROMPTWORLD_HOME", dir)
 
 	wh, err := WorldsHome()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestValidateName(t *testing.T) {
 
 func TestInsideWorldsHome(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("SCRIPTWORLD_HOME", root)
+	t.Setenv("PROMPTWORLD_HOME", root)
 	home, err := WorldsHome()
 	if err != nil {
 		t.Fatal(err)

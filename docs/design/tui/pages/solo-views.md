@@ -31,7 +31,7 @@ same key or `1`/`esc` drops back to the composite.
 ### Mockup — solo chronicle (`2` `2`)
 
 ```
- script-world · attached · day 4 · 08:12 · 1×                          PAUSED
+ promptworld · attached · day 4 · 08:12 · 1×                          PAUSED
  ┌─ CHRONICLE · raw · paused — j/k select · ⏎ expand · r narrated ──────────┐
  │ #1198 08:09 agent.talked              {"a":"Sable","b":"Birch"}          │
  │ #1201 08:11 social.conversation_turn  {"Ash"→"Rowan"} "the fire's low ag…│
@@ -71,7 +71,7 @@ the app renders **today's single-pane UI unchanged**: header + tab bar + one act
 pane + footer, keys `1–4` swap panes exactly as the current `internal/tui` does.
 
 ```
- script-world · day 4 · 08:12 · 1×
+ promptworld · day 4 · 08:12 · 1×
  [ map ] chronicle  metatron  villagers
  ┌───────────────────────────────────┐
  │ ~ ~ " ♠ ♠ A ♠ " . . ⌂ . B . .     │

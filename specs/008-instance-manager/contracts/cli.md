@@ -18,14 +18,14 @@ Applies to: `daemon`, `start`, `stop`, `status`, `pause`, `resume`, `speed`, `ui
 **Errors (exit 1)**:
 
 ```
-scriptworld <cmd>: no world named "aria" (searched /Users/x/.scriptworld/worlds and the known-worlds list) — try `scriptworld ps --all`
-scriptworld <cmd>: name "aria" is ambiguous:
-  /Users/x/.scriptworld/worlds/aria
+promptworld <cmd>: no world named "aria" (searched /Users/x/.promptworld/worlds and the known-worlds list) — try `promptworld ps --all`
+promptworld <cmd>: name "aria" is ambiguous:
+  /Users/x/.promptworld/worlds/aria
   /srv/games/aria
 use a path to disambiguate
 ```
 
-## `scriptworld ps [--all] [--json]`
+## `promptworld ps [--all] [--json]`
 
 Lists worlds machine-wide from any CWD. Exit 0 always on success paths, including
 "nothing running".
@@ -38,9 +38,9 @@ tick/game time from the store.
 
 ```
 NAME      STATE     PID    TICK     GAME TIME     SPEED  LLM  PATH
-aria      running   4242   180321   day 3 08:05   8x     on   ~/.scriptworld/worlds/aria
+aria      running   4242   180321   day 3 08:05   8x     on   ~/.promptworld/worlds/aria
 harbor    paused    5150   99       day 1 06:01   1x     off  /srv/games/harbor
-old-run   stopped   -      52100    day 1 20:28   -      off  ~/.scriptworld/worlds/old-run
+old-run   stopped   -      52100    day 1 20:28   -      off  ~/.promptworld/worlds/old-run
 ```
 
 (`GAME TIME` is whatever `internal/clock.Format` renders — the same string `status`
@@ -52,7 +52,7 @@ has always printed; `ps` reuses it verbatim.)
 [
   {
     "name": "aria",
-    "path": "/Users/x/.scriptworld/worlds/aria",
+    "path": "/Users/x/.promptworld/worlds/aria",
     "state": "running",
     "world": { "name": "aria", "seed": 123, "format_version": 1 },
     "clock": { "tick": 180321, "game_time": "d3 02:05:21", "paused": false, "speed": "8x", "effective_rate": 8.0, "degraded": false, "metatron_charges": 3 },
@@ -61,7 +61,7 @@ has always printed; `ps` reuses it verbatim.)
   },
   {
     "name": "old-run",
-    "path": "/Users/x/.scriptworld/worlds/old-run",
+    "path": "/Users/x/.promptworld/worlds/old-run",
     "state": "stopped",
     "world": { "name": "old-run", "seed": 9, "format_version": 1 },
     "clock": { "tick": 52100, "game_time": "d1 14:28:20", "paused": false, "speed": "1x" },
@@ -81,11 +81,11 @@ has always printed; `ps` reuses it verbatim.)
 - Whole-listing budget: < 2s regardless of wedged daemons (parallel probes, ~1s
   per-world budget).
 
-## `scriptworld new` (changed first-positional semantics)
+## `promptworld new` (changed first-positional semantics)
 
 ```
-scriptworld new <name> [--at DIR] [--seed N]     name-form (NEW default)
-scriptworld new <path> [--name NAME] [--seed N]  path-form (unchanged legacy behavior)
+promptworld new <name> [--at DIR] [--seed N]     name-form (NEW default)
+promptworld new <path> [--name NAME] [--seed N]  path-form (unchanged legacy behavior)
 ```
 
 - `<name>` (bare word): creates `<worlds-home>/<name>`, manifest name `<name>`,
@@ -98,16 +98,16 @@ scriptworld new <path> [--name NAME] [--seed N]  path-form (unchanged legacy beh
 - Name validation (both `<name>` and `--name`): non-empty, no `/`, no leading `-` or
   `.`; violation ⇒ exit 1 with the rule stated.
 - Success output additionally suggests name-based commands when a name-form world was
-  created: `start it with: scriptworld start <name>`.
+  created: `start it with: promptworld start <name>`.
 
-## `scriptworld stop <world>`
+## `promptworld stop <world>`
 
 Unchanged semantics by path; by name identical after resolution: idempotent ("daemon
 not running" ⇒ exit 0), graceful shutdown then SIGTERM fallback, 30s deadline.
 
 ## Daemon side effect (advisory)
 
-`scriptworld daemon <world>` (and thus `start`) upserts `{manifest-name → dir}` into
+`promptworld daemon <world>` (and thus `start`) upserts `{manifest-name → dir}` into
 the known-worlds record at boot **iff** the dir is outside the current worlds home.
 Failure to write is logged and non-fatal. No other daemon behavior changes; no IPC
 protocol changes.
@@ -116,4 +116,4 @@ protocol changes.
 
 | Variable | Effect |
 |---|---|
-| `SCRIPTWORLD_HOME` | overrides `~/.scriptworld` (worlds home `$SCRIPTWORLD_HOME/worlds`, registry `$SCRIPTWORLD_HOME/known_worlds.json`) |
+| `PROMPTWORLD_HOME` | overrides `~/.promptworld` (worlds home `$PROMPTWORLD_HOME/worlds`, registry `$PROMPTWORLD_HOME/known_worlds.json`) |

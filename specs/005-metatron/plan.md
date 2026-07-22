@@ -16,7 +16,7 @@ executor as a pure function of state + tick; spends recorded by the nudge event)
 charges replay deterministically. The charter and Metatron's soul are flat files in the
 save directory, loaded fresh each turn — a charter edit is live on the next turn by
 construction. The TUI metatron pane becomes the console (transcript + input); a
-`scriptworld metatron` one-shot CLI serves scripting and tests.
+`promptworld metatron` one-shot CLI serves scripting and tests.
 
 ## Technical Context
 
@@ -109,7 +109,7 @@ internal/ipc/            # metatron_chat request (long-call pattern like llm_cal
 │                        #   status gains charges/metatron availability
 internal/world/world.go  # CharterPath(), MetatronDir()
 internal/persona/        # default charter text (authored constant), seeded by `new`
-cmd/scriptworld/         # `scriptworld metatron <dir> [message]` one-shot console
+cmd/promptworld/         # `promptworld metatron <dir> [message]` one-shot console
 internal/tui/            # metatron pane → console: transcript viewport + input line,
 │                        #   charges display; tier health retained
 internal/daemon/daemon.go# wire metatron component when LLM config exists

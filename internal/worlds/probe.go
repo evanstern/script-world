@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/evanstern/script-world/internal/clock"
-	"github.com/evanstern/script-world/internal/ipc"
-	"github.com/evanstern/script-world/internal/sim"
-	"github.com/evanstern/script-world/internal/store"
-	"github.com/evanstern/script-world/internal/world"
+	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/sim"
+	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // State classifies a candidate world at query time — always re-proven from
@@ -183,7 +183,7 @@ func statusWithBudget(sockPath string, budget time.Duration) (*ipc.StatusData, b
 
 // OfflineSnapshot reads a world's last-known clock straight from its store,
 // without a live daemon — extracted from cmdStatus's offline branch
-// (cmd/scriptworld/commands.go) so both `status` and `ps --all` share the
+// (cmd/promptworld/commands.go) so both `status` and `ps --all` share the
 // one read instead of duplicating it (research.md D7).
 func OfflineSnapshot(w *world.World) (tick int64, paused bool, speed string, lastSeq int64, err error) {
 	st, err := store.Open(w.DBPath())

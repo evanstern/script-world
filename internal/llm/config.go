@@ -165,7 +165,7 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// WriteDefault writes the default llm.json (used by `scriptworld new`).
+// WriteDefault writes the default llm.json (used by `promptworld new`).
 func WriteDefault(path string) error {
 	data, err := json.MarshalIndent(DefaultConfig(), "", "  ")
 	if err != nil {
