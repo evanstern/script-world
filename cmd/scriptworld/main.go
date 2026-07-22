@@ -23,7 +23,7 @@ Usage:
   scriptworld start <world>                        start a detached daemon
   scriptworld stop <world>                         gracefully stop the daemon
   scriptworld status <world> [--json]              report world/daemon status
-  scriptworld ui <world>                           full-screen TUI (map, chronicle, metatron, souls)
+  scriptworld ui <world>                           full-screen TUI (map, chronicle, metatron, villagers)
   scriptworld attach <world>                       line-mode event stream + commands
   scriptworld tail <world> [--since SEQ] [--follow] print events from the log
   scriptworld pause <world>                        pause game time

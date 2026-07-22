@@ -35,6 +35,6 @@ its sizing and its place in the composite.
   selected dock tab. `c` recenters and resumes following.
 - Legend stays pinned as the panel's last row; drop the legend before shrinking the
   viewport when rows get scarce.
-- Agents render as name-initial glyphs (existing behavior). Future: the souls tab or
-  an inspect selection may highlight an agent on the map — out of scope for TASK-34,
-  don't preclude it.
+- Agents render as name-initial glyphs (existing behavior). Future: the villagers
+  tab's selection (TASK-56) or a chronicle inspect selection may highlight an
+  agent on the map — out of scope for TASK-34, don't preclude it.

@@ -8,7 +8,7 @@ footer always shows the current mode's primary hints.
 | Key | Action |
 |---|---|
 | `1` | home composite (from solo: return home; on home: map is already primary) |
-| `2` / `3` / `4` | select dock tab chronicle / metatron / souls; **same key again** → solo zoom; again → back home |
+| `2` / `3` / `4` | select dock tab chronicle / metatron / villagers; **same key again** → solo zoom; again → back home |
 | `m` | focus the minibuffer |
 | `space` | pause / resume the clock |
 | `[` / `]` | speed down / up |
@@ -46,12 +46,32 @@ All global keys stay live in inspect mode; `j/k/g/G/⏎` are additions, not
 replacements. (Map pan keeps the arrow keys; inspect deliberately uses `j/k` so the
 two never collide.)
 
+## Mode: villagers (the villagers tab is the thing visible; layered on global, TASK-56)
+
+Scoped to whichever tab is on screen — the dock shows one tab at a time, so this
+never collides with inspect mode's `j/k/⏎` (chronicle) or the map's arrow-pan.
+Unlike inspect mode, this does **not** require the clock to be paused.
+
+| Key | Roster view | Detail view |
+|---|---|---|
+| `j` / `k` | select next / previous villager (clamped) | no-op |
+| `g` / `G` | jump to first / last villager | no-op |
+| `⏎` | open detail for the selected villager | no-op |
+| `esc` | (falls through to global — releases solo/home) | close detail → back to roster |
+
+`esc` follows "esc always releases" ordering
+([focus-contract.md](focus-contract.md) rule 3): minibuffer → villager detail →
+solo → home — each press of `esc` releases exactly one layer. With no world state
+loaded (or an empty roster) `j/k/g/G/⏎` are strict no-ops.
+
 ## Footer hints per mode
 
 ```
-global      2 chronicle 3 metatron 4 souls (again: solo) · m ask · space pause · q quit
-minibuffer  esc release · ⏎ send · ↑↓ history
-inspect     j/k select · ⏎ expand · space resume · m ask
+global            2 chronicle 3 metatron 4 villagers (again: solo) · m ask · space pause · q quit
+minibuffer        esc release · ⏎ send · ↑↓ history
+inspect           j/k select · ⏎ expand · space resume · m ask
+villagers roster  j/k select · ⏎ inspect · space pause · q quit
+villagers detail  esc back · space pause · q quit
 ```
 
 ## Migration notes

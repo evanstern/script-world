@@ -9,7 +9,7 @@ to build every screen from these files without re-deriving intent.
 **Chosen direction: B + C hybrid** (from the TASK-34 spike mockups).
 
 - **B — tabbed dock:** the right side of the widescreen composite is a single dock
-  with tabs (chronicle · metatron · souls). One tab visible at a time; the dock is
+  with tabs (chronicle · metatron · villagers). One tab visible at a time; the dock is
   the extension point for future displays/controls.
 - **C — Metatron minibuffer:** Metatron's *input* leaves the pane system entirely and
   becomes a one-line minibuffer above the footer — the only text input in the app.
@@ -28,7 +28,7 @@ Every widescreen frame is composed of exactly five regions:
 ```
 ┌─ header ─ script-world · day 4 · 08:12 · 1× · [PAUSED] ──────────────────┐
 │ ┌─ MAP ──────────────────────────────┐ ┌─ DOCK ───────────────────────┐  │
-│ │                                    │ │  chronicle │ metatron │ souls│  │
+│ │                                    │ │ chronicle │ metatron │ villagers│  │
 │ │  camera viewport over terrain      │ ├──────────────────────────────┤  │
 │ │  (existing renderer, resized)      │ │                              │  │
 │ │                                    │ │  active tab content          │  │
@@ -49,7 +49,7 @@ Pages (what fills the terminal):
 Panels (regions inside a page):
 
 - [panels/map.md](panels/map.md) — terrain camera viewport
-- [panels/dock.md](panels/dock.md) — tab container; souls + metatron tab content
+- [panels/dock.md](panels/dock.md) — tab container; villagers + metatron tab content
 - [panels/chronicle.md](panels/chronicle.md) — the feed panel: running scroll + paused inspect
 - [panels/minibuffer.md](panels/minibuffer.md) — the Metatron input line and its states
 

@@ -7,8 +7,8 @@ current "one pane at a time" model as the resting state of the app.
 ## Mockup
 
 ```
- script-world · attached · day 4 · 08:12 · 1×                    4 souls awake
- ┌─ MAP · following centroid ────────────────┐ ┌─ chronicle │ metatron │ souls ─┐
+ script-world · attached · day 4 · 08:12 · 1×                4 villagers awake
+ ┌─ MAP · following centroid ────────────────┐ ┌─ chronicle │ metatron │ villagers ┐
  │ ~ ~ ~ ~ " " ♠ ♠ ♠ ♠ ♠ " " . . . . ▲ . .   │ │ #1198 08:09 agent.talked      │
  │ ~ ~ ~ " " ♠ ♠ A ♠ ♠ " " . . ⌂ ⌂ . . . .   │ │   {"a":"Sable","b":"Birch"}   │
  │ ~ ~ " ♠ ♠ ♠ R ♠ " " . . . ⌂ . B . . .     │ │ #1201 08:11 turn              │
@@ -22,7 +22,7 @@ current "one pane at a time" model as the resting state of the app.
  ┌─ METATRON ────────────────────────────────────────────────────────────────┐
  │ ⏎ m — speak with the angel…                                               │
  └───────────────────────────────────────────────────────────────────────────┘
-  2 chronicle 3 metatron 4 souls (again: solo) · m ask · space pause · q quit
+  2 chronicle 3 metatron 4 villagers (again: solo) · m ask · space pause · q quit
 ```
 
 ## Composition
