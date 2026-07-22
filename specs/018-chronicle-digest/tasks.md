@@ -22,10 +22,10 @@
 
 **Purpose**: the segment/family/registry substrate every story builds on (research R1, R2, R4; data-model).
 
-- [ ] T002 Add `seg`/`segRole` types (`segText|segName|segSpeech|segEmphasis|segLabel`) and a `plainSegs([]seg) string` helper to internal/tui/grammar.go, ANSI-free per R4
-- [ ] T003 Add `eventFamily` enum and namespace-prefix derivation with the `meeting`+`norm`→governance merge (R2) to internal/tui/grammar.go
-- [ ] T004 Create internal/tui/digest.go with `digestFunc`, `digestRegistry map[string]digestFunc`, and rework `formatChronicleLine` in internal/tui/grammar.go to chronicleLine v2 (`Tick`, `Time`, `Type`, `Family`, `Summary []seg`; `Seq` kept for the detail pane) — registry hit → digest segs, miss or `!ok` → compact `resolvePayloadNames` fallback as one `segText` (FR-002); fold the existing speech/scene privileges into registry entries so `classifyEvent`'s roles migrate rather than duplicate
-- [ ] T005 Update existing tests in internal/tui/grammar_test.go to the v2 line shape (tick column replaces `#seq` in `plainChronicleLine`; speech/scene expectations move to registry-driven output; wrap/truncate tests unchanged)
+- [X] T002 Add `seg`/`segRole` types (`segText|segName|segSpeech|segEmphasis|segLabel`) and a `plainSegs([]seg) string` helper to internal/tui/grammar.go, ANSI-free per R4
+- [X] T003 Add `eventFamily` enum and namespace-prefix derivation with the `meeting`+`norm`→governance merge (R2) to internal/tui/grammar.go
+- [X] T004 Create internal/tui/digest.go with `digestFunc`, `digestRegistry map[string]digestFunc`, and rework `formatChronicleLine` in internal/tui/grammar.go to chronicleLine v2 (`Tick`, `Time`, `Type`, `Family`, `Summary []seg`; `Seq` kept for the detail pane) — registry hit → digest segs, miss or `!ok` → compact `resolvePayloadNames` fallback as one `segText` (FR-002); fold the existing speech/scene privileges into registry entries so `classifyEvent`'s roles migrate rather than duplicate
+- [X] T005 Update existing tests in internal/tui/grammar_test.go to the v2 line shape (tick column replaces `#seq` in `plainChronicleLine`; speech/scene expectations move to registry-driven output; wrap/truncate tests unchanged)
 
 **Checkpoint**: `go test ./internal/tui/` green with only fallback digests — feed behavior equivalent to today plus tick column.
 
@@ -37,16 +37,16 @@
 
 **Independent Test**: run/replay a world and watch the raw feed — no cataloged type shows a JSON dump; the sweep test enforces it mechanically.
 
-- [ ] T006 [US1] Implement world/clock/daemon/sim digests per contract §3 tables 1–2 in internal/tui/digest.go (labeled voice for clock/daemon; `world.migrated` elides the embedded state)
-- [ ] T007 [US1] Implement agent acts & needs digests per contract §3 table 3 in internal/tui/digest.go (verify payload fields against internal/sim structs; `agent.needs_changed` phrase-prefixed labeled; `agent.died` alert-flagged)
-- [ ] T008 [US1] Implement agent mind & plan digests per contract §3 table 4 in internal/tui/digest.go (consolidation-family fields verified against internal/sim/consolidate.go, plans against internal/sim/plan.go)
-- [ ] T009 [US1] Implement social digests per contract §3 table 5 in internal/tui/digest.go (speech privilege for conversation_turn/rumor_told preserved as segName+segSpeech; `social.secret_seeded` fields verified against internal/sim/social.go; `social.chest_taken` alert-flagged)
-- [ ] T010 [US1] Implement governance digests per contract §3 table 6 in internal/tui/digest.go (fields verified against internal/sim/governance.go and specs/006-norms-and-votes/contracts/governance-events.md; `norm.violated` alert-flagged)
-- [ ] T011 [US1] Implement gru/chronicle/metatron/cog digests per contract §3 tables 7–8 in internal/tui/digest.go (cog labeled voice per specs/007-cognition-horizon/contracts/events.md field order; `gru.attacked` alert-flagged; `metatron.nudged` resolves target indices to names)
-- [ ] T012 [US1] Implement column assembly per R5 in internal/tui/grammar.go + internal/tui/views.go: tick right-aligned to widest visible, time width 5, type padded to widest visible cap 26 (solo) / last-segment short name cap 10 with no tick (dock); rework `chronicleRawBody` to window-first-then-format (R8)
-- [ ] T013 [US1] Write per-family digest unit tests in internal/tui/digest_test.go — one sample payload per type asserting plain text and role spans (contract §3 templates are the expected values)
-- [ ] T014 [US1] Write the catalog sweep test in internal/tui/digest_test.go per contract §7: fixture of all ~70 types × sample payloads; asserts registry coverage both directions plus backticked-type cross-check against docs/wiki/event-types.md (SC-001)
-- [ ] T015 [US1] Update internal/tui/render_test.go and internal/tui/tui_test.go expectations that assert on old feed strings
+- [X] T006 [US1] Implement world/clock/daemon/sim digests per contract §3 tables 1–2 in internal/tui/digest.go (labeled voice for clock/daemon; `world.migrated` elides the embedded state)
+- [X] T007 [US1] Implement agent acts & needs digests per contract §3 table 3 in internal/tui/digest.go (verify payload fields against internal/sim structs; `agent.needs_changed` phrase-prefixed labeled; `agent.died` alert-flagged)
+- [X] T008 [US1] Implement agent mind & plan digests per contract §3 table 4 in internal/tui/digest.go (consolidation-family fields verified against internal/sim/consolidate.go, plans against internal/sim/plan.go)
+- [X] T009 [US1] Implement social digests per contract §3 table 5 in internal/tui/digest.go (speech privilege for conversation_turn/rumor_told preserved as segName+segSpeech; `social.secret_seeded` fields verified against internal/sim/social.go; `social.chest_taken` alert-flagged)
+- [X] T010 [US1] Implement governance digests per contract §3 table 6 in internal/tui/digest.go (fields verified against internal/sim/governance.go and specs/006-norms-and-votes/contracts/governance-events.md; `norm.violated` alert-flagged)
+- [X] T011 [US1] Implement gru/chronicle/metatron/cog digests per contract §3 tables 7–8 in internal/tui/digest.go (cog labeled voice per specs/007-cognition-horizon/contracts/events.md field order; `gru.attacked` alert-flagged; `metatron.nudged` resolves target indices to names)
+- [X] T012 [US1] Implement column assembly per R5 in internal/tui/grammar.go + internal/tui/views.go: tick right-aligned to widest visible, time width 5, type padded to widest visible cap 26 (solo) / last-segment short name cap 10 with no tick (dock); rework `chronicleRawBody` to window-first-then-format (R8)
+- [X] T013 [US1] Write per-family digest unit tests in internal/tui/digest_test.go — one sample payload per type asserting plain text and role spans (contract §3 templates are the expected values)
+- [X] T014 [US1] Write the catalog sweep test in internal/tui/digest_test.go per contract §7: fixture of all ~70 types × sample payloads; asserts registry coverage both directions plus backticked-type cross-check against docs/wiki/event-types.md (SC-001)
+- [X] T015 [US1] Update internal/tui/render_test.go and internal/tui/tui_test.go expectations that assert on old feed strings
 
 **Checkpoint**: US1 shippable — feed readable end-to-end, sweep green, inspect mode still the old inline inspector.
 
