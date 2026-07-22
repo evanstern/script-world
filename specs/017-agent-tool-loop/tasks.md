@@ -138,11 +138,11 @@ live-vs-replay byte-identity on a loop-era run.
 
 **Independent Test**: quickstart §2 log inspection + SC-003 correlation test.
 
-- [ ] T016 [P] (Sonnet) [US3] `CogToolCallPayload` per contracts/events.md (canonical
+- [x] T016 [P] (Sonnet) [US3] `CogToolCallPayload` per contracts/events.md (canonical
       order, args 2 KiB cap+truncation marker, reason required on rejections),
       whitelist entry + reducer no-op arm in internal/sim/loop.go +
       internal/sim/state.go + internal/sim/cognition.go, marshal-order + no-op tests
-- [ ] T017 [P] (Sonnet) [US3] Add `Job string json:"job,omitempty"` to
+- [x] T017 [P] (Sonnet) [US3] Add `Job string json:"job,omitempty"` to
       `IntentSetPayload` (LAST field) in internal/sim/agents.go, populate from
       `InjectArgs.JobID` at the inject-landing arm only in internal/sim/loop.go;
       byte-stability pin: reflex/executor emissions and pre-feature marshaling

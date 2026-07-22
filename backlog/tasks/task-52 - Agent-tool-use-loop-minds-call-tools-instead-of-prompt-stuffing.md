@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 21:42'
+updated_date: '2026-07-22 21:55'
 labels:
   - agent-mind
   - llm
@@ -81,4 +81,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Opus 4.8 landed T009+T010 (branch commits 548a1a6, 49ed3fd post-rebase): internal/toolloop driver — contract surface exact, unexported submitter seam for deterministic tests, transcript invariant one-assistant-turn-per-round pinned (the env-<round> fallback dependency), final-round reads recorded unlanded by design, CallRecord.Reason = handler ResultForModel for rejections. Full suite green. Branch then rebased onto origin/main after PRs #37 (chronicle digest) + #38 (metatron miracles) merged — clean rebase, overlapping packages green. Post-#38 impact absorbed into artifacts: metatron turn now works miracles with an at-most-one-mediated-act rule that maps exactly onto loop cardinality; added T019b (work_miracle registry entry, Sonnet) and amended T020 + research R13. Next: T011-T013 mind migration (Opus).
 
 2026-07-22 Opus 4.8 landed US1 (MVP core): T011 (fa62655: villager handlers — world verbs/set_plan wrap InjectIntent w/ talk_to guards preserved, muse lands via InjectSocial atomically, CallRecord sink buffered for T018), T012 (0ffda92: runPlan → toolloop.Run w/ runLoop seam, loopRounds threaded from llm.Config.Rounds(), MaxTokens 512 documented, tool-era system prompt, parseReply/plannerReplySchema/golden-prompt test retired, e2e fake LLM scripts native tool_calls), T013 (8f2067b: scheduled musing deleted — muse scheduling/musingSystemPrompt/KindMusing/musing DecisionClass removed; BestEffort machinery stays; parseMusing kept for meeting rephraser). Full suite incl e2e green; TestCognitionReplayByteIdentical passes on a loop-era run. As-built decisions gated and recorded: door owns the single cog.outcome on landings (mind emits OutcomeUnusable only when nothing reached a door); intra-cognition retries can yield multiple door cog.outcomes per job (events.md amended); rearm preserves today's semantics (rejection rearms, failure does not); BEHAVIOR CHANGE by design: world-verb landings carry no planner free-text reason — interiority flows via the muse tool (opportunity-cost doctrine), chronicle richness shifts accordingly.
+
+2026-07-22 Sonnet landed T016 (0657530: CogToolCallPayload canonical order, whitelist entry, reducer no-op arm; updated the TestWhitelistDiffIdentical trip-wire deliberately per contract) and T017 (965dc4c: IntentSetPayload.Job last-field omitempty, populated only at the inject-landing arm; byte-stability pins incl absent-key assertion for reflex/executor paths). Full suite green, replay byte-identity unmodified. Next: T018+T019 (record landing + SC-003 correlation, Opus).
 <!-- SECTION:NOTES:END -->
