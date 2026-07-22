@@ -226,10 +226,11 @@ func hasManifest(dir string) bool {
 	return err == nil
 }
 
-// cmdMigrate implements `scriptworld migrate <world>` (spec 012 US6): the
-// offline v1→v2 snapshot-cut migration. It resolves the world, then hands the
-// whole archive/transform/rewrite ceremony to world.Migrate, and prints a
-// human summary of what carried across the break.
+// cmdMigrate implements `scriptworld migrate <world>` (spec 012 US6, spec 013):
+// the offline snapshot-cut migration that upgrades an older world (v1 or v2) to
+// the current format — a v1 world chains 1→2→3 in one run. It resolves the
+// world, then hands the whole archive/transform/rewrite ceremony to
+// world.Migrate, and prints a human summary of what carried across the break.
 func cmdMigrate(args []string) error {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	arg, err := dirArg(fs, args)

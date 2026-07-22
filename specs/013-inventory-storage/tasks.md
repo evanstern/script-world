@@ -144,9 +144,9 @@ minute; chest food and all non-food immortal; rot events chronicle-visible.
 **Purpose**: existing v2 worlds cross the behavior break with their people —
 and their belongings — intact.
 
-- [ ] T035 v2 legacy decode + pure v2→v3 transform in `internal/sim/migrate.go`: everything carries verbatim (NO land reset — no map inputs changed, research R3); carried bulk over `bulkCap` spills to a pile at the agent's tile (food batches stamped `migration tick + rotWindowTicks`); wire 1→2→3 chaining so a v1 world migrates in one run
-- [ ] T036 `scriptworld migrate` 2→3 orchestration in `cmd/scriptworld` + `internal/world/world.go`: archive `world.db` → `world.v2.db` (existing-archive guard), fresh log `world.created` + `world.migrated{from_format: 2}` + initial snapshot, manifest → 3; same refusal set as 1→2 (running daemon, uncovered tail)
-- [ ] T037 Migration tests: v2 fixture (agents incl. over-cap inventory, structures, overlays, mid-flight intents, memories/relations) migrates with people + land state verbatim, spill pile present; v1 fixture chains 1→2→3; snapshot-free replay from genesis ⇒ byte-identical; refusal cases
+- [X] T035 v2 legacy decode + pure v2→v3 transform in `internal/sim/migrate.go`: everything carries verbatim (NO land reset — no map inputs changed, research R3); carried bulk over `bulkCap` spills to a pile at the agent's tile (food batches stamped `migration tick + rotWindowTicks`); wire 1→2→3 chaining so a v1 world migrates in one run
+- [X] T036 `scriptworld migrate` 2→3 orchestration in `cmd/scriptworld` + `internal/world/world.go`: archive `world.db` → `world.v2.db` (existing-archive guard), fresh log `world.created` + `world.migrated{from_format: 2}` + initial snapshot, manifest → 3; same refusal set as 1→2 (running daemon, uncovered tail)
+- [X] T037 Migration tests: v2 fixture (agents incl. over-cap inventory, structures, overlays, mid-flight intents, memories/relations) migrates with people + land state verbatim, spill pile present; v1 fixture chains 1→2→3; snapshot-free replay from genesis ⇒ byte-identical; refusal cases
 
 **Checkpoint**: the format break has a door; no goods are lost crossing it.
 
