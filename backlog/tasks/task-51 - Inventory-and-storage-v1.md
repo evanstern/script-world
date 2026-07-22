@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 06:57'
+updated_date: '2026-07-22 07:18'
 labels: []
 dependencies:
   - TASK-50
@@ -26,7 +26,7 @@ Spec: specs/013-inventory-storage
 - [x] #3 Spec phase: User Story 1 — Villagers can only carry so much (P1) 🎯 MVP
 - [x] #4 Spec phase: User Story 2 — Ground piles and emergent stockpiles (P2)
 - [x] #5 Spec phase: User Story 3 — Chests: the village learns to keep things (P3)
-- [ ] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
+- [x] #6 Spec phase: User Story 4 — Theft is a story, not an error (P4)
 - [ ] #7 Spec phase: User Story 5 — Rot: the ground is not a larder (P5)
 - [ ] #8 Spec phase: Migration & Format Door (Cross-Cutting)
 - [ ] #9 Spec phase: Polish & Cross-Cutting
@@ -56,4 +56,6 @@ US1 (bulk cap) complete: 0aa5c6e mechanics (T010-T014: reducer yield clamps, zer
 US2 (piles) complete: a5c6ffd mechanics (T016-T020: drop/pick_up goals with Kind/Qty threading through resolveGoal+InjectArgs, death spill reducer-internal on agent.died, build-site pile guard in buildSite, 6-test suite incl. contested same-tick pickup + replay byte-identity), 260084b contract note (contested pickup keeps contested-gather idiom), 29d65c3 TUI+vocab (T021-T022, Sonnet: % pile glyph, render-side BFS zone grouping, legend inspection line, planner kind/qty parse wiring in mind/parse.go with validation — storage kind key is 'spears' plural). Full suite green both dispatches; US1 degraded-mode gate stays green.
 
 US3 (chests) mechanics complete: d700cbd (T023-T025) — build_chest goal (build_oven pattern, buildFireTicks duration), deposit/withdraw instant goals with double-clamped total reducers, chestAt helper, spears most-worn-first through chests, 6-test suite incl. owner-survives-death, full-rot-window chest-food immortality, replay byte-identity. Full suite green. Chest-built salience memory deliberately deferred to T030 (US4 salience table) per tasks.md scope. T026/T027 (TUI + vocab, Sonnet) next.
+
+US3 Sonnet + US4 complete: 77565ee (T026-T027: chest glyph U+2610 + legend inspection with owner name + fullness, planner build_chest/deposit/withdraw vocabulary + parse validation + larder guidance), 186cf62 (T028-T031 Opus: social.chest_taken routed through applySocial as effect-free record, theftCompanions batch in contract order with fixed-agent-order witnesses, salChestBuilt/salTaking=7 + chest-built memory closing US3 deferral, 6-test theft suite incl. rumor-seed TellableFor + replay byte-identity; ChestCap exported, TUI dup const removed). Full suite green both dispatches.
 <!-- SECTION:NOTES:END -->
