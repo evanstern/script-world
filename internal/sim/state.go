@@ -76,6 +76,16 @@ type State struct {
 	Norms             []Norm             `json:"norms,omitempty"`
 	NextNormID        int                `json:"next_norm_id,omitempty"`
 	NextProposalID    int                `json:"next_proposal_id,omitempty"`
+
+	// m is the static generated map for this world (seed + dimensions). It is
+	// unexported and never serialized — canonical state bytes are unchanged by
+	// it (spec 016: "State marshals unchanged"). It is attached at construction
+	// (NewState) and carried into the loop's dry-run probe and across a
+	// world.migrated replacement, so miracle reducer arms can consult the
+	// terrain vocabulary (passable/buildSite/effectiveKind) the same way live,
+	// in the dry-run, and in replay — the reducer stays the single, map-aware
+	// validator for the map-dependent miracle checks (spec 016 R1/R4).
+	m *worldmap.Map
 }
 
 // NewState is genesis: day 1 06:00, default speed, named agents placed
@@ -89,6 +99,7 @@ func NewState(seed uint64, m *worldmap.Map) *State {
 		Seed:            seed,
 		Agents:          make([]Agent, agentCount),
 		MetatronCharges: MetatronGenesisCharges,
+		m:               m,
 	}
 	pos := genesisPlacement(seed, m, agentCount)
 	for i := range s.Agents {
@@ -124,6 +135,13 @@ func genesisPlacement(seed uint64, m *worldmap.Map, count int) []Point {
 	}
 	return pos
 }
+
+// SetMap attaches the static world map to a State built outside NewState —
+// the loop's dry-run probe and any replica reconstructed by unmarshalling into
+// a bare State. The map is unexported and unserialized, so a State restored
+// from bytes alone has none until this is called; miracle reducer arms need it
+// for the terrain vocabulary (spec 016). Idempotent, never marshaled.
+func (s *State) SetMap(m *worldmap.Map) { s.m = m }
 
 // Marshal renders canonical state bytes (struct field order is fixed, so the
 // bytes are deterministic for equal states).
@@ -918,7 +936,12 @@ func (s *State) Apply(e store.Event) error {
 		if p.State.Seed != s.Seed {
 			return nil
 		}
+		// The payload's State was unmarshalled from the event and carries no
+		// map (unexported, unserialized); preserve the map already attached to
+		// the live/replay State across the wholesale replacement (spec 016).
+		m := s.m
 		*s = p.State
+		s.m = m
 
 	case "agent.slept":
 		var p AgentPayload
@@ -1053,6 +1076,10 @@ func (s *State) Apply(e store.Event) error {
 
 	case "metatron.charge_regenerated", "metatron.nudged":
 		return s.applyMetatron(e)
+
+	case "metatron.time_snapped", "metatron.item_granted",
+		"metatron.entity_moved", "metatron.entity_removed":
+		return s.applyMiracle(e)
 
 	case "meeting.convention_established", "sim.gathering_observed",
 		"meeting.place_designated", "meeting.convened", "meeting.opened",

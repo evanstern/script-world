@@ -400,6 +400,11 @@ func (l *Loop) handleCommand(cmd command) error {
 			err = uerr
 			break
 		}
+		// The probe is reconstructed from bytes and so carries no map
+		// (unexported, unserialized); attach the loop's map so miracle
+		// arms validate the terrain vocabulary in the dry-run exactly as
+		// the real apply and replay will (spec 016).
+		probe.SetMap(l.m)
 		for _, e := range batch {
 			if aerr := probe.Apply(e); aerr != nil {
 				err = fmt.Errorf("social batch rejected: %w", aerr)
