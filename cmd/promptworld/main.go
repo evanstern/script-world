@@ -30,6 +30,8 @@ Usage:
   promptworld resume <world>                       resume game time
   promptworld speed <world> <1x|4x|8x|16x|32x|max>     set game speed
   promptworld metatron <world> [message...]        converse with the angel (no message: status peek)
+  promptworld miracle <world> <snap-time|give|move|remove> ... [--force]
+                                                   land a Metatron miracle (--force waives the charge)
   promptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon
                                                    (kinds: planner, conversation, musing,
                                                     consolidation, narrator, drama)
@@ -77,6 +79,8 @@ func main() {
 		err = cmdCalibrate(args)
 	case "metatron":
 		err = cmdMetatron(args)
+	case "miracle":
+		err = cmdMiracle(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

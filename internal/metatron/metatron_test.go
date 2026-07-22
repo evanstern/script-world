@@ -91,6 +91,126 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	return mt, orch, inj, dir
 }
 
+// TestBuildMiracleBatch (spec 016 T006): the shared builder composes the right
+// miracle event plus the FR-018 perception memories for each kind, at SalDream,
+// so the two doors cannot drift. Recipients follow data-model.md: a moved
+// villager and a granted villager each gain one memory; a time snap touches
+// every living villager; a structure/pile/terrain move or remove touches none.
+func TestBuildMiracleBatch(t *testing.T) {
+	m := worldmap.Generate(42, 64, 64)
+	s := sim.NewState(42, m)
+	// Put agent 0 on a known tile so a villager move resolves its recipient.
+	s.Agents[0].X, s.Agents[0].Y = 10, 12
+	// One villager departed, so time-snap recipients exclude the dead.
+	s.Agents[3].Dead = true
+
+	memCount := func(batch []store.Event) int {
+		n := 0
+		for _, e := range batch {
+			if e.Type == "agent.memory_added" {
+				n++
+			}
+		}
+		return n
+	}
+	assertMem := func(t *testing.T, e store.Event, agent int) {
+		t.Helper()
+		if e.Type != "agent.memory_added" {
+			t.Fatalf("want agent.memory_added, got %s", e.Type)
+		}
+		var p sim.MemoryAddedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Agent != agent {
+			t.Errorf("memory agent = %d, want %d", p.Agent, agent)
+		}
+		if p.Salience != sim.SalDream {
+			t.Errorf("memory salience = %d, want SalDream (%d)", p.Salience, sim.SalDream)
+		}
+		if p.Text == "" {
+			t.Error("memory text is empty")
+		}
+	}
+
+	t.Run("villager_move_one_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "move", MiracleParams{
+			Class: "villager", X: 10, Y: 12, ToX: 11, ToY: 12}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.entity_moved" {
+			t.Fatalf("main event = %s, want metatron.entity_moved", batch[0].Type)
+		}
+		if memCount(batch) != 1 {
+			t.Fatalf("villager move memories = %d, want 1", memCount(batch))
+		}
+		assertMem(t, batch[1], 0)
+		// gratis flows verbatim into the payload.
+		var mp sim.EntityMovedPayload
+		json.Unmarshal(batch[0].Payload, &mp)
+		if mp.Gratis {
+			t.Error("gratis leaked true on a charged build")
+		}
+	})
+
+	t.Run("structure_move_no_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "move", MiracleParams{
+			Class: "structure", X: 10, Y: 12, ToX: 11, ToY: 12}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if memCount(batch) != 0 {
+			t.Errorf("structure move memories = %d, want 0", memCount(batch))
+		}
+		var mp sim.EntityMovedPayload
+		json.Unmarshal(batch[0].Payload, &mp)
+		if !mp.Gratis {
+			t.Error("gratis not carried into the payload")
+		}
+	})
+
+	t.Run("remove_no_memory", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "remove", MiracleParams{Class: "pile", X: 10, Y: 12}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.entity_removed" || memCount(batch) != 0 {
+			t.Errorf("remove batch wrong: %s, memories %d", batch[0].Type, memCount(batch))
+		}
+	})
+
+	t.Run("give_one_memory_to_grantee", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "give_item", MiracleParams{Agent: 2, Item: "food_raw", Qty: 3}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.item_granted" || memCount(batch) != 1 {
+			t.Fatalf("give batch wrong: %s, memories %d", batch[0].Type, memCount(batch))
+		}
+		assertMem(t, batch[1], 2)
+	})
+
+	t.Run("snap_every_living_villager", func(t *testing.T) {
+		batch, err := BuildMiracleBatch(s, "time_snap", MiracleParams{ToTick: 99999}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch[0].Type != "metatron.time_snapped" {
+			t.Fatalf("main event = %s, want metatron.time_snapped", batch[0].Type)
+		}
+		if memCount(batch) != len(s.LivingAgents()) || memCount(batch) != sim.AgentCount-1 {
+			t.Errorf("snap memories = %d, want %d living", memCount(batch), sim.AgentCount-1)
+		}
+	})
+
+	t.Run("unknown_kind_errors", func(t *testing.T) {
+		if _, err := BuildMiracleBatch(s, "bless", MiracleParams{}, false); err == nil {
+			t.Error("unknown kind should error")
+		}
+	})
+}
+
 // TestTurnConverses (US1): charter voice in the system prompt, live status in
 // the user prompt, reply passed through, transcript persisted.
 func TestTurnConverses(t *testing.T) {
