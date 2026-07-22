@@ -47,7 +47,7 @@ per-tile map keyed by coordinates (rejected: maps are banned in serialized state
 | Site | Rule |
 |---|---|
 | gather completions (forage/chop/hunt/quarry/collect_water) | executor re-validates free bulk at completion: zero free ⇒ `agent.intent_done` only (no harvest event, **no depletion** — US1-AS1); partial ⇒ harvest event emitted, reducer clamps yield to free bulk, overlay/depletion applies, remainder forfeit (US1-AS2) |
-| craft completions (planks/stone/spear) | completion re-validation extends to net bulk delta: if outputs−inputs won't fit, no event, intent cleared (crafts don't truncate — they don't happen). Only `craft_planks` has positive net (+1 with plankYield 2) |
+| craft completions (planks/stone/spear) | completion re-validation extends to net bulk delta: if outputs−inputs won't fit, no event, intent cleared (crafts don't truncate — they don't happen). Only `craft_planks` has positive net (+3 with plankYield 4; the implementation derives the net from the recipe table, so the number here is informational) |
 | cook / bathe / refuel / build | net delta ≤ 0 always — no check needed (assert in tests) |
 | `social.gave` (executor give rule) | executor skips the give when receiver has zero free bulk; reducer clamps defensively |
 | pick_up / withdraw | truncate to taker's free bulk (partial moves; payload records actual counts) |
