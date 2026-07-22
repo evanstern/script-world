@@ -4,7 +4,7 @@ title: 'Grounded memories: context-rich episodic capture'
 status: To Do
 assignee: []
 created_date: '2026-07-19 15:56'
-updated_date: '2026-07-22 02:20'
+updated_date: '2026-07-22 02:50'
 labels:
   - memory
   - agent-mind
@@ -43,4 +43,6 @@ Second layer on top of the deterministic episodic capture: give each agent a per
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-07-21: Journal tools decided as tool-driven, not prompt stuffing — search results enter context only when the agent calls search_journal. This requires an agent tool-use loop, which does not exist (llm.Orchestrator is single-shot). Created TASK-52 as the prerequisite; TASK-16 now depends on it.
+
+2026-07-21: prereq chain extended — TASK-53 (tool registry) -> TASK-52 (tool loop) -> TASK-16 journal tools. Journal write tools are expressive-class registry entries; search/read are read-class (loop-dependent). One acting tool per cognition; read tools exempt.
 <!-- SECTION:NOTES:END -->

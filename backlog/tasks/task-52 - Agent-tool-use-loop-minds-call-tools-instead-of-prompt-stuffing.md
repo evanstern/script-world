@@ -4,11 +4,12 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: To Do
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 02:20'
+updated_date: '2026-07-22 02:50'
 labels:
   - agent-mind
   - llm
-dependencies: []
+dependencies:
+  - TASK-53
 ordinal: 47000
 ---
 
@@ -37,3 +38,13 @@ First consumer: TASK-16 journal tools (write_journal_entry, search_journal, opti
 - [ ] #3 Works on at least one local-tier and the cloud-tier provider, with an explicit documented fallback for tiers that cannot tool-call reliably
 - [ ] #4 Metering/governor accounts for multi-call cognitions (estimates + calibration remain sane)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-07-21 design exploration decisions (with Evan):
+1. Layer split confirmed — TASK-53 (tool registry, behavior-identical formalization) stands alone and precedes this task; TASK-52 is now specifically the agentic loop (Layer 2): per-provider native tool calling + bounded execute-and-feed-back loop.
+2. Cardinality: ONE acting tool per cognition (world or expressive) — read tools (search_journal/read_journal) are exempt, they are mid-loop lookups that inform the cognition, not actions. Journal writes therefore carry opportunity cost: a cognition spent journaling is not spent acting.
+3. muse merges into the tool roster (no separate scheduled musing channel long-term); agents choosing to muse via tool call lands with this task's loop.
+4. Core principle to preserve verbatim in the spec: a tool call is a REQUEST; an event is the FACT; the gate decides; the executor grounds work in time and space. Speaking/musing/thinking are tools too — game-state integrity applies to expression, not just world mutation.
+<!-- SECTION:NOTES:END -->
