@@ -116,10 +116,27 @@ func Migrate(dir string) (*MigrateResult, error) {
 		st.Close()
 		return nil, migrateNeedsCleanStop(dir, "this world has no valid snapshot")
 	}
-	if snap.Seq != maxSeq {
+	// The clean-shutdown guarantee (FR-024) is that the covering snapshot holds
+	// all *sim* state. A real v1 daemon appends its `daemon.stopped` bookkeeping
+	// AFTER the shutdown snapshot, so a cleanly-stopped world normally has a
+	// one-event tail past snap.Seq — observed on myworld-01: seq 114507 trailing
+	// a 114506-covering snapshot. `daemon.*` events are reducer no-ops carrying
+	// zero sim state, so a tail consisting only of them is tolerated (and simply
+	// dropped — its information content is nil, nothing to carry into the v2
+	// log). Any sim-affecting event past the snapshot is un-snapshotted history
+	// and still refuses.
+	tail, err := st.EventsSince(snap.Seq, 0)
+	if err != nil {
 		st.Close()
-		return nil, migrateNeedsCleanStop(dir,
-			fmt.Sprintf("the latest valid snapshot covers seq %d but the log runs to seq %d (an unclean stop left un-snapshotted history)", snap.Seq, maxSeq))
+		return nil, err
+	}
+	for _, e := range tail {
+		if !strings.HasPrefix(e.Type, "daemon.") {
+			st.Close()
+			return nil, migrateNeedsCleanStop(dir,
+				fmt.Sprintf("the latest valid snapshot covers seq %d but the log runs to seq %d with a sim-affecting event (%s at seq %d) past it (an unclean stop left un-snapshotted history)",
+					snap.Seq, maxSeq, e.Type, e.Seq))
+		}
 	}
 
 	// Transform: v1 covering-snapshot state → v2 state, re-placing souls on the

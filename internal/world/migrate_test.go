@@ -114,6 +114,20 @@ func writeV1World(t *testing.T, dir string, seed uint64, tick int64, nEvents int
 	}
 }
 
+// appendTail opens an already-written world.db and appends events past its
+// snapshot — used to reproduce the trailing tail a real v1 daemon leaves.
+func appendTail(t *testing.T, dir string, evs ...store.Event) {
+	t.Helper()
+	st, err := store.Open(filepath.Join(dir, "world.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.AppendEvents(evs); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func appendDummy(t *testing.T, st *store.Store, n int) {
 	t.Helper()
 	evs := make([]store.Event, n)
@@ -277,6 +291,51 @@ func TestMigrateRefusesUncoveredTail(t *testing.T) {
 	_, err := Migrate(dir)
 	if err == nil {
 		t.Fatal("Migrate should refuse an uncovered tail")
+	}
+	if !strings.Contains(err.Error(), "start and stop") {
+		t.Errorf("error should name the start+stop remedy, got: %v", err)
+	}
+	assertUntouched(t, dir)
+}
+
+// TestMigrateToleratesDaemonTail is the real-world shape (spec amendment,
+// FR-024): a v1 daemon appends `daemon.stopped` AFTER its shutdown snapshot, so
+// a cleanly-stopped world has a one-event daemon.* tail past the covering
+// snapshot. That tail is process bookkeeping (a reducer no-op, zero sim state);
+// migration tolerates it and drops it. source_events still reflects the full v1
+// log (the archive's true size), tail included.
+func TestMigrateToleratesDaemonTail(t *testing.T) {
+	dir := t.TempDir()
+	const seed = uint64(42)
+	const tick = int64(257400)
+	writeV1World(t, dir, seed, tick, 6, true) // snapshot at seq 6
+	appendTail(t, dir, store.Event{Tick: tick, Type: "daemon.stopped", Payload: json.RawMessage(`{"tick":257400}`)})
+
+	res, err := Migrate(dir)
+	if err != nil {
+		t.Fatalf("Migrate should tolerate a daemon.* tail: %v", err)
+	}
+	// source_events counts the whole v1 log, the trailing daemon.stopped
+	// included (the archive holds all 7 events).
+	if res.SourceEvents != 7 {
+		t.Errorf("SourceEvents = %d, want 7 (full v1 log incl. daemon tail)", res.SourceEvents)
+	}
+	if res.Tick != tick {
+		t.Errorf("Tick = %d, want %d", res.Tick, tick)
+	}
+}
+
+// TestMigrateRefusesSimTail is the other half of the amended precondition: a
+// SIM-affecting event past the snapshot (not daemon.*) is genuine
+// un-snapshotted history and still refuses, untouched.
+func TestMigrateRefusesSimTail(t *testing.T) {
+	dir := t.TempDir()
+	writeV1World(t, dir, 42, 5000, 6, true) // covering snapshot at seq 6
+	appendTail(t, dir, store.Event{Tick: 5001, Type: "agent.moved", Payload: json.RawMessage(`{"agent":0,"x":1,"y":1}`)})
+
+	_, err := Migrate(dir)
+	if err == nil {
+		t.Fatal("Migrate should refuse a sim-affecting event past the snapshot")
 	}
 	if !strings.Contains(err.Error(), "start and stop") {
 		t.Errorf("error should name the start+stop remedy, got: %v", err)
