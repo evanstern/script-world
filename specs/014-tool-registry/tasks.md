@@ -98,7 +98,7 @@ metatron naming a world verb rejected; roster/registry inconsistency fails start
 - [X] T029 [P] Ladder regression audit: confirm generation/staleness/guard tests (`internal/sim/memory_test.go`, `hail_test.go`, `cognition_test.go`) pass unmodified and cover the registry-fed door path; add a rung-coverage case only if a gap is found (AC #4)
 - [X] T030 [P] Doc reconciliation: update `specs/014-tool-registry/contracts/tool-catalog.md` "= today" cells with the actual shipped values; note any spec-013 verbs added in T002
 - [X] T031 Run full quickstart.md (steps 1–6) top to bottom in the worktree; `go vet ./...` clean; record results in TASK-53 notes
-- [ ] T032 Wiki re-pin: run `/grounding-wiki:wiki-update` for touched sources (agent-mind, sim-loop, reflex-policy, executor, metatron, cognition, event-types notes) — constitution Principle IV; lands in the same PR
+- [X] T032 Wiki re-pin: run `/grounding-wiki:wiki-update` for touched sources (agent-mind, sim-loop, reflex-policy, executor, metatron, cognition, event-types notes) — constitution Principle IV; lands in the same PR
 - [ ] T033 Board close-out: `spec-bridge:sync` TASK-53; tick TASK-55 ACs (cure + never-diverge test shipped here) and close TASK-55 referencing the PR; open the single PR from `.worktrees/task-53`
 
 ## Dependencies & Execution Order
