@@ -21,10 +21,10 @@ PR merges. T001 enforces this.
 
 **Purpose**: worktree, vocabulary re-enumeration, and the pre-refactor anchors.
 
-- [ ] T001 Verify TASK-51 (spec 013) PR is merged; `git fetch origin && git pull --ff-only` in root; create worktree `git worktree add .worktrees/task-53 -b task-53-tool-registry origin/main`; all subsequent tasks run inside `.worktrees/task-53`
-- [ ] T002 Re-enumerate the verb vocabulary on post-TASK-51 main (`internal/mind/prompt.go` goalVocabulary, `internal/mind/parse.go` validGoals, `internal/sim/plan.go` planGoals) and update `specs/014-tool-registry/contracts/tool-catalog.md` world-tool table if spec 013 added verbs (catalog shape is fixed; rows extend)
-- [ ] T003 Write the golden-prompt anchor test AGAINST CURRENT CODE in `internal/mind/prompt_golden_test.go` with fixture `internal/mind/testdata/planner_prompt.golden`: pins full `systemPrompt` output (persona + vocabulary + gloss) byte-for-byte; commit it green BEFORE any registry code (quickstart step 0, R3)
-- [ ] T004 Record baseline: `go test ./...` green on the branch tip; note run in task notes (`backlog task edit TASK-53 --append-notes`), and record the implementation tier choice + Principle V rubric justification on TASK-53
+- [X] T001 Verify TASK-51 (spec 013) PR is merged; `git fetch origin && git pull --ff-only` in root; create worktree `git worktree add .worktrees/task-53 -b task-53-tool-registry origin/main`; all subsequent tasks run inside `.worktrees/task-53`
+- [X] T002 Re-enumerate the verb vocabulary on post-TASK-51 main (`internal/mind/prompt.go` goalVocabulary, `internal/mind/parse.go` validGoals, `internal/sim/plan.go` planGoals) and update `specs/014-tool-registry/contracts/tool-catalog.md` world-tool table if spec 013 added verbs (catalog shape is fixed; rows extend)
+- [X] T003 Write the golden-prompt anchor test AGAINST CURRENT CODE in `internal/mind/prompt_golden_test.go` with fixture `internal/mind/testdata/planner_prompt.golden`: pins full `systemPrompt` output (persona + vocabulary + gloss) byte-for-byte; commit it green BEFORE any registry code (quickstart step 0, R3)
+- [X] T004 Record baseline: `go test ./...` green on the branch tip; note run in task notes (`backlog task edit TASK-53 --append-notes`), and record the implementation tier choice + Principle V rubric justification on TASK-53
 
 **Checkpoint**: fixture and baseline committed; refactor may begin.
 

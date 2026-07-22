@@ -33,10 +33,30 @@ this order is the byte-identity anchor for the derived prompt string (SC-003).
 | craft_spear | — | resolvable | = today (+ spear hunt override stays executor-side) | true | false | = today |
 | build_oven | — | resolvable | = today | true | false | = today (`prompt.go:30`) |
 | bathe | — | resolvable | = today | true | false | = today |
+| drop | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | = today (`prompt.go:31`) |
+| pick_up | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares drop's gloss line) |
+| build_chest | — | resolvable | = today (`buildFireTicks`, 600) | true | false | = today (`prompt.go:32`) |
+| deposit | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares build_chest's gloss line) |
+| withdraw | kind: enum (item keys), optional | resolvable | 0 (instant) | true | false | — (shares build_chest's gloss line) |
 
-`PlanStep: true` across all rows IS the FR-012 delta (today `planGoals` admits only the
-first 10). `ReflexEligible` is declarative doctrine data mirroring `decideIntent`
-(`policy.go:24–112`), which stays hand-written.
+**T002 re-enumeration (post-TASK-51 / spec 013 merged, 2026-07-22)**: `goalVocabulary`
+now holds 24 world verbs — the 19 above plus the 5 storage verbs (`drop`, `pick_up`,
+`build_chest`, `deposit`, `withdraw`) added by spec 013. The catalog shape is fixed; these
+rows extend it. Their `kind`/`qty` argument surface is carried by
+`validateKindQty`/`validKinds` (`internal/mind/parse.go`) and `Kind`/`Qty` on
+`sim.InjectArgs`/`sim.PlanStep`; `validKinds` is NOT migrated in this layer (parse.go
+keeps it — it is not a capability-vocabulary list). The `qty` integer argument has no
+representable `ParamKind` in the fixed contract (`AgentName`/`Text`/`Enum`), so only
+`kind` is modeled as a Param here (flagged for TASK-52, which consumes Params for
+tool-call parsing).
+
+`PlanStep: true` across all rows IS the FR-012 delta — but post-TASK-51 the delta is the
+**9 spec-012 verbs** (`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
+`craft_stone`, `craft_spear`, `build_oven`, `bathe`): today's `planGoals`
+(`internal/sim/plan.go`) admits 15 — the first 10 plus the 5 spec-013 storage verbs,
+which TASK-51 added to `planGoals` correctly. Only the 9 spec-012 verbs remain missing
+from `planGoals`, so they alone are the cured drift. `ReflexEligible` is declarative
+doctrine data mirroring `decideIntent` (`policy.go:24–112`), which stays hand-written.
 
 ## Expressive tools (Effect: Expressive → InjectSocial; villager roster)
 
