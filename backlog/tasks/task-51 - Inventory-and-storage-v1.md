@@ -4,7 +4,7 @@ title: Inventory and storage v1
 status: In Progress
 assignee: []
 created_date: '2026-07-22 01:42'
-updated_date: '2026-07-22 05:17'
+updated_date: '2026-07-22 05:40'
 labels: []
 dependencies:
   - TASK-50
@@ -48,4 +48,6 @@ Tier decision (constitution V, rubric in research R9): Opus 4.8 spec-implementer
 
 <!-- SECTION:NOTES:BEGIN -->
 spec-bridge sync: Setup: 0/2 · Foundational (Blocking Prerequisites): 0/7 · User Story 1 — Villagers can only carry so much (P1) 🎯 MVP: 0/6 · User Story 2 — Ground piles and emergent stockpiles (P2): 0/7 · User Story 3 — Chests: the village learns to keep things (P3): 0/5 · User Story 4 — Theft is a story, not an error (P4): 0/4 · User Story 5 — Rot: the ground is not a larder (P5): 0/3 · Migration & Format Door (Cross-Cutting): 0/3 · Polish & Cross-Cutting: 0/4
+
+Phase 1+2 complete on task-51-inventory-storage (worktree .worktrees/task-51): 78938f1 setup, 62be844 foundational (T003-T009) — v3 state shapes, Pile/FoodBatch + helpers, Structure.Owner/Store, Intent/PlanStep Kind+Qty, bulk() + tuning consts, 6 payload structs, build_chest recipe row, FormatVersion 2->3 gate, reducer no-op scaffolding. Full go test green. Opus tier per rubric (substrate/determinism). Note: spec-implementer agent type not registered in this session; constitution V satisfied via general-purpose subagent pinned model:opus with the spec-implementer execution rules inlined. Migrate command is mid-state (stamps v3 but only chains v1->v2) until Phase 8 — flagged by implementer, expected, single-PR shields it.
 <!-- SECTION:NOTES:END -->
