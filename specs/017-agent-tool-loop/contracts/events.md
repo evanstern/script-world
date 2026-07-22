@@ -77,6 +77,12 @@ agent.thought (muse)      │      ↑ sibling records: ordinals 1..k-1 (reads, 
   events sharing the job — rejection verdict(s) then the landing. The mind adds its own
   `OutcomeUnusable` only when NO acting call reached a door. Chain-walking by job is
   unaffected; consumers must not assume exactly one outcome per job.
+- **Chain granularity (as-built note, T019)**: grounding events carry `job` but not
+  `ordinal`, so "a rejected call grounds nothing" is job-resolvable only when NOTHING
+  in that job landed (a rejected-then-retried-then-landed job holds both a rejected
+  record and a grounding event). Call-level attribution within a landed job comes from
+  the records' verdicts — sufficient for SC-003; pinned by
+  TestToolCallCorrelationChainSC003.
 - Muse landings: `agent.thought` carries no job field today; the muse handler's
   `cog.tool_call{verdict:landed}` plus the batch's shared `cog.outcome{job}` closes the
   chain without touching `agent.thought`'s payload (byte-stability preferred over

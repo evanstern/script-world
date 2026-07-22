@@ -147,10 +147,10 @@ live-vs-replay byte-identity on a loop-era run.
       `InjectArgs.JobID` at the inject-landing arm only in internal/sim/loop.go;
       byte-stability pin: reflex/executor emissions and pre-feature marshaling
       unchanged (TASK-32 pattern test)
-- [ ] T018 (Opus 4.8) [US3] Land CallRecords as cog.tool_call events through each
+- [x] T018 (Opus 4.8) [US3] Land CallRecords as cog.tool_call events through each
       consumer's telemetry door (mind emitCog batch in internal/mind/telemetry.go;
       metatron's landing path) with job+ordinal threading (depends on T009, T016)
-- [ ] T019 (Sonnet) [US3] SC-003 correlation test: from a stub-run fixture resolve
+- [x] T019 (Sonnet) [US3] SC-003 correlation test: from a stub-run fixture resolve
       intent_set→job→cog.tool_call chains and rejected-call artifacts purely by
       identifier, in internal/sim or internal/mind integration test (depends on
       T017, T018)

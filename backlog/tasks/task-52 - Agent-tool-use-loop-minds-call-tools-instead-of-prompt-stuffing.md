@@ -4,7 +4,7 @@ title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
 status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 21:55'
+updated_date: '2026-07-22 22:12'
 labels:
   - agent-mind
   - llm
@@ -83,4 +83,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Opus 4.8 landed US1 (MVP core): T011 (fa62655: villager handlers — world verbs/set_plan wrap InjectIntent w/ talk_to guards preserved, muse lands via InjectSocial atomically, CallRecord sink buffered for T018), T012 (0ffda92: runPlan → toolloop.Run w/ runLoop seam, loopRounds threaded from llm.Config.Rounds(), MaxTokens 512 documented, tool-era system prompt, parseReply/plannerReplySchema/golden-prompt test retired, e2e fake LLM scripts native tool_calls), T013 (8f2067b: scheduled musing deleted — muse scheduling/musingSystemPrompt/KindMusing/musing DecisionClass removed; BestEffort machinery stays; parseMusing kept for meeting rephraser). Full suite incl e2e green; TestCognitionReplayByteIdentical passes on a loop-era run. As-built decisions gated and recorded: door owns the single cog.outcome on landings (mind emits OutcomeUnusable only when nothing reached a door); intra-cognition retries can yield multiple door cog.outcomes per job (events.md amended); rearm preserves today's semantics (rejection rearms, failure does not); BEHAVIOR CHANGE by design: world-verb landings carry no planner free-text reason — interiority flows via the muse tool (opportunity-cost doctrine), chronicle richness shifts accordingly.
 
 2026-07-22 Sonnet landed T016 (0657530: CogToolCallPayload canonical order, whitelist entry, reducer no-op arm; updated the TestWhitelistDiffIdentical trip-wire deliberately per contract) and T017 (965dc4c: IntentSetPayload.Job last-field omitempty, populated only at the inject-landing arm; byte-stability pins incl absent-key assertion for reflex/executor paths). Full suite green, replay byte-identity unmodified. Next: T018+T019 (record landing + SC-003 correlation, Opus).
+
+2026-07-22 Opus 4.8 landed T018 (7fe3b58: CallRecords → cog.tool_call via dedicated all-or-nothing emitCog batch on every termination path, ordinal-sorted, empty-buffer guarded; conversion constructor sim.NewCogToolCallPayload placed sim-side w/ plain arg types so metatron T020 reuses it without dependency inversion; reason invariant enforced-at-emission w/ backfill+log, never fatal) and T019 (84d578f: TestToolCallCorrelationChainSC003, 8/8 under -count=8; chain-granularity refinement recorded in events.md — grounding events carry job not ordinal, so rejected-grounds-nothing is job-resolvable only for rejected-only cognitions). T019 ran on Opus for seam continuity (recorded per rubric). US3 complete — board AC#5 provable from the event log. Full suite incl e2e green. Next: T019b+T020 metatron migration (Opus, T019b rides along w/ justification: work_miracle schema must mirror landMiracle expectations the same agent studies).
 <!-- SECTION:NOTES:END -->
