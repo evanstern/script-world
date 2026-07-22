@@ -14,7 +14,7 @@
 
 **Purpose**: branch/worktree per constitution Principle II.
 
-- [ ] T001 Create the task worktree: `git fetch origin && git worktree add .worktrees/task-60 -b task-60-chronicle-digest origin/main`; all subsequent tasks execute inside `.worktrees/task-60`
+- [x] T001 Create the task worktree: `git fetch origin && git worktree add .worktrees/task-60 -b task-60-chronicle-digest origin/main`; all subsequent tasks execute inside `.worktrees/task-60`
 
 ---
 

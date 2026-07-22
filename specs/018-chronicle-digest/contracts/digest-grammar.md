@@ -79,7 +79,7 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 | `agent.ate` | `{agent} ate {consumed breakdown} → food {food_after}` |
 | `agent.slept` | `{agent} fell asleep` |
 | `agent.woke` | `{agent} woke` |
-| `agent.needs_changed` | `{agent}` + labeled needs (`food=… water=… warmth=… morale=…`, fields per payload) |
+| `agent.needs_changed` | `{agent}` + labeled needs (`health=… food=… rest=… warmth=… morale=…` — verified: `NeedsPayload` has no water field) |
 | `agent.died` | `{agent} died: {cause}` **(alert)** |
 | `agent.talked` | `{a} chatted with {b}` |
 
@@ -89,8 +89,8 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 |---|---|
 | `agent.memory_added` | `{agent} remembers: "{text}"` (+ ` · about {subject}` when present) |
 | `agent.thought` | `{agent} thought: "{text}" ({source})` |
-| `agent.memory_promoted` | `{agent}'s memory reinforced: "{text}"` |
-| `agent.memory_faded` | `{agent} forgot: "{text}"` |
+| `agent.memory_promoted` | `{agent}'s memory (t{mem_tick}) reinforced` (verified: payload carries `text_hash`+`mem_tick`, never the text) |
+| `agent.memory_faded` | `{agent} forgot a memory (t{mem_tick})` (same — no text in payload) |
 | `agent.belief_revised` | `{agent} now believes: "{text}"` |
 | `agent.narrative_set` | `{agent}'s story: "{text}"` |
 | `agent.consolidated` | `{agent} consolidated the night's memories` |
@@ -105,9 +105,9 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 | `social.conversation_turn` | `{Speaker}→{Listener} "{text}"` (speech privilege preserved) |
 | `social.rumor_told` | `{From}→{To} rumor: "{text}"` |
 | `social.conversation` | `"{gist}" · {turns} turns` (tones elided to detail) |
-| `social.relation_changed` | `{from}→{to} {delta:+} ({reason})` |
-| `social.gave` | `{from} gave {to} {n} {kind}` |
-| `social.promise_broken` | `{from} broke a promise to {to}` |
+| `social.relation_changed` | `{a}→{b} trust{±}/affection{±} ({reason})` (verified: two deltas, `trust_delta` + `affection_delta`) |
+| `social.gave` | `{from} gave {to} {kind}` (verified: `GavePayload` has no amount field) |
+| `social.promise_broken` | `a promise was broken (#{id})` (verified: payload carries only the promise id — no from/to) |
 | `social.secret_seeded` | `a secret took root with {agent}` (fields verified at impl) |
 | `social.chest_taken` | `{taker} raided {owner}'s chest at ({x},{y})` **(alert)** |
 | `social.hailed` | `{from} hailed {to} (until t{until})` |
@@ -118,7 +118,7 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 
 | Type | Template |
 |---|---|
-| `meeting.convened` | `meeting convened` + place/agents per payload |
+| `meeting.convened` | `meeting convened` + place (verified: `MeetingPlacePayload` carries the place only, no agents list) |
 | `meeting.opened` | `meeting opened` |
 | `meeting.turn_taken` | `{agent} spoke at the meeting` |
 | `meeting.proposal_tabled` | `{agent} proposed: "{text}"` |
@@ -127,7 +127,7 @@ Emphasis roles inside summaries: **name** (every resolved agent name), **speech*
 | `meeting.closed` | `meeting closed` |
 | `meeting.place_designated` | `meeting place set at ({x},{y})` |
 | `meeting.convention_established` | `meeting convention: {open time} at ({x},{y}) ({source})` |
-| `norm.violated` | `{agent} violated a norm: "{norm text}"` **(alert)** |
+| `norm.violated` | `{agent} violated a norm (#{norm_id})` **(alert)** (verified: payload carries `norm_id`, never the norm text) |
 
 ### gru / chronicle / metatron
 
