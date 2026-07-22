@@ -1,10 +1,10 @@
 ---
 id: TASK-56
 title: 'Villagers tab: per-villager inspection in the TUI'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 05:38'
-updated_date: '2026-07-22 12:49'
+updated_date: '2026-07-22 12:53'
 labels: []
 dependencies: []
 ordinal: 49000
@@ -20,12 +20,12 @@ Spec: specs/015-villagers-tab
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Spec phase: Setup
-- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #3 Spec phase: User Story 1 — Select a villager and inspect them (P1) 🎯 MVP
-- [ ] #4 Spec phase: User Story 2 — Most recent objective when idle (P2)
-- [ ] #5 Spec phase: User Story 3 — Memories, beliefs, narrative (P3)
-- [ ] #6 Spec phase: Polish & Cross-Cutting
+- [x] #1 Spec phase: Setup
+- [x] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #3 Spec phase: User Story 1 — Select a villager and inspect them (P1) 🎯 MVP
+- [x] #4 Spec phase: User Story 2 — Most recent objective when idle (P2)
+- [x] #5 Spec phase: User Story 3 — Memories, beliefs, narrative (P3)
+- [x] #6 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -40,4 +40,12 @@ Full Spec Kit run complete (specs/015-villagers-tab: spec, plan, research R1-R7,
 Implementation complete in worktree .worktrees/task-56 (spec-implementer, Sonnet tier): T001–T022 done across 3 commits, full suite green (build/vet/test incl. e2e), independently re-verified after rebase onto main. PR #32 open: https://github.com/evanstern/script-world/pull/32. Remaining: merge, then T023 (wiki re-pin via /grounding-wiki:wiki-update for tui-client.md + sim-state-reducer.md sources, worktree cleanup, root ff-pull) and board sync to Done. Phase ACs intentionally unchecked until the PR merges — the bridge derives from main, and the ticked tasks.md rides the PR branch.
 
 PR #32 rebased onto main after TASK-51 (PR #33, inventory/storage) merged: two conflicts resolved — state.go intent_set (kept spec-013 Kind/Qty fields + LastGoal/LastGoalTick write) and tui_test.go (kept spec-013 pile/chest tests + villagers rename). Full suite re-verified green (-count=1, incl. e2e); PR now MERGEABLE/CLEAN.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — Select a villager and inspect them (P1) 🎯 MVP: 7/7 · User Story 2 — Most recent objective when idle (P2): 3/3 · User Story 3 — Memories, beliefs, narrative (P3): 3/3 · Polish & Cross-Cutting: 5/5 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 — Select a villager and inspect them (P1) 🎯 MVP: 7/7 · User Story 2 — Most recent objective when idle (P2): 3/3 · User Story 3 — Memories, beliefs, narrative (P3): 3/3 · Polish & Cross-Cutting: 5/5). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
