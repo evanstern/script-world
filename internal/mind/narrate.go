@@ -119,6 +119,14 @@ func (md *Mind) chronicleNote(e store.Event) {
 		if json.Unmarshal(e.Payload, &p) == nil {
 			line = fmt.Sprintf("%s gave %s %s.", name(p.From), name(p.To), p.Kind)
 		}
+	case "social.chest_taken":
+		// spec 013 (storage, T034): the theft story — same narrative weight
+		// as a broken promise (a trust violation), and the event exists
+		// specifically as chronicle/TUI material (social.go doc comment).
+		var p sim.ChestTakenPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			line = fmt.Sprintf("%s took from %s's chest without asking.", name(p.Taker), name(p.Owner))
+		}
 	case "social.promise_broken":
 		var p sim.PromiseBrokenPayload
 		if json.Unmarshal(e.Payload, &p) == nil {

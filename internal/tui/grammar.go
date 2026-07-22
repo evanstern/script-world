@@ -53,11 +53,17 @@ var agentIndexFields = map[string]bool{
 	"agent": true, "a": true, "b": true,
 	"from": true, "to": true,
 	"speaker": true, "listener": true, "subject": true,
+	// spec 013 (storage): agent.withdrew's Owner and social.chest_taken's
+	// Owner/Taker are agent-index fields too (T034 gap — chest_taken was
+	// added as chronicle/TUI material per its doc comment, but owner/taker
+	// weren't in this table, so the raw feed and inspector rendered them as
+	// bare integers instead of names).
+	"owner": true, "taker": true,
 }
 
 // agentIndexFieldRe matches `"<field>":<int>` for the known agent-index
 // fields, in the original payload's field order.
-var agentIndexFieldRe = regexp.MustCompile(`"(agent|a|b|from|to|speaker|listener|subject)":(-?\d+)`)
+var agentIndexFieldRe = regexp.MustCompile(`"(agent|a|b|from|to|speaker|listener|subject|owner|taker)":(-?\d+)`)
 
 // agentName resolves an index against the roster; out-of-range indices
 // render as "#N" rather than panicking or silently dropping the field.

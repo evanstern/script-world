@@ -133,7 +133,7 @@ minute; chest food and all non-food immortal; rot events chronicle-visible.
 
 - [X] T032 [US5] Rot sweep on the per-game-minute heartbeat in `internal/sim/executor.go`: pile slice order, `SpoilAt ≤ tick` batches emit `sim.food_rotted{x,y,kind,n}` (same-kind merged per pile per sweep); reducer removes spoiled batches + empties piles in `internal/sim/state.go` (research R6)
 - [X] T033 [US5] Tests in `internal/sim`: rot inside window +1 minute (SC-004), non-food immortal, chest immunity, death-spill batches inherit fresh deadlines, rot-vs-pickup same-tick re-validation (spec edge case), replay byte-identity incl. `spoil_at` deadlines
-- [ ] T034 [P] [US5] TUI/chronicle observability pass in `internal/tui/views.go`: verify SC-006 answerable end-to-end (piles, chests, owner, bulk) and storage happenings (first chest, taking, rot, death-site recovery) appear in the chronicle feed; fill any gaps found (Sonnet-ok)
+- [X] T034 [P] [US5] TUI/chronicle observability pass in `internal/tui/views.go`: verify SC-006 answerable end-to-end (piles, chests, owner, bulk) and storage happenings (first chest, taking, rot, death-site recovery) appear in the chronicle feed; fill any gaps found (Sonnet-ok)
 
 **Checkpoint**: chests have their mechanical job; the loop closes.
 
