@@ -1,10 +1,10 @@
 ---
 id: TASK-52
 title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-22 18:34'
+updated_date: '2026-07-22 19:07'
 labels:
   - agent-mind
   - llm
@@ -16,6 +16,7 @@ ordinal: 2000
 
 ## Description
 
+<!-- SECTION:DESCRIPTION:BEGIN -->
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Prerequisite for the agent-authored journal in TASK-16 and any future agent-callable capability.
 
@@ -32,6 +33,9 @@ Design considerations to resolve in the spec:
 First consumer: TASK-16 journal tools (write_journal_entry, search_journal, optional read_journal / delete_from_journal). Spec via Spec Kit before implementation per constitution.
 <!-- SECTION:DESCRIPTION:END -->
 
+Spec: specs/017-agent-tool-loop
+<!-- SECTION:DESCRIPTION:END -->
+
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Mind LLM calls can declare tools; a loop executes model tool calls via a registry and feeds results back until a final answer, with a hard iteration/budget cap
@@ -39,7 +43,21 @@ First consumer: TASK-16 journal tools (write_journal_entry, search_journal, opti
 - [ ] #3 Works on at least one local-tier and the cloud-tier provider, with an explicit documented fallback for tiers that cannot tool-call reliably
 - [ ] #4 Metering/governor accounts for multi-call cognitions (estimates + calibration remain sane)
 - [ ] #5 Tool-call trace is first-class and correlatable end-to-end: every tool call is a recorded artifact (including rejected/never-grounded calls), and downstream grounding events link back to the causing call — e.g. JobID carried into IntentSetPayload — so 'tool call → verdict → grounding chain' is queryable from the event log without adjacency inference
+- [ ] #6 Spec phase: Setup
+- [ ] #7 Spec phase: Foundational (blocking all stories)
+- [ ] #8 Spec phase: User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP
+- [ ] #9 Spec phase: User Story 2 — replay reproduces state without re-running loops (P1)
+- [ ] #10 Spec phase: User Story 3 — every tool call is a first-class correlatable artifact (P2)
+- [ ] #11 Spec phase: User Story 4 — both tiers + documented fallback (P2)
+- [ ] #12 Spec phase: User Story 5 — governor stays sane on multi-call cognitions (P3)
+- [ ] #13 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Full Spec Kit at specs/017-agent-tool-loop: spec (3 clarifications resolved with Evan 2026-07-22), plan, research R1-R15, data-model, contracts (loop-api, events, provider-wire), quickstart, tasks (28 tasks, 8 phases). Architecture: internal/llm gains tool-call transport (Tools/Turns/ToolCalls, one Submit stays one metered call); NEW internal/toolloop drives the bounded loop (cap 8 rounds default, one landed acting call per cognition, read tools exempt); mind planner + metatron turn migrate; scheduled musing deleted (muse = roster choice); cloud native Anthropic tools, local native-first with per-model json-envelope fallback; cog.tool_call artifact events + IntentSetPayload.Job (omitempty) close the AC#5 correlation chain; governor observes whole-loop wall time, meter stays per-call. Implementation in .worktrees/task-52, one PR.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
@@ -51,4 +69,6 @@ First consumer: TASK-16 journal tools (write_journal_entry, search_journal, opti
 4. Core principle to preserve verbatim in the spec: a tool call is a REQUEST; an event is the FACT; the gate decides; the executor grounds work in time and space. Speaking/musing/thinking are tools too — game-state integrity applies to expression, not just world mutation.
 
 2026-07-22 (with Evan): added the tool-call observability AC. Today (post-TASK-53) tool usage is visible only as the landing (agent.intent_set{goal, source} / agent.plan_set); the call itself has no independent record, and correlating a completion back to its causing thought requires agent+adjacency inference (cog.outcome carries the job id, IntentSetPayload does not). Fold the cure into this task's loop design: the request artifact plus JobID threading on IntentSetPayload (additive payload field — verify snapshot/replay byte-stability for old logs via omitempty, the TASK-32 pattern). Related registry note: a numeric ParamKind (for storage-verb qty) is also owed to this task — recorded in specs/014-tool-registry/contracts/tool-catalog.md.
+
+2026-07-22 planning session (Fable 5): spec 017 authored+clarified+planned+tasked; linked via spec-bridge. Clarification decisions (Evan): local tier native-first w/ per-model json fallback; scheduled musing channel removed NOW; scope = villager planner + metatron turn. Tier decision per constitution v1.1.0 Principle V rubric: Opus 4.8 for T005-T015, T018, T020, T023-T025 (cross-package llm/cognition/mind/metatron orchestration, concurrency, doctrine-adjacent landing-door behavior); Sonnet for T002-T004, T016-T017, T019, T021-T022, T026 (single-package registry additions, additive sim payloads with pinned byte-stability contracts, docs). Justification: the loop driver, transport, and channel removal touch internal/llm + internal/cognition + internal/mind orchestration = senior tier per rubric; registry/payload slices are routine with explicit contracts.
 <!-- SECTION:NOTES:END -->
