@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-22 18:53'
-updated_date: '2026-07-22 19:15'
+updated_date: '2026-07-22 20:25'
 labels:
   - events
   - tui
@@ -46,4 +46,8 @@ Spec: specs/018-chronicle-digest
 
 <!-- SECTION:NOTES:BEGIN -->
 Tier decision (constitution V rubric): Sonnet — routine slice: single-package view/rendering code (internal/tui only), tests alongside code, doc reconciliation; no concurrency/governor logic, not doctrine-adjacent. Escalation to Opus 4.8 only if a slice fails gates. Plan of record: specs/018-chronicle-digest (plan.md, research R1-R8, contracts/digest-grammar.md, tasks.md 27 tasks). Implementation delegated to spec-implementer in .worktrees/task-60 (branch task-60-chronicle-digest), slice 1 = T001-T015 (Setup+Foundational+US1 MVP), slice 2 = T016-T026 (US2+US3+Polish).
+
+Slice 1 (T002-T015) gated and accepted 2026-07-22: registry (~86 entries incl. companion types), v2 line shape + column assembly, sweep test green both directions, full suite green, gate-proves-itself check passed. 7 contract template rows reconciled to verified payload fields (commit e8a1c52 on task branch). Implementer decisions accepted: intent_set target-presence heuristic, %.2f telemetry floats, doc cross-check filters file-path backticks.
+
+Slice 2 (T016-T026) gated and accepted 2026-07-22: detail pane (bottom split, J/K scroll, ⏎ reserved as extension point), family palette recorded in chronicle-grammar.md, segment-wise styling with plain-equivalence regression test (caught+fixed a dock ellipsis bug pre-ship), 3 design docs reconciled, full suite green. Live PTY walkthrough (expect-driven, throwaway world): digest feed, inspect selection, DETAIL pane, resume/quit verified end-to-end; colors/alignment eyeball deferred to PR review. PR #37 open: https://github.com/evanstern/promptworld/pull/37. Post-merge remaining: wiki-update re-pin (T027), spec-bridge sync, worktree cleanup.
 <!-- SECTION:NOTES:END -->
