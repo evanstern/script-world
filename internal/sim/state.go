@@ -32,14 +32,14 @@ type State struct {
 	// a field-absent snapshot is a valid ungoverned state.
 	RequestedSpeed clock.Speed `json:"requested_speed,omitempty"`
 	Degraded       bool        `json:"degraded"`
-	EffectiveRate float64     `json:"effective_rate"`
-	Seed          uint64      `json:"seed"`
-	Night         bool        `json:"night"`
-	Agents        []Agent     `json:"agents"`
-	Structures    []Structure `json:"structures,omitempty"`
-	Cleared       []Point     `json:"cleared,omitempty"`
-	Harvested     []Harvest   `json:"harvested,omitempty"`
-	DenUses       []DenUse    `json:"den_uses,omitempty"`
+	EffectiveRate  float64     `json:"effective_rate"`
+	Seed           uint64      `json:"seed"`
+	Night          bool        `json:"night"`
+	Agents         []Agent     `json:"agents"`
+	Structures     []Structure `json:"structures,omitempty"`
+	Cleared        []Point     `json:"cleared,omitempty"`
+	Harvested      []Harvest   `json:"harvested,omitempty"`
+	DenUses        []DenUse    `json:"den_uses,omitempty"`
 	// Quarried (spec 012, US1) marks depleted rock outcrops — permanent in
 	// v1, no regrow entry (unlike Harvested/Cleared, which do regrow). A
 	// quarried tile is passable but NOT buildable and NOT quarryable again;

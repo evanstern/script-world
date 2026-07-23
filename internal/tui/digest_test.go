@@ -43,7 +43,7 @@ var catalogFixture = map[string]digestFixture{
 		`governor recovered 8x→16x debt=30% jobs=1`,
 	},
 	"daemon.started": {`{"tick":100,"recovery_ms":250}`, `tick=100 recovery_ms=250`},
-	"daemon.stopped":  {`{"tick":100}`, `tick=100`},
+	"daemon.stopped": {`{"tick":100}`, `tick=100`},
 
 	// --- sim ---
 	"sim.day_started":        {`{"day":3}`, `day 3 begins`},
