@@ -3,10 +3,10 @@ id: TASK-48
 title: >-
   Flaky test: TestEstimatorSampleCountUnderConcurrency loses samples under queue
   pressure
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 19:10'
-updated_date: '2026-07-23 04:59'
+updated_date: '2026-07-23 05:04'
 labels: []
 dependencies: []
 priority: medium
@@ -38,3 +38,9 @@ ROOT CAUSE (AC#1): test expectation bug, not an estimator defect. llm_test.go fi
 
 AC#2 evidence (orchestrator's independent run, commit 67c648b): go test ./internal/llm/ -count=10 → ok 8.435s; -race -count=5 on the fixed test → ok. Implementer (Opus 4.8) run also green: -count=10 ok 8.396s, vet clean, build clean. NOTE: one orchestrator gate run hung 10m in TestQueueBackpressure (NOT touched by this diff) under CPU contention from a concurrent session's go test — pre-existing flaw, filed as TASK-69.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged to main as PR #44 (merge 2f91252, fix commit 67c648b). Root cause: test expectation bug — the 40-wide synchronized burst races the cap-32 fail-fast tier queue (ErrQueueFull is designed backpressure); estimator was exact (samples==hits==completed calls in every failure). Fix: test-only — submit goroutine backs off 2ms and retries on ErrQueueFull, 5s deadline; assertions unchanged, llm.go untouched. Implemented by spec-implementer on Opus 4.8 (rubric: concurrency/scheduling in internal/llm); trivial spec exemption (surgical fix, file:line diagnosis on task). Gates: go test ./internal/llm/ -count=10 ok (implementer + orchestrator independently), -race -count=5 ok, vet/build clean, re-verified on merged main (0.374s). No wiki re-pin needed (no note sources llm_test.go). Side finding filed as TASK-69 (TestQueueBackpressure 10m hang under CPU contention).
+<!-- SECTION:FINAL_SUMMARY:END -->
