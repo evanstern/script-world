@@ -78,6 +78,33 @@ Default speed is 4x: 1 game minute per 15 real seconds; the watchable ladder top
 32x. `go test -race ./...` covers determinism (same seed → byte-identical history),
 crash recovery, the client protocol, and the model-output firewalls.
 
+## Setup & configuration
+
+**Prerequisites**: Go (build with `go build ./cmd/promptworld`); for AI minds, an
+OpenAI-compatible local endpoint (Ollama at `http://localhost:11434/v1` by default,
+e.g. `gemma4:12b-mlx`); optionally `ANTHROPIC_API_KEY` in the environment for the
+cloud narrative tier. No model configured? The world still runs — reflex-only minds.
+
+**All model traffic is configured in `llm.json`** in the world's save directory
+(written by `promptworld new`, read at daemon start). Since spec 024 it is a
+**provider registry + per-kind routing chains**:
+
+- `providers` — named model sources (transport `openai_compat` or `anthropic`,
+  endpoint, model, pricing, `parallel` worker slots, `tool_mode`,
+  `reasoning_effort`, opt-in `endpoint_capacity` for shared-endpoint coordination).
+- `routes` — every call kind (planner, conversation, consolidation, narrator, drama,
+  metatron, meeting) maps to an **ordered chain** of provider names. Chain order is
+  the whole routing policy: first admissible candidate serves; skips happen only for
+  mechanical reasons (circuit open / budget / queue full) and are recorded.
+- `monthly_budget_usd` — one global ceiling; spend is attributed per provider.
+- Pre-024 configs (`local`/`cloud` shape) load unchanged, forever — no migration.
+
+Where a call went and why is always visible: `promptworld status` shows the
+per-provider table (health, queue, inflight/slots, contended, spend), and
+`promptworld llm <world> <kind> "..."` prints the serving provider and any skips.
+`promptworld calibrate <world>` benchmarks each declared provider for the cognition
+horizon. Full operator reference: **[docs/llm-providers.md](docs/llm-providers.md)**.
+
 ## The cognition horizon (TASK-32)
 
 A model turn takes real wall time while game time keeps flowing — a ~50s local
@@ -120,21 +147,22 @@ tune it:
   verbatim; anything outside that range clamps to it with an operator warning at
   boot — never a boot failure, the same warn-not-error convention as
   `local.parallel`.
-- **`local.tool_mode` / `cloud.tool_mode`** — `"native"` (the default) speaks the
-  transport's first-class function-calling wire: OpenAI-compatible `tool_calls`
-  locally, Anthropic `tools` on cloud. `"json"` engages a provider-agnostic,
-  schema-constrained fallback for models whose native function-calling is
-  unreliable: tool declarations move into the system prompt and every round is
-  grammar-constrained to a small `{tool, args, say}` envelope emulating one tool
-  call. Anthropic cloud calls are always native and ignore the knob; `tool_mode`
-  is honored only by the `openai_compat` transport (the local tier, or the cloud
-  tier when `cloud.provider` is `openai_compat`).
+- **per-provider `tool_mode`** — `"native"` (the default) speaks the transport's
+  first-class function-calling wire: OpenAI-compatible `tool_calls`, or Anthropic
+  `tools`. `"json"` engages a provider-agnostic, schema-constrained fallback for
+  models whose native function-calling is unreliable: tool declarations move into
+  the system prompt and every round is grammar-constrained to a small
+  `{tool, args, say}` envelope emulating one tool call. The knob lives on each
+  provider entry and is honored only by the `openai_compat` transport — the
+  `anthropic` transport is always native and ignores it. (Legacy configs: the old
+  `local.tool_mode` / `cloud.tool_mode` fields keep working on the two derived
+  providers.)
 
 Flip a model's `tool_mode` to `"json"` when you see the symptoms of unreliable
 native function-calling: a run of `rejected_malformed` verdicts in the event log
 (the model can't hit the declared argument schema), or the model answering in
 plain prose instead of emitting a call at all. Both are the documented cue to
-switch that tier's knob — not a code change.
+switch that provider's knob — not a code change.
 
 Doctrine, unchanged by which wire shape is in play: a tool call is a request, never
 a fact; switching `tool_mode` changes how the request is transported, never what
