@@ -137,8 +137,10 @@ func (m Model) footerView() string {
 		return styleDim.Render("esc release · ⏎ send · ↑↓ history")
 	case m.inspecting():
 		return styleDim.Render("j/k select · J/K scroll detail · space resume · m ask")
+	case m.villagersVisible() && m.villDetail && m.villDecisions:
+		return styleDim.Render("j/k scroll · esc back · space pause · q quit")
 	case m.villagersVisible() && m.villDetail:
-		return styleDim.Render("esc back · space pause · q quit")
+		return styleDim.Render("d decisions · esc back · space pause · q quit")
 	case m.villagersVisible():
 		return styleDim.Render("j/k select · ⏎ inspect · space pause · q quit")
 	case isWidescreen(m.width) && m.solo:
@@ -1295,6 +1297,12 @@ func classifyTranscriptLine(l string) (label, text string, style lipgloss.Style)
 		return "you", strings.TrimPrefix(l, "you: "), lipgloss.NewStyle()
 	case strings.HasPrefix(l, "angel: "):
 		return "angel", strings.TrimPrefix(l, "angel: "), lipgloss.NewStyle()
+	case strings.HasPrefix(l, transcriptVerdictPrefix):
+		// spec 020 (TASK-63, contract R12): Metatron's own inline tool-call
+		// verdicts — styled as telemetry (dim), distinct from you:/angel:,
+		// and labeled so it wraps like a normal row instead of relying on
+		// clipContent's truncation.
+		return "note", strings.TrimPrefix(l, transcriptVerdictPrefix), styleFamilyCog
 	default:
 		return "", l, styleAgent
 	}
@@ -1432,10 +1440,14 @@ func (m Model) villagersBody(width, height int) string {
 	if m.replica == nil || len(m.replica.Agents) == 0 {
 		return styleHeader.Render("VILLAGERS") + "\n\n" + styleDim.Render("waiting for world state…")
 	}
-	if m.villDetail {
+	switch {
+	case m.villDetail && m.villDecisions:
+		return m.villagerDecisionsBody(width, height)
+	case m.villDetail:
 		return m.villagerDetailBody(width, height)
+	default:
+		return m.villagerRosterBody(width, height)
 	}
-	return m.villagerRosterBody(width, height)
 }
 
 // villagerRosterBody renders the roster with a selection cursor, dropping
@@ -1553,6 +1565,106 @@ func (m Model) villagerDetailBody(width, height int) string {
 		lines[i] = clipLine(l, width)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// villagerDecisionsBody renders the selected villager's decision chains
+// most-recent-first (spec 020, TASK-63, contract R9–R11): a when/class
+// header, the stimulus line, each call as "ordinal. tool — phrase (reason)"
+// in recorded order, and the terminal outcome line — or a visible
+// in-progress marker when no cog.outcome has arrived yet (FR-008).
+// Suppression-only chains (router held the thought back — no cog.thought,
+// no calls) render as a single "didn't think because…" entry instead
+// (renderDecisionChain). Clipped to the row budget with a render-time
+// scroll clamp (R10, the same "shed from the budget, never overflow"
+// discipline chronicleInspectBody/villagerDetailBody use); a villager with
+// no chains gets an explicit empty-state line rather than a blank pane
+// (R11). Dead villagers keep their chains — this reads straight from
+// m.traces, never m.replica.Agents[sel].Dead.
+func (m Model) villagerDecisionsBody(width, height int) string {
+	if height < 1 {
+		height = 1
+	}
+	sel := clampInt(m.villSelected, 0, len(m.replica.Agents)-1)
+	a := m.replica.Agents[sel]
+	header := styleHeader.Render(strings.ToUpper(a.Name) + " · decisions")
+
+	chains := m.traces.chainsFor(sel)
+	var content []string
+	if len(chains) == 0 {
+		content = []string{styleDim.Render("no decisions recorded yet this session")}
+	} else {
+		for i, c := range chains {
+			if i > 0 {
+				content = append(content, "")
+			}
+			content = append(content, renderDecisionChain(c)...)
+		}
+	}
+
+	budget := height - 2 // header + blank separator line
+	if budget < 1 {
+		budget = 1
+	}
+	maxScroll := len(content) - budget
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	scroll := clampInt(m.villDecisionsScroll, 0, maxScroll)
+	end := scroll + budget
+	if end > len(content) {
+		end = len(content)
+	}
+	visible := content[scroll:end]
+
+	lines := append([]string{header, ""}, visible...)
+	for i, l := range lines {
+		lines[i] = clipLine(l, width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderDecisionChain formats one decisionChain for the decisions sub-view
+// (contract R9). A fragment whose thought was never seen (mid-cognition
+// connect, FR-008) renders its class/stimulus as "unknown" rather than
+// blank — honest about what the client actually knows.
+func renderDecisionChain(c *decisionChain) []string {
+	when := clock.Format(c.Tick)
+	if c.Suppressed {
+		reason := c.OutcomeReason
+		if reason == "" {
+			reason = "no reason recorded"
+		}
+		return []string{fmt.Sprintf("%s · didn't think because %s", when, reason)}
+	}
+	class := c.Class
+	if class == "" {
+		class = "unknown"
+	}
+	stimulus := c.Stimulus
+	if stimulus == "" {
+		stimulus = "unknown — this chain's thought record wasn't seen"
+	}
+	lines := []string{fmt.Sprintf("%s · %s", when, class), "  stimulus: " + stimulus}
+	for _, call := range c.Calls {
+		lines = append(lines, fmt.Sprintf("  %d. %s", call.Ordinal, callLine(call.Tool, call.Verdict, call.Reason)))
+	}
+	lines = append(lines, "  "+decisionOutcomeLine(c))
+	return lines
+}
+
+// decisionOutcomeLine is a chain's terminal row: the outcome's plain-language
+// phrase plus its reason, or a visible in-progress marker when no
+// cog.outcome has arrived yet (FR-008: an in-flight cognition must render
+// honestly, never pretend a terminal state).
+func decisionOutcomeLine(c *decisionChain) string {
+	if c.Outcome == "" {
+		return "in progress — no outcome yet"
+	}
+	line := "outcome: " + verdictPhrase(c.Outcome)
+	if c.OutcomeReason != "" {
+		line += " (" + c.OutcomeReason + ")"
+	}
+	return line
 }
 
 // villagerIdentitySection is FR-003: name, awake/asleep/dead status,

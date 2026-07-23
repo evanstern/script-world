@@ -22,34 +22,34 @@ creation is orchestration, handled outside these tasks.)*
 
 **Purpose**: the projection and the glossary — every surface renders from these.
 
-- [ ] T002 Define `decisionChain`, `decisionCall`, `decisionTraces` types with bounds
+- [x] T002 Define `decisionChain`, `decisionCall`, `decisionTraces` types with bounds
       constant `decisionChainCap = 20` and the Metatron sentinel key, per
       data-model.md, in `internal/tui/decisions.go`
-- [ ] T003 Implement projection ingest `(*decisionTraces).ingest(e store.Event, names []string, ring []store.Event)`
+- [x] T003 Implement projection ingest `(*decisionTraces).ingest(e store.Event, names []string, ring []store.Event)`
       handling cog.thought / cog.tool_call / cog.outcome: job join, ordinal-ordered
       call insertion, attribution precedence (thought agent → outcome agent → villager
       job-ID regexp parse; `turn-metatron-` → sentinel; `conversation-` → skip),
       suppression detection (outcome with no thought/calls), per-agent cap eviction
       removing both indexes, in `internal/tui/decisions.go` (contract §1 R1–R4)
-- [ ] T004 Implement stimulus resolution at thought-ingest: trigger_seq 0 → cadence
+- [x] T004 Implement stimulus resolution at thought-ingest: trigger_seq 0 → cadence
       phrase; ring hit → `formatChronicleLine` summary flattened to plain text; miss →
       neutral "stimulus #N (before this view connected)" reference, stored on the
       chain, in `internal/tui/decisions.go` (research D3, contract R6)
-- [ ] T005 [P] Implement the verdict glossary `verdictPhrase(string) string` covering
+- [x] T005 [P] Implement the verdict glossary `verdictPhrase(string) string` covering
       all 8 toolloop verdicts + all 10 sim outcome strings with plain-language
       phrases and a safe generic fallback for unknown strings (never the raw enum),
       in `internal/tui/decisions.go` (contract §4 R15, R17)
-- [ ] T006 Wire the projection into the Model: add `traces decisionTraces` field,
+- [x] T006 Wire the projection into the Model: add `traces decisionTraces` field,
       initialize at `New`/`connectedMsg` (reset on reconnect, contract R5), call
       `ingest` from `applyEvent` after the seq-skip guard and replica fold, in
       `internal/tui/tui.go`
-- [ ] T007 Foundational tests in `internal/tui/decisions_test.go`: ingest join across
+- [x] T007 Foundational tests in `internal/tui/decisions_test.go`: ingest join across
       the three event types; out-of-order ordinal insertion; fragment chains
       (tool_call-first, outcome-first) with job-ID-parse attribution; conversation-job
       skip; metatron-sentinel attribution; suppression detection; cap eviction (21st
       chain evicts oldest from both indexes); stimulus resolution (cadence / ring hit
       / ring miss); reconnect reset via the Model
-- [ ] T008 [P] Glossary sweep test importing `internal/toolloop` verdict constants and
+- [x] T008 [P] Glossary sweep test importing `internal/toolloop` verdict constants and
       `internal/sim` outcome constants: every constant has a non-empty phrase that
       does not equal the raw enum string; unknown-verdict fallback covered, in
       `internal/tui/decisions_test.go` (contract R16 — mechanical proof of SC-002)
@@ -65,21 +65,21 @@ chains most-recent-first.
 (stimulus, class, calls with plain-language verdicts + reasons, outcome); `j`/`k`
 scroll; `esc` unwinds.
 
-- [ ] T009 [US1] Add `villDecisions bool` + `villDecisionsScroll int` Model state with
+- [x] T009 [US1] Add `villDecisions bool` + `villDecisionsScroll int` Model state with
       resets (villager change, detail close, reconnect) and extend
       `handleVillagersKey`: `d` toggles decisions while detail is open, `j`/`k`
       scroll while decisions is open, `esc` unwinds decisions → detail → roster ahead
       of the existing chain, in `internal/tui/tui.go` (contract R7)
-- [ ] T010 [US1] Implement `villagerDecisionsBody(width, height int) string` rendering
+- [x] T010 [US1] Implement `villagerDecisionsBody(width, height int) string` rendering
       the selected villager's chains most-recent-first — when/class header, stimulus
       line, per-call `tool — phrase (reason)` rows, terminal outcome line or
       in-progress marker, suppression entries, explicit empty state — clipped to the
       row budget with render-time scroll clamp, in `internal/tui/views.go`
       (contract R9–R11)
-- [ ] T011 [US1] Dispatch the decisions body from the villagers pane render path and
+- [x] T011 [US1] Dispatch the decisions body from the villagers pane render path and
       add the `d decisions` hint to the detail view (and the decisions view's own
       footer/hint line), in `internal/tui/views.go` (contract R8)
-- [ ] T012 [US1] US1 tests: key routing (`d` toggle gated on detail; scroll; esc
+- [x] T012 [US1] US1 tests: key routing (`d` toggle gated on detail; scroll; esc
       unwind order; no silent no-ops), rendering (chain order, in-progress marker,
       suppression row, empty state, dead villager retains chains, exact-height
       clipping at small budgets, scroll reveal), in `internal/tui/decisions_test.go`
