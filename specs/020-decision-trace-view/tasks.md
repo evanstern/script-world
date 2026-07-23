@@ -14,7 +14,7 @@ All work lands in `internal/tui/` on the single TASK-63 branch.
 *(No scaffolding needed — existing package, existing toolchain. Worktree/branch
 creation is orchestration, handled outside these tasks.)*
 
-- [ ] T001 Create `internal/tui/decisions.go` with package doc comment naming the
+- [x] T001 Create `internal/tui/decisions.go` with package doc comment naming the
       feature (spec 020, TASK-63) and `internal/tui/decisions_test.go` with the test
       file skeleton, both compiling empty (`go build ./internal/tui/`)
 
