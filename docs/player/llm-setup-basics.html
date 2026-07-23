@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="docs/llm-providers.md@258305048f05dd56f8400387421541f9a96540df">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="README.md@8fa82e1a4deefb4f7d3923b334ef85f25cf2c298">
+<title>AI setup basics — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>AI setup basics</h1>
+<p class="lede">The minimum you need to know about <code>llm.json</code> to get
+AI-driven villagers running. For the full operator-level reference, see
+<code>docs/llm-providers.md</code> — this page only covers "get it working."</p>
+
+<h2>You don't need this to play at all</h2>
+<p>promptworld runs perfectly well with no AI configured — villagers just act on
+simple built-in behavior instead of model-driven decisions ("reflex-only"). If you
+delete or never set up <code>llm.json</code>, that's exactly what you get: a working,
+watchable village, just without the AI layer described on the
+<a href="the-ai-behind-the-village.html">previous page</a>.</p>
+
+<h2>Where the configuration lives</h2>
+<p><code>promptworld new</code> automatically writes an <code>llm.json</code> file
+into your world's save directory with sensible defaults already filled in — you don't
+have to write one from scratch. It's read once, when the daemon starts; if you edit
+it, restart the world for the change to take effect:</p>
+<pre><code>promptworld stop demo
+promptworld start demo</code></pre>
+
+<h2>The easiest path: a local model</h2>
+<p>For everyday villager decisions, promptworld expects an OpenAI-compatible model
+server running on your own machine — <a href="https://ollama.com">Ollama</a> is the
+common choice, listening at <code>http://localhost:11434/v1</code> by default with a
+model such as <code>gemma4:12b-mlx</code> loaded. Install Ollama, pull a model, make
+sure it's running, and the default <code>llm.json</code> promptworld already wrote
+will find it — no editing required for the simplest setup.</p>
+
+<h2>Optional: the cloud tier</h2>
+<p>A handful of higher-value moments — nightly memory digestion, the narrated
+chronicle, and Metatron's own conversation with you — are worth spending on a
+higher-quality cloud model instead of the local one. To enable that tier, set an
+<code>ANTHROPIC_API_KEY</code> environment variable before starting the daemon; the
+key itself is never written into <code>llm.json</code>, only the name of the
+environment variable that holds it. Skip this and those moments simply don't run —
+nothing else breaks.</p>
+
+<h2>Checking it's actually working</h2>
+<ul>
+<li><code>promptworld status demo</code> (and the Metatron pane in the full-screen
+client) shows you, per configured model, whether it's up, how busy it is, and how
+much you've spent this month.</li>
+<li><code>promptworld llm demo planner "..."</code> fires one test call directly and
+tells you which model actually answered.</li>
+<li><code>promptworld calibrate demo</code> benchmarks your setup and tells you which
+game speeds are safe to run at with your hardware and model choice — worth running
+once after any setup change.</li>
+</ul>
+
+<h2>If something looks broken</h2>
+<p>If villagers seem to be getting stuck or the log shows a run of malformed
+responses, some smaller local models are unreliable at the structured "tool calling"
+promptworld's AI-driven decisions rely on. There's a per-model fallback setting for
+exactly this case, covered along with everything else past this "get it working"
+level — multiple models, custom routing, spending limits, and upgrading an older
+configuration — in the full operator reference: <strong>docs/llm-providers.md</strong>.
+This page intentionally stops here; that guide is where the deeper knobs live.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>

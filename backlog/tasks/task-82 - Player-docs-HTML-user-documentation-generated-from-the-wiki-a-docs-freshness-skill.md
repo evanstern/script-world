@@ -3,10 +3,10 @@ id: TASK-82
 title: >-
   Player docs: HTML user documentation generated from the wiki + a
   docs-freshness skill
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 18:06'
-updated_date: '2026-07-23 18:26'
+updated_date: '2026-07-23 18:59'
 labels:
   - docs
 dependencies: []
@@ -30,17 +30,19 @@ Spec: specs/026-player-docs
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A docs folder of self-contained HTML player pages exists, covering at minimum: getting started (install→new→start→attach), playing via Metatron + charter, time/speed/pause, reading the chronicle/story, and a plain-language 'the AI behind the village' page
-- [ ] #2 Every page records the wiki notes + commit it was rendered from; a skill regenerates stale pages and offers a check mode that reports staleness without writing
-- [ ] #3 The skill is planted as a project skill and documented (name + when to run) in CLAUDE.md or the skill's own description; running it twice in a row is a no-op
-- [ ] #4 Player docs contain no facts that contradict docs/wiki at their pinned commit (spot-audit recorded on this task)
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (blocks all user stories)
-- [ ] #7 Spec phase: User Story 1 — new player gets to a running world (P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — player learns to play (P2)
-- [ ] #9 Spec phase: User Story 3 — provable freshness (P3)
-- [ ] #10 Spec phase: Polish & Validation
+- [x] #1 A docs folder of self-contained HTML player pages exists, covering at minimum: getting started (install→new→start→attach), playing via Metatron + charter, time/speed/pause, reading the chronicle/story, and a plain-language 'the AI behind the village' page
+- [x] #2 Every page records the wiki notes + commit it was rendered from; a skill regenerates stale pages and offers a check mode that reports staleness without writing
+- [x] #3 The skill is planted as a project skill and documented (name + when to run) in CLAUDE.md or the skill's own description; running it twice in a row is a no-op
+- [x] #4 Player docs contain no facts that contradict docs/wiki at their pinned commit (spot-audit recorded on this task)
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (blocks all user stories)
+- [x] #7 Spec phase: User Story 1 — new player gets to a running world (P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — player learns to play (P2)
+- [x] #9 Spec phase: User Story 3 — provable freshness (P3)
+- [x] #10 Spec phase: Polish & Validation
 <!-- AC:END -->
+
+
 
 ## Implementation Plan
 
@@ -52,4 +54,36 @@ Full Spec Kit per constitution v1.1.0: spec'd as specs/026-player-docs (spec/pla
 
 <!-- SECTION:NOTES:BEGIN -->
 Model tier: Sonnet (default implementation tier). Rubric: doc/rendering + a standalone zero-dependency Node script — single-package, no concurrency/scheduling/governor logic, not doctrine-adjacent, no prior failed attempt. No escalation triggers met.
+
+Implementation complete on branch task-82-player-docs — PR #53 open (https://github.com/evanstern/promptworld/pull/53), awaiting merge (merge blocked for the agent by permission policy; operator to merge). All 15 spec tasks ticked; quickstart V1–V6 pass. check-freshness: 7 fresh, 0 stale, 0 missing, 0 broken-ref (exit 0), regeneration no-op verified. No wiki note lists any changed file as a source — no wiki re-pin needed.
+
+Grounding spot-audit (AC #4, quickstart V6) — 17 claims, zero contradictions:
+| Page | Claim | Source@pin | Verdict |
+| getting-started | go build ./cmd/promptworld builds it; no AI configured → world still runs (reflex-only) | README.md@8fa82e1a | CONFIRMED |
+| getting-started | promptworld new demo --seed 42 creates a world under ~/.promptworld/worlds/demo | README.md@8fa82e1a | CONFIRMED |
+| getting-started | quitting attach/ui only detaches; the world keeps running | cli-promptworld.md@056c53a1 | CONFIRMED |
+| playing-via-metatron | Metatron is the sole player verb; charter.md read fresh every turn, edits live immediately | metatron.md@8ada1050 | CONFIRMED |
+| playing-via-metatron | time-snap miracle costs 2 charges, others 1; a villager can never be removed | metatron-miracles.md@8ada1050 | CONFIRMED |
+| playing-via-metatron | villagers meet once per game day; village_charter.md distinct from Metatron's charter.md | governance.md@fdd311a7 | CONFIRMED |
+| time-and-speed | 1 tick = 1 game second; day 1 starts 06:00; default 4x = 1 game min/15 real sec; 32x tops watchable ladder | game-clock.md@c8fe4132 | CONFIRMED |
+| time-and-speed | no catch-up bursts — honest slowdown; pause freezes, in-flight thoughts land at frozen tick | sim-loop.md@6b869e1c | CONFIRMED |
+| reading-the-story | chronicle is the catch-up mechanism; quiet day/night spends no call; no llm.json → no narrated story | chronicle.md@fdd311a7 | CONFIRMED |
+| reading-the-story | raw feed 'r' toggle is the automatic fallback when no narrated entries exist | tui-client.md@056c53a1 | CONFIRMED |
+| reading-the-story | events are append-only; schema enforces it | event-log.md@8be4440a | CONFIRMED |
+| the-ai-behind-the-village | persona vs soul split (fixed vs grown); persona.md has no post-genesis write path | agent-mind.md@056c53a1 | CONFIRMED |
+| the-ai-behind-the-village | nightly consolidation has no write path to persona.md; drift-lexicon validator rejects temperament drift | nightly-consolidation.md@8ada1050 | CONFIRMED |
+| the-ai-behind-the-village | surviving local-vs-cloud distinction is pricing class; zero-priced providers never budget-refused | llm-orchestrator.md@056c53a1 | CONFIRMED |
+| the-ai-behind-the-village | rumor confidence decays ×4/5 per hop; conversations paraphrase on retell | social-fabric.md@056c53a1 | CONFIRMED |
+| llm-setup-basics | legacy two-entry (local/cloud) llm.json shape loads forever, byte-identical | docs/llm-providers.md@2583050 | CONFIRMED |
+| llm-setup-basics | API keys never stored in llm.json, only the env-var name | docs/llm-providers.md@2583050 | CONFIRMED |
+
+Audit methodology: wiki-note claims verified against note content at HEAD (the notes' verified_against pins name the CODE commit each note was verified against, not the note file's own blob — the note text itself postdates the pin by construction); README/llm-providers pins are last-touching commits, verified literally via git show.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocks all user stories): 1/1 · User Story 1 — new player gets to a running world (P1) 🎯 MVP: 2/2 · User Story 2 — player learns to play (P2): 6/6 · User Story 3 — provable freshness (P3): 3/3 · Polish & Validation: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocks all user stories): 1/1 · User Story 1 — new player gets to a running world (P1) 🎯 MVP: 2/2 · User Story 2 — player learns to play (P2): 6/6 · User Story 3 — provable freshness (P3): 3/3 · Polish & Validation: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/nightly-consolidation.md@8ada1050cc5b108790d0e48640dba0b985632e25">
+<meta name="promptworld-docs:source" content="docs/wiki/social-fabric.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<title>The AI behind the village — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>The AI behind the village</h1>
+<p class="lede">What's actually "thinking" for your villagers, what's just habit, and
+why some decisions use a fast cheap model while others use a slower, better one.</p>
+
+<h2>Nature and soul: what stays fixed, what grows</h2>
+<p>Every villager starts with a written personality — their nature — set once when
+the world is created and never changed again for the rest of that villager's life. On
+top of that fixed nature, each villager accumulates a "soul": a growing record of
+memories, beliefs, and a sense of who they're becoming, shaped by everything that
+happens to them. The short version: a villager's souls change over time, but their
+underlying nature doesn't. That split is enforced, not just a design intention — see
+below.</p>
+
+<h2>Not everything needs an AI call</h2>
+<p>Plenty of what a villager does — walking somewhere, eating, sleeping, basic
+reactions — happens instantly through simple built-in rules, no AI model involved at
+all. Bigger moments — deciding what to do next, how to respond in a conversation, what
+to say — go through an actual AI model "thinking" as that villager, using their
+persona and recent memories as the basis for the decision. This mix is why a village
+can run smoothly at high speed instead of grinding to a halt waiting on AI responses
+for every little thing: most of a villager's second-to-second existence is free,
+and AI is spent where it actually matters.</p>
+
+<h2>Local model vs. cloud model</h2>
+<p>promptworld can split AI work across two kinds of models: a fast, typically free
+model running on your own computer for high-volume, routine decisions (like the
+everyday choices villagers make while going about their day), and a slower but
+higher-quality cloud model reserved for the handful of things worth paying real
+quality for — most notably nightly memory digestion (below) and the narrated
+<a href="reading-the-story.html">chronicle</a>, plus Metatron's own conversation with
+you. This split is configurable, and the
+<a href="llm-setup-basics.html">setup basics page</a> walks through the minimum you
+need to turn it on.</p>
+
+<h2>Why villagers sometimes feel more "on autopilot" at very high speed</h2>
+<p>An AI model takes real wall-clock time to respond, but the game world keeps ticking
+during that time. At very high game speeds, a slow decision risks arriving too late to
+still make sense for the moment it was meant for. Rather than let a stale decision land
+anyway, the game simply falls back to the simple built-in behavior for that moment
+instead. You may notice villagers acting a bit more routine-driven at the fastest
+speeds — that's this trade-off in action, not a bug; dial the speed back down and
+full AI-driven decisions resume.</p>
+
+<h2>Sleep is when a soul actually grows</h2>
+<p>Once a night, when a villager sleeps, one AI call (using the higher-quality cloud
+model) reviews everything memorable that happened to them that day and folds it into
+their permanent soul: some memories get promoted as worth keeping long-term, some fade
+away, new beliefs form (each one noting how sure the villager is, and whether they
+witnessed it themselves, were told, or simply inferred it), and their short
+self-narrative — "who I am becoming" — gets updated. Crucially, this process is not
+allowed to touch the villager's underlying nature: a separate, purely mechanical check
+throws out any digestion attempt that starts drifting the villager's fundamental
+temperament. The nightly digest can only grow the soul; it can never rewrite the
+nature underneath it.</p>
+
+<h2>Relationships, gossip, and grudges</h2>
+<p>Villagers keep track of how they feel about each other — trust and fondness that
+rise and fall based on what actually happens between them: talking, giving gifts,
+breaking a promise, or taking from someone's storage chest without asking (which is
+noticed and remembered, and damages the relationship, even though the goods still
+change hands). Rumors spread from villager to villager, getting slightly reworded each
+time they're retold, and a villager's confidence in a rumor fades the more times it's
+been passed along — exactly how gossip behaves in real life. None of this is
+decoration: real grudges and real friendships form from it, and you can read the
+results — arguments, favors, broken promises — right in the
+<a href="reading-the-story.html">chronicle</a>.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>

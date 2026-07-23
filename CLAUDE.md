@@ -50,6 +50,10 @@ grounding-wiki (docs/wiki) ──corpus──▶ codebase-to-course (docs/course
   Payloads ride the gitignored `.handoff/` transport; evidence lives in tracked state.
 - **Grounding freshness:** `docs/wiki/` is load-bearing, not decoration. Changes that touch
   pinned sources aren't done until the wiki is re-pinned (`/grounding-wiki:wiki-update`).
+- **Player docs:** `docs/player/` (plain-language HTML for non-engineers) is generated from
+  the wiki + README.md + docs/llm-providers.md by the `player-docs` project skill — run it
+  after `/grounding-wiki:wiki-update` re-pins notes; check freshness with
+  `node .claude/skills/player-docs/scripts/check-freshness.mjs --check`.
 
 <!-- pdlc:peer:backlog BEGIN -->
 ## Backlog.md — the board (officially supported peer)
