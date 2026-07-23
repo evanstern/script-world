@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 15:26'
+updated_date: '2026-07-23 15:35'
 labels:
   - engine
   - llm
@@ -44,7 +44,16 @@ Spec: specs/024-provider-routing
 <!-- AC:BEGIN -->
 - [x] #1 A design session produces a durable design doc (decision record or spec) defining the routing criteria, provider registry shape, and fallback-chain semantics
 - [x] #2 The design states how routing interacts with the spend meter, circuit breakers, and the TASK-24 contention scenario
-- [ ] #3 Follow-on implementation tasks (or a Spec Kit spec) are cut from the design and placed on the board
+- [x] #3 Follow-on implementation tasks (or a Spec Kit spec) are cut from the design and placed on the board
+- [ ] #4 Spec phase: Setup
+- [ ] #5 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #6 Spec phase: User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP
+- [ ] #7 Spec phase: User Story 2 — Division of labor: per-provider speed truth (Priority: P2)
+- [ ] #8 Spec phase: User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3)
+- [ ] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
+- [ ] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
+- [ ] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
+- [ ] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -61,4 +70,8 @@ Live evidence for this design session (2026-07-21): local server parallelizes na
 Re-grounding 2026-07-22: no drift — kind-to-tier table (llm.go:61) and breaker/queue machinery hold. Mechanical prereq TASK-45 (parallel local tier workers) is Done. TASK-24's endpoint-contention findings feed this session; its advisory-lock option may be subsumed by the per-endpoint concurrency guard designed here.
 
 Design session complete (2026-07-23): doctrine recorded as decision-5 (registry + deterministic ordered chains; chain order IS the quality statement; one wallet with per-provider attribution; per-provider breaker/queue/lane/workers/estimator; endpoint-capacity advisory leases subsuming TASK-24; persona scene pinning; legacy llm.json equivalence). Spec specs/024-provider-routing authored on branch task-35-provider-routing (6 prioritized stories: registry+legacy equivalence P1 MVP, division of labor P2, chain-walking fallback + scene pinning P3, one wallet P4, endpoint leases P5, status/TUI legibility P6; 18 FRs, 8 SCs; quality checklist all-pass). AC1+AC2 proven by decision-5 + spec. Next: speckit-plan / speckit-tasks on the branch, then delegated implementation (Opus 4.8 rubric tier — concurrency/scheduling in internal/llm).
+
+spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 0/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 0/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 0/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 0/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/3
+
+AC-3 proven: follow-on implementation cut from the design as spec 024's tasks.md (19 tasks, 9 phases) and mirrored onto this task as Spec-phase ACs via spec-bridge. Tier decisions per constitution V recorded in plan.md slice map: Phases 1-8 (US1-US5 + engine polish) → spec-implementer on Opus 4.8 (concurrency/scheduling/governor logic in internal/llm + cross-package seams: cognition, mind, toolloop, ipc); Phase 9 (US6 status/TUI/CLI surfacing) → Sonnet (view/rendering code).
 <!-- SECTION:NOTES:END -->
