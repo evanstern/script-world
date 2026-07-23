@@ -4,7 +4,7 @@ title: Behavioral test coverage for metatron and persona packages
 status: In Progress
 assignee: []
 created_date: '2026-07-23 06:35'
-updated_date: '2026-07-23 15:16'
+updated_date: '2026-07-23 15:32'
 labels:
   - review-2026-07-22
   - code-quality
@@ -27,15 +27,15 @@ Spec: specs/023-metatron-persona-tests
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every metatron source file has behavioral coverage of its exported seams; charge economy and fixed-frame composition tested explicitly
-- [ ] #2 Persona genesis-once, file modes, and cross-map alignment covered incl. a sweep test over the index-aligned maps
-- [ ] #3 All new tests run under -race with no network (scripted stubs only)
+- [x] #1 Every metatron source file has behavioral coverage of its exported seams; charge economy and fixed-frame composition tested explicitly
+- [x] #2 Persona genesis-once, file modes, and cross-map alignment covered incl. a sweep test over the index-aligned maps
+- [x] #3 All new tests run under -race with no network (scripted stubs only)
 - [ ] #4 Wiki testing-strategy note updated with the new coverage
-- [ ] #5 Spec phase: Setup (Shared Infrastructure)
-- [ ] #6 Spec phase: User Story 1 - Metatron economy and turn dispatch are provably correct (Priority: P1) 🎯 MVP
-- [ ] #7 Spec phase: User Story 2 - Instruction-surface composition is pinned by tests (Priority: P2)
-- [ ] #8 Spec phase: User Story 3 - Persona lifecycle guarantees are enforced by tests (Priority: P3)
-- [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #5 Spec phase: Setup (Shared Infrastructure)
+- [x] #6 Spec phase: User Story 1 - Metatron economy and turn dispatch are provably correct (Priority: P1) 🎯 MVP
+- [x] #7 Spec phase: User Story 2 - Instruction-surface composition is pinned by tests (Priority: P2)
+- [x] #8 Spec phase: User Story 3 - Persona lifecycle guarantees are enforced by tests (Priority: P3)
+- [x] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,4 +53,6 @@ Spec: specs/023-metatron-persona-tests
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-07-23: Spec Kit flow complete (specify → plan → tasks), spec linked via spec-bridge. Clarify skipped: board card detailed + re-verified, zero NEEDS CLARIFICATION markers survived spec validation. Implementation starting on Sonnet spec-implementer.
+
+2026-07-23: Implementation complete on Sonnet spec-implementer (3 commits on task-74-metatron-persona-tests), gated by planning session: diff scope verified (2 test files + wiki note only, 602 insertions, zero production changes), fresh go test -race -count=1 green on both packages, full suite green, R1 anti-duplication review of the diff passed. 12 new tests: charge mirror accrual/cap, concurrent ErrTurnBusy, Observe backpressure, absorb mirrors, tailOfFile/soulTail/transcriptTail; persona 4-map sweep, anchor≡temperament, unreadable-load degrade, genesis charter/journal seeding, SecretEvents. No production defects surfaced. tasks.md T001-T015 ticked. PR #49 open and mergeable — merge blocked by session permissions, awaiting operator. AC #4 completes with post-merge wiki-update re-pin. Implementer flagged: quickstart/plan '~25s' full-suite baseline is stale — real baseline ~190s (e2e dominates); pre-existing, noted for future planning docs.
 <!-- SECTION:NOTES:END -->
