@@ -17,12 +17,13 @@ func namesOf(tools []Tool) []string {
 	return out
 }
 
-// TestLoopRosterVillagerContents (spec 017 contracts/loop-api.md): the
-// villager loop roster is exactly the legacy world verbs (registration
-// order), then set_plan, then muse — say/gist stay scene-gated and out of
-// the loop roster this task (data-model.md §2).
+// TestLoopRosterVillagerContents (spec 017 contracts/loop-api.md, extended by
+// spec 019): the villager loop roster is the legacy world verbs (registration
+// order), then set_plan, then muse, then the four journal tools (spec 019, US3).
+// say/gist stay scene-gated and out of the loop roster.
 func TestLoopRosterVillagerContents(t *testing.T) {
-	want := append(append(append([]string{}, wantWorldOrder...), "set_plan"), "muse")
+	want := append(append([]string{}, wantWorldOrder...), "set_plan", "muse",
+		"write_journal_entry", "delete_from_journal", "search_journal", "read_journal")
 	got := namesOf(LoopRosterVillager())
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoopRosterVillager() names =\n%v\nwant\n%v", got, want)

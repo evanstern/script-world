@@ -72,6 +72,10 @@ type Param struct {
 	MaxRunes int      // 0 = n/a
 	Enum     []string // the allowed values when Kind == Enum; nil otherwise
 	Min, Max int      // Number bounds; 0,0 = unbounded. Meaningful only when Kind == Number.
+	// Description is an optional neutral, capability-only gloss surfaced as the
+	// property's JSON Schema "description" (derive.go). "" = no description.
+	// Used by the acting tools' optional `reason` param (spec 019 R12).
+	Description string
 }
 
 // GateClass names the precondition family checked against live state before

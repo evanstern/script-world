@@ -40,6 +40,7 @@ func New(worldDir string, seed uint64, m *worldmap.Map, stateJSON []byte) (*Scri
 	}
 	for i := range s.replica.Agents {
 		s.render(i)
+		s.renderJournal(i)
 	}
 	s.renderChronicle()
 	s.renderVillageCharter()
@@ -69,6 +70,7 @@ func (s *Scribe) run() {
 			return
 		case batch := <-s.events:
 			dirty := map[int]bool{}
+			jDirty := map[int]bool{}
 			chronDirty := false
 			charterDirty := false
 			for _, e := range batch {
@@ -77,6 +79,15 @@ func (s *Scribe) run() {
 					s.replica.Tick = e.Tick
 				}
 				switch e.Type {
+				case "journal.entry_written", "journal.entry_deleted":
+					// Spec 019 (US3): a journal mutation re-renders that agent's
+					// journal.md (only) — souls are unaffected.
+					var p struct {
+						Agent int `json:"agent"`
+					}
+					if json.Unmarshal(e.Payload, &p) == nil {
+						jDirty[p.Agent] = true
+					}
 				case "chronicle.entry":
 					chronDirty = true
 				case "meeting.place_designated", "meeting.proposal_resolved",
@@ -105,6 +116,9 @@ func (s *Scribe) run() {
 			}
 			for idx := range dirty {
 				s.render(idx)
+			}
+			for idx := range jDirty {
+				s.renderJournal(idx)
 			}
 			if chronDirty {
 				s.renderChronicle()
@@ -218,6 +232,46 @@ func (s *Scribe) renderVillageCharter() {
 	os.WriteFile(filepath.Join(s.worldDir, "village_charter.md"), []byte(b.String()), 0o644)
 }
 
+// renderJournal writes one agent's journal.md from replica state (spec 019,
+// US3): a header with current budget usage, then each entry verbatim under a
+// "## <clock> (#<id>)" section. The entry text is rendered as-is — agent-
+// authored markdown is the artifact under study, so the scribe adds no
+// normalization, only the id/clock chrome delete and read address by
+// (contracts/journal-tools.md view contract).
+func (s *Scribe) renderJournal(idx int) {
+	if idx < 0 || idx >= len(s.replica.Agents) {
+		return
+	}
+	a := s.replica.Agents[idx]
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s's journal\n\n", a.Name)
+	fmt.Fprintf(&b, "_%d/%d runes_\n", a.Journal.JournalUsedRunes(), sim.JournalBudgetRunes)
+	entries := a.Journal.JournalEntries()
+	if len(entries) == 0 {
+		b.WriteString("\n*Empty — nothing written yet.*\n")
+	}
+	for _, e := range entries {
+		fmt.Fprintf(&b, "\n## %s (#%d)\n\n%s\n", clock.Format(e.Tick), e.ID, e.Text)
+	}
+	os.WriteFile(persona.JournalPath(s.worldDir, a.Name), []byte(b.String()), 0o644)
+}
+
+// memorySuffix renders the ONLY situated suffix soul.md carries — the
+// conversation ref (spec 019, T024 dedup). Place and why are NOT re-rendered as
+// suffixes: the situated memory TEXT already carries them (" at <desc> (x,y)
+// — <why>"), so a `· at …`/`· why: …` suffix duplicated them
+// ("Built a fire at the woods (10,40). · at the woods (10,40)"). The structured
+// Where/Why fields remain on the Memory for programmatic consumers; only the
+// redundant render is dropped. A pre-019 memory (and any non-conversation
+// memory) yields "", so its line renders byte-identically to the pre-019 format
+// (FR-006, FR-014, SC-007).
+func memorySuffix(m sim.Memory) string {
+	if m.Conv != 0 {
+		return fmt.Sprintf(" · [conv %d]", m.Conv)
+	}
+	return ""
+}
+
 // render writes one agent's soul.md from replica state.
 func (s *Scribe) render(idx int) {
 	if idx < 0 || idx >= len(s.replica.Agents) {
@@ -242,7 +296,7 @@ func (s *Scribe) render(idx int) {
 		b.WriteString("*No memories yet.*\n")
 	}
 	for _, m := range a.Memories {
-		fmt.Fprintf(&b, "- **%s** (%d★) %s\n", clock.Format(m.Tick), m.Salience, m.Text)
+		fmt.Fprintf(&b, "- **%s** (%d★) %s%s\n", clock.Format(m.Tick), m.Salience, m.Text, memorySuffix(m))
 	}
 
 	// Beliefs: durable convictions with confidence and provenance (TASK-9).

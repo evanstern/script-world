@@ -14,7 +14,7 @@
 
 **Purpose**: branch/worktree per constitution Principle II; no scaffolding needed (existing module).
 
-- [ ] T001 Create worktree `.worktrees/task-16` on branch `task-16-grounded-memories` from fresh `origin/main`; all subsequent tasks execute inside it
+- [x] T001 Create worktree `.worktrees/task-16` on branch `task-16-grounded-memories` from fresh `origin/main`; all subsequent tasks execute inside it
 
 ---
 
@@ -22,9 +22,9 @@
 
 **Purpose**: the shared memory-context data shapes every story reads/writes.
 
-- [ ] T002 Add `MemoryPlace` type and extend `MemoryAddedPayload` with `Where *MemoryPlace`, `Why string`, `Conv int64` (all omitempty) in internal/sim/agents.go per data-model.md §1–2
-- [ ] T003 Extend `Memory` with the same three fields (omitempty) in internal/sim/agents.go per data-model.md §3
-- [ ] T004 Copy `Where`/`Why`/`Conv` from payload to `Memory` in the `agent.memory_added` Apply arm in internal/sim/state.go; unit test: pre-019 payload (fields absent) reduces to a pre-019-shaped Memory in internal/sim/state_test.go (or the existing reducer test file)
+- [x] T002 Add `MemoryPlace` type and extend `MemoryAddedPayload` with `Where *MemoryPlace`, `Why string`, `Conv int64` (all omitempty) in internal/sim/agents.go per data-model.md §1–2
+- [x] T003 Extend `Memory` with the same three fields (omitempty) in internal/sim/agents.go per data-model.md §3
+- [x] T004 Copy `Where`/`Why`/`Conv` from payload to `Memory` in the `agent.memory_added` Apply arm in internal/sim/state.go; unit test: pre-019 payload (fields absent) reduces to a pre-019-shaped Memory in internal/sim/state_test.go (or the existing reducer test file)
 
 **Checkpoint**: `go build ./... && go test ./internal/sim/` green; no behavior change yet.
 
@@ -36,11 +36,12 @@
 
 **Independent test**: quickstart §1 grammar/unit tests + §3 live smoke — memories show `· at <desc> (x,y)` and `· why:` for planner-driven acts, place-only for reflex.
 
-- [ ] T005 [US1] Add `Reason string json:"reason,omitempty"` to `Intent` in internal/sim/agents.go and populate it from the `agent.intent_set` payload's existing `Reason` in that event's Apply arm in internal/sim/state.go (research R2); unit test: planner intent carries reason, reflex intent carries ""
-- [ ] T006 [P] [US1] Implement deterministic `describePlace(s *State, x, y int) string` (same-tile feature, then fixed-radius "near <feature>", else "") in internal/sim/memory.go or internal/sim/journal.go-adjacent location per research R3, with table-driven unit test in internal/sim/memory_test.go
-- [ ] T007 [US1] Add situated constructor variants (`situatedMemoryEvent`, situated `memoryAboutEvent`/`memoryEventToned` forms) and the shared where/why text-grammar helper in internal/sim/memory.go per contracts/memory-context.md grammar; unit test pins exact composed strings (with/without desc, with/without why)
-- [ ] T008 [US1] Migrate executor memory call sites (hunt, spear-broke, fire, shelter, starving-forage, oven, chest, talk at internal/sim/executor.go:671–740 and :374, plus witness memories) to the situated variants, baking `Where` (agent tile + describePlace) and `Why` (`in.Reason`) at emission
-- [ ] T009 [US1] Render situated suffixes (`· at <desc> (x,y)` / `· at (x,y)` / `· why: <reason>`) from reduced `Memory` in the soul.md memory line in internal/scribe/scribe.go per contracts/memory-context.md; scribe unit test pins new-format line AND pre-019 memory rendering byte-identical to today's format in internal/scribe/scribe_test.go
+- [x] T005 [US1] Add `Reason string json:"reason,omitempty"` to `Intent` in internal/sim/agents.go and populate it from the `agent.intent_set` payload's existing `Reason` in that event's Apply arm in internal/sim/state.go (research R2); unit test: planner intent carries reason, reflex intent carries ""
+- [x] T006 [P] [US1] Implement deterministic `describePlace(s *State, x, y int) string` (same-tile feature, then fixed-radius "near <feature>", else "") in internal/sim/memory.go or internal/sim/journal.go-adjacent location per research R3, with table-driven unit test in internal/sim/memory_test.go
+- [x] T007 [US1] Add situated constructor variants (`situatedMemoryEvent`, situated `memoryAboutEvent`/`memoryEventToned` forms) and the shared where/why text-grammar helper in internal/sim/memory.go per contracts/memory-context.md grammar; unit test pins exact composed strings (with/without desc, with/without why)
+- [x] T008 [US1] Migrate executor memory call sites (hunt, spear-broke, fire, shelter, starving-forage, oven, chest, talk at internal/sim/executor.go:671–740 and :374, plus adjacent witness memories) to the situated variants, baking `Where` (agent tile + describePlace) and `Why` (`in.Reason`) at emission
+- [x] T008b [US1] (SC-001 full coverage, added post-review) Situate the REMAINING sim `agent.memory_added` emission sites — executor.go (cold-night :38, fire-out :83, near-death :113, witness-death :130, never-paid :288, saved/gave :320/:322), gru.go (sighted :107, attack :133, witness :141), social.go (theft owner :401 + witnesses :412), governance.go (spoke :676, outcome :694/:697, voters :712, exiled :716, violation :949) — each by the REMEMBERING agent's own tile, no `Why` (never intent-driven, never fabricated). Remove the now-unused pre-019 bare constructors so no sim memory can be emitted unsituated; SC-001 coverage test asserts every driven memory carries `Where`. Reconcile data-model §5 (`*Journal` pointer), research R2 (IntentSetPayload.Reason correction) and R4 (full-coverage scope)
+- [x] T009 [US1] Render situated suffixes (`· at <desc> (x,y)` / `· at (x,y)` / `· why: <reason>`) from reduced `Memory` in the soul.md memory line in internal/scribe/scribe.go per contracts/memory-context.md; scribe unit test pins new-format line AND pre-019 memory rendering byte-identical to today's format in internal/scribe/scribe_test.go
 
 **Checkpoint**: US1 independently demonstrable via quickstart §3.
 
@@ -52,9 +53,9 @@
 
 **Independent test**: quickstart §4 — sqlite query by `conv` returns the full ordered dialogue.
 
-- [ ] T010 [US2] Set `Conv: cc.conv` (and `Where` from the remembering agent's position) on the gist `MemoryAddedPayload` at internal/mind/convo.go:337 per research R5
-- [ ] T011 [US2] Render the `[conv <id>]` marker on conversation memory lines in internal/scribe/scribe.go (extends T009's line format); update scribe unit test
-- [ ] T012 [US2] Integration test: run a scripted conversation through the mind test harness, then recover the full ordered transcript from the event log using only `Memory.Conv` (event type `social.conversation_turn`, payload `conv`), asserting speaker + verbatim text per contracts/memory-context.md, in internal/mind/convo_test.go (or existing convo test file)
+- [x] T010 [US2] Set `Conv: cc.conv` (and `Where` from the remembering agent's position) on the gist `MemoryAddedPayload` at internal/mind/convo.go:337 per research R5
+- [x] T011 [US2] Render the `[conv <id>]` marker on conversation memory lines in internal/scribe/scribe.go (extends T009's line format); update scribe unit test
+- [x] T012 [US2] Integration test: run a scripted conversation through the mind test harness, then recover the full ordered transcript from the event log using only `Memory.Conv` (event type `social.conversation_turn`, payload `conv`), asserting speaker + verbatim text per contracts/memory-context.md, in internal/mind/convo_test.go (or existing convo test file)
 
 **Checkpoint**: US1+US2 together close Layer 1.
 
@@ -66,12 +67,12 @@
 
 **Independent test**: quickstart §1 gates + §5 — scripted-driver test drives write→search→read→delete; over-budget write rejected at the door with journal unchanged.
 
-- [ ] T013 [P] [US3] Create internal/sim/journal.go: `Journal`/`JournalEntry` types, `journalBudgetRunes=4000`, `journalWriteCapRunes=1000`, `journalSearchResultCap=8`, `JournalWrittenPayload`/`JournalDeletedPayload`, and Apply helpers (append-with-NextID, budget-error, delete-by-id-with-absent-error) per data-model.md §5–7; add `Journal Journal json:"journal,omitempty"` to `Agent` in internal/sim/agents.go
-- [ ] T014 [US3] Wire `journal.entry_written`/`journal.entry_deleted` Apply arms into the reducer switch in internal/sim/state.go and add both types to `injectSocialWhitelist` in internal/sim/loop.go; reducer unit tests in internal/sim/journal_test.go: id stability, budget rejection leaves state untouched, delete-unknown-id errors, freed-budget reuse
-- [ ] T015 [P] [US3] Register the four tools (`write_journal_entry`, `delete_from_journal` Expressive with `Events`; `search_journal`, `read_journal` Read) in internal/tool/registry.go with guidance-free `PromptGloss` (states capability + budget number only) per contracts/journal-tools.md, and add all four to `LoopRosterVillager()` in internal/tool/roster.go; registry/roster unit tests; confirm `tool.Validate()` + `sim.ValidateToolCoverage()` pass (boot-gate tests)
-- [ ] T016 [P] [US3] Add `JournalPath` to internal/persona/files.go and seed an empty journal.md at genesis alongside soul.md
-- [ ] T017 [US3] Implement mind handlers in internal/mind/handlers.go per contracts/journal-tools.md: write (InjectSocial batch + cog.outcome, `rejected_gate` with budget reason on dry-run failure), delete (`rejected_gate` "no journal entry #id"), search (case-insensitive substring, newest-first, cap 8, explicit empty read_ok), read (entry or whole journal, `read_error` on unknown id); register in `villagerHandlers` in internal/mind/mind.go; unit tests via the scripted loop driver (`runLoopOverride` seam) covering the full write→search→read→delete cycle and the over-budget rejection feedback in internal/mind/handlers_test.go
-- [ ] T018 [US3] Render `agents/<name>/journal.md` in internal/scribe/scribe.go (`renderJournal`, dirty-marked on `journal.*` events in the run-loop switch) per contracts/journal-tools.md view contract; scribe unit test pins the render (header with used/budget runes, `## <clock> (#id)` sections, verbatim entry text)
+- [x] T013 [P] [US3] Create internal/sim/journal.go: `Journal`/`JournalEntry` types, `journalBudgetRunes=4000`, `journalWriteCapRunes=1000`, `journalSearchResultCap=8`, `JournalWrittenPayload`/`JournalDeletedPayload`, and Apply helpers (append-with-NextID, budget-error, delete-by-id-with-absent-error) per data-model.md §5–7; add `Journal Journal json:"journal,omitempty"` to `Agent` in internal/sim/agents.go
+- [x] T014 [US3] Wire `journal.entry_written`/`journal.entry_deleted` Apply arms into the reducer switch in internal/sim/state.go and add both types to `injectSocialWhitelist` in internal/sim/loop.go; reducer unit tests in internal/sim/journal_test.go: id stability, budget rejection leaves state untouched, delete-unknown-id errors, freed-budget reuse
+- [x] T015 [P] [US3] Register the four tools (`write_journal_entry`, `delete_from_journal` Expressive with `Events`; `search_journal`, `read_journal` Read) in internal/tool/registry.go with guidance-free `PromptGloss` (states capability + budget number only) per contracts/journal-tools.md, and add all four to `LoopRosterVillager()` in internal/tool/roster.go; registry/roster unit tests; confirm `tool.Validate()` + `sim.ValidateToolCoverage()` pass (boot-gate tests)
+- [x] T016 [P] [US3] Add `JournalPath` to internal/persona/files.go and seed an empty journal.md at genesis alongside soul.md
+- [x] T017 [US3] Implement mind handlers in internal/mind/handlers.go per contracts/journal-tools.md: write (InjectSocial batch + cog.outcome, `rejected_gate` with budget reason on dry-run failure), delete (`rejected_gate` "no journal entry #id"), search (case-insensitive substring, newest-first, cap 8, explicit empty read_ok), read (entry or whole journal, `read_error` on unknown id); register in `villagerHandlers` in internal/mind/mind.go; unit tests via the scripted loop driver (`runLoopOverride` seam) covering the full write→search→read→delete cycle and the over-budget rejection feedback in internal/mind/handlers_test.go
+- [x] T018 [US3] Render `agents/<name>/journal.md` in internal/scribe/scribe.go (`renderJournal`, dirty-marked on `journal.*` events in the run-loop switch) per contracts/journal-tools.md view contract; scribe unit test pins the render (header with used/budget runes, `## <clock> (#id)` sections, verbatim entry text)
 
 **Checkpoint**: US3 independently demonstrable via quickstart §5.
 
@@ -83,8 +84,8 @@
 
 **Independent test**: quickstart §2.
 
-- [ ] T019 [US4] Extend the replay/determinism suite with a fixture exercising situated memories (planner reason + reflex), a conversation, and journal write/delete/over-budget-rejection; assert live-vs-replay `State` equality and byte-identical soul.md + journal.md renders with zero orchestrator calls, in the existing determinism test location (internal/sim and/or the daemon-level replay test)
-- [ ] T020 [P] [US4] Add/verify a pre-019 fixture log replays unchanged and renders byte-identically to its pre-019 output (FR-014/SC-007) in the same suite
+- [x] T019 [US4] Extend the replay/determinism suite with a fixture exercising situated memories (planner reason + reflex), a conversation, and journal write/delete/over-budget-rejection; assert live-vs-replay `State` equality and byte-identical soul.md + journal.md renders with zero orchestrator calls, in the existing determinism test location (internal/sim and/or the daemon-level replay test)
+- [x] T020 [P] [US4] Add/verify a pre-019 fixture log replays unchanged and renders byte-identically to its pre-019 output (FR-014/SC-007) in the same suite
 
 **Checkpoint**: all four stories proven; SC-003/SC-007 closed.
 
@@ -93,8 +94,9 @@
 ## Phase 7: Polish & Cross-Cutting
 
 - [ ] T021 [P] Run quickstart §3–§6 live smoke on a throwaway world (local tier up); record observed situated lines, a conv transcript recovery, and any journal tool calls on the board task as evidence
-- [ ] T022 [P] `go vet ./...` + full `go test ./...` green; fix fallout
-- [ ] T023 Reconcile spec-014 tool catalog contract (specs/014-tool-registry/contracts/tool-catalog.md) with the four new registry entries if that contract enumerates tools exhaustively (check first; skip with a note if additive entries don't belong there)
+- [x] T022 [P] `go vet ./...` + full `go test ./...` green; fix fallout
+- [x] T023 Reconcile spec-014 tool catalog contract (specs/014-tool-registry/contracts/tool-catalog.md) with the four new registry entries if that contract enumerates tools exhaustively (check first; skip with a note if additive entries don't belong there)
+- [x] T024 (post-live-smoke, user-clarified 2026-07-23) Three fixes from live-smoke findings, gate-reviewed: (1) restore the reason channel — optional bounded `reason` param on every acting villager world tool + top-level `reason` on set_plan (internal/tool/registry.go), threaded into `InjectArgs.Reason` by the mind handlers (internal/mind/handlers.go); NOT on muse or Metatron; (2) de-dup soul rendering — drop the `· at …`/`· why:` suffixes (the situated text already carries them), keep only `· [conv <id>]` (internal/scribe/scribe.go + contracts/memory-context.md); (3) build-memory place fix — `describePlaceExcept`/`placeForBuild` hold the just-built structure kind out of the scan so "Built a fire" reads "at the woods", not "at the fire" (internal/sim/memory.go). Spec reconciled: spec.md clarification (2026-07-23), research.md R12 (reason channel + 017 tension) and R13 (dedup + build fix). Unit tests: reason threads to intent + completion memory Why (payload + text); build-memory excludes same-kind; scribe/replay dedup assertions updated
 
 *Post-merge (not part of this PR)*: `/grounding-wiki:wiki-update` re-pins notes whose sources changed (agent-mind, executor, sim-state-reducer, event-types, tool-registry, tool-loop, social-fabric); spec-bridge:sync moves the board.
 

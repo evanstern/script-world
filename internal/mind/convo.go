@@ -334,9 +334,17 @@ func (md *Mind) runConversation(cc convoCtx) {
 			if j == i {
 				continue
 			}
+			// Spec 019 (US2, R5): the gist memory carries a durable reference to
+			// the conversation it summarizes (Conv = cc.conv, the founding-talk
+			// tick that keys every social.conversation_turn of the scene) so the
+			// full transcript is recoverable from the memory alone, and is situated
+			// by the remembering agent's own tile in the mind replica (FR-003,
+			// FR-005). The gist text keeps its shape — no where/why clause is
+			// spliced into a conversation memory (the Conv ref is its situating).
 			add("agent.memory_added", sim.MemoryAddedPayload{
 				Agent: cc.idx[i], Text: fmt.Sprintf("Talked with %s%s — %s", cc.names[j], others, out.Gist),
 				Salience: sim.SalConvoGist, Subject: cc.idx[j], Tone: tones[i] * convoMemoryToneScale,
+				Where: sim.PlaceAt(md.replica, md.replica.Agents[cc.idx[i]].X, md.replica.Agents[cc.idx[i]].Y), Conv: cc.conv,
 			})
 			add("social.relation_changed", sim.RelationChangedPayload{
 				A: cc.idx[i], B: cc.idx[j],

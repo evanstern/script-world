@@ -398,7 +398,8 @@ func theftCompanions(s *State, owner, taker, x, y int, nextTick int64, takerName
 	}
 	// The owner remembers it wherever they are — but only if they live.
 	if !s.Agents[owner].Dead {
-		events = append(events, memoryAboutEvent(nextTick, owner, taker, theftMemoryTone, salTaking,
+		events = append(events, situatedMemoryAboutEvent(nextTick, owner, taker, theftMemoryTone, salTaking,
+			PlaceAt(s, s.Agents[owner].X, s.Agents[owner].Y),
 			"%s took from my chest without asking.", takerName))
 	}
 	// Witnesses: whoever stood near enough to see, minus the two principals.
@@ -409,8 +410,8 @@ func theftCompanions(s *State, owner, taker, x, y int, nextTick int64, takerName
 			continue
 		}
 		if abs(wa.X-x)+abs(wa.Y-y) <= witnessRadius {
-			events = append(events, memoryAboutEvent(nextTick, w, taker, theftMemoryTone, salTaking,
-				"Saw %s take from %s's chest.", takerName, ownerName))
+			events = append(events, situatedMemoryAboutEvent(nextTick, w, taker, theftMemoryTone, salTaking,
+				PlaceAt(s, wa.X, wa.Y), "Saw %s take from %s's chest.", takerName, ownerName))
 		}
 	}
 	return events

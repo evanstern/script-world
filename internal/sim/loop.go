@@ -190,6 +190,13 @@ var injectSocialWhitelist = map[string]bool{
 	// observability, reducer no-op, same isolation guarantees as the other
 	// cog.* types above.
 	"cog.tool_call": true,
+	// Agent-authored journal (spec 019, US3): the two mind-injectable journal
+	// mutations. Landed only through this door; the reducer dry-run enforces the
+	// rune budget (written) and entry existence (deleted) before either lands.
+	// sim.ValidateToolCoverage pins the two Expressive journal tools' Events ⊆
+	// this whitelist at boot.
+	"journal.entry_written": true,
+	"journal.entry_deleted": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
@@ -594,6 +601,12 @@ func (l *Loop) handleCommand(cmd command) error {
 					ResX: intent.ResX, ResY: intent.ResY,
 					Kind: intent.Kind, Qty: intent.Qty,
 					Source: "planner", Job: in.JobID,
+					// Spec 019 (R2): carry the planner's reason onto the intent so
+					// it survives to completion, where the executor bakes it into the
+					// memory's Why. Recorded input (already narrated as the
+					// agent.thought above) — replay repopulates it from this event, so
+					// live and replay stay identical with no new event.
+					Reason: in.Reason,
 				})
 			}
 			// The hail (TASK-47): a talk_to landing pauses a hailable

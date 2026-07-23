@@ -67,6 +67,15 @@ func LoopRosterVillager() []Tool {
 	if muse, ok := Lookup("muse"); ok {
 		out = append(out, muse)
 	}
+	// Journal tools (spec 019, US3): the villager's private notebook — two
+	// acting (Expressive) and two Read. Appended after muse so no existing
+	// declared tool's position shifts; villager-only (the metatron roster is
+	// untouched, journals are private).
+	for _, n := range []string{"write_journal_entry", "delete_from_journal", "search_journal", "read_journal"} {
+		if t, ok := Lookup(n); ok {
+			out = append(out, t)
+		}
+	}
 	return out
 }
 

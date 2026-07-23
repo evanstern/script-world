@@ -109,6 +109,22 @@ migration time; later specs extend the registry under their own contracts:
   loop roster only; excluded from every legacy derived surface).
 - `work_miracle` — spec 017 post-#38 amendment (Expressive, Charge, flat Params over
   the spec-016 miracle surface, metatron loop roster; gratis structurally absent).
+- `write_journal_entry` — spec 019 (Expressive, None gate, `text` Text ≤ 1000 runes,
+  Cost TextCapRunes 1000, Events `journal.entry_written`; villager loop roster only).
+  The reducer dry-run enforces the 4000-rune journal budget (`journalBudgetRunes`); the
+  door — not the handler — rejects an over-budget write (Principle III / SC-005).
+- `delete_from_journal` — spec 019 (Expressive, None gate, `entry` Number required,
+  Events `journal.entry_deleted`; villager loop roster only). Unknown-id delete is a
+  reducer dry-run rejection.
+- `search_journal` — spec 019 (Read, `query` Text ≤ 200 runes; villager loop roster
+  only) — the first PRODUCTION Read tool. Deterministic case-insensitive substring
+  search over the agent's own journal; grounds no events.
+- `read_journal` — spec 019 (Read, `entry` Number optional — absent = whole journal;
+  villager loop roster only). Grounds no events.
+
+Both journal Expressive tools' Events are pinned ⊆ `injectSocialWhitelist` by
+`sim.ValidateToolCoverage`; the whitelist gains exactly the two `journal.*` types
+(spec 019). Journals are villager-private — the metatron roster is untouched.
 
 ## Explicitly NOT in the catalog (clarified 2026-07-22)
 

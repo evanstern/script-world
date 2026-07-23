@@ -55,6 +55,120 @@ func TestSoulRendersFromEvents(t *testing.T) {
 	t.Fatalf("soul.md never rendered the memory; content:\n%s", data)
 }
 
+// TestSoulRendersSituatedContext (spec 019 US1/US2, T009/T011, dedup T024): a
+// situated memory's place/why live in its TEXT (no duplicating suffix); the
+// ONLY suffix is the conversation ref; a pre-019 memory renders byte-identically
+// to today's format — no suffix.
+func TestSoulRendersSituatedContext(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+	scr, err := New(dir, 42, m, state.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.Close()
+
+	scr.Observe([]store.Event{
+		// A fully situated memory (place with desc + why).
+		{Tick: 3600, Type: "agent.memory_added", Payload: mustPayloadJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Built a fire at the rock outcrop (23,41) — keep the Gru away.", Salience: 5, Subject: -1,
+			Where: &sim.MemoryPlace{X: 23, Y: 41, Desc: "the rock outcrop"}, Why: "keep the Gru away."})},
+		// A conversation memory (place, no desc + conv ref).
+		{Tick: 3660, Type: "agent.memory_added", Payload: mustPayloadJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Talked with Birch — argued about the storm.", Salience: 4, Subject: 1,
+			Where: &sim.MemoryPlace{X: 7, Y: 12}, Conv: 3600})},
+		// A pre-019 memory (no situated fields) — must render as before.
+		{Tick: 3720, Type: "agent.memory_added", Payload: mustPayloadJSON(t, map[string]any{
+			"agent": 0, "text": "An old bare memory.", "salience": 3})},
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+		s := string(data)
+		if // place + why live in the memory text, verbatim, with NO duplicating suffix.
+		strings.Contains(s, "Built a fire at the rock outcrop (23,41) — keep the Gru away.") &&
+			!strings.Contains(s, "· at ") && !strings.Contains(s, "· why:") &&
+			// the conversation ref is the one remaining suffix.
+			strings.Contains(s, "· [conv 3600]") &&
+			// The pre-019 line renders with NO situated suffix (byte-identical form).
+			strings.Contains(s, "An old bare memory.\n") &&
+			!strings.Contains(s, "An old bare memory. ·") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+	t.Fatalf("soul.md never rendered situated context; content:\n%s", data)
+}
+
+// TestJournalRenders (spec 019 US3, T018): journal.md is seeded empty at
+// genesis, then re-rendered on journal.* events — a header with current budget
+// usage, and each entry verbatim under a "## <clock> (#id)" section; a delete
+// removes its section and updates the usage line.
+func TestJournalRenders(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+
+	// Genesis seeded an empty journal.md.
+	if data, err := os.ReadFile(persona.JournalPath(dir, "Ash")); err != nil ||
+		!strings.Contains(string(data), "0/4000 runes") {
+		t.Fatalf("genesis should seed an empty journal.md, got err=%v content:\n%s", err, data)
+	}
+
+	scr, err := New(dir, 42, m, state.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.Close()
+
+	scr.Observe([]store.Event{
+		{Tick: 3600, Type: "journal.entry_written", Payload: mustPayloadJSON(t,
+			sim.JournalWrittenPayload{Agent: 0, Text: "Banked the fire before the cold set in."})},
+		{Tick: 7200, Type: "journal.entry_written", Payload: mustPayloadJSON(t,
+			sim.JournalWrittenPayload{Agent: 0, Text: "Owe Birch a meal."})},
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+		s := string(data)
+		if strings.Contains(s, "# Ash's journal") &&
+			strings.Contains(s, "## day 1 07:00 (#0)") &&
+			strings.Contains(s, "Banked the fire before the cold set in.") &&
+			strings.Contains(s, "## day 1 08:00 (#1)") &&
+			strings.Contains(s, "Owe Birch a meal.") &&
+			// used = len("Banked...") + len("Owe...") runes.
+			strings.Contains(s, "runes_") {
+			// Now delete entry #0 and confirm it disappears.
+			scr.Observe([]store.Event{{Tick: 7300, Type: "journal.entry_deleted",
+				Payload: mustPayloadJSON(t, sim.JournalDeletedPayload{Agent: 0, Entry: 0})}})
+			d2 := time.Now().Add(3 * time.Second)
+			for time.Now().Before(d2) {
+				after, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+				sa := string(after)
+				if !strings.Contains(sa, "Banked the fire") && strings.Contains(sa, "## day 1 08:00 (#1)") {
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			after, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+			t.Fatalf("delete not reflected in journal.md:\n%s", after)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	data, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+	t.Fatalf("journal.md never rendered the entries; content:\n%s", data)
+}
+
 func TestDeathFreezesSoulHeader(t *testing.T) {
 	dir := t.TempDir()
 	if err := persona.Genesis(dir); err != nil {
@@ -169,7 +283,7 @@ func governedEvents(t *testing.T) []store.Event {
 		{Tick: 21970, Type: "meeting.proposal_rephrased", Payload: mustPayloadJSON(t,
 			sim.ProposalRephrasedPayload{ProposalID: 1, NormID: 1, Text: "Stay by the fire once the dark comes down."})},
 		{Tick: 60000, Type: "norm.violated", Payload: mustPayloadJSON(t, sim.NormViolatedPayload{NormID: 1, Violator: 4, Witnesses: []int{5}})},
-		{Tick: 108360, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, amend)},   // day 2
+		{Tick: 108360, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, amend)},  // day 2
 		{Tick: 194400, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, exile)},  // day 3 noon
 		{Tick: 280800, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, repeal)}, // day 4 noon
 	}

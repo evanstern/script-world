@@ -33,6 +33,11 @@ var wantMetatron = []string{"converse", "nudge_dream", "nudge_omen"}
 var wantMetatronCatalog = []string{"converse", "nudge_dream", "nudge_omen", "work_miracle"}
 var wantVillagerExpressiveTail = []string{"say", "muse", "gist"}
 
+// wantJournal is the four villager journal tools (spec 019, US3): two Expressive
+// (write/delete), two Read (search/read). Catalog membership mirrors
+// contracts/tool-catalog.md; they join LoopRosterVillager only (villager-private).
+var wantJournal = []string{"write_journal_entry", "delete_from_journal", "search_journal", "read_journal"}
+
 // TestCatalogCompleteness: every catalog row is present, nothing extra is
 // registered, the legacy (free-text-vocabulary) world-tool order is exactly
 // goalVocabulary order (R3), and set_plan (spec 017) is registered as the
@@ -53,7 +58,11 @@ func TestCatalogCompleteness(t *testing.T) {
 	}
 
 	wantAll := make(map[string]bool)
-	for _, n := range append(append(append(append([]string{}, wantWorldOrder...), "set_plan"), wantExpressive...), wantMetatronCatalog...) {
+	catalog := append(append([]string{}, wantWorldOrder...), "set_plan")
+	catalog = append(catalog, wantExpressive...)
+	catalog = append(catalog, wantMetatronCatalog...)
+	catalog = append(catalog, wantJournal...)
+	for _, n := range catalog {
 		wantAll[n] = true
 	}
 	for n := range gotAll {

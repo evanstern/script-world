@@ -71,6 +71,11 @@ func setPlanSchema(goals []string) json.RawMessage {
 				"maxItems": PlanStepCap,
 				"items":    step,
 			},
+			// Optional plan-level reason (spec 019 R12 / T024): the model's why
+			// for the whole plan, threaded to InjectArgs.Reason (agent.thought
+			// narration). Capability-only description, not required.
+			"reason": map[string]any{"type": "string", "maxLength": ReasonCapRunes,
+				"description": "optionally, why you're doing this"},
 		},
 		"required":             []string{"steps"},
 		"additionalProperties": false,
@@ -138,6 +143,22 @@ func miracleParams() []Param {
 	}
 }
 
+// ReasonCapRunes bounds the optional per-action `reason` text — the same rune
+// budget muse's text carries (a wire sanity cap, not usage guidance). Exported
+// so the mind handler's defensive truncation reads the one authoritative value.
+const ReasonCapRunes = 200
+
+// reasonParam is the OPTIONAL free-text "why" every acting villager world tool
+// carries (spec 019 R12 / T024): the model's reason for the action, threaded to
+// InjectArgs.Reason and baked into the completion memory's Why (situated
+// " — <why>" clause). Capability-only description — no cadence/format/content
+// guidance. NOT added to muse (interiority is already free-standing) or any
+// metatron tool.
+func reasonParam() Param {
+	return Param{Name: "reason", Kind: Text, Required: false, MaxRunes: ReasonCapRunes,
+		Description: "optionally, why you're doing this"}
+}
+
 // storageParams is the shared `kind`+`qty` descriptor for the four storage
 // verbs (drop/pick_up/deposit/withdraw; build_chest takes neither). `qty` is
 // a Number param (Min 1, Max unbounded) — spec 017 R12 pays the spec-014 debt
@@ -164,6 +185,17 @@ const (
 	glossBuildOven  = `build_oven needs 4 refined stone + 2 planks and lets you cook meals and bathe; bathe at an oven spends 1 water + 1 wood for warmth and morale.`
 	glossDrop       = `drop puts down goods where you stand, creating or adding to a ground pile there anyone can take from; pick_up takes from a pile on or next to you. Name what with "kind" (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, or spears) and how much with "qty" (omit or 0 = all of that kind); pick_up with no "kind" takes everything that fits.`
 	glossBuildChest = `build_chest needs 6 planks; chests preserve food (it never rots there, unlike a ground pile) and you keep the chest permanently once built. deposit stores goods in the nearest chest — always name a "kind" or nothing moves; withdraw takes goods back out of the nearest chest that has them ("kind" omitted or empty takes everything that fits). Taking from another villager's chest is possible too, but they will remember who took it.`
+
+	// Journal tool glosses (spec 019, US3). Deliberately capability + budget
+	// ONLY — the ONE rule the system imposes is the size budget, so the prompt
+	// imposes no cadence, format, or content guidance either (FR-010 applies to
+	// prompts too; the reviewer checks for smuggled "when/why/how to journal"
+	// guidance). The 4000/1000 numbers mirror sim.JournalBudgetRunes /
+	// JournalWriteCapRunes (internal/tool is a leaf and cannot import sim).
+	glossWriteJournal  = `write_journal_entry adds a new entry to your private journal, a personal notebook only you can read. The journal holds up to 4000 characters total; a write that would exceed that (or is over 1000 characters on its own) is rejected and leaves the journal unchanged.`
+	glossDeleteJournal = `delete_from_journal removes one journal entry by its id number, freeing the space it used.`
+	glossSearchJournal = `search_journal returns the entries in your journal whose text contains a given word or phrase, most recent first.`
+	glossReadJournal   = `read_journal returns one journal entry by its id number, or the whole journal when no id is given.`
 )
 
 // Durations carried verbatim from internal/sim/agents.go (the intentDuration
@@ -175,7 +207,19 @@ const (
 // separately, rather than as one registry literal, so that set_plan (spec
 // 017 R11) can be built from worldTools alone and then spliced in after it —
 // see setPlanTool and the registry assembly below.
-var worldTools = []Tool{
+// worldTools carries every acting villager world verb. Each entry gains the
+// optional `reason` param (spec 019 R12 / T024) via a post-declaration pass, so
+// the shared param is defined once and no verb's literal repeats it — every
+// acting tool can carry a why without touching 24 rows.
+var worldTools = func() []Tool {
+	tools := worldToolsBase
+	for i := range tools {
+		tools[i].Params = append(append([]Param(nil), tools[i].Params...), reasonParam())
+	}
+	return tools
+}()
+
+var worldToolsBase = []Tool{
 	{Name: "forage", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 120}, PlanStep: true, ReflexEligible: true},
 	{Name: "chop", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, ReflexEligible: true},
 	{Name: "hunt", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, ReflexEligible: true},
@@ -281,17 +325,46 @@ var metatronTools = []Tool{
 			"metatron.entity_moved", "metatron.entity_removed", "agent.memory_added"}},
 }
 
+// journalTools are the villager-only journal capabilities (spec 019, US3): two
+// Expressive tools that land the journal.* mutations through the InjectSocial
+// door (their Events are pinned ⊆ injectSocialWhitelist by
+// sim.ValidateToolCoverage) and two Read tools that return journal content into
+// cognition and ground nothing — the first PRODUCTION Read tools (spec 017 lifted
+// the roster restriction and specified Read dispatch, so the loop needs no
+// change). All four join LoopRosterVillager only; the metatron never sees them
+// (journals are private). Gate None: write/delete need no scene and no charge —
+// the reducer dry-run (budget / existence) is their only gate.
+var journalTools = []Tool{
+	{Name: "write_journal_entry", Effect: Expressive, Gate: None,
+		Params:      []Param{{Name: "text", Kind: Text, Required: true, MaxRunes: 1000}},
+		Cost:        Cost{TextCapRunes: 1000},
+		Events:      []string{"journal.entry_written"},
+		PromptGloss: glossWriteJournal},
+	{Name: "delete_from_journal", Effect: Expressive, Gate: None,
+		Params:      []Param{{Name: "entry", Kind: Number, Required: true}},
+		Events:      []string{"journal.entry_deleted"},
+		PromptGloss: glossDeleteJournal},
+	{Name: "search_journal", Effect: Read,
+		Params:      []Param{{Name: "query", Kind: Text, Required: true, MaxRunes: 200}},
+		PromptGloss: glossSearchJournal},
+	{Name: "read_journal", Effect: Read,
+		Params:      []Param{{Name: "entry", Kind: Number, Required: false}},
+		PromptGloss: glossReadJournal},
+}
+
 // registry is the authoritative collection of every tool, in registration
 // order: worldTools (exactly today's goal-vocabulary order — the byte-
 // identity anchor for the derived prompt string, SC-003/R3), then set_plan
 // (appended immediately after the world verbs so no existing tool's position
-// shifts — spec 017 T004), then expressiveTools, then metatronTools.
+// shifts — spec 017 T004), then expressiveTools, then metatronTools, then the
+// journal tools (spec 019, appended last so no existing tool's position shifts).
 var registry = func() []Tool {
-	out := make([]Tool, 0, len(worldTools)+1+len(expressiveTools)+len(metatronTools))
+	out := make([]Tool, 0, len(worldTools)+1+len(expressiveTools)+len(metatronTools)+len(journalTools))
 	out = append(out, worldTools...)
 	out = append(out, setPlanTool)
 	out = append(out, expressiveTools...)
 	out = append(out, metatronTools...)
+	out = append(out, journalTools...)
 	return out
 }()
 

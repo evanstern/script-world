@@ -16,9 +16,11 @@ All decisions below are grounded against current `main` (9a25310; wiki notes ver
 
 ## R2 — Getting "why" to the executor: `Intent` gains `Reason`, populated by the reducer from `agent.intent_set`
 
-**Decision**: Add `Reason string json:"reason,omitempty"` to `Intent` (agents.go:49). The `agent.intent_set` event payload already carries `Reason` (loop.go:455/462) — the reducer's `agent.intent_set` arm copies it onto the stored intent. Executor memory emission sites (executor.go:671 switch) read `in.Reason` when baking the memory.
+**Decision**: Add `Reason string json:"reason,omitempty"` to `Intent` (agents.go:49) AND to `IntentSetPayload`; the planner inject-landing site emits `Reason: in.Reason` on the `agent.intent_set` event (loop.go, the `intent != nil` emission arm), and the reducer's `agent.intent_set` arm copies it onto the stored intent. Executor memory emission sites (executor.go completion switch) read `in.Reason` when baking the memory.
 
-**Rationale**: today the reason's whole life is `InjectArgs.Reason` → one `agent.thought` (loop.go:559/582) → gone; the intent that executes minutes later has no memory of why. The event log already records the reason on `agent.intent_set`, so carrying it on reduced state adds zero new events and stays replay-identical (live and replay both populate it from the same event). Reflex intents set no reason → memories from reflex actions carry no `Why` — exactly the spec's "never fabricate" rule (FR-002, edge case 1). Plans: `set_plan` steps land through the same `InjectIntent` path; the plan-level reason applies to each step's intent as recorded by its `agent.intent_set`.
+**Correction (T008b, recorded)**: an earlier draft of this decision claimed "the `agent.intent_set` event payload already carries `Reason` (loop.go:455/462)". That was inaccurate — loop.go:455/462 are the `agent.intent_rejected` / `cog.outcome` REJECT payloads; `IntentSetPayload` had no `Reason` field. The implemented enabler adds `Reason` to `IntentSetPayload` and emits `in.Reason` at the planner landing (only that site; reflex- and executor-authored `intent_set` events carry none, `omitempty`). This is recorded input — the reason was already narrated as the sibling `agent.thought`, so replay repopulates the intent from the same event and live/replay stay identical with zero NEW events.
+
+**Rationale**: today the reason's whole life is `InjectArgs.Reason` → one `agent.thought` (loop.go:559/582) → gone; the intent that executes minutes later has no memory of why. Carrying it on the `agent.intent_set` event and reduced state adds no new event type (live and replay both populate it from the same event). Reflex intents set no reason → memories from reflex actions carry no `Why` — exactly the spec's "never fabricate" rule (FR-002, edge case 1). Plans: `set_plan` steps land through the same `InjectIntent` path; the plan-level reason applies to each step's intent as recorded by its `agent.intent_set`.
 
 **Alternatives considered**: executor looks back through recent `agent.thought` events — rejected: out-of-band lookup at emission time, and thoughts aren't correlated to intents; threading through the in-memory `InjectArgs` only — rejected: replay would lose it (replay sees events, not InjectArgs).
 
@@ -32,9 +34,11 @@ All decisions below are grounded against current `main` (9a25310; wiki notes ver
 
 ## R4 — Situated executor templates: extend the constructors, keep the salience table
 
-**Decision**: Add context-carrying constructor variants in memory.go (e.g. `situatedMemoryEvent(tick, agent, salience, where *MemoryPlace, why string, format, args...)` and a `withConv` variant for the mind side) rather than widening every existing call. Executor call sites (executor.go:675–740, 374) migrate to the situated variants and their template strings gain where/why clauses composed deterministically: base text + optional " at/near <place> (x,y)" + optional " — <reason>" (exact grammar pinned in contracts/memory-context.md). Witness memories (`memoryAboutEvent`) gain the same where treatment (the witness's own location).
+**Decision**: Add context-carrying constructor variants in memory.go — `situatedMemoryEvent(tick, agent, salience, where *MemoryPlace, why string, format, args...)`, `situatedMemoryToned` (personal + tone), and `situatedMemoryAboutEvent` (gossip/witness about another agent, no `Why`) — plus a `Conv` variant baked directly on the mind-side gist payload. Template strings gain where/why clauses composed deterministically: base text + optional " at <place> (x,y)" + optional " — <reason>" (exact grammar pinned in contracts/memory-context.md).
 
-**Rationale**: constructors are the single choke point (all three build `MemoryAddedPayload` via `mustPayload`); adding variants preserves the untouched call sites' byte-stability while migrated sites change only where the feature demands it. Salience table unchanged — this feature situates memories, it does not re-weigh them.
+**Scope (SC-001 full coverage, T008b)**: an earlier draft scoped the migration to the executor completion switch + talk + adjacent witness memories only. FR-001/SC-001 require **100%** of newly emitted episodic memories to carry a location, and the highest-salience formative memories (near-death, witnessed death, the gru, exile, norm violations, theft) live at the OTHER sim emission sites. So T008b migrated **every** sim `agent.memory_added` emission site — executor.go (cold-night, fire-out, near-death, witness-death, never-paid, gave/saved, and the completion switch), gru.go (sighted/attack/witness), social.go (theft owner + witnesses), governance.go (spoke/outcome/voters/exiled/violation) — each situated by the REMEMBERING agent's own tile (witnesses: their tile, not the subject's), no `Why` where none is intent-completion driven (never fabricated). The three pre-019 bare constructors were then REMOVED (they had no remaining caller), so no sim memory can be emitted unsituated — SC-001 is guaranteed at the code level, not merely by convention. (Metatron nudge memories and nightly-consolidation digests are emitted by other packages and have no agent-tile location — deliberately out of scope.)
+
+**Rationale**: constructors are the single choke point (all build `MemoryAddedPayload` via `mustPayload`); the situated variants set `Where` unconditionally, so migrating a site is a mechanical, low-risk change that touches only the emission line. Salience/subject/tone are unchanged — this feature situates memories, it does not re-weigh them.
 
 ## R5 — Conversation memory ref: `Conv` on the gist payload
 
@@ -89,6 +93,20 @@ All four join `LoopRosterVillager()` (roster.go:57). The two Expressive tools de
 
 **Rationale**: SC-003 is the load-bearing invariant; the suite already proves it for every prior feature — this feature adds cases, not a new harness.
 
+## R12 — The reason channel in the tool era: an optional per-action `reason` param (post-live-smoke, 2026-07-23)
+
+**Decision**: Add an OPTIONAL, bounded `reason` param (Text, `tool.ReasonCapRunes` = 200, muse's rune budget) to every acting villager World tool's `Params`, and an optional top-level `reason` string to `set_plan`'s authored `InputSchemaJSON`. The mind handlers (`handleWorldVerb`, `handleSetPlan`) thread the arg into `InjectArgs.Reason`; the R2 pipeline (intent_set `Reason` → `Intent.Reason` → executor bakes `Why` → situated " — <why>" text) then fires, and the planner-landing `agent.thought` narration returns for reasoned intents. NOT added to `muse` (interiority is already a free-standing act) or any Metatron tool. The param carries a neutral, capability-only description ("optionally, why you're doing this") — no cadence/format/content guidance.
+
+**The 017 tension it resolves**: spec 017 (agent tool-use loop) replaced the free-text planner reply — whose `reason` field fed `InjectArgs.Reason` — with the tool-use loop, and the world verbs "declare no reason param" (internal/mind/handlers.go's original `handleWorldVerb` comment: "the tool era carries [reason] via the muse tool rather than a per-action field"). So in the loop era `InjectArgs.Reason` was always empty for world verbs, and situated memories never carried a live `Why` (only the deterministic reflex path, which has no reason). This decision restores the channel as first-class tool data: the reason is now an explicit, optional, bounded argument the model may attach to any action, rather than smuggled through muse or lost. It is recorded input (already narrated as the sibling `agent.thought`), so replay repopulates it from `agent.intent_set` and determinism holds with zero new event types.
+
+**Alternatives considered**: (a) infer the reason from a preceding `muse` in the same cognition — rejected: muse is deliberately free-standing interiority (spec 017), not per-action justification, and correlating them is fragile; (b) a required `reason` on every action — rejected: forces fabrication when the agent has no articulable why, violating the spec's "never fabricate" rule (FR-002); optional is the honest shape.
+
+## R13 — Soul render dedup + build-memory place fix (post-live-smoke, 2026-07-23)
+
+**Decision (dedup)**: The situated memory TEXT already carries where/why (" at <desc> (x,y) — <why>"), so the scribe's `· at …` / `· why: …` soul.md suffixes duplicated them (live: "Built a fire at the woods (10,40). · at the woods (10,40)"). Drop those two suffixes; keep only `· [conv <id>]` (the conversation ref, which has no in-text representation). The structured `Where`/`Why` fields stay on the reduced `Memory` for programmatic consumers — only the redundant render is removed. Pre-019 and non-conversation memories render byte-identically to the pre-019 format.
+
+**Decision (build fix)**: `describePlace` at a build completion could name a same-kind structure near the build tile ("Built a fire at the fire (7,48)"). Add `describePlaceExcept(s, x, y, excludeKind)` / `placeForBuild(s, x, y, builtKind)` that hold the just-built kind out of the feature scan, so a fire built by the woods reads "at the woods (x,y)", never "at the fire". Deterministic and needs no ordering dance with the not-yet-reduced `agent.built` event.
+
 ## Decision summary
 
 | # | Decision | Closes |
@@ -104,3 +122,5 @@ All four join `LoopRosterVillager()` (roster.go:57). The two Expressive tools de
 | R9 | Deterministic substring search, private, replica-backed | FR-012 |
 | R10 | soul.md suffixes + journal.md scribe view | FR-006, 008 |
 | R11 | Determinism suite extension | FR-007, 011, 014 (SC-003/007) |
+| R12 | Optional per-action `reason` param (world tools + set_plan) restores the tool-era why | FR-002/004 (live) |
+| R13 | Soul render dedup (place/why in text) + build-memory place fix | FR-006 |

@@ -26,10 +26,14 @@ package mind
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/scribe"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/toolloop"
@@ -198,6 +202,146 @@ func TestLoopRunReplayByteIdenticalSC002(t *testing.T) {
 	if loopRuns != 3 {
 		t.Errorf("model seam invoked %d times, want 3 (once per live cognition, zero during replay)", loopRuns)
 	}
+}
+
+// TestJournalAndSituatedReplayByteIdentical (spec 019 US4, T019 / SC-003):
+// a loop-era run that exercises situated memories, journal writes + a delete,
+// and an over-budget write REJECTION replays byte-identically — the live State,
+// and the rendered soul.md + journal.md over it, equal a from-genesis replay,
+// with the model seam invoked zero times during replay.
+func TestJournalAndSituatedReplayByteIdentical(t *testing.T) {
+	lm, loop, m := newPausedLoopMind(t)
+	loopRuns := 0
+
+	// --- Situated memories: injected agent.memory_added events carrying the
+	// spec-019 context (place/why and place/conv). Same reducer path the
+	// executor/convo emitters use; here injected directly so a paused loop can
+	// exercise the reduced-Memory situated fields deterministically. ---
+	if err := loop.InjectSocial([]store.Event{
+		{Type: "agent.memory_added", Payload: mustJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Built a fire at the rock outcrop (23,41) — keep the Gru away.", Salience: 5,
+			Subject: -1, Where: &sim.MemoryPlace{X: 23, Y: 41, Desc: "the rock outcrop"}, Why: "keep the Gru away."})},
+		{Type: "agent.memory_added", Payload: mustJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Talked with Birch — planned the firewood run.", Salience: 4,
+			Subject: 1, Where: &sim.MemoryPlace{X: 7, Y: 12}, Conv: 100})},
+	}); err != nil {
+		t.Fatalf("inject situated memories: %v", err)
+	}
+
+	// --- Agent 0 journal cognitions: write, write, delete. ---
+	writeCog := func(agent int, text string) {
+		job := lm.newJob(agent)
+		lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+			loopRuns++
+			out := j.Handlers["write_journal_entry"](ctx, call("write_journal_entry", `{"text":"`+text+`"}`))
+			j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "write_journal_entry", Verdict: out.Verdict, Tier: "local"})
+			if out.Verdict == toolloop.VerdictLanded {
+				return toolloop.Result{Term: toolloop.TermLanded}, nil
+			}
+			return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+		}
+		lm.md.runPlan(job)
+	}
+	writeCog(0, "the fire held through the cold night")
+	writeCog(0, "owe Birch a meal")
+
+	jobDel := lm.newJob(0)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		loopRuns++
+		out := j.Handlers["delete_from_journal"](ctx, call("delete_from_journal", `{"entry":0}`))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "delete_from_journal", Verdict: out.Verdict, Tier: "local"})
+		return toolloop.Result{Term: toolloop.TermLanded}, nil
+	}
+	lm.md.runPlan(jobDel)
+
+	// --- Over-budget REJECTION on agent 1: fill the journal via injected writes,
+	// then a scripted write cognition that overflows — the door refuses it, so it
+	// lands NOTHING in the log (only a rejected cog.tool_call), and replay (which
+	// sees only landed events) reproduces the identical, full journal. ---
+	full := strings.Repeat("y", sim.JournalWriteCapRunes)
+	var fill []store.Event
+	for i := 0; i < 4; i++ { // 4×1000 = 4000, exactly full
+		fill = append(fill, store.Event{Type: "journal.entry_written",
+			Payload: mustJSON(t, sim.JournalWrittenPayload{Agent: 1, Text: full})})
+	}
+	if err := loop.InjectSocial(fill); err != nil {
+		t.Fatalf("fill agent 1 journal: %v", err)
+	}
+	jobOver := lm.newJob(1)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		loopRuns++
+		out := j.Handlers["write_journal_entry"](ctx, call("write_journal_entry", `{"text":"one line too many"}`))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "write_journal_entry", Verdict: out.Verdict, Tier: "local"})
+		if out.Verdict != toolloop.VerdictRejectedGate {
+			t.Errorf("over-budget write verdict = %q, want rejected_gate (%s)", out.Verdict, out.ResultForModel)
+		}
+		return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+	}
+	lm.md.runPlan(jobOver)
+
+	// --- Capture the authoritative live state. ---
+	liveBytes, _, err := loop.DoState()
+	if err != nil {
+		t.Fatalf("live DoState: %v", err)
+	}
+
+	// --- Genesis replay → byte-identical State. ---
+	genesis := replayState(t, 42, m, lm.st, 0, nil)
+	if string(genesis.Marshal()) != string(liveBytes) {
+		t.Fatalf("SC-003: genesis replay diverged from live state\nlive:   %s\nreplay: %s", liveBytes, genesis.Marshal())
+	}
+
+	// --- Byte-identical soul.md + journal.md renders over live vs replayed state. ---
+	liveFiles := renderWorld(t, 42, m, liveBytes)
+	replayFiles := renderWorld(t, 42, m, genesis.Marshal())
+	for name, live := range liveFiles {
+		if replay := replayFiles[name]; replay != live {
+			t.Errorf("SC-003: %s diverged live vs replay\nlive:\n%s\nreplay:\n%s", name, live, replay)
+		}
+	}
+	// The renders must actually carry the feature's output, or the proof is vacuous.
+	// (T024 dedup: place/why live in the memory TEXT, not a suffix; only the conv
+	// ref renders as a suffix.)
+	if !strings.Contains(liveFiles["ash/soul.md"], "Built a fire at the rock outcrop (23,41) — keep the Gru away.") ||
+		!strings.Contains(liveFiles["ash/soul.md"], "· [conv 100]") {
+		t.Errorf("soul.md missing the situated line / conv ref:\n%s", liveFiles["ash/soul.md"])
+	}
+	if !strings.Contains(liveFiles["ash/journal.md"], "owe Birch a meal") ||
+		strings.Contains(liveFiles["ash/journal.md"], "the fire held through the cold night") {
+		t.Errorf("ash journal.md should hold only the surviving entry:\n%s", liveFiles["ash/journal.md"])
+	}
+	if !strings.Contains(liveFiles["birch/journal.md"], "4000/4000 runes") {
+		t.Errorf("birch journal.md should be full (the over-budget write landed nothing):\n%s", liveFiles["birch/journal.md"])
+	}
+
+	// --- Zero model-seam invocations during replay. ---
+	if loopRuns != 4 {
+		t.Errorf("model seam invoked %d times, want 4 (once per live cognition, zero during replay)", loopRuns)
+	}
+}
+
+// renderWorld renders every soul.md + journal.md from a state snapshot into a
+// fresh dir and returns them keyed by "name/file", for byte comparison.
+func renderWorld(t *testing.T, seed uint64, m *worldmap.Map, stateJSON []byte) map[string]string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	scr, err := scribe.New(dir, seed, m, stateJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scr.Close()
+	out := map[string]string{}
+	for _, name := range sim.AgentNames {
+		lower := strings.ToLower(name)
+		soul, _ := os.ReadFile(persona.SoulPath(dir, name))
+		journal, _ := os.ReadFile(persona.JournalPath(dir, name))
+		out[lower+"/soul.md"] = string(soul)
+		out[lower+"/journal.md"] = string(journal)
+	}
+	return out
 }
 
 // assertFullArtifactSet fails unless the log carries every trace SC-002 wants a

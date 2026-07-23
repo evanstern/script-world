@@ -141,44 +141,49 @@ func (s *State) applyTimeSnapped(e store.Event) error {
 // (TestRebaseTaxonomyComplete) fails the build when a new int64 field appears in
 // the state structs without a classification entry. The rule:
 //
-//   SHIFT (+delta) — a future deadline, or an anchor from which an elapsed/
-//     remaining duration is measured; shifting preserves that duration across
-//     the jump. A SHIFT field whose zero value is an "unset/never" sentinel is
-//     shifted ONLY when non-zero (shifting the sentinel would fabricate a value).
-//   KEEP — a historical timestamp (when something happened) or an identity/
-//     counter; rewriting it would rewrite history or break a reference.
+//	SHIFT (+delta) — a future deadline, or an anchor from which an elapsed/
+//	  remaining duration is measured; shifting preserves that duration across
+//	  the jump. A SHIFT field whose zero value is an "unset/never" sentinel is
+//	  shifted ONLY when non-zero (shifting the sentinel would fabricate a value).
+//	KEEP — a historical timestamp (when something happened) or an identity/
+//	  counter; rewriting it would rewrite history or break a reference.
 //
 // SHIFT fields:
-//   Agent.IdleSince      reflex-grace anchor (elapsed = tick-IdleSince); shifted
-//                        UNCONDITIONALLY — its zero is genesis-idle, a real tick
-//                        read by raw subtraction, not a "never" sentinel.
-//   Agent.LastTalk       talk cooldown; ONLY non-zero (0 = never, canTalk-checked)
-//   Agent.LastGive       gift cooldown; ONLY non-zero (0 = never, canGive-checked)
-//   Intent.WorkStart     work-in-progress; ONLY non-zero (0 = not started)
-//   AgentHail.Until       courtesy-pause deadline (a present hail is non-zero)
-//   PlanStep.Until        plan-step validity deadline; ONLY when > 0 (0 = no
-//                         expiry). NOT in data-model.md — see NOTE.
-//   Guard.Tick            after_tick/before_tick boundary; ONLY non-zero (0 for
-//                         the non-timed guard types). NOT in data-model.md — see NOTE.
-//   Structure.FuelUntil   fire burn deadline; ONLY non-zero
-//   Harvest.Regrow        forage regrowth deadline
-//   DenUse.Ready          den cooldown deadline
-//   FoodBatch.SpoilAt     ground-food rot deadline
-//   Debt.Due              repayment deadline; ONLY non-zero
-//   Gru.LastAttack        attack-cooldown anchor; ONLY non-zero (0 = never) and
-//                         only while the gru is abroad
-//   Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
-//   Meeting.GatherStart   emergent-gathering-watch anchor; ONLY non-zero
+//
+//	Agent.IdleSince      reflex-grace anchor (elapsed = tick-IdleSince); shifted
+//	                     UNCONDITIONALLY — its zero is genesis-idle, a real tick
+//	                     read by raw subtraction, not a "never" sentinel.
+//	Agent.LastTalk       talk cooldown; ONLY non-zero (0 = never, canTalk-checked)
+//	Agent.LastGive       gift cooldown; ONLY non-zero (0 = never, canGive-checked)
+//	Intent.WorkStart     work-in-progress; ONLY non-zero (0 = not started)
+//	AgentHail.Until       courtesy-pause deadline (a present hail is non-zero)
+//	PlanStep.Until        plan-step validity deadline; ONLY when > 0 (0 = no
+//	                      expiry). NOT in data-model.md — see NOTE.
+//	Guard.Tick            after_tick/before_tick boundary; ONLY non-zero (0 for
+//	                      the non-timed guard types). NOT in data-model.md — see NOTE.
+//	Structure.FuelUntil   fire burn deadline; ONLY non-zero
+//	Harvest.Regrow        forage regrowth deadline
+//	DenUse.Ready          den cooldown deadline
+//	FoodBatch.SpoilAt     ground-food rot deadline
+//	Debt.Due              repayment deadline; ONLY non-zero
+//	Gru.LastAttack        attack-cooldown anchor; ONLY non-zero (0 = never) and
+//	                      only while the gru is abroad
+//	Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
+//	Meeting.GatherStart   emergent-gathering-watch anchor; ONLY non-zero
 //
 // KEEP (history/identity — never rewritten): Agent.Generation,
-//   Agent.LastGoalTick, Agent.LastConsolidatedNight, Agent.ConsolidatedUpTo,
-//   Agent.LastConsolidateMark, Memory.Tick, Belief.Tick, KnownRumor.Tick,
-//   Guard.Generation, Rumor.OriginTick, ConvoRecord.Conv (identity — the
-//   founding-talk tick doubles as the conversation id), ConvoRecord.Tick,
-//   ChronicleEntry.Tick/Day/FromTick/ToTick, Meeting.LastMeetingDay,
-//   MeetingConvention.EstablishedDay, Norm.DayPassed/DayRepealed/DayAmended,
-//   NormViolation.Tick. Day-denominated governance fields re-arm naturally under
-//   the new clock.
+//
+//	Agent.LastGoalTick, Agent.LastConsolidatedNight, Agent.ConsolidatedUpTo,
+//	Agent.LastConsolidateMark, Memory.Tick, Memory.Conv (spec 019: a
+//	conversation-ref identity, same founding-talk tick as ConvoRecord.Conv),
+//	JournalEntry.Tick (spec 019: when the entry was written, history),
+//	Belief.Tick, KnownRumor.Tick,
+//	Guard.Generation, Rumor.OriginTick, ConvoRecord.Conv (identity — the
+//	founding-talk tick doubles as the conversation id), ConvoRecord.Tick,
+//	ChronicleEntry.Tick/Day/FromTick/ToTick, Meeting.LastMeetingDay,
+//	MeetingConvention.EstablishedDay, Norm.DayPassed/DayRepealed/DayAmended,
+//	NormViolation.Tick. Day-denominated governance fields re-arm naturally under
+//	the new clock.
 //
 // PHASE-ANCHORED behavior (day/night, meeting times of day, charge-regen
 // boundaries) is a pure function of the absolute clock and stores no field here.
