@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
 ---
 
 # LLM orchestrator
@@ -45,17 +45,11 @@ calls inflated to 60–120 s, enough to saturate the tier and shed every
 musing — and the compat endpoint ignores `think: false` but honors
 `reasoning_effort`. The value arrives at `newOpenAICompat` already
 resolved (`resolveReasoningEffort`); empty means the field is omitted
-from the body. Since TASK-58 `Request` also carries an optional
-`ResponseSchema` (`json.RawMessage`) + `SchemaName`: when set (and no
-`Tools` are declared — the two are mutually exclusive on the wire,
-provider-wire.md §2), the chat-completions body gains a `response_format`
-`{type: json_schema}` envelope (name defaulting to `"reply"`) so an
-OpenAI-compat backend that honors structured outputs (Ollama does)
-constrains the reply at the sampler. The mechanism survives spec 017, but
-its one caller retired: the planner used it to constrain a free-text goal
-reply (TASK-58); since spec 017 the planner instead declares its roster as
-native tools (below), and no request sets `ResponseSchema` in production —
-the field stays live for any future schema-constrained single-shot kind.
+from the body. (A TASK-58 `ResponseSchema`/`SchemaName` structured-output
+path — a sampler-level `response_format {type: json_schema}` envelope on
+schema-carrying requests — lost its one caller when spec 017 moved the
+planner to native tools, and was deleted as dead code in TASK-71; git
+history has it if a schema-constrained single-shot kind ever returns.)
 
 **Agent tool-use loop transport** (`llm.go`/`providers.go`, TASK-52, spec
 017; every field below is additive — a request that sets none of them

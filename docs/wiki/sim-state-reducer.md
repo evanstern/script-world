@@ -8,7 +8,7 @@ sources:
   - internal/sim/recipes.go
   - internal/sim/miracles.go
   - internal/sim/journal.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
 ---
 
 # Sim state & reducer

@@ -9,7 +9,7 @@ sources:
   - internal/cognition/route.go
   - internal/cognition/calibration.go
   - internal/sim/cognition.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
 ---
 
 # Cognition horizon
@@ -43,8 +43,8 @@ horizon gate rather than carrying its own 1pt/3600t budget ([[agent-mind]],
 the package leaf) to a class; `ValidateKinds` enforces FR-002 at daemon start
 — an unmapped kind, a non-Fibonacci point value, or a non-positive budget is
 a fatal startup error. `Degrade` names the suppression floor: `skip`
-(recorded, not silent), `reflex`, `template`, or `faster-tier`
-(registry-expressible but treated as skip in v1).
+(recorded, not silent), `reflex`, or `template` (a `faster-tier` variant
+existed but was never wired past skip and was removed as dead code, TASK-71).
 
 **Routing** (`route.go`): `Route(dc, ticksPerSecond, secondsPerPoint)` is pure
 arithmetic — predicted wall seconds = points × seconds-per-point; predicted
