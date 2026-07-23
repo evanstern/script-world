@@ -225,7 +225,7 @@ live-vs-replay byte-identity on a loop-era run.
       ParamKind debt note) and this spec's contracts to as-shipped values, in
       specs/014-tool-registry/contracts/tool-catalog.md +
       specs/017-agent-tool-loop/contracts/
-- [ ] T027 Run quickstart.md end-to-end (both tiers, fallback, replay-verify, budget
+- [x] T027 Run quickstart.md end-to-end (both tiers, fallback, replay-verify, budget
       sanity) and record evidence on TASK-52
 - [ ] T028 Re-pin grounding wiki notes touched by this feature
       (llm-orchestrator, cognition, agent-mind, tool-registry, event-types,
