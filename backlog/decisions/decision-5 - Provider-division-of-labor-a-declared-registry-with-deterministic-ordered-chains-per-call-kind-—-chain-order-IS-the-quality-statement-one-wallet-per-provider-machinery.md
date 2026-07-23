@@ -89,4 +89,4 @@ doctrine one level down: no model — and no heuristic — ever chooses a model.
 - Replay and determinism are untouched: routing happens outside the sim loop; provider
   choice affects which model answered, never how recorded events replay.
 
-Spec: specs/023-provider-routing (TASK-35).
+Spec: specs/024-provider-routing (TASK-35).
