@@ -29,7 +29,7 @@ Single Go module, packages evolved in place per plan.md. All work on branch
 
 **Purpose**: regression anchor before any refactor
 
-- [ ] T001 Record the pre-change baseline: run `go test -race ./...` in the worktree and
+- [x] T001 Record the pre-change baseline: run `go test -race ./...` in the worktree and
   note the green run (and any pre-existing flakes) in the task-35 board notes; this is
   the "unchanged semantics" reference for every later phase
 
@@ -41,7 +41,7 @@ Single Go module, packages evolved in place per plan.md. All work on branch
 everything else sits on. After this phase the tree compiles and behaves identically for
 legacy configs (proven in US1).
 
-- [ ] T002 Rework internal/llm/config.go per data-model.md + contracts/llm-config.md:
+- [x] T002 Rework internal/llm/config.go per data-model.md + contracts/llm-config.md:
   add `ProviderConfig` (transport, endpoint, model, pricing, api_key_env/api_key,
   parallel, reasoning_effort, tool_mode, endpoint_capacity) and `RouteConfig` (custom
   UnmarshalJSON accepting bare-array shorthand and `{chain, no_fallback}`); `Config`
@@ -50,7 +50,7 @@ legacy configs (proven in US1).
   missing/duplicate route entries, no_fallback contradiction, per-provider required
   fields) with warn-and-clamp preserved per provider; legacy `local`/`cloud` derivation
   exactly per contract; DefaultConfig/WriteDefault emit the v2 default shape
-- [ ] T003 Generalize internal/llm/llm.go: rename `tier` struct to `provider` (name,
+- [x] T003 Generalize internal/llm/llm.go: rename `tier` struct to `provider` (name,
   cfg, caller, health, queue, prio, slots, inflight, est); replace the `routing` map and
   `tiers` map with a validated `providers map[string]*provider` + `routes map[Kind]route`
   built in `New()` (workers spawned per provider's clamped parallel); `Submit` dispatches
@@ -58,7 +58,7 @@ legacy configs (proven in US1).
   (always set) and cost uses the serving provider's pricing; `Request` gains the
   `Provider` pin field (validated, admission-honoring — full walk semantics arrive in
   US3); keep `Kinds()` static and boot-validated against routes
-- [ ] T004 Propagate mechanically so the tree compiles with unchanged behavior: meter
+- [x] T004 Propagate mechanically so the tree compiles with unchanged behavior: meter
   `Add(provider, cost)` signature (attribution lands in US4), `llm.Status` →
   `{Providers []ProviderStatus, Month, Spent, Budget}` per contracts/status.md with
   internal/ipc/server.go (+ protocol type if typed) and the TUI pane updated to render
@@ -78,16 +78,16 @@ with named errors.
 
 **Independent Test**: quickstart §1–§2.
 
-- [ ] T005 [P] [US1] Legacy-equivalence suite in internal/llm/config_test.go +
+- [x] T005 [P] [US1] Legacy-equivalence suite in internal/llm/config_test.go +
   llm_test.go: a legacy-shape llm.json derives providers `local`/`cloud` with today's
   routes, defaults, reasoning-effort/tool-mode resolution, parallel clamp warnings, and
   admission errors byte-identical to the pre-change suite (port the existing httptest
   mock-provider tests to prove routing/ceiling/breaker/queue behavior unchanged)
-- [ ] T006 [P] [US1] Validation-matrix tests in internal/llm/config_test.go: every row of
+- [x] T006 [P] [US1] Validation-matrix tests in internal/llm/config_test.go: every row of
   contracts/llm-config.md's matrix fails LoadConfig with an error naming the offending
   entry; v2 default from WriteDefault round-trips loadable and semantically equals
   today's defaults
-- [ ] T007 [US1] Chain-head dispatch tests in internal/llm/llm_test.go: v2 config with
+- [x] T007 [US1] Chain-head dispatch tests in internal/llm/llm_test.go: v2 config with
   two providers routes each kind to its chain head; `Response.Provider` names it; worker
   counts per provider match clamped `parallel` (extend the TASK-45 concurrency tests to
   two simultaneous providers under `-race`)

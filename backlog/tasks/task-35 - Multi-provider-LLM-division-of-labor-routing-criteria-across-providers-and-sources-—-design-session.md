@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 15:35'
+updated_date: '2026-07-23 16:06'
 labels:
   - engine
   - llm
@@ -45,9 +45,9 @@ Spec: specs/024-provider-routing
 - [x] #1 A design session produces a durable design doc (decision record or spec) defining the routing criteria, provider registry shape, and fallback-chain semantics
 - [x] #2 The design states how routing interacts with the spend meter, circuit breakers, and the TASK-24 contention scenario
 - [x] #3 Follow-on implementation tasks (or a Spec Kit spec) are cut from the design and placed on the board
-- [ ] #4 Spec phase: Setup
-- [ ] #5 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #6 Spec phase: User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP
+- [x] #4 Spec phase: Setup
+- [x] #5 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #6 Spec phase: User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP
 - [ ] #7 Spec phase: User Story 2 — Division of labor: per-provider speed truth (Priority: P2)
 - [ ] #8 Spec phase: User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3)
 - [ ] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
@@ -74,4 +74,8 @@ Design session complete (2026-07-23): doctrine recorded as decision-5 (registry 
 spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 0/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 0/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 0/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 0/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/3
 
 AC-3 proven: follow-on implementation cut from the design as spec 024's tasks.md (19 tasks, 9 phases) and mirrored onto this task as Spec-phase ACs via spec-bridge. Tier decisions per constitution V recorded in plan.md slice map: Phases 1-8 (US1-US5 + engine polish) → spec-implementer on Opus 4.8 (concurrency/scheduling/governor logic in internal/llm + cross-package seams: cognition, mind, toolloop, ipc); Phase 9 (US6 status/TUI/CLI surfacing) → Sonnet (view/rendering code).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 0/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 0/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 0/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/3
+
+Slice 1 (Opus 4.8, T001-T007) landed on the branch: commits 636df4e (registry generalization T002-T004) + a80b0b8 (equivalence/validation/chain-head tests T005-T007). T001 baseline: pre-change go test -race ./... fully green, 20 packages, no flakes. Post-slice: full -race suite green (uncached), go vet clean; orchestrator-session spot-check re-ran internal/llm green. Two spec-directed deviations accepted by gate review: budget gating keys on pricing class not tier identity (FR-009/decision-5), reasoning-effort nil-default keys on pricing class (data-model). Chain-walking, estimator seeding, attribution, leases, surface polish deliberately deferred to their slices.
 <!-- SECTION:NOTES:END -->
