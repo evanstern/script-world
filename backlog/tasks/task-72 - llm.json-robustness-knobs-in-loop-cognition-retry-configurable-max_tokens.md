@@ -1,10 +1,10 @@
 ---
 id: TASK-72
 title: 'llm.json robustness knobs: in-loop cognition retry + configurable max_tokens'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 06:34'
-updated_date: '2026-07-23 17:11'
+updated_date: '2026-07-23 17:17'
 labels:
   - review-2026-07-22
   - code-quality
@@ -31,11 +31,11 @@ Spec: specs/025-llm-robustness-knobs
 - [x] #2 Estimator feeding unchanged: retries produce no extra latency observations; breaker semantics unchanged
 - [x] #3 Retry visible in the recorded trail (CallRecord or event), never silent
 - [x] #4 Per-kind max_tokens knobs in llm.json with warn-not-error clamping; defaults match current hardcodes
-- [ ] #5 go test -race ./... passes; wiki notes re-pinned (llm-orchestrator, tool-loop)
+- [x] #5 go test -race ./... passes; wiki notes re-pinned (llm-orchestrator, tool-loop)
 - [x] #6 Spec phase: Setup
 - [x] #7 Spec phase: User Story 1 — A flaky provider call no longer wastes a whole thought (Priority: P1) 🎯 MVP
 - [x] #8 Spec phase: User Story 2 — Operator tunes cognition token budgets in llm.json (Priority: P2)
-- [ ] #9 Spec phase: Polish & Cross-Cutting
+- [x] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -45,3 +45,9 @@ Spec Kit flow complete (2026-07-23): specs/025-llm-robustness-knobs — spec.md,
 
 Implementation complete on branch task-72-llm-robustness-knobs (PR #51, commit 9e62208 after rebase onto origin/main). Implemented by spec-implementer @ Opus 4.8; reviewed + independently re-verified on Fable 5 (retry tests, token-budget normalization, TestCatalogSweep, full go test -race ./... green on rebased branch). ACs 1-4 proven by tests in the PR: toolloop/retry_test.go (fail-once/fail-twice/never-retry matrix, estimator invariance = AC1+AC2), mind/metatron retry-visibility via non-terminal cog.outcome OutcomeRetried (AC3), llm config normalization table + boot smoke with clamp warning (AC4). AC5 (wiki re-pin) after merge. Notable accepted deviations: Config.MaxTokens is *TokenBudgets (value struct defeats omitempty), tui/decisions.go guard so the non-terminal retried marker never overwrites the earned terminal outcome, TestProviderErrorFromSubmit updated to fail-twice premise. tasks.md 16/17 (T017 post-merge).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shipped in PR #51 (merge 8ada105). (a) One in-loop transport retry per cognition run in toolloop.run() — provider_error via terminationForSubmitErr only; admission/ctx/handler failures never retry; identical transcript re-submitted, no round consumed; Result.Retried/RetryReason surfaced by mind.runPlan and metatron.Turn as a non-terminal cog.outcome OutcomeRetried (TASK-42 vocabulary, no new event type); estimator/breaker invariance structural and test-locked (recovered run = 1 ObserveCognition, twice-failed = 0). (b) llm.json max_tokens {planner 512, metatron_turn 1024, consolidation 1024} as *TokenBudgets with warn-not-error clamping (1-4096), threaded daemon → mind.New/metatron.New; WriteDefault stays minimal (omitempty via pointer). Implemented by spec-implementer @ Opus 4.8, reviewed + independently verified on Fable 5; full go test -race ./... green. Wiki re-pinned to 8ada105: 11 notes (7b0f6b2). Spec 025 tasks 17/17. Follow-up observations (non-blocking, in notes): metatron retry markers carry no class/agent for future rendering; decisions.go 'retried' gloss is conversation-specific; 5 pre-existing gofmt-nonconforming files out of scope.
+<!-- SECTION:FINAL_SUMMARY:END -->

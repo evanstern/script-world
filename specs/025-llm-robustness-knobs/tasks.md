@@ -87,7 +87,7 @@ Single Go module at repo root; packages under `internal/`, entrypoints under `cm
 **Purpose**: whole-suite gates and grounding freshness (TASK-72 AC #5)
 
 - [x] T016 Full-suite gate: `go test -race ./...` green in the worktree; run the quickstart.md scenarios end to end and record results in the PR description
-- [ ] T017 Post-merge (root checkout, after the PR lands): `/grounding-wiki:wiki-update` re-pins the touched notes (`docs/wiki/tool-loop.md`, `docs/wiki/llm-orchestrator.md`, `docs/wiki/agent-mind.md`, `docs/wiki/metatron.md`, `docs/wiki/nightly-consolidation.md`, `docs/wiki/daemon-lifecycle.md` — exact set as wiki-update computes against the diff)
+- [x] T017 Post-merge (root checkout, after the PR lands): `/grounding-wiki:wiki-update` re-pins the touched notes (`docs/wiki/tool-loop.md`, `docs/wiki/llm-orchestrator.md`, `docs/wiki/agent-mind.md`, `docs/wiki/metatron.md`, `docs/wiki/nightly-consolidation.md`, `docs/wiki/daemon-lifecycle.md` — exact set as wiki-update computes against the diff)
 
 ---
 
