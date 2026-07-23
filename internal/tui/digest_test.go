@@ -140,6 +140,10 @@ var catalogFixture = map[string]digestFixture{
 		`{"tier":"cheap","estimate_s_per_pt":0.5,"spike_rate":0.2,"window":50}`,
 		`tier=cheap est=0.50s/pt spikes=0.20 window=50`,
 	},
+	"cog.tool_call": {
+		`{"job":"j1","ordinal":1,"tool":"inject_intent","args":{"agent":0},"verdict":"rejected_gate","reason":"stale snapshot","tier":"cheap","snapshot_tick":100}`,
+		`job=j1 ord=1 tool=inject_intent rejected_gate tier=cheap reason=stale snapshot`,
+	},
 }
 
 // TestCatalogSweep is the SC-001 gate (contract §7): every fixture type
@@ -253,7 +257,7 @@ func TestDigestRoleSpans(t *testing.T) {
 	}
 
 	// Labeled voice (contract §2): cog/clock/daemon render key=value spans.
-	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended",
+	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended", "cog.tool_call",
 		"clock.speed_set", "clock.degraded", "daemon.started", "daemon.stopped", "agent.needs_changed"} {
 		fx := catalogFixture[typ]
 		if !anyRole(digestOf(t, typ, fx.payload), segLabel) {
