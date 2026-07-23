@@ -229,3 +229,66 @@ func TestGovernSequenceLandsInStore(t *testing.T) {
 		t.Errorf("final state = {Speed:%q Requested:%q}, want {8x 32x}", l.state.Speed, l.state.RequestedSpeed)
 	}
 }
+
+// TestGovernShedThenRecoverToCeiling (spec 028 US3, T013): a full governed arc
+// through the real loop command path — two sheds under load, then recover
+// notch-by-notch back to the 32x ceiling. The intermediate recover keeps the
+// ceiling recorded (RequestedSpeed stays set — still governed, US3-AC1); the
+// final recover reaching the ceiling clears governed state (RequestedSpeed empty,
+// effective equals requested — US3-AC3).
+func TestGovernShedThenRecoverToCeiling(t *testing.T) {
+	l := newGovernHarness(t, clock.Speed32x, nil)
+
+	// Shed 32x -> 16x -> 8x under load; the player's 32x request is the ceiling.
+	runGovern(t, l, clock.Speed16x, 2.1, 3)
+	runGovern(t, l, clock.Speed8x, 1.8, 2)
+	if l.state.Speed != clock.Speed8x || l.state.RequestedSpeed != clock.Speed32x {
+		t.Fatalf("after two sheds = {Speed:%q Requested:%q}, want {8x 32x}", l.state.Speed, l.state.RequestedSpeed)
+	}
+
+	// Recover 8x -> 16x: debt drained, but the world is still governed — the 32x
+	// ceiling stands and RequestedSpeed stays set.
+	st := runGovern(t, l, clock.Speed16x, 0.2, 1)
+	if l.state.Speed != clock.Speed16x {
+		t.Errorf("after first recover Speed = %q, want 16x", l.state.Speed)
+	}
+	if l.state.RequestedSpeed != clock.Speed32x {
+		t.Errorf("intermediate recover cleared the ceiling: RequestedSpeed = %q, want 32x", l.state.RequestedSpeed)
+	}
+	if st.RequestedSpeed != clock.Speed32x {
+		t.Errorf("status RequestedSpeed = %q, want 32x (still governed)", st.RequestedSpeed)
+	}
+
+	// Recover 16x -> 32x: reaches the ceiling, so governed state clears.
+	st = runGovern(t, l, clock.Speed32x, 0.1, 0)
+	if l.state.Speed != clock.Speed32x {
+		t.Errorf("after final recover Speed = %q, want 32x", l.state.Speed)
+	}
+	if l.state.RequestedSpeed != "" {
+		t.Errorf("recovered to the ceiling but RequestedSpeed = %q, want empty", l.state.RequestedSpeed)
+	}
+	if st.RequestedSpeed != "" {
+		t.Errorf("status RequestedSpeed = %q, want empty (ungoverned)", st.RequestedSpeed)
+	}
+	if l.state.EffectiveRate != clock.Speed32x.TicksPerSecond() {
+		t.Errorf("EffectiveRate = %v, want %v", l.state.EffectiveRate, clock.Speed32x.TicksPerSecond())
+	}
+
+	// The whole arc is in the log in order: two sheds, then two recoveries.
+	evs := governorEvents(t, l)
+	wantTypes := []string{"clock.governor_shed", "clock.governor_shed", "clock.governor_recovered", "clock.governor_recovered"}
+	if len(evs) != len(wantTypes) {
+		t.Fatalf("governor events = %d, want %d", len(evs), len(wantTypes))
+	}
+	for i, wt := range wantTypes {
+		if evs[i].Type != wt {
+			t.Errorf("event %d = %q, want %q", i, evs[i].Type, wt)
+		}
+	}
+	// The final recovery's payload records the ceiling reached.
+	final := decodeGovernor(t, evs[3])
+	want := GovernorPayload{Requested: clock.Speed32x, From: clock.Speed16x, To: clock.Speed32x, Debt: 0.1, Jobs: 0}
+	if final != want {
+		t.Errorf("final recover payload = %+v, want %+v", final, want)
+	}
+}
