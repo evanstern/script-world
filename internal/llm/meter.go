@@ -13,9 +13,10 @@ type MeterStore interface {
 	SetMeta(key, value string) error
 }
 
-// Meter tracks cloud spend against the monthly ceiling, persisted in the
-// world's meta table so restarts never forget money already spent. Months
-// are wall-clock UTC — spend is an operator concern, not sim state.
+// Meter tracks priced-provider spend against the monthly ceiling, persisted in
+// the world's meta table so restarts never forget money already spent (zero-
+// priced providers never touch it). Months are wall-clock UTC — spend is an
+// operator concern, not sim state.
 //
 // One wallet, per-provider attribution (spec 024 US4, research R4): the total
 // key llm_spend_YYYY-MM stays authoritative — it is what Allow() reads and what

@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// tierHealth is a circuit breaker: consecutive failures open it (fail fast),
-// a backoff window closes into half-open (one probe request allowed), and a
-// success resets. This is the "designed degraded state" — an unreachable
-// model can never hang or crash the daemon, and recovery is automatic.
-// Vars (not consts) so tests can compress the clock.
+// tierHealth is a circuit breaker, one per provider (spec 024): consecutive
+// failures open it (fail fast), a backoff window closes into half-open (one probe
+// request allowed), and a success resets. This is the "designed degraded state" —
+// an unreachable model can never hang or crash the daemon, and recovery is
+// automatic. Vars (not consts) so tests can compress the clock.
 var (
 	failuresToOpen = 3
 	backoffInitial = 15 * time.Second

@@ -1,10 +1,16 @@
-// Package llm is the orchestrator for all model traffic (TASK-6): two
-// tiers (local Ollama-style HTTP, cloud Anthropic), kind-based routing,
-// bounded queues with backpressure feeding N concurrent local workers
-// (configurable via local.parallel, default 1; cloud is always single-worker,
-// TASK-45), a persisted monthly spend meter with a hard ceiling, and per-tier
-// circuit breakers so unreachable inference degrades the AI layer — never the
-// simulation.
+// Package llm is the orchestrator for all model traffic (TASK-6, generalized in
+// spec 024): a registry of named PROVIDERS (each a transport — OpenAI-compatible
+// HTTP or Anthropic — with its own model, pricing, queues, workers, breaker, and
+// latency estimator) and per-kind ordered ROUTES that chain them. Each call kind
+// resolves to its chain and dispatches to the first admissible provider, walking
+// past any that are circuit-open, wallet-exhausted, or busy (US3). A single
+// monthly spend meter with a hard ceiling governs the one wallet while attributing
+// spend per provider (US4), and an opt-in advisory endpoint-lease pool bounds
+// combined cross-world concurrency on a shared endpoint (US5). Bounded queues with
+// backpressure feed each provider's N workers (its clamped parallel, TASK-45), and
+// per-provider circuit breakers keep unreachable inference degrading the AI layer
+// — never the simulation. Legacy local/cloud worlds derive a two-provider registry
+// and behave byte-identically (US1).
 //
 // The orchestrator lives entirely OUTSIDE the deterministic sim loop. LLM
 // results reach the world only as recorded inputs (TASK-7's job), so replay
@@ -24,7 +30,8 @@ import (
 	"github.com/evanstern/promptworld/internal/cognition"
 )
 
-// Kind classifies a call; routing to a tier follows the grounding decisions.
+// Kind classifies a call; each kind resolves to an ordered provider chain (its
+// route) per the operator's config.
 type Kind string
 
 const (
@@ -41,11 +48,13 @@ const (
 	KindMeeting Kind = "meeting"
 )
 
-// Tier is the retiring routing concept (decision-5): pricing (zero vs nonzero)
-// is now the only local-vs-cloud distinction. The type survives as the
-// estimator/calibration key and the legacy provider names ("local"/"cloud"),
-// and rides Response.Tier plus the recalibrate hook until those consumers move
-// per provider in later slices of spec 024.
+// Tier is the retired routing concept (decision-5): routing is now per named
+// provider along ordered chains, and pricing (zero vs nonzero) is the only
+// surviving local-vs-cloud distinction. The type is no longer a routing or
+// estimator key; it remains ONLY as load-bearing wire compat — Response.Tier
+// carries the serving provider's name for telemetry/CLI consumers not yet moved
+// off it, and TierLocal/TierCloud back cmd/promptworld's legacy `--tier` calibrate
+// iteration until the US6 surfacing slice (T020) moves it to provider names.
 type Tier string
 
 const (
@@ -121,7 +130,7 @@ type Request struct {
 	// replayed.
 	Turns []Turn `json:"turns,omitempty"`
 	// SkipObserve marks a loop-internal call: the worker feeds NO per-call
-	// sample to the tier estimator (the loop reports one whole-cognition
+	// sample to the provider estimator (the loop reports one whole-cognition
 	// observation via Orchestrator.ObserveCognition instead). Metering,
 	// admission, and the circuit breaker are unaffected.
 	SkipObserve bool `json:"skip_observe,omitempty"`
@@ -177,7 +186,7 @@ const (
 // --- tool-call transport model (TASK-52) ---
 //
 // These types are the wire-agnostic currency between the loop driver and the
-// per-tier callers: a caller translates Request{Tools,Turns} out to its
+// per-provider callers: a caller translates Request{Tools,Turns} out to its
 // provider's shape and Response{ToolCalls,Stop} back. They are transport-only
 // and ephemeral — never persisted and never replayed (data-model §3).
 
@@ -270,7 +279,7 @@ type Status struct {
 const queueCap = 32
 
 // workerCallCap bounds any single provider call at the worker, the last
-// line of defense against a hung transport freezing a tier.
+// line of defense against a hung transport freezing a provider.
 const workerCallCap = 2 * time.Minute
 
 type job struct {
@@ -374,7 +383,7 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		providers: make(map[string]*provider, len(pcs)),
 		routes:    make(map[Kind]route, len(rcs)),
 	}
-	// Each provider owns a full instance of the per-tier machinery (FR-005),
+	// Each provider owns a full instance of the per-provider machinery (FR-005),
 	// with worker slots from its clamped parallel (warn discarded here — the
 	// daemon surfaces boot warnings; the clamp itself is the invariant).
 	for name, pc := range pcs {
@@ -539,7 +548,7 @@ func (o *Orchestrator) EstimateForKind(kind Kind) (string, float64, bool) {
 	return head.name, head.est.Estimate(), true
 }
 
-// feedEstimate reports one completed-cognition wall time to a tier's
+// feedEstimate reports one completed-cognition wall time to a provider's
 // seconds-per-point estimator, normalized by the kind's registered point cost,
 // and fires the recalibrate hook (in its own goroutine) on a spike-rate breach.
 // Shared by the per-call worker path (TASK-32) and the whole-loop
@@ -743,7 +752,7 @@ func (o *Orchestrator) worker(t *provider) {
 				j.reply <- result{err: j.ctx.Err()}
 				return
 			}
-			// Worker-side hard cap: no single call may wedge the tier,
+			// Worker-side hard cap: no single call may wedge the provider,
 			// regardless of the caller's context or transport behavior.
 			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
 			// Endpoint lease (spec 024 US5): a lease-enabled provider acquires a
@@ -791,7 +800,7 @@ func (o *Orchestrator) worker(t *provider) {
 				Millis:       time.Since(start).Milliseconds(),
 			}
 			// Cognition-horizon sampling (TASK-32): completed calls feed the
-			// tier's seconds-per-point estimate, normalized by the kind's
+			// provider's seconds-per-point estimate, normalized by the kind's
 			// registered point cost. Successes only — a fast failure is not
 			// a latency observation of completed thought, and the estimator's
 			// spike rejection only guards the high side. A loop-internal call

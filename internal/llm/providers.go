@@ -14,9 +14,9 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// caller is one tier's transport. It returns the fields a transport owns for
+// caller is one provider's transport. It returns the fields a transport owns for
 // one provider call (text, any tool calls, stop reason, token counts); the
-// worker completes the Response with tier/model/cost/millis (TASK-52).
+// worker completes the Response with provider/model/cost/millis (TASK-52).
 type caller interface {
 	call(ctx context.Context, req Request) (callResult, error)
 }
@@ -33,8 +33,8 @@ type callResult struct {
 }
 
 // --- OpenAI-compatible chat completions (Ollama, 9router, et al.) ---
-// Serves the local tier always, and the cloud tier when
-// cloud.provider = "openai_compat".
+// The transport of any provider whose transport is "openai_compat" (spec 024) —
+// legacy worlds' local tier and any openai_compat cloud router alike.
 
 type openaiCompat struct {
 	endpoint string
@@ -466,7 +466,8 @@ func (o *openaiCompat) do(ctx context.Context, payload map[string]any) (oaiRespo
 	return out, nil
 }
 
-// --- cloud tier: Anthropic Messages API via the official SDK ---
+// --- Anthropic Messages API via the official SDK ---
+// The transport of any provider whose transport is "anthropic" (spec 024).
 
 type anthropicCaller struct {
 	client anthropic.Client
