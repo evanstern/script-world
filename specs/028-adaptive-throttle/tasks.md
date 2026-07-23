@@ -15,7 +15,7 @@ concurrency/sim slices → Opus 4.8; TUI/status/doc slices → Sonnet).
 
 ## Phase 1: Setup
 
-- [ ] T001 Verify worktree `.worktrees/task-33` (branch `task-33-adaptive-throttle`) is rebased on current
+- [x] T001 Verify worktree `.worktrees/task-33` (branch `task-33-adaptive-throttle`) is rebased on current
       `origin/main` and baseline `go test ./...` is green before any change
 
 ---
@@ -24,11 +24,11 @@ concurrency/sim slices → Opus 4.8; TUI/status/doc slices → Sonnet).
 
 **Purpose**: the pure debt arithmetic and the pending-thought inventory — every story reads these.
 
-- [ ] T002 [P] Add `Debt()` helper, `PendingDebtInput`, and the five doctrine constants (`GovernorCadence`,
+- [x] T002 [P] Add `Debt()` helper, `PendingDebtInput`, and the five doctrine constants (`GovernorCadence`,
       `ShedThreshold`, `BreachWindow`, `RecoverHeadroom`, `RecoveryWindow`) in
       `internal/cognition/governor.go` per contracts/internal-api.md; table-driven unit tests (zero-pending,
       overdue-floored-at-zero, mixed classes, unknown-kind skip) in `internal/cognition/governor_test.go`
-- [ ] T003 [P] Add the job registry (add on Submit-accept, stamp at dequeue, remove on every terminal path) and
+- [x] T003 [P] Add the job registry (add on Submit-accept, stamp at dequeue, remove on every terminal path) and
       `Orchestrator.PendingCognition()` in `internal/llm/llm.go`; lifecycle + drain-to-empty + snapshot-copy
       tests under `-race` in `internal/llm/pending_test.go`
 
