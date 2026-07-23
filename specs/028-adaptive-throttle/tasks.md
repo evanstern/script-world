@@ -127,7 +127,7 @@ resume window resets; max-speed refusal regression.
 - [x] T016 Run quickstart.md end-to-end in a scratch `PROMPTWORLD_HOME` with a real local model, including the
       SC-002 governor-on/off stale-discard comparison; record results in
       `specs/028-adaptive-throttle/quickstart-results.md` (live-observation precedent: 012/T045)
-- [ ] T017 [P] Full-suite gate `go test ./...` green + `go vet ./...`; confirm no format bump needed
+- [x] T017 [P] Full-suite gate `go test ./...` green + `go vet ./...`; confirm no format bump needed
       (snapshot-byte test from T007 passes on pre-028 fixtures)
 - [ ] T018 Post-merge re-grounding: `/grounding-wiki:wiki-update` for touched notes (sim-loop, cognition,
       llm-orchestrator, event-types, ipc-protocol, ipc-server, tui-client, game-clock connections) + player-docs
