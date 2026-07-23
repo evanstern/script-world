@@ -172,11 +172,11 @@ func TestMeterPersistsAcrossRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, spent1, _ := o1.meter.Snapshot()
+	_, spent1, _, _ := o1.meter.Snapshot()
 	o1.Close()
 
 	o2 := newOrch(t, cfg, st)
-	_, spent2, _ := o2.meter.Snapshot()
+	_, spent2, _, _ := o2.meter.Snapshot()
 	if spent2 != spent1 || spent2 == 0 {
 		t.Errorf("spend not persisted: before=%.5f after=%.5f", spent1, spent2)
 	}
@@ -936,7 +936,7 @@ func TestMeterExactUnderConcurrency(t *testing.T) {
 	wg.Wait()
 
 	want := float64(calls)*1.0 + float64(adders)*perAdd
-	_, spent, _ := o.meter.Snapshot()
+	_, spent, _, _ := o.meter.Snapshot()
 	if spent != want {
 		t.Errorf("meter spend = %v, want exactly %v", spent, want)
 	}
@@ -1019,7 +1019,7 @@ func TestSkipObserveStillMeters(t *testing.T) {
 	o := newOrch(t, testConfig("http://unused.invalid", cloud.URL, 100), testStore(t))
 	ct := o.providers["cloud"]
 	_, _, csamples0, _ := ct.est.Stats()
-	_, spent0, _ := o.meter.Snapshot()
+	_, spent0, _, _ := o.meter.Snapshot()
 
 	resp, err := o.Submit(context.Background(), Request{Kind: KindNarrator, Prompt: "x", SkipObserve: true})
 	if err != nil {
@@ -1028,7 +1028,7 @@ func TestSkipObserveStillMeters(t *testing.T) {
 	if resp.CostUSD <= 0 {
 		t.Errorf("SkipObserve call must still bill: cost=%v", resp.CostUSD)
 	}
-	if _, spent1, _ := o.meter.Snapshot(); spent1 <= spent0 {
+	if _, spent1, _, _ := o.meter.Snapshot(); spent1 <= spent0 {
 		t.Errorf("meter did not record the SkipObserve call: %v -> %v", spent0, spent1)
 	}
 	if _, _, csamples1, _ := ct.est.Stats(); csamples1 != csamples0 {

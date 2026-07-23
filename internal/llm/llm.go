@@ -342,15 +342,22 @@ type Orchestrator struct {
 }
 
 func New(cfg Config, st MeterStore) (*Orchestrator, error) {
-	meter, err := NewMeter(st, cfg.MonthlyBudgetUSD)
-	if err != nil {
-		return nil, err
-	}
 	// resolveRegistry normalizes both config shapes (legacy local/cloud or the
 	// v2 registry) into the validated provider set + kind→chain routes. A direct
 	// caller that hands New() a malformed registry gets the same boot error
 	// LoadConfig would raise — New() never builds machinery from an invalid map.
 	pcs, rcs, err := cfg.resolveRegistry()
+	if err != nil {
+		return nil, err
+	}
+	// The meter learns the declared provider roster so it can reload each one's
+	// persisted per-provider attribution at open and enumerate them in the
+	// snapshot (spec 024 US4). The total key still governs the one wallet.
+	names := make([]string, 0, len(pcs))
+	for name := range pcs {
+		names = append(names, name)
+	}
+	meter, err := NewMeter(st, cfg.MonthlyBudgetUSD, names)
 	if err != nil {
 		return nil, err
 	}
@@ -738,18 +745,19 @@ func (o *Orchestrator) worker(t *provider) {
 }
 
 // StatusSnapshot reports each provider's health, queue depth, and worker
-// occupancy plus the global spend (FR-012). Rows are sorted by name for a
-// deterministic marshal; Contended and per-provider SpentUSD are wired in later
-// slices (US5 leases, US4 attribution) and report zero here.
+// occupancy plus its attributed spend and the global total (FR-012). Rows are
+// sorted by name for a deterministic marshal; SpentUSD is the provider's share
+// of the month's spend (spec 024 US4) — the total minus Σ(rows) is the
+// (unattributed) remainder a surface renders. Contended is wired in US5.
 func (o *Orchestrator) StatusSnapshot() Status {
-	month, spent, budget := o.meter.Snapshot()
+	month, spent, budget, perProvider := o.meter.Snapshot()
 	rows := make([]ProviderStatus, 0, len(o.providers))
 	for _, p := range o.providers {
 		rows = append(rows, ProviderStatus{
 			Name: p.name, Model: p.cfg.Model, Endpoint: p.cfg.Endpoint,
 			Up: !p.health.down(), Queue: len(p.queue),
 			Inflight: int(p.inflight.Load()), Slots: p.slots,
-			Contended: false, SpentUSD: 0,
+			Contended: false, SpentUSD: perProvider[p.name],
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
