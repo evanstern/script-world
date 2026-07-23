@@ -10,6 +10,9 @@ sources:
   - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
   - internal/mind/replay_test.go
+  - internal/metatron/metatron_test.go
+  - internal/metatron/metatron_gaps_test.go
+  - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
 verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
@@ -141,6 +144,44 @@ leaves it untouched at zero, while a non-forced attempt against the same
 empty bank is refused; a `give_item` resolves the villager by name and the
 grant is visible in the next state fetch; unknown kinds/names are refused
 cleanly with the connection surviving.
+
+**Metatron behavioral suites** (`internal/metatron/metatron_test.go`,
+`internal/metatron/metatron_gaps_test.go`, TASK-74): the package's own tests
+now prove the economy mirror, turn serialization, and context-window
+contracts, not just the TASK-64 instruction surface. `metatron_test.go`
+(pre-existing) covers turn converse/degraded/fallback paths, nudge/miracle
+landing (charge decrement, atomicity, perception memories), zero-bank
+refusal, the firewall sentinel, charter fallbacks, skill-file
+eligibility/ordering, the fixed-frame non-negotiables under an adversarial
+battery, and capability-manifest gating. `metatron_gaps_test.go` closes what
+that suite left untested: `TestChargeMirrorAccrualAndCap` drives
+`metatron.charge_regenerated`/`metatron.nudged` through `Observe` → `run()` →
+`mirrorState` and proves the bank accrues and caps at `sim.MetatronChargeCap`
+without a sim executor; `TestTurnBusyConcurrent` runs two real goroutines
+against the `turnBusy` CAS (channel-gated, meaningful under `-race`) to prove
+exactly one `Turn` proceeds at a time; `TestObserveNeverBlocks` proves the
+notify path drops rather than wedges the caller; `TestAbsorbRefreshesMirrors`
+proves an observed batch's effects (alive map, chronicle story tail capped at
+8) are visible to the very next turn; and `TestTailOfFile`/
+`TestSoulTailWindow`/`TestTranscriptTailTurns` pin the soul/transcript
+tail-window truncation rules (`tailOfFile`, the 4000-byte `soulTail`, the
+6-whole-turn `transcriptTail`). All new concurrency tests are channel-gated,
+never sleep-as-the-only-gate (the TASK-69 flake lesson).
+
+**Persona lifecycle suite** (`internal/persona/persona_test.go`, TASK-74): on
+top of the pre-existing genesis-once/0444/missing-file-load coverage,
+`TestPersonaMapsSweepAligned` proves the four index-aligned maps (`Texts`,
+`Anchors`, `DriftMarkers`, `Secrets`) stay in lockstep with `sim.AgentNames` —
+gaining or losing an entry in any one map fails the sweep;
+`TestAnchorsMatchTemperamentLine` pins the documented "deliberately
+identical" invariant between `Anchors` and each persona's `**Temperament:**`
+line; `TestLoadUnreadableDegrades` proves an unreadable persona file degrades
+`Load` to an empty string for that agent only, mirroring the missing-file
+contract; `TestGenesisSeedsCharterAndJournal` proves fresh genesis seeds
+`charter.md` (= `DefaultCharter`) and a rune-budgeted `journal.md` per agent,
+and that an existing `charter.md` is never overwritten; and `TestSecretEvents`
+proves the genesis `social.secret_seeded` events are index-aligned,
+tick-0, tone `-70`, one per agent.
 
 The whole suite runs under `-race`; it caught a real race (store `lastSeq`, loop
 writer vs IPC readers — now atomic).
