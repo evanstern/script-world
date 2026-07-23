@@ -12,7 +12,7 @@ sources:
   - internal/mind/replay_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
 ---
 
 # Testing strategy
@@ -110,6 +110,12 @@ within 10 s, restart-while-paused wakes paused, graceful stop idempotent; E: a
 daemons' sim histories over their common tick prefix (past tick 25000, so the
 full day-1 [[governance]] meeting cycle is inside the compared window),
 excluding wall-dependent `daemon.*`/`clock.*` bookkeeping.
+
+**Miracle cost derivation** (`internal/sim/miracles_test.go`, spec 021):
+`TestMiracleCostDerivedFromTool` pins `sim.miracleCost` ≡
+`tool.MiracleCostsByEvent()` — the sim-side enforcement table is a derivation of
+the registry's single authoritative price source, not a mirror, so a price edit
+cannot half-propagate ([[tool-registry]], [[metatron-miracles]]).
 
 **Miracle reducer suite** (`internal/sim/miracles_test.go`, spec 016,
 [[metatron-miracles]]): per-arm coverage for all four types — move (villager/

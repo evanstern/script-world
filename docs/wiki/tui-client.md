@@ -8,7 +8,7 @@ sources:
   - internal/tui/layout.go
   - internal/tui/grammar.go
   - internal/tui/digest.go
-verified_against: d38330a018bec3ddfc78733aac33d9fb65ce1862
+verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
 ---
 
 # TUI client
@@ -85,8 +85,10 @@ because chests preserve food indefinitely (no rot deadlines to track).
 The **dock** hosts three tabs — keys `2`/`3`/`4` select, the same key again
 zooms the tab solo, `1`/`esc` return to the composite: **chronicle** (default;
 see below), **metatron** (the angel transcript — replies stream here, or
-badge the tab `metatron •` when it isn't visible; charge bank and charter
-provenance as before — [[metatron]]), and **villagers** (renamed from
+badge the tab `metatron •` when it isn't visible; the pane header shows the charge
+bank plus the spec-021 instruction/capability provenance summary — charter
+default/custom, skill-file count when non-zero, and the granted-tool summary from
+`Status.GrantedTools`, quiet for a full-grant default world — [[metatron]]), and **villagers** (renamed from
 "souls", spec 015/TASK-56 — now a two-view inspector rather than a flat
 roster). The villagers **roster** shows per agent: a selection cursor,
 status, current goal, needs gauges, a leading `bulk n/24` derived-load

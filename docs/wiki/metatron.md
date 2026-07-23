@@ -1,6 +1,6 @@
 ---
 name: metatron
-description: The gatekeeper angel (TASK-12) — console turn driven through the bounded tool-use loop (spec 017), dream/omen nudge mediation behind a structural prompt firewall, event-sourced charge economy, digests + drama moments, the one player-editable charter
+description: The gatekeeper angel (TASK-12) — console turn driven through the bounded tool-use loop (spec 017), dream/omen nudge mediation behind a structural prompt firewall, event-sourced charge economy, digests + drama moments, and the staged player-editable instruction surface (charter + skills/ + capabilities.json, spec 021)
 kind: component
 sources:
   - internal/metatron/metatron.go
@@ -11,7 +11,7 @@ sources:
   - internal/metatron/miracle_batch.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
 ---
 
 # Metatron
@@ -21,8 +21,11 @@ the mind/scribe notify-consumer pattern) that converses in the console, watches 
 world, and mediates all influence. Raw player text has exactly one sink — Metatron's
 own prompt; villagers can only ever receive Metatron's validated rendering, landed
 through [[sim-loop]]'s injection door as recorded events. The meta-game is
-prompt-engineering your angel: `charter.md` is the game's ONLY player-editable
-prompt.
+prompt-engineering your angel through the staged instruction surface (spec 021,
+TASK-64), shaped like real assistant configuration: `charter.md` (the
+CLAUDE.md-shaped base), `skills/*.md` (player-authored SKILL.md-shaped files),
+and `capabilities.json` (the per-world tool grant manifest) — all at the
+save-dir root, all re-read fresh every turn.
 
 ## How it works
 
@@ -30,15 +33,32 @@ prompt.
 through [[tool-loop]]'s bounded loop (`toolloop.Run`, spec 017 T020) against
 `llm.KindMetatron` cloud calls ([[llm-orchestrator]]), serialized single-flight.
 The prompt stacks the charter (re-read every turn — edits are live by construction,
-with restore/empty/truncate fallbacks and in-reply notices, `charter.go`), a fixed
-frame that pins two invariants beneath ANY charter (never invent unobserved events;
-never pass the player's words to a villager), live status (clock, ⚡ bank, roster),
+with restore/empty/truncate fallbacks and in-reply notices, `charter.go`), then the
+skill files (spec 021: `loadSkills` composes eligible `skills/*.md` — regular `.md`
+direct children, ascending bytewise filename order, ≤8 files, ≤4,000 chars each via
+`persona.CharterMaxChars`, each under a `--- skill: <name> ---` separator, with the
+same truncate/skip notice discipline as the charter), then a fixed frame appended
+LAST as a compile-time constant (`metatronNonNegotiables`) on every path — no
+editable byte can displace or truncate it (adversarial battery + determinism tests
+in `metatron_test.go`). The frame pins two invariants beneath ANY editable text
+(never invent unobserved events; never pass the player's words to a villager) and
+carries the acting-tool guidance DERIVED from the registry
+(`tool.MetatronToolGuidance` over the world's granted roster, [[tool-registry]]) —
+the old hand-written prose tool list is gone, so described ≡ declared by
+construction. The turn also stacks live status (clock, ⚡ bank, roster),
 queued moments, the [[chronicle]] tail (the angel reads its village's story — this
 grounds fresh reigns and upgraded worlds), its soul tail, and recent transcript. The
 model may reply with words (**converse** — the transcript-only final-answer channel,
 `toolloop.Result.Final`; `converse` is deliberately NOT a declared loop tool, so it
 can never be rejected as unknown) or call exactly one acting tool
-(`nudge_dream`/`nudge_omen`/`work_miracle`), which lands through its existing door;
+(`nudge_dream`/`nudge_omen`/`work_miracle` — or fewer: since spec 021 the world's
+`capabilities.json` gates the roster per-read through three independent layers, one
+`grantedRoster` feeding declaration, guidance prose, and the handler set, with
+defense-in-depth `grant.allows` checks in `landNudge`/`landMiracle`; an ungranted
+tool is structurally absent from the declared schemas, never merely prose-forbidden;
+missing manifest = full roster byte-compatibly, malformed = full roster + notice,
+`tools: []` = conversation-only — converse is never gateable), which lands through
+its existing door;
 the driver's one-acting-call cardinality enforces "at most one mediated act per
 turn" structurally, so the pre-loop nudge-wins-over-miracle precedence dissolves —
 the model just picks its one act. The retired `turnReply`/`parseTurn` free-text
@@ -120,13 +140,21 @@ V1 contract: the angel acts only when told; digests and moments can never constr
 a nudge.
 
 **Files** (bound to the run, not event-sourced): `charter.md` at the save-dir root
-(seeded by `persona.Genesis`, never overwritten); `metatron/soul.md` (accreting
-notes, starts empty) and `metatron/transcript.md` (console history) — restart
-survival comes free with files, and world determinism never depends on them.
+(seeded by `persona.Genesis`, never overwritten), plus the optional player-created
+`skills/` dir and `capabilities.json` manifest beside it (spec 021 — root =
+player-authored configuration); `metatron/soul.md` (accreting notes, starts empty)
+and `metatron/transcript.md` (console history) — restart survival comes free with
+files, and world determinism never depends on them (prompt composition is upstream
+of the recorded LLM inputs).
 
 **Surfaces**: IPC `metatron_chat`/`metatron_status` ([[ipc-protocol]]), CLI
 `promptworld metatron <dir> [message…]` ([[cli-promptworld]]), and the
-[[tui-client]] metatron pane (the console). Protocol status carries the ⚡ bank.
+[[tui-client]] metatron pane (the console). Protocol status (`metatron.Status`, the
+model-free peek, computed fresh from disk per call) carries the ⚡ bank, charter
+provenance (`charter_default`), and since spec 021 the effective skill filenames
+(`skills`, composition order), the granted roster (`granted_tools`, registry order,
+`work_miracle(move,give_item)` form when kinds are restricted), and
+`manifest_default` (no `capabilities.json` present).
 
 ## Connections
 
@@ -141,8 +169,10 @@ sharing `BuildMiracleBatch` with `landMiracle` here. [[tool-loop]] is the consol
 turn's driver since spec 017: `Turn` calls `toolloop.Run` with
 `tool.LoopRosterMetatron()` and the `nudge_dream`/`nudge_omen`/`work_miracle`
 handlers; [[tool-registry]] declares those tools (and deliberately excludes
-`converse`). Specs: `specs/005-metatron/`, `specs/016-metatron-miracles/`,
-`specs/017-agent-tool-loop/`.
+`converse`), derives the turn's tool guidance (`MetatronToolGuidance`), and holds
+the single miracle cost source ([[metatron-miracles]]). Specs: `specs/005-metatron/`,
+`specs/016-metatron-miracles/`, `specs/017-agent-tool-loop/`,
+`specs/021-metatron-instruction-surface/`.
 
 ## Operational notes
 

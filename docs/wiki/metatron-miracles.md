@@ -7,9 +7,10 @@ sources:
   - internal/metatron/miracle_batch.go
   - internal/metatron/turn.go
   - internal/metatron/toolcalls.go
+  - internal/tool/registry.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
 ---
 
 # Metatron's miracles
@@ -68,10 +69,16 @@ partial application (validate-not-clamp, reject-whole):
   regeneration boundaries) needs no code of its own — regeneration only fires when
   the executor *processes* a boundary crossing, and a snap processes no interval.
 
-**Cost table and gratis doctrine** (`miracleCost`, a keyed map — never iterated into
-state, for determinism): the time snap costs 2 charges; every other miracle costs 1.
-Pricing is doctrine fixed in the reducer, not caller input — a payload never carries
-its own price, so replay re-validates every spend identically (R2).
+**Cost table and gratis doctrine**: the time snap costs 2 charges; every other
+miracle costs 1. Since spec 021 (TASK-64) the AUTHORITATIVE per-kind table lives in
+the leaf [[tool-registry]] (`tool.MiracleCost(kind)` / `tool.MiracleCostsByEvent()`,
+`internal/tool/registry.go`, beside `miracleKinds`); `sim.miracleCost` (`miracles.go`,
+a keyed map — never iterated into state, for determinism) is now DERIVED from
+`tool.MiracleCostsByEvent()` rather than a second literal, and the angel's turn
+prompt renders costs from the same source (`tool.MetatronToolGuidance`), so one edit
+propagates to enforcement and every rendering (`TestMiracleCostDerivedFromTool`
+pins the derivation). Pricing remains doctrine, not caller input — a payload never
+carries its own price, so replay re-validates every spend identically (R2).
 `spendMiracleCharge(eventType, gratis)` is the shared validate/spend helper every
 arm calls last, after all other validation passes: with `gratis` it returns
 immediately, waiving ONLY the charge (every other validation still runs in full);
@@ -152,7 +159,13 @@ exactly as memorable as an angelic dream:
   one mediated act per turn" is now the driver's cardinality rule (one acting call
   lands, every other call this cognition is rejected) rather than a hand-written
   nudge-wins-over-miracle precedence — the model calls `work_miracle` (or a nudge
-  tool) and whichever lands first ends the turn. `handleMiracle` parses the call's
+  tool) and whichever lands first ends the turn. Since spec 021 the world's
+  `capabilities.json` can withhold `work_miracle` entirely or restrict its `kind`
+  vocabulary ([[metatron]]): an ungranted tool/kind is structurally absent from the
+  declared schema and guidance, its handler is never installed, and `landMiracle`
+  additionally refuses via the grant check ("that miracle is not granted in this
+  world") — defense in depth ahead of the reducer dry-run, which remains the final
+  authority. `handleMiracle` parses the call's
   arguments into `miracleArgs` and calls `landMiracle`, which resolves
   `MiracleParams` from an `agentXY` snapshot (`mt.agentXY`, mirrored per batch by
   the absorb goroutine in `mirrorState`, so the turn worker never races the live

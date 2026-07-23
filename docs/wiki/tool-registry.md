@@ -1,6 +1,6 @@
 ---
 name: tool-registry
-description: The single source of truth for agent capabilities (spec 014, extended spec 017, extended spec 019) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; the tool-use loop's declared rosters (set_plan, work_miracle, journal tools) and InputSchema derivation; boot-time coverage gate
+description: The single source of truth for agent capabilities (spec 014, extended specs 017/019/021) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; the tool-use loop's declared rosters and InputSchema derivation; the authoritative miracle cost table, RestrictEnum, and the derived Metatron tool guidance (spec 021); boot-time coverage gate
 kind: component
 sources:
   - internal/tool/tool.go
@@ -9,7 +9,7 @@ sources:
   - internal/tool/derive.go
   - internal/tool/validate.go
   - internal/sim/toolcheck.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
 ---
 
 # Tool registry
@@ -101,6 +101,24 @@ and — decisively — `Validate` forbids a World tool from declaring `Events`, 
 `work_miracle` must (so the sim-side coverage check can pin its event set ⊆ the
 whitelist). There is deliberately no `gratis` parameter: the angel can never waive
 a charge (spec 016 FR-007/SC-005) — structural absence, not a sanitized field.
+
+**The miracle cost source and the spec-021 derivations** (`registry.go`,
+`derive.go`; TASK-64): the per-kind miracle cost table is declared HERE, beside
+`miracleKinds` — `MiracleCost(kind) (int, bool)` and `MiracleCostsByEvent()`
+(kind↔event-type mapping, fresh map per call) are the ONE authoritative price
+source: `sim.miracleCost` derives from `MiracleCostsByEvent()` (the import
+direction already existed — [[metatron-miracles]]) and the angel's prompt renders
+costs from `MiracleCost`, so a price edit propagates to enforcement and prose in
+one edit (`work_miracle.Cost.Charges` stays 1 — the Charge gate's minimum, not a
+price). Two new derive.go surfaces serve [[metatron]]'s per-world capability
+gating: `RestrictEnum(t, param, allowed)` returns a copy-on-write `Tool` whose
+named Enum param keeps only the allowed values (registry never mutated; the
+tool's own Enum order preserved; `InputSchema` of the restricted copy declares
+only granted values), and `MetatronToolGuidance(roster)` renders the acting-tool
+guidance prose — per tool its name, argument surface (from `Params`, the same
+source `InputSchema` walks), and charge cost — replacing the hand-written prose
+list `turnSystemPrompt` used to carry, so described ≡ declared ≡ priced by
+construction (drift tests in `derive_test.go`).
 
 **Derived surfaces** (`derive.go`): each consumer is one walk of the registry —
 `VocabularyLine()` (the prompt's goal list, byte-identical to the old constant,
