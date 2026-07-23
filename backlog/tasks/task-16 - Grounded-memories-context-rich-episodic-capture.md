@@ -4,7 +4,7 @@ title: 'Grounded memories: context-rich episodic capture'
 status: In Progress
 assignee: []
 created_date: '2026-07-19 15:56'
-updated_date: '2026-07-23 02:21'
+updated_date: '2026-07-23 03:09'
 labels:
   - memory
   - agent-mind
@@ -71,4 +71,6 @@ Execution: one branch task-16-grounded-memories in .worktrees/task-16, one PR.
 Re-grounding 2026-07-22: line refs drifted — agent.thought emit is now loop.go:531/543 (was 371); conversation-turn emit convo.go:311 with ConversationTurnPayload carrying Text at sim/social.go:138 (was convo.go:135); MemoryAddedPayload now agents.go:246 (was 218); executor memory template literals live in executor.go (memoryEvent helper) — memory.go holds the constructor, not the strings. All mechanisms hold; premise unchanged.
 
 2026-07-23: Spec 019 planning done and linked via spec-bridge (status derived In Progress). Tier decision (constitution V rubric): Opus 4.8 implementer — cross-package (sim/mind/tool/scribe/persona), doctrine-adjacent (injectSocialWhitelist admission, reducer-gate budget enforcement, InjectSocial door semantics, mind orchestration handlers). Rendering/tests ride the same slices; no Sonnet split worth the coordination cost.
+
+2026-07-23: Implementation (Opus 4.8 spec-implementer) complete on task-16-grounded-memories — T002–T020, T022–T023 done across 4 commits (2c70234 Layer 1 + transcript refs, 4ea54a7 journal, 2adb42b replay proof + reconciliation, 2c1594a ticks). All touched packages green incl. extended determinism suite. Gate review: FILED-1 accepted (*Journal pointer — omitempty is a no-op on value structs; only shape satisfying FR-014), FILED-2 accepted (IntentSetPayload gains Reason emitted at planner landing; research R2's line refs were wrong). SC-001 scope gap NOT accepted: ~18 emission sites (gru, theft, near-death/witness-death, cold-night, debts, governance) left unsituated — follow-up slice T008b delegated to same implementer (situate all with Where, no fabricated Why, reconcile data-model §5 + research R2/R4). Pre-existing main breakage found during verification filed as TASK-62 (TestCatalogSweep / cog.tool_call digest drift — not this branch). Remaining: T008b, my full-suite gate, T021 live smoke, PR.
 <!-- SECTION:NOTES:END -->
