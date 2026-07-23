@@ -244,15 +244,25 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		if c.LoopMaxRounds != 0 {
 			out["loop_max_rounds"] = c.LoopMaxRounds
 		}
+		// max_tokens (spec 025 US2) is a kind-scoped top-level knob, orthogonal to
+		// the provider registry (research R9): it round-trips verbatim in BOTH
+		// shapes. A POINTER preserves omitempty — a nil MaxTokens must NOT emit the
+		// object (WriteDefault stays minimal, a default file byte-for-byte
+		// compatible), which this hand-rolled map must replicate since the custom
+		// marshaler bypasses the struct tag's omitempty.
+		if c.MaxTokens != nil {
+			out["max_tokens"] = c.MaxTokens
+		}
 		return json.Marshal(out)
 	}
 	type legacy struct {
-		MonthlyBudgetUSD float64     `json:"monthly_budget_usd"`
-		Local            LocalConfig `json:"local"`
-		Cloud            CloudConfig `json:"cloud"`
-		LoopMaxRounds    int         `json:"loop_max_rounds,omitempty"`
+		MonthlyBudgetUSD float64       `json:"monthly_budget_usd"`
+		Local            LocalConfig   `json:"local"`
+		Cloud            CloudConfig   `json:"cloud"`
+		LoopMaxRounds    int           `json:"loop_max_rounds,omitempty"`
+		MaxTokens        *TokenBudgets `json:"max_tokens,omitempty"`
 	}
-	return json.Marshal(legacy{c.MonthlyBudgetUSD, c.Local, c.Cloud, c.LoopMaxRounds})
+	return json.Marshal(legacy{c.MonthlyBudgetUSD, c.Local, c.Cloud, c.LoopMaxRounds, c.MaxTokens})
 }
 
 // loop iteration-cap bounds. 8 rounds covers read-then-act patterns with

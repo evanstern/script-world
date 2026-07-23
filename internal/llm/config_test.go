@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -239,5 +240,105 @@ func TestValidV2Loads(t *testing.T) {
 	}
 	if len(providers) != 2 || len(routes) != len(acceptedKinds) {
 		t.Errorf("valid v2 resolved to %d providers / %d routes", len(providers), len(routes))
+	}
+}
+
+// TestMaxTokensRoundTripsThroughShapeAwareMarshal (spec 024 T021 / research R9):
+// the spec-025 max_tokens object is a kind-scoped top-level knob, orthogonal to
+// the provider registry — it MUST survive the branch's shape-aware custom
+// MarshalJSON byte-for-byte in BOTH shapes, and a nil MaxTokens must NOT emit the
+// object (omitempty preserved so a default file stays byte-for-byte compatible).
+// The custom marshaler bypasses the struct-tag omitempty, so this pins the
+// hand-rolled carry the reconciliation added.
+func TestMaxTokensRoundTripsThroughShapeAwareMarshal(t *testing.T) {
+	budgets := &TokenBudgets{Planner: 700, Consolidation: 2000} // MetatronTurn 0 → dropped by TokenBudgets' own omitempty
+	shapes := map[string]Config{
+		"v2": {
+			MonthlyBudgetUSD: 100,
+			Providers: map[string]ProviderConfig{
+				"gemma": {Transport: "openai_compat", Endpoint: "http://x/v1", Model: "g"},
+			},
+			Routes:    map[string]RouteConfig{"planner": {Chain: []string{"gemma"}}},
+			MaxTokens: budgets,
+		},
+		"legacy": {
+			MonthlyBudgetUSD: 100,
+			Local:            LocalConfig{Endpoint: "http://x/v1", Model: "g"},
+			Cloud:            CloudConfig{Model: "claude", InputUSDPerMTok: 5, APIKeyEnv: "K"},
+			MaxTokens:        budgets,
+		},
+	}
+	for name, cfg := range shapes {
+		t.Run(name+"/present", func(t *testing.T) {
+			raw, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			// MetatronTurn 0 must be suppressed; planner/consolidation carried.
+			if got := string(raw); !strings.Contains(got, `"max_tokens":{"planner":700,"consolidation":2000}`) {
+				t.Fatalf("max_tokens not carried verbatim: %s", got)
+			}
+			var back Config
+			if err := json.Unmarshal(raw, &back); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if !reflect.DeepEqual(back.MaxTokens, budgets) {
+				t.Errorf("MaxTokens round-trip mismatch: got %+v want %+v", back.MaxTokens, budgets)
+			}
+			// Byte-for-byte: re-marshaling the parsed config reproduces the bytes.
+			again, err := json.Marshal(back)
+			if err != nil {
+				t.Fatalf("re-marshal: %v", err)
+			}
+			if string(again) != string(raw) {
+				t.Errorf("not byte-for-byte:\n first=%s\nsecond=%s", raw, again)
+			}
+			// The normalizers read the recovered budgets (defaults where absent).
+			if n, _ := back.PlannerTokens(); n != 700 {
+				t.Errorf("PlannerTokens = %d, want 700", n)
+			}
+			if n, _ := back.MetatronTurnTokens(); n != defaultMetatronTurnTokens {
+				t.Errorf("MetatronTurnTokens = %d, want default %d", n, defaultMetatronTurnTokens)
+			}
+			if n, _ := back.ConsolidationTokens(); n != 2000 {
+				t.Errorf("ConsolidationTokens = %d, want 2000", n)
+			}
+		})
+		t.Run(name+"/nil-omitted", func(t *testing.T) {
+			cfg.MaxTokens = nil
+			raw, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if strings.Contains(string(raw), "max_tokens") {
+				t.Errorf("nil MaxTokens emitted the object: %s", raw)
+			}
+		})
+	}
+}
+
+// TestMaxTokensLoadsFromV2File (spec 024 T021): a full v2 llm.json carrying
+// max_tokens loads through LoadConfig and the normalizers resolve the tuned
+// values — proving the parse leg composes with the registry validator, not only
+// the direct marshal round-trip above.
+func TestMaxTokensLoadsFromV2File(t *testing.T) {
+	body := `{"monthly_budget_usd":100,` +
+		`"max_tokens":{"planner":300,"metatron_turn":1500,"consolidation":900},` +
+		`"providers":{` +
+		`"gemma":{"transport":"openai_compat","endpoint":"http://x/v1","model":"g"},` +
+		`"anthropic":{"transport":"anthropic","model":"claude","input_usd_per_mtok":5}},` +
+		`"routes":` + validRoutes + `}`
+	cfg, err := LoadConfig(writeConfigFile(t, body))
+	if err != nil {
+		t.Fatalf("v2 config with max_tokens rejected: %v", err)
+	}
+	if n, _ := cfg.PlannerTokens(); n != 300 {
+		t.Errorf("PlannerTokens = %d, want 300", n)
+	}
+	if n, _ := cfg.MetatronTurnTokens(); n != 1500 {
+		t.Errorf("MetatronTurnTokens = %d, want 1500", n)
+	}
+	if n, _ := cfg.ConsolidationTokens(); n != 900 {
+		t.Errorf("ConsolidationTokens = %d, want 900", n)
 	}
 }
