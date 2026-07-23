@@ -143,12 +143,12 @@ console header renders it.
 **Independent Test**: quickstart §5 — status JSON and header track disk changes on next
 read.
 
-- [ ] T020 [US3] Extend `Status` in internal/metatron/turn.go per contracts/status.md:
+- [X] T020 [US3] Extend `Status` in internal/metatron/turn.go per contracts/status.md:
       `Skills []string` (effective files, composition order), `GrantedTools []string`
       (registry order; `work_miracle(move,give_item)` form when restricted),
       `ManifestDefault bool`; computed fresh per call via loadSkills/loadManifest; unit
       tests in internal/metatron/metatron_test.go (incl. restricted-kinds rendering)
-- [ ] T021 [US3] Render provenance in the TUI console header in internal/tui/tui.go:
+- [X] T021 [US3] Render provenance in the TUI console header in internal/tui/tui.go:
       extend the `consoleStatusMsg` handling (tui.go:335-343) and header line to
       `custom charter · 2 skills · tools: dream, omen` form per contracts/status.md —
       quiet default (tools part omitted when `manifest_default`), `tools: none` for

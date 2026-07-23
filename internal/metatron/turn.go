@@ -368,18 +368,36 @@ func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
 	mt.appendFile(mt.transcriptPath(), b.String())
 }
 
-// Status is the model-free peek: charges, charter provenance, soul tail.
+// Status is the model-free peek: charges, charter provenance, soul tail, and
+// (spec 021 R8, US3) the instruction-file + capability provenance a player reads
+// to answer "what is my angel running on, and what can it do". The new fields
+// are additive and omitempty where sensible, so existing IPC clients ignore them
+// (encoding/json) — no protocol version bump (contracts/status.md).
 type Status struct {
-	Charges        int    `json:"charges"`
-	CharterDefault bool   `json:"charter_default"`
-	SoulTail       string `json:"soul_tail"`
+	Charges         int      `json:"charges"`
+	CharterDefault  bool     `json:"charter_default"`
+	SoulTail        string   `json:"soul_tail"`
+	Skills          []string `json:"skills,omitempty"`        // effective skill filenames, composition order
+	GrantedTools    []string `json:"granted_tools,omitempty"` // granted roster, registry order; work_miracle(kind,…) when restricted
+	ManifestDefault bool     `json:"manifest_default"`        // true ⇒ no capabilities.json (full default grant)
 }
 
+// Status is computed fresh per call from disk (same per-read discipline as the
+// turn, FR-001): a skill added or a manifest edited between peeks shows on the
+// next read with no cache to go stale.
 func (mt *Metatron) Status() Status {
 	mt.stateMu.Lock()
 	c := mt.charges
 	mt.stateMu.Unlock()
-	return Status{Charges: c, CharterDefault: charterIsDefault(mt.worldDir), SoulTail: mt.soulTail()}
+	grant, _ := loadManifest(mt.worldDir)
+	return Status{
+		Charges:         c,
+		CharterDefault:  charterIsDefault(mt.worldDir),
+		SoulTail:        mt.soulTail(),
+		Skills:          skillNames(mt.worldDir),
+		GrantedTools:    grantedToolLabels(grant),
+		ManifestDefault: grant.manifestDefault,
+	}
 }
 
 func (mt *Metatron) soulTail() string { return tailOfFile(mt.soulPath(), soulTailBytes) }

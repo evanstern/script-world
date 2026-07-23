@@ -1315,7 +1315,20 @@ func (m Model) metatronView() string {
 	header := fmt.Sprintf("METATRON · charges %s%s",
 		strings.Repeat("⚡", charges), strings.Repeat("·", clampInt(sim.MetatronChargeCap-charges, 0, sim.MetatronChargeCap)))
 	if m.consoleCharter != "" {
-		header += styleDim.Render(" · " + m.consoleCharter + " (charter.md)")
+		// Instruction + capability provenance (spec 021 US3): charter flavor,
+		// then the skill count when non-zero, then the granted-tool summary
+		// (quiet for a full-grant default world). Answers "what is my angel
+		// running on, and what can it do" without leaving the game.
+		prov := m.consoleCharter + " (charter.md)"
+		if m.consoleSkills == 1 {
+			prov += " · 1 skill"
+		} else if m.consoleSkills > 1 {
+			prov += fmt.Sprintf(" · %d skills", m.consoleSkills)
+		}
+		if m.consoleTools != "" {
+			prov += " · " + m.consoleTools
+		}
+		header += styleDim.Render(" · " + prov)
 	}
 
 	body := m.metatronTranscriptBody(width, clampInt(m.height-14, 4, 200))

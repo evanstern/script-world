@@ -108,6 +108,8 @@ type Model struct {
 	// (patterns/focus-contract.md) everywhere it appears.
 	transcript     []string // rendered transcript rows, newest last
 	consoleCharter string   // "default charter" | "custom charter" | ""
+	consoleSkills  int      // count of effective skill files (spec 021 US3)
+	consoleTools   string   // granted-tool summary, e.g. "tools: dream, omen"; "" when quiet default
 
 	mbFocused bool
 	mbInput   string
@@ -162,6 +164,45 @@ type consoleReplyMsg struct {
 }
 
 type consoleStatusMsg struct{ status *metatron.Status }
+
+// consoleToolsSummary renders the granted-tool part of the console header
+// (spec 021 US3, contracts/status.md): quiet (empty) for a full-grant default
+// world, "tools: none" for a conversation-only world, else "tools: " + the
+// granted set in short form (dream, omen, miracles) with any kind restriction
+// carried through. Kept beside the consoleStatusMsg handler — the only TUI
+// region this feature touches (TASK-63 owns the digest/villager/transcript
+// regions).
+func consoleToolsSummary(s *metatron.Status) string {
+	if s.ManifestDefault {
+		return "" // full grant is the unremarkable default — keep the header quiet
+	}
+	if len(s.GrantedTools) == 0 {
+		return "tools: none"
+	}
+	parts := make([]string, 0, len(s.GrantedTools))
+	for _, t := range s.GrantedTools {
+		parts = append(parts, shortToolName(t))
+	}
+	return "tools: " + strings.Join(parts, ", ")
+}
+
+// shortToolName maps a granted-tool label to its console short form, preserving
+// any kind restriction suffix on work_miracle ("work_miracle(move,give_item)" →
+// "miracles(move,give_item)").
+func shortToolName(label string) string {
+	switch {
+	case label == "nudge_dream":
+		return "dream"
+	case label == "nudge_omen":
+		return "omen"
+	case label == "work_miracle":
+		return "miracles"
+	case strings.HasPrefix(label, "work_miracle("):
+		return "miracles" + strings.TrimPrefix(label, "work_miracle")
+	default:
+		return label
+	}
+}
 
 // fetchConsoleStatus grabs the model-free peek when the metatron tab/pane is
 // selected.
@@ -335,10 +376,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case consoleStatusMsg:
 		if msg.status == nil {
 			m.consoleCharter = ""
-		} else if msg.status.CharterDefault {
-			m.consoleCharter = "default charter"
+			m.consoleSkills = 0
+			m.consoleTools = ""
 		} else {
-			m.consoleCharter = "custom charter"
+			if msg.status.CharterDefault {
+				m.consoleCharter = "default charter"
+			} else {
+				m.consoleCharter = "custom charter"
+			}
+			m.consoleSkills = len(msg.status.Skills)
+			m.consoleTools = consoleToolsSummary(msg.status)
 		}
 		return m, nil
 

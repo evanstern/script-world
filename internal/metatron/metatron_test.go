@@ -1459,3 +1459,54 @@ func TestStagePresetsAreData(t *testing.T) {
 		})
 	}
 }
+
+// TestStatusProvenance (spec 021 T020, SC-005): Status reports skills, granted
+// tools, and manifest provenance fresh per call, with work_miracle suffixed by
+// its granted kinds only when restricted.
+func TestStatusProvenance(t *testing.T) {
+	mt, _, _, dir := newTestAngel(t, "ok")
+
+	// Fresh world: default charter, no skills, no manifest → full grant, quiet.
+	s := mt.Status()
+	if !s.CharterDefault {
+		t.Error("fresh charter should read default")
+	}
+	if len(s.Skills) != 0 {
+		t.Errorf("fresh world lists skills: %v", s.Skills)
+	}
+	if !s.ManifestDefault {
+		t.Error("no manifest ⇒ ManifestDefault true")
+	}
+	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "nudge_omen", "work_miracle"}) {
+		t.Errorf("default granted tools = %v", s.GrantedTools)
+	}
+
+	// Customize charter + add two skills → tracked on the next read (per-read).
+	os.WriteFile(filepath.Join(dir, "charter.md"), []byte("You are AZRAEL."), 0o644)
+	writeSkill(t, dir, "10-weather.md", "omens")
+	writeSkill(t, dir, "20-diplomacy.md", "counsel")
+	s = mt.Status()
+	if s.CharterDefault {
+		t.Error("customized charter should read custom")
+	}
+	if !reflect.DeepEqual(s.Skills, []string{"10-weather.md", "20-diplomacy.md"}) {
+		t.Errorf("skills = %v, want the two files in order", s.Skills)
+	}
+
+	// Restricted manifest → granted set shrinks; work_miracle carries its kinds.
+	writeManifest(t, dir, `{"tools":["nudge_dream","work_miracle"],"miracle_kinds":["move","give_item"]}`)
+	s = mt.Status()
+	if s.ManifestDefault {
+		t.Error("a present manifest is not the default")
+	}
+	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "work_miracle(move,give_item)"}) {
+		t.Errorf("restricted granted tools = %v", s.GrantedTools)
+	}
+
+	// Conversation-only manifest → no granted tools (omitempty → nil).
+	writeManifest(t, dir, `{"tools":[]}`)
+	s = mt.Status()
+	if len(s.GrantedTools) != 0 {
+		t.Errorf("conversation-only granted tools = %v, want none", s.GrantedTools)
+	}
+}

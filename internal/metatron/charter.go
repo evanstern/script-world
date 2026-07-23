@@ -187,6 +187,26 @@ func (g grantSet) grantedKinds() []string {
 	return out
 }
 
+// grantedToolLabels renders the granted roster for Status (contracts/status.md):
+// registry order, with work_miracle suffixed `(kind,…)` ONLY when its kinds are
+// restricted (an unrestricted work_miracle shows bare). nil when nothing is
+// granted (a conversation-only world) so the field omits under omitempty.
+func grantedToolLabels(g grantSet) []string {
+	names := g.grantedTools()
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if n == "work_miracle" && g.kindsRestricted {
+			out = append(out, "work_miracle("+strings.Join(g.grantedKinds(), ",")+")")
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // fullGrant is the default grant a world with no (or an unusable) manifest gets:
 // the entire metatron loop roster, all miracle kinds — byte-compatible with the
 // pre-021 angel (FR-007, SC-003).
