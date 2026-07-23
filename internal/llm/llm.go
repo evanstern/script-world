@@ -139,6 +139,12 @@ type Response struct {
 	OutputTokens int64   `json:"output_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
 	Millis       int64   `json:"ms"`
+	// Skipped records, in chain order, the candidates the dispatch walk passed
+	// over before the serving provider accepted the call (spec 024 US3): each is
+	// a {Provider, Reason} pair with a mechanical, observable reason. Empty on a
+	// head dispatch (the common case) and on a pinned / no_fallback route (which
+	// never walk). Operator-facing only — routing carries no game-state meaning.
+	Skipped []RouteSkip `json:"skipped,omitempty"`
 	// --- agent tool-use loop transport (TASK-52; additive) ---
 	// ToolCalls holds the calls the model emitted this round, in emission
 	// order; nil for a plain-text reply. Stop is the provider's stop reason,
@@ -146,6 +152,27 @@ type Response struct {
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	Stop      StopReason `json:"stop,omitempty"`
 }
+
+// RouteSkip is one candidate the dispatch walk passed over and why (spec 024
+// US3, data-model "Chain-walk admission"). Reasons are mechanical and
+// observable — never a score or a judgment: a chain is the operator's ordered
+// ruling and a skip is a deterministic admission fact.
+type RouteSkip struct {
+	Provider string `json:"provider"`
+	Reason   string `json:"reason"`
+}
+
+// Chain-walk skip reasons (data-model.md): the only four conditions that make a
+// candidate inadmissible at dispatch. circuit-open and queue-full apply to every
+// call; wallet-exhausted applies to priced candidates only; busy applies to
+// best-effort calls only (they additionally require an idle slot and empty
+// queues).
+const (
+	SkipCircuitOpen     = "circuit-open"
+	SkipWalletExhausted = "wallet-exhausted"
+	SkipQueueFull       = "queue-full"
+	SkipBusy            = "busy"
+)
 
 // --- tool-call transport model (TASK-52) ---
 //
@@ -501,68 +528,117 @@ func (o *Orchestrator) SetRecalibrateHook(fn func(provider string, estimate, spi
 	o.recalMu.Unlock()
 }
 
-// Submit routes a request to its tier and blocks until the result (or the
-// caller's ctx expires). Admission control is immediate: budget ceiling,
-// open circuit, and full queue all fail fast rather than piling work up —
-// that backpressure is what lets local throughput cap sim speed later.
+// Submit routes a request along its kind's chain and blocks until the serving
+// provider replies (or the caller's ctx expires). Admission control is immediate
+// per candidate — budget ceiling, open circuit, best-effort busy, and full queue
+// all fail fast rather than piling work up — that backpressure is what lets local
+// throughput cap sim speed. Fallback is chain-walking (spec 024 US3): the walk
+// visits each candidate in the operator's declared order and dispatches to the
+// first admissible one, recording the ordered skips it passed over.
 func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error) {
-	// Resolve the serving provider: an explicit Request.Provider pin (R3) names
-	// a declared provider and bypasses chain routing (US3's scene pinning and
-	// the CLI/tests use it) while honoring ALL of that provider's admission
-	// checks; otherwise the kind's route selects the chain head. Full chain-
-	// walking / fallback is a later slice — this slice dispatches to the head.
-	var t *provider
+	// Resolve the candidate set. An explicit Request.Provider pin (R3) names a
+	// declared provider and bypasses chain-walking (scene pinning, the CLI, and
+	// tests use it) while honoring ALL of that provider's admission checks; a
+	// no_fallback route considers only its head; otherwise the whole chain walks.
+	var candidates []*provider
 	if req.Provider != "" {
 		p, ok := o.providers[req.Provider]
 		if !ok {
 			return Response{}, fmt.Errorf("%w: %q", ErrUnknownProvider, req.Provider)
 		}
-		t = p
+		candidates = []*provider{p}
 	} else {
 		rt, ok := o.routes[req.Kind]
 		if !ok {
 			return Response{}, fmt.Errorf("%w: %q", ErrUnknownKind, req.Kind)
 		}
-		t = rt.chain[0]
+		if rt.noFallback {
+			candidates = rt.chain[:1]
+		} else {
+			candidates = rt.chain
+		}
 	}
 
-	// Budget throttles priced providers before the call (never after the money
-	// is spent); zero-priced providers are never budget-refused (decision-5).
-	if t.priced() && !o.meter.Allow() {
-		return Response{}, ErrBudgetExhausted
-	}
-	if !t.health.admit() {
-		return Response{}, ErrTierDown
+	// Walk the candidates in order. A candidate is skipped ONLY for a mechanical
+	// admission fact, in the data-model's order: wallet ceiling (priced only),
+	// open circuit, best-effort busy, then full queue. The first admissible
+	// candidate is dispatched to; every skip that preceded it is recorded on the
+	// response. When none is admissible the walk returns the HEAD's refusal error
+	// (the first skip is the head's, since the walk records in chain order).
+	var skipped []RouteSkip
+	for _, t := range candidates {
+		// Budget throttles priced providers before the call (never after the
+		// money is spent); zero-priced providers are never budget-refused
+		// (decision-5).
+		if t.priced() && !o.meter.Allow() {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipWalletExhausted})
+			continue
+		}
+		if !t.health.admit() {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipCircuitOpen})
+			continue
+		}
+		// Best-effort work is admitted only when a slot is free, refused
+		// instantly otherwise. With N workers, "free slot" means no queued work
+		// AND at least one idle worker (inflight < slots) — a non-empty queue
+		// already implies every slot is busy, so the queue checks are the
+		// fast-path refusal (R3).
+		if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipBusy})
+			continue
+		}
+		// Conversations are interactive — a turn mid-dialogue must not wait
+		// behind a backlog of planner thoughts (which tolerate staleness; the
+		// reflex grace covers them). Everything else rides the normal queue.
+		q := t.queue
+		if req.Kind == KindConversation {
+			q = t.prio
+		}
+		j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
+		select {
+		case q <- j:
+		default:
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipQueueFull})
+			continue
+		}
+		// Accepted: this candidate serves the call. Post-dispatch failure is
+		// FINAL — a provider error here is never re-dispatched down the chain
+		// (the model may have already done partial work; re-running it would
+		// double-spend and double-act). The recorded skips ride the response.
+		select {
+		case res := <-j.reply:
+			if res.err != nil {
+				return res.resp, res.err
+			}
+			res.resp.Skipped = skipped
+			return res.resp, nil
+		case <-ctx.Done():
+			return Response{}, ctx.Err()
+		case <-o.done:
+			return Response{}, ErrClosed
+		}
 	}
 
-	// Conversations are interactive — a turn mid-dialogue must not wait
-	// behind a backlog of planner thoughts (which tolerate staleness; the
-	// reflex grace covers them). Everything else rides the normal queue.
-	// Best-effort work is the opposite extreme: admitted only
-	// when a slot is free, refused instantly otherwise. With N workers,
-	// "free slot" means no queued work AND at least one idle worker
-	// (inflight < slots) — a non-empty queue already implies every slot is
-	// busy, so the queue checks remain the fast-path refusal (R3).
-	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
-		return Response{}, ErrTierBusy
-	}
-	q := t.queue
-	if req.Kind == KindConversation {
-		q = t.prio
-	}
-	j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
-	select {
-	case q <- j:
-	default:
-		return Response{}, ErrQueueFull
-	}
-	select {
-	case res := <-j.reply:
-		return res.resp, res.err
-	case <-ctx.Done():
-		return Response{}, ctx.Err()
-	case <-o.done:
-		return Response{}, ErrClosed
+	// Every candidate was inadmissible: refuse with the head's reason (skipped[0]
+	// is the head — the walk records in chain order, and a pin/no_fallback set has
+	// exactly one candidate, its own head).
+	return Response{}, refusalFor(skipped[0].Reason)
+}
+
+// refusalFor maps a chain-head skip reason onto the admission-ladder sentinel
+// the caller (and the toolloop's terminationForSubmitErr) already switch on, so
+// an all-inadmissible walk refuses exactly as a single-tier refusal did before
+// fallback existed — legacy single-entry chains are byte-identical.
+func refusalFor(reason string) error {
+	switch reason {
+	case SkipWalletExhausted:
+		return ErrBudgetExhausted
+	case SkipCircuitOpen:
+		return ErrTierDown
+	case SkipBusy:
+		return ErrTierBusy
+	default: // SkipQueueFull
+		return ErrQueueFull
 	}
 }
 

@@ -50,6 +50,26 @@ type SocialInjector interface {
 	InjectSocial(events []store.Event) error
 }
 
+// resolving is the optional orchestrator surface for pinning a scene's provider
+// (spec 024 R3): a dry chain-walk that names the provider a kind currently
+// resolves to. Real orchestrators satisfy it; a test fake without the seam pins
+// nothing (empty provider = route by chain, unchanged behavior).
+type resolving interface {
+	ResolveProvider(kind llm.Kind) (string, error)
+}
+
+// sceneProvider resolves the provider to pin a whole scene to, ONCE at scene
+// start. A resolve error or a fake lacking the seam yields "" — the scene then
+// routes every turn by chain exactly as before this feature.
+func (md *Mind) sceneProvider() string {
+	if r, ok := md.orch.(resolving); ok {
+		if name, err := r.ResolveProvider(llm.KindConversation); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
 // sceneCap bounds a scene: each extra participant adds ConvoTurnsPerSide
 // utterance calls, and the local tier pays for every one.
 const sceneCap = 4
@@ -59,8 +79,13 @@ const sceneCap = 4
 const sceneJoinRadius = 2
 
 type convoCtx struct {
-	conv     int64 // founding talk's tick = conversation id
-	meta     thoughtMeta
+	conv int64 // founding talk's tick = conversation id
+	meta thoughtMeta
+	// provider pins every turn of the scene to one model (spec 024 US3): a
+	// persona must not switch voices mid-dialogue, so the conversation provider
+	// is resolved ONCE at scene start (ResolveProvider) and stamped on every
+	// Submit. Empty = route by chain (a test fake without the seam, unchanged).
+	provider string
 	idx      []int
 	names    []string
 	personas []string
@@ -94,6 +119,12 @@ func (md *Mind) maybeStartConversation(e store.Event) {
 		return // one at a time; this encounter stays a primitive talk
 	}
 	cc := md.snapshotConvo(e.Tick, p.A, p.B)
+	// Pin the scene's provider ONCE, here at scene start (spec 024 US3): every
+	// utterance and the outcome call stamp cc.provider, so a persona keeps one
+	// voice for the whole dialogue even if a preferable candidate frees up
+	// mid-scene. A mid-scene failure flows into the existing TASK-42 tolerance
+	// path unchanged — never a re-resolve, never a provider switch.
+	cc.provider = md.sceneProvider()
 	// The scene is one 13-point decision (contracts/registry.md): its
 	// telemetry identity is minted at founding, agent = founding speaker.
 	cc.meta = md.newMeta("conversation", p.A, e.Tick, e.Seq, llm.KindConversation)
@@ -422,6 +453,7 @@ Reply with ONLY {"say": "<one or two short sentences in your voice>"}`,
 			cc.names[sp], cc.personas[sp], strings.Join(others, " and "), cc.rels[sp]),
 		Prompt:    user.String(),
 		MaxTokens: 128,
+		Provider:  cc.provider, // the scene's pinned voice (spec 024 US3)
 	})
 	if err != nil {
 		return "", "", transportError{err}
@@ -464,6 +496,7 @@ Note %s may pass on: %q`,
 		strings.Join(cc.names, ", "), teller, teller, note)
 	resp, err := md.orch.Submit(ctx, llm.Request{
 		Kind: llm.KindConversation, Prompt: prompt, MaxTokens: 224,
+		Provider: cc.provider, // same pinned voice as every utterance (spec 024 US3)
 	})
 	if err != nil {
 		return convoOutcome{}, "", transportError{err}
