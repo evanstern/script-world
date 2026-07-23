@@ -129,7 +129,7 @@ no raw enum appears; suppressions read as "didn't think because…".
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T018 Regression sweep: full `go test ./...`, `gofmt -l .` clean, `go vet
+- [x] T018 Regression sweep: full `go test ./...`, `gofmt -l .` clean, `go vet
       ./internal/tui/` clean; confirm digest catalog sweep in
       `internal/tui/digest_test.go` passes unchanged (contract R18)
 - [ ] T019 Run quickstart.md live validation (§2–§5) against a real world and record
