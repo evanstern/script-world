@@ -213,7 +213,7 @@ live-vs-replay byte-identity on a loop-era run.
 - [x] T025 (Opus 4.8) Adversarial verification pass over the loop driver + door
       handlers (cardinality races, batched-call edge cases, cap off-by-one, transcript
       growth vs MaxTokens) — findings fixed or filed
-- [ ] T025b (Opus 4.8) Cure the two T025 filed findings: (1) FILED-1 governor defect —
+- [x] T025b (Opus 4.8) Cure the two T025 filed findings: (1) FILED-1 governor defect —
       loop feeds estimator only on completed terminations (landed/model_done/
       cap_exhausted), nothing on admission_refused/provider_error/ctx_done, per the
       amended loop-api.md Run guarantee (successes-only doctrine); failing-test-first
