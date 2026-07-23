@@ -53,6 +53,15 @@ func newExhaustedMeter() *preSeededMeter {
 func (s *preSeededMeter) GetMeta(key string) (string, error) { return s.m[key], nil }
 func (s *preSeededMeter) SetMeta(key, value string) error    { s.m[key] = value; return nil }
 
+// secPerPt reads a kind's serving-provider live estimate via the provider-
+// granular seam (spec 024 replaced SecondsPerPoint(tier)); metatron routes to
+// the cloud provider, planner to the local one, so these read exactly the
+// estimators the old tier accessor read.
+func secPerPt(orch *llm.Orchestrator, kind llm.Kind) float64 {
+	_, spp, _ := orch.EstimateForKind(kind)
+	return spp
+}
+
 // TestRefusedLoopDoesNotFeedEstimatorSC004b (spec 017 T025b, FILED-1): the
 // estimator's feed is SUCCESSES-ONLY, mirroring the worker path's doctrine
 // (internal/llm/llm.go: "a fast failure is not a latency observation of
@@ -66,7 +75,11 @@ func TestRefusedLoopDoesNotFeedEstimatorSC004b(t *testing.T) {
 	cfg := llm.Config{
 		MonthlyBudgetUSD: 100,
 		Local:            llm.LocalConfig{Endpoint: "http://unused", Model: "unused"},
-		Cloud:            llm.CloudConfig{Provider: llm.ProviderOpenAICompat, Endpoint: "http://unused", Model: "unused"},
+		// The cloud provider must be PRICED for the budget gate to refuse it:
+		// spec 024 (FR-009, decision-5) gates by pricing, not tier identity, so a
+		// zero-priced provider is never budget-refused. The refusal-before-HTTP
+		// mechanism this test relies on requires a priced provider.
+		Cloud: llm.CloudConfig{Provider: llm.ProviderOpenAICompat, Endpoint: "http://unused", Model: "unused", InputUSDPerMTok: 5, OutputUSDPerMTok: 25},
 	}
 	orch, err := llm.New(cfg, newExhaustedMeter())
 	if err != nil {
@@ -74,7 +87,7 @@ func TestRefusedLoopDoesNotFeedEstimatorSC004b(t *testing.T) {
 	}
 	defer orch.Close()
 
-	before := orch.SecondsPerPoint(llm.TierCloud)
+	before := secPerPt(orch, llm.KindMetatron)
 	if math.Abs(before-cognition.BootstrapCloudSecPerPt) > 1e-9 {
 		t.Fatalf("pre-run cloud estimate = %g, want bootstrap %g", before, cognition.BootstrapCloudSecPerPt)
 	}
@@ -97,7 +110,7 @@ func TestRefusedLoopDoesNotFeedEstimatorSC004b(t *testing.T) {
 		t.Fatalf("rounds = %d, want 0 (refused before any completed round)", res.Rounds)
 	}
 
-	after := orch.SecondsPerPoint(llm.TierCloud)
+	after := secPerPt(orch, llm.KindMetatron)
 	if math.Abs(after-before) > 1e-9 {
 		t.Errorf("a refused loop (zero completed work) moved cloud sec/pt %g → %g; "+
 			"the estimator feed must be successes-only (landed/model_done/cap_exhausted)", before, after)
@@ -143,7 +156,7 @@ func TestWholeLoopFeedsEstimatorOnceSC004(t *testing.T) {
 
 	orch := newEquivOrch(t, srv.URL, llm.ToolModeNative)
 
-	if got := orch.SecondsPerPoint(llm.TierLocal); math.Abs(got-cognition.BootstrapLocalSecPerPt) > 1e-9 {
+	if got := secPerPt(orch, llm.KindPlanner); math.Abs(got-cognition.BootstrapLocalSecPerPt) > 1e-9 {
 		t.Fatalf("pre-run estimate = %g, want the bootstrap %g", got, cognition.BootstrapLocalSecPerPt)
 	}
 
@@ -164,7 +177,7 @@ func TestWholeLoopFeedsEstimatorOnceSC004(t *testing.T) {
 		t.Fatalf("loop ran %d rounds, want 2 (a whole-loop observation must cover both)", res.Rounds)
 	}
 
-	afterLoop := orch.SecondsPerPoint(llm.TierLocal)
+	afterLoop := secPerPt(orch, llm.KindPlanner)
 	if math.Abs(afterLoop-16.0) > 0.1 {
 		t.Errorf("estimate after loop = %g, want ~16.0 (exactly ONE whole-loop observation; "+
 			"20.0 = none, 12.8 = two per-round fractions leaked)", afterLoop)
@@ -174,7 +187,7 @@ func TestWholeLoopFeedsEstimatorOnceSC004(t *testing.T) {
 	if _, err := orch.Submit(context.Background(), llm.Request{Kind: llm.KindPlanner, Prompt: "hi"}); err != nil {
 		t.Fatalf("non-loop Submit: %v", err)
 	}
-	afterSingle := orch.SecondsPerPoint(llm.TierLocal)
+	afterSingle := secPerPt(orch, llm.KindPlanner)
 	if math.Abs(afterSingle-12.8) > 0.1 {
 		t.Errorf("estimate after a non-loop Submit = %g, want ~12.8 (0.8·16.0) — the per-call "+
 			"feed path must stay live for single-shot cognition", afterSingle)

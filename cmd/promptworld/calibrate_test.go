@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/tool"
+	"github.com/evanstern/promptworld/internal/world"
 )
 
 // stubSampler is a sampleWallMs stub: each call returns a fixed per-point wall
@@ -89,7 +91,7 @@ func TestVillagerProbeJobRoster(t *testing.T) {
 	if !sh.loop {
 		t.Fatal("the local planner shape must be a loop shape")
 	}
-	job := villagerProbeJob(sh, 8)
+	job := villagerProbeJob(sh, 8, "")
 
 	want := tool.LoopRosterVillager()
 	if len(job.Roster) != len(want) {
@@ -168,5 +170,170 @@ func TestLoopProbeReportsWholeLoop(t *testing.T) {
 	}
 	if millis < 0 {
 		t.Errorf("whole-loop wall time = %d, want >= 0", millis)
+	}
+}
+
+// --- T020: v2-registry calibration (spec 024 US6) ---
+
+// stubToolCallServer answers every request with a native forage tool_call —
+// the same no-op-landing shape TestLoopProbeReportsWholeLoop scripts, reused
+// here so a calibrateLegacy/calibrateDeclaredProviders run against it
+// terminates in one round without a real model.
+func stubToolCallServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"content":    "",
+					"tool_calls": []map[string]any{{"id": "c1", "type": "function", "function": map[string]any{"name": "forage", "arguments": "{}"}}},
+				},
+				"finish_reason": "tool_calls",
+			}},
+			"usage": map[string]any{"prompt_tokens": 5, "completion_tokens": 2},
+		})
+	}))
+}
+
+// TestCalibrateLegacyOutputStructureUnchanged (T020: "legacy config output
+// is byte-identical to today's"): the legacy path's default invocation
+// (empty --tier, no --provider — a v2-registry config never reaches this
+// function) prints the exact pre-spec-024 template — "tier", never
+// "provider" — around the wall-clock numbers, which are machine-dependent
+// and so are matched structurally rather than byte-for-byte.
+func TestCalibrateLegacyOutputStructureUnchanged(t *testing.T) {
+	srv := stubToolCallServer()
+	defer srv.Close()
+
+	w, err := world.Create(t.TempDir()+"/w", "calib-legacy", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: srv.URL, Model: "mock-local"},
+		Cloud:            llm.CloudConfig{Model: "unused"},
+	}
+	out := captureStdout(t, func() {
+		if err := calibrateLegacy(w, &cfg, "", 1); err != nil {
+			t.Fatalf("calibrateLegacy: %v", err)
+		}
+	})
+	for _, want := range []string{
+		"calibrating local tier (1 samples per shape)...\n",
+		"tier local  (mock-local)\n",
+		"  planner-3pt    1/1 samples",
+		"seconds_per_point:",
+		"cognition at this profile:",
+		"wrote " + w.CalibrationPath(),
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("legacy output missing %q; got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "provider") {
+		t.Errorf("legacy output must keep the pre-spec-024 \"tier\" wording, not \"provider\": %s", out)
+	}
+
+	prof, err := cognition.LoadProfile(w.CalibrationPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := prof.Tiers["local"]; !ok || len(prof.Tiers) != 1 {
+		t.Errorf("profile = %+v, want exactly one entry keyed \"local\"", prof.Tiers)
+	}
+}
+
+// TestCalibrateDeclaredProvidersThreeNamedEntries (T020: "a v2 three-provider
+// config produces three named profile entries"): every declared provider
+// gets its own calibration.json entry, keyed by its name.
+func TestCalibrateDeclaredProvidersThreeNamedEntries(t *testing.T) {
+	srv := stubToolCallServer()
+	defer srv.Close()
+
+	w, err := world.Create(t.TempDir()+"/w", "calib-v2", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc := llm.ProviderConfig{Transport: llm.ProviderOpenAICompat, Endpoint: srv.URL, Model: "alpha-model"}
+	cfg := &llm.Config{
+		MonthlyBudgetUSD: 100,
+		Providers: map[string]llm.ProviderConfig{
+			"alpha": pc,
+			"beta":  {Transport: llm.ProviderOpenAICompat, Endpoint: srv.URL, Model: "beta-model"},
+			"gamma": {Transport: llm.ProviderOpenAICompat, Endpoint: srv.URL, Model: "gamma-model"},
+		},
+		Routes: map[string]llm.RouteConfig{
+			string(llm.KindPlanner):       {Chain: []string{"alpha", "beta", "gamma"}},
+			string(llm.KindConversation):  {Chain: []string{"alpha"}},
+			string(llm.KindConsolidation): {Chain: []string{"alpha"}},
+			string(llm.KindNarrator):      {Chain: []string{"alpha"}},
+			string(llm.KindDrama):         {Chain: []string{"alpha"}},
+			string(llm.KindMetatron):      {Chain: []string{"alpha"}},
+			string(llm.KindMeeting):       {Chain: []string{"alpha"}},
+		},
+	}
+	out := captureStdout(t, func() {
+		if err := calibrateDeclaredProviders(w, cfg, "", "", 1); err != nil {
+			t.Fatalf("calibrateDeclaredProviders: %v", err)
+		}
+	})
+	for _, want := range []string{`provider "alpha"`, `provider "beta"`, `provider "gamma"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q; got:\n%s", want, out)
+		}
+	}
+
+	prof, err := cognition.LoadProfile(w.CalibrationPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prof.Tiers) != 3 {
+		t.Fatalf("profile has %d entries, want 3: %+v", len(prof.Tiers), prof.Tiers)
+	}
+	for name, model := range map[string]string{"alpha": "alpha-model", "beta": "beta-model", "gamma": "gamma-model"} {
+		tp, ok := prof.Tiers[name]
+		if !ok {
+			t.Errorf("profile missing entry for %q", name)
+			continue
+		}
+		if tp.Model != model {
+			t.Errorf("profile[%q].Model = %q, want %q", name, tp.Model, model)
+		}
+	}
+}
+
+// TestSelectDeclaredProvidersProviderFlag: --provider narrows to exactly one
+// declared name and rejects an undeclared one; no flags selects every
+// declared provider (the v2 default, tasks.md T020).
+func TestSelectDeclaredProvidersProviderFlag(t *testing.T) {
+	names := []string{"alpha", "beta"}
+	sel, err := selectDeclaredProviders(nil, names, "", "beta")
+	if err != nil || len(sel) != 1 || sel[0] != "beta" {
+		t.Errorf("sel=%v err=%v, want [beta]", sel, err)
+	}
+	if _, err := selectDeclaredProviders(nil, names, "", "nope"); err == nil {
+		t.Error("an undeclared --provider must error")
+	}
+	if _, err := selectDeclaredProviders(nil, names, "bogus", ""); err == nil {
+		t.Error("an unknown --tier must error")
+	}
+	sel, err = selectDeclaredProviders(nil, names, "", "")
+	if err != nil || len(sel) != 2 {
+		t.Errorf("no flags should select every declared provider: sel=%v err=%v", sel, err)
+	}
+}
+
+// TestVillagerProbeJobPinsProvider: the calibrate loop probe threads Provider
+// straight onto toolloop.Job (spec 024 R3/T020) so a reference sample pins
+// its Submit to the named provider.
+func TestVillagerProbeJobPinsProvider(t *testing.T) {
+	sh := refShapesFor(false)[0]
+	job := villagerProbeJob(sh, 8, "cogito")
+	if job.Provider != "cogito" {
+		t.Errorf("job.Provider = %q, want \"cogito\"", job.Provider)
+	}
+	if unpinned := villagerProbeJob(sh, 8, ""); unpinned.Provider != "" {
+		t.Errorf("empty provider must stay unpinned: %q", unpinned.Provider)
 	}
 }

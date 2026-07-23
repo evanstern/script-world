@@ -32,11 +32,14 @@ Usage:
   promptworld metatron <world> [message...]        converse with the angel (no message: status peek)
   promptworld miracle <world> <snap-time|give|move|remove> ... [--force]
                                                    land a Metatron miracle (--force waives the charge)
-  promptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon
+  promptworld llm <world> <kind> <prompt...>       one-shot LLM call via the daemon; prints the
+                                                   serving provider and any fallback skips
                                                    (kinds: planner, conversation,
                                                     consolidation, narrator, drama)
-  promptworld calibrate <world> [--tier local|cloud|all] [--samples N]
-                                                   benchmark seconds-per-point, write calibration.json
+  promptworld calibrate <world> [--provider name | --tier local|cloud|all] [--samples N]
+                                                   benchmark seconds-per-point per declared
+                                                   provider, write calibration.json
+                                                   (--tier is a deprecated alias, see --help)
 `
 
 func main() {

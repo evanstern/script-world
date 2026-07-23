@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/evanstern/promptworld/internal/ipc"
+	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 )
@@ -257,5 +258,107 @@ func TestPureLayerEmitsNoANSI(t *testing.T) {
 	l := formatChronicleLine(fallback, names)
 	if strings.Contains(plainSegs(l.Summary), "\x1b") {
 		t.Error("fallback summary contains an ESC byte")
+	}
+}
+
+// --- llm provider table (spec 024 US6, contracts/status.md "TUI") ---
+
+// TestLLMProviderLinesFields: every declared field lands in the row — name,
+// model, up/down, queue, inflight/slots, contended, spend — for both an up
+// and a down provider.
+func TestLLMProviderLinesFields(t *testing.T) {
+	st := &llm.Status{
+		Providers: []llm.ProviderStatus{
+			{Name: "cogito", Model: "cogito:3b", Up: true, Queue: 3, Inflight: 4, Slots: 4, Contended: false, SpentUSD: 0.42},
+			{Name: "anthropic", Model: "claude-opus-4-8", Up: false, Queue: 0, Inflight: 0, Slots: 1, Contended: false, SpentUSD: 12.41},
+		},
+		Month: "2026-07", Spent: 12.83, Budget: 100,
+	}
+	lines := llmProviderLines(st)
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2 (no unattributed remainder — rows sum to Spent): %v", len(lines), lines)
+	}
+	up, down := lines[0], lines[1]
+	for _, want := range []string{"cogito", "cogito:3b", "q3", "4/4", "$0.42"} {
+		if !strings.Contains(up, want) {
+			t.Errorf("up-provider row missing %q: %q", want, up)
+		}
+	}
+	if strings.Contains(up, "●") == false {
+		t.Errorf("an up provider should carry the up glyph: %q", up)
+	}
+	for _, want := range []string{"anthropic", "claude-opus-4-8", "q0", "0/1", "$12.41"} {
+		if !strings.Contains(down, want) {
+			t.Errorf("down-provider row missing %q: %q", want, down)
+		}
+	}
+	if strings.Contains(down, "○") == false {
+		t.Errorf("a down provider should carry the down glyph: %q", down)
+	}
+}
+
+// TestLLMProviderLinesContendedMarker: the lease-wait flag renders distinctly
+// from an uncontended row.
+func TestLLMProviderLinesContendedMarker(t *testing.T) {
+	st := &llm.Status{Providers: []llm.ProviderStatus{
+		{Name: "local", Model: "gemma4:12b-mlx", Up: true, Slots: 4, Contended: true},
+	}, Spent: 0, Budget: 100}
+	lines := llmProviderLines(st)
+	if len(lines) != 1 || !strings.Contains(lines[0], "⏳") {
+		t.Errorf("contended provider should carry the contended marker: %v", lines)
+	}
+}
+
+// TestLLMProviderLinesUnattributedRemainder (contracts/status.md: Σ rows ≤
+// global spent_usd; the difference is legacy unattributed spend): a nonzero
+// remainder gets its own trailing row; an exactly-accounted total does not.
+func TestLLMProviderLinesUnattributedRemainder(t *testing.T) {
+	st := &llm.Status{
+		Providers: []llm.ProviderStatus{{Name: "cloud", Model: "claude-opus-4-8", Up: true, Slots: 1, SpentUSD: 5}},
+		Spent:     8, Budget: 100,
+	}
+	lines := llmProviderLines(st)
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2 (provider row + unattributed remainder): %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[1], "(unattributed)") || !strings.Contains(lines[1], "$3.00") {
+		t.Errorf("remainder row = %q, want (unattributed) and $3.00", lines[1])
+	}
+
+	exact := &llm.Status{
+		Providers: []llm.ProviderStatus{{Name: "cloud", Model: "claude-opus-4-8", Up: true, Slots: 1, SpentUSD: 5}},
+		Spent:     5, Budget: 100,
+	}
+	if lines := llmProviderLines(exact); len(lines) != 1 {
+		t.Errorf("fully attributed spend should not add a remainder row: %v", lines)
+	}
+}
+
+// TestLLMProviderLinesEmpty: nil status and an empty registry both render no
+// rows (rather than panicking or printing a bare remainder).
+func TestLLMProviderLinesEmpty(t *testing.T) {
+	if lines := llmProviderLines(nil); lines != nil {
+		t.Errorf("nil status: %v", lines)
+	}
+	if lines := llmProviderLines(&llm.Status{}); lines != nil {
+		t.Errorf("empty registry: %v", lines)
+	}
+}
+
+// TestMetatronViewRendersProviderTable: the console pane surfaces the
+// per-provider table it's handed, not the old plain up/down line.
+func TestMetatronViewRendersProviderTable(t *testing.T) {
+	m := testModel(t)
+	m.status = &ipc.StatusData{LLM: &llm.Status{
+		Providers: []llm.ProviderStatus{
+			{Name: "cogito", Model: "cogito:3b", Up: true, Queue: 1, Inflight: 1, Slots: 4, SpentUSD: 0},
+		},
+		Spent: 0, Budget: 100,
+	}}
+	view := m.metatronView()
+	for _, want := range []string{"cogito", "cogito:3b", "q1", "1/4"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("metatron view missing provider field %q:\n%s", want, view)
+		}
 	}
 }

@@ -764,3 +764,124 @@ func mustJSON(t *testing.T, v any) []byte {
 	}
 	return b
 }
+
+// pinnedModel is a scripted conversation model that also satisfies the resolving
+// seam (spec 024 US3): it records the Provider pin on every Submit and the number
+// of times ResolveProvider was consulted, so a test can prove a scene resolves
+// its provider exactly once and stamps that single value on every turn. `flip`
+// simulates a preferable candidate freeing mid-scene — ResolveProvider's answer
+// would change, but a pinned scene must ignore it. failAt (1-based) makes Submit
+// return a transport error from that call onward (the pinned provider dying).
+type pinnedModel struct {
+	mu       sync.Mutex
+	replies  []string
+	calls    int
+	resolves int
+	pins     []string
+	current  string
+	flip     string
+	failAt   int
+}
+
+func (m *pinnedModel) ResolveProvider(_ llm.Kind) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resolves++
+	return m.current, nil
+}
+
+func (m *pinnedModel) Submit(_ context.Context, req llm.Request) (llm.Response, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pins = append(m.pins, req.Provider)
+	m.calls++
+	// A preferable candidate frees the moment the scene's first turn returns: any
+	// re-resolve from here on WOULD choose `flip`. A correctly pinned scene never
+	// re-resolves, so this must not change the pin.
+	if m.flip != "" && m.calls == 1 {
+		m.current = m.flip
+	}
+	if m.failAt > 0 && m.calls >= m.failAt {
+		return llm.Response{}, llm.ErrTierDown
+	}
+	if m.calls > len(m.replies) {
+		return llm.Response{}, context.DeadlineExceeded
+	}
+	return llm.Response{Text: m.replies[m.calls-1], Tier: llm.TierLocal, Provider: req.Provider}, nil
+}
+
+// TestScenePinsOneProviderForWholeScene (spec 024 T011 / SC-005): the scene
+// resolves its provider ONCE at start and stamps it on every utterance and the
+// outcome — even though a preferable candidate frees mid-scene (ResolveProvider's
+// answer flips after turn 1). A persona never switches voices mid-dialogue.
+func TestScenePinsOneProviderForWholeScene(t *testing.T) {
+	model := &pinnedModel{
+		replies: convoScript(`{"gist": "planned firewood", "topics": ["fire"], "tones": [1, 1], "retold": null}`),
+		current: "alpha", flip: "beta", failAt: 0,
+	}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	if convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	}); len(convs) == 0 {
+		t.Fatal("pinned scene never landed")
+	}
+
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	if model.resolves != 1 {
+		t.Errorf("ResolveProvider consulted %d times, want exactly 1 (resolve once at scene start)", model.resolves)
+	}
+	if len(model.pins) != 2*sim.ConvoTurnsPerSide+1 {
+		t.Fatalf("recorded %d pins, want every utterance + the outcome", len(model.pins))
+	}
+	for i, p := range model.pins {
+		if p != "alpha" {
+			t.Errorf("turn %d pinned to %q, want alpha for the whole scene (no mid-scene switch to %q)", i, p, model.flip)
+		}
+	}
+}
+
+// TestScenePinnedProviderDeathAbsorbed (spec 024 T011 / SC-005): when the pinned
+// provider dies mid-scene, the failure flows into the TASK-42 tolerance path
+// unchanged — the scene abandons all-or-nothing — and never switches to another
+// provider. Zero mid-scene provider switches even under a pinned-provider death.
+func TestScenePinnedProviderDeathAbsorbed(t *testing.T) {
+	model := &pinnedModel{
+		replies: convoScript(`{"gist": "planned firewood", "topics": ["fire"], "tones": [1, 1], "retold": null}`),
+		current: "alpha", failAt: 2, // turn 1 succeeds, the pinned provider dies on turn 2
+	}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	// The transport failure abandons the scene (OutcomeUnusable) — tolerance, not
+	// a provider switch.
+	if outs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		if e.Type != "cog.outcome" {
+			return false
+		}
+		var p sim.CogOutcomePayload
+		return json.Unmarshal(e.Payload, &p) == nil &&
+			p.Class == "conversation" && p.Outcome == sim.OutcomeUnusable
+	}); len(outs) == 0 {
+		t.Fatal("a pinned-provider death did not abandon the scene via the tolerance path")
+	}
+
+	all, _ := h.st.EventsSince(0, 0)
+	for _, e := range all {
+		if e.Type == "social.conversation" {
+			t.Error("an abandoned scene must land no social.conversation")
+		}
+	}
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	if model.resolves != 1 {
+		t.Errorf("ResolveProvider consulted %d times, want exactly 1 (no re-resolve on death)", model.resolves)
+	}
+	for i, p := range model.pins {
+		if p != "alpha" {
+			t.Errorf("turn %d pinned to %q, want alpha — a dying provider must never trigger a switch", i, p)
+		}
+	}
+}

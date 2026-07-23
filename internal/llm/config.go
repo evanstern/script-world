@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,10 +13,26 @@ import (
 // environment variable that carries one. The one exception is api_key,
 // meant for keys that guard LAN-local routers and secure nothing beyond
 // the operator's own machines.
+//
+// Two shapes load (spec 024, decision-5): the v2 registry (`providers` +
+// `routes`) and the legacy two-tier (`local`/`cloud`) shape. They are mutually
+// exclusive — a legacy file derives a two-provider registry named local/cloud
+// with today's routes (resolveRegistry), so every existing world boots byte-
+// identically with zero edits (FR-004).
 type Config struct {
-	MonthlyBudgetUSD float64     `json:"monthly_budget_usd"`
-	Local            LocalConfig `json:"local"`
-	Cloud            CloudConfig `json:"cloud"`
+	MonthlyBudgetUSD float64 `json:"monthly_budget_usd"`
+	// Providers is the v2 registry: uniquely named model sources (names are the
+	// map keys, so duplicate names are unrepresentable). Presence of a non-empty
+	// map selects v2 parsing; empty selects legacy derivation from Local/Cloud.
+	Providers map[string]ProviderConfig `json:"providers,omitempty"`
+	// Routes maps every accepted call kind to an ordered provider chain (FR-002).
+	// The key is a Kind string; load validates it names a real kind and covers
+	// exactly Kinds() (completeness, both directions, FR-003).
+	Routes map[string]RouteConfig `json:"routes,omitempty"`
+	// Local/Cloud are the legacy two-tier shape (mutually exclusive with
+	// Providers); retained so untouched llm.json files keep loading forever.
+	Local LocalConfig `json:"local,omitempty"`
+	Cloud CloudConfig `json:"cloud,omitempty"`
 	// LoopMaxRounds is the hard iteration cap for the agent tool-use loop
 	// (TASK-52): the maximum number of provider rounds a single cognition may
 	// spend before the driver terminates it. Absent or 0 means the default
@@ -108,6 +125,144 @@ func (c Config) MetatronTurnTokens() (int64, string) {
 
 func (c Config) ConsolidationTokens() (int64, string) {
 	return normalizeTokenBudget("consolidation", c.tokenBudgets().Consolidation, defaultConsolidationTokens)
+}
+
+// ProviderConfig is one declared model source in the v2 registry (FR-001): the
+// same knob set the two fixed tiers expose today, now per named entry. Both
+// pricing fields zero ⇒ a zero-priced provider (never budget-refused; seeds
+// the local estimator bootstrap class).
+type ProviderConfig struct {
+	Transport        string  `json:"transport"` // "openai_compat" | "anthropic"
+	Endpoint         string  `json:"endpoint,omitempty"`
+	Model            string  `json:"model"`
+	InputUSDPerMTok  float64 `json:"input_usd_per_mtok,omitempty"`
+	OutputUSDPerMTok float64 `json:"output_usd_per_mtok,omitempty"`
+	APIKeyEnv        string  `json:"api_key_env,omitempty"` // env var NAME holding the key
+	APIKey           string  `json:"api_key,omitempty"`     // inline key, local routers only
+	Parallel         int     `json:"parallel,omitempty"`    // clamp 1–16, warn-not-error (workers())
+	ReasoningEffort  *string `json:"reasoning_effort,omitempty"`
+	ToolMode         string  `json:"tool_mode,omitempty"`
+	// EndpointCapacity, when > 0, enables the advisory cross-process lease pool
+	// on this provider's normalized endpoint (US5). Absent/0 = today's behavior.
+	EndpointCapacity int `json:"endpoint_capacity,omitempty"`
+}
+
+// zeroPriced reports whether a provider bills nothing — the surviving local vs
+// cloud distinction (decision-5): zero-priced providers are never budget-
+// refused and seed the local estimator bootstrap class.
+func (pc ProviderConfig) zeroPriced() bool {
+	return pc.InputUSDPerMTok == 0 && pc.OutputUSDPerMTok == 0
+}
+
+// key resolves the credential exactly as CloudConfig.key: an inline local-router
+// key wins, else the named environment variable, else empty (open endpoints).
+func (pc ProviderConfig) key() string {
+	if pc.APIKey != "" {
+		return pc.APIKey
+	}
+	if pc.APIKeyEnv != "" {
+		return os.Getenv(pc.APIKeyEnv)
+	}
+	return ""
+}
+
+// workers normalizes a provider's Parallel into an effective worker count and
+// an optional warning, mirroring LocalConfig.Workers() per provider (FR-003
+// warn-and-clamp): absent/0 → 1 silent; 1–16 verbatim; out-of-range clamped
+// with a warning; never an error.
+func (pc ProviderConfig) workers(name string) (int, string) {
+	switch {
+	case pc.Parallel == 0:
+		return 1, ""
+	case pc.Parallel < 0:
+		return 1, fmt.Sprintf("llm.json providers.%s.parallel %d out of range (min 1) — using 1", name, pc.Parallel)
+	case pc.Parallel > maxLocalWorkers:
+		return maxLocalWorkers, fmt.Sprintf("llm.json providers.%s.parallel %d out of range (max %d) — clamped to %d", name, pc.Parallel, maxLocalWorkers, maxLocalWorkers)
+	default:
+		return pc.Parallel, ""
+	}
+}
+
+// toolModeResolved normalizes a provider's tool_mode (openai_compat only; the
+// anthropic transport is always native and ignores it), mirroring the warn-not-
+// error clamp of the tier config (resolveToolMode), scoped by provider name.
+func (pc ProviderConfig) toolModeResolved(name string) (mode, warn string) {
+	return resolveToolMode("providers."+name, pc.ToolMode)
+}
+
+// RouteConfig is one call kind's ordered provider chain plus the no-fallback
+// flag (FR-002). Two JSON forms unmarshal into it (research R6): the bare-array
+// shorthand `["a","b"]` (the common case — the chain IS the operator's ruling)
+// and the object form `{"chain": ["a","b"], "no_fallback": true}`.
+type RouteConfig struct {
+	Chain      []string
+	NoFallback bool
+}
+
+// UnmarshalJSON accepts both the bare-array shorthand and the {chain,
+// no_fallback} object form.
+func (r *RouteConfig) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		return json.Unmarshal(trimmed, &r.Chain)
+	}
+	var obj struct {
+		Chain      []string `json:"chain"`
+		NoFallback bool     `json:"no_fallback"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	r.Chain, r.NoFallback = obj.Chain, obj.NoFallback
+	return nil
+}
+
+// MarshalJSON emits the bare-array shorthand for a plain chain and the object
+// form only when no_fallback is set, so WriteDefault's v2 output stays as terse
+// as an operator would hand-write it.
+func (r RouteConfig) MarshalJSON() ([]byte, error) {
+	if !r.NoFallback {
+		return json.Marshal(r.Chain)
+	}
+	return json.Marshal(struct {
+		Chain      []string `json:"chain"`
+		NoFallback bool     `json:"no_fallback"`
+	}{r.Chain, r.NoFallback})
+}
+
+// MarshalJSON writes the v2 registry shape when Providers is populated and the
+// legacy two-tier shape otherwise — one Config type, two on-disk shapes. Only
+// WriteDefault (v2) and any legacy passthrough exercise this; the daemon never
+// rewrites llm.json.
+func (c Config) MarshalJSON() ([]byte, error) {
+	if len(c.Providers) > 0 {
+		out := map[string]any{
+			"monthly_budget_usd": c.MonthlyBudgetUSD,
+			"providers":          c.Providers,
+			"routes":             c.Routes,
+		}
+		if c.LoopMaxRounds != 0 {
+			out["loop_max_rounds"] = c.LoopMaxRounds
+		}
+		// max_tokens (spec 025 US2) is a kind-scoped top-level knob, orthogonal to
+		// the provider registry (research R9): it round-trips verbatim in BOTH
+		// shapes. A POINTER preserves omitempty — a nil MaxTokens must NOT emit the
+		// object (WriteDefault stays minimal, a default file byte-for-byte
+		// compatible), which this hand-rolled map must replicate since the custom
+		// marshaler bypasses the struct tag's omitempty.
+		if c.MaxTokens != nil {
+			out["max_tokens"] = c.MaxTokens
+		}
+		return json.Marshal(out)
+	}
+	type legacy struct {
+		MonthlyBudgetUSD float64       `json:"monthly_budget_usd"`
+		Local            LocalConfig   `json:"local"`
+		Cloud            CloudConfig   `json:"cloud"`
+		LoopMaxRounds    int           `json:"loop_max_rounds,omitempty"`
+		MaxTokens        *TokenBudgets `json:"max_tokens,omitempty"`
+	}
+	return json.Marshal(legacy{c.MonthlyBudgetUSD, c.Local, c.Cloud, c.LoopMaxRounds, c.MaxTokens})
 }
 
 // loop iteration-cap bounds. 8 rounds covers read-then-act patterns with
@@ -286,29 +441,42 @@ func resolveReasoningEffort(v *string, def string) string {
 	return *v
 }
 
-// DefaultConfig matches the grounding decisions: local Ollama for the
-// per-agent chatter, Claude for the nightly/narrative tier, $100/month hard
-// ceiling.
+// DefaultConfig matches the grounding decisions in the v2 registry shape
+// (FR-017): local Ollama for the per-agent chatter, Claude for the nightly/
+// narrative work, $100/month hard ceiling — semantically identical to today's
+// two-tier defaults, expressed as two named providers with today's routes.
 func DefaultConfig() Config {
 	return Config{
 		MonthlyBudgetUSD: 100,
-		Local: LocalConfig{
-			Endpoint: "http://localhost:11434/v1",
-			// The operator's always-on local model; cogito:3b is the
-			// lighter "budget" alternative if kept perma-loaded.
-			Model: "gemma4:12b-mlx",
+		Providers: map[string]ProviderConfig{
+			// The operator's always-on local model; cogito:3b is the lighter
+			// "budget" alternative if kept perma-loaded.
+			"local": {Transport: ProviderOpenAICompat, Endpoint: "http://localhost:11434/v1", Model: "gemma4:12b-mlx"},
+			"cloud": {Transport: ProviderAnthropic, Model: "claude-opus-4-8", InputUSDPerMTok: 5, OutputUSDPerMTok: 25, APIKeyEnv: "ANTHROPIC_API_KEY"},
 		},
-		Cloud: CloudConfig{
-			Model:            "claude-opus-4-8",
-			InputUSDPerMTok:  5,
-			OutputUSDPerMTok: 25,
-			APIKeyEnv:        "ANTHROPIC_API_KEY",
-		},
+		Routes: defaultRoutes(),
+	}
+}
+
+// defaultRoutes is today's kind→tier table expressed as single-entry chains:
+// high-volume ambient cognition local (free), low-volume high-quality work
+// cloud. Shared by DefaultConfig (v2) and legacy derivation.
+func defaultRoutes() map[string]RouteConfig {
+	return map[string]RouteConfig{
+		string(KindPlanner):       {Chain: []string{"local"}},
+		string(KindConversation):  {Chain: []string{"local"}},
+		string(KindMeeting):       {Chain: []string{"local"}},
+		string(KindConsolidation): {Chain: []string{"cloud"}},
+		string(KindNarrator):      {Chain: []string{"cloud"}},
+		string(KindDrama):         {Chain: []string{"cloud"}},
+		string(KindMetatron):      {Chain: []string{"cloud"}},
 	}
 }
 
 // LoadConfig reads llm.json; (nil, nil) when the file doesn't exist — the
-// orchestrator is simply disabled for that world.
+// orchestrator is simply disabled for that world. The full validation matrix
+// (contracts/llm-config.md) runs here so a bad registry dies at boot with an
+// error naming the offending entry, never a runtime surprise (FR-003).
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -324,15 +492,118 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.MonthlyBudgetUSD <= 0 {
 		return nil, fmt.Errorf("%s: monthly_budget_usd must be positive", path)
 	}
-	switch cfg.Cloud.Provider {
-	case "", ProviderAnthropic, ProviderOpenAICompat:
-	default:
-		return nil, fmt.Errorf("%s: unknown cloud.provider %q", path, cfg.Cloud.Provider)
-	}
-	if cfg.Cloud.Provider == ProviderOpenAICompat && cfg.Cloud.Endpoint == "" {
-		return nil, fmt.Errorf("%s: cloud.provider %q requires cloud.endpoint", path, ProviderOpenAICompat)
+	if _, _, err := cfg.resolveRegistry(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return &cfg, nil
+}
+
+// resolveRegistry normalizes either config shape into the runtime registry:
+// the validated provider set and the kind→chain routes New() builds machinery
+// from. It is the single validation authority — LoadConfig calls it for boot
+// errors, New() calls it to build. Warn-and-clamp knobs (parallel, tool_mode)
+// are NOT validated here; they clamp per provider at construction (FR-003).
+func (c Config) resolveRegistry() (map[string]ProviderConfig, map[Kind]RouteConfig, error) {
+	legacyPresent := c.Local != (LocalConfig{}) || c.Cloud != (CloudConfig{})
+	v2Present := len(c.Providers) > 0
+	switch {
+	case v2Present && legacyPresent:
+		return nil, nil, fmt.Errorf("`providers` and legacy `local`/`cloud` are mutually exclusive — declare one shape")
+	case v2Present:
+		return c.validateV2()
+	default:
+		return c.deriveLegacy()
+	}
+}
+
+// deriveLegacy builds the two-provider registry (named local/cloud) and today's
+// routes from the legacy shape, so an untouched llm.json behaves byte-identically
+// (FR-004). Legacy-specific validation (cloud.provider, openai_compat endpoint)
+// is preserved verbatim from the pre-feature LoadConfig.
+func (c Config) deriveLegacy() (map[string]ProviderConfig, map[Kind]RouteConfig, error) {
+	switch c.Cloud.Provider {
+	case "", ProviderAnthropic, ProviderOpenAICompat:
+	default:
+		return nil, nil, fmt.Errorf("unknown cloud.provider %q", c.Cloud.Provider)
+	}
+	if c.Cloud.Provider == ProviderOpenAICompat && c.Cloud.Endpoint == "" {
+		return nil, nil, fmt.Errorf("cloud.provider %q requires cloud.endpoint", ProviderOpenAICompat)
+	}
+	// cloud.provider "" | "anthropic" → anthropic transport; "openai_compat" →
+	// openai_compat. Local is always openai_compat, zero-priced. Cloud carries
+	// its pricing and keys; parallel is left absent (workers() → 1, cloud's
+	// single-worker rule).
+	cloudTransport := ProviderAnthropic
+	if c.Cloud.Provider == ProviderOpenAICompat {
+		cloudTransport = ProviderOpenAICompat
+	}
+	providers := map[string]ProviderConfig{
+		"local": {
+			Transport: ProviderOpenAICompat, Endpoint: c.Local.Endpoint, Model: c.Local.Model,
+			APIKey: c.Local.APIKey, Parallel: c.Local.Parallel,
+			ReasoningEffort: c.Local.ReasoningEffort, ToolMode: c.Local.ToolMode,
+		},
+		"cloud": {
+			Transport: cloudTransport, Endpoint: c.Cloud.Endpoint, Model: c.Cloud.Model,
+			InputUSDPerMTok: c.Cloud.InputUSDPerMTok, OutputUSDPerMTok: c.Cloud.OutputUSDPerMTok,
+			APIKeyEnv: c.Cloud.APIKeyEnv, APIKey: c.Cloud.APIKey,
+			ReasoningEffort: c.Cloud.ReasoningEffort, ToolMode: c.Cloud.ToolMode,
+		},
+	}
+	routes := make(map[Kind]RouteConfig, len(acceptedKinds))
+	for kind, rc := range defaultRoutes() {
+		routes[Kind(kind)] = rc
+	}
+	return providers, routes, nil
+}
+
+// validateV2 runs the full boot-error matrix over the v2 registry and returns
+// the routes keyed by Kind. Every failure names the offending entry (FR-003).
+func (c Config) validateV2() (map[string]ProviderConfig, map[Kind]RouteConfig, error) {
+	for name, pc := range c.Providers {
+		switch pc.Transport {
+		case ProviderOpenAICompat, ProviderAnthropic:
+		default:
+			return nil, nil, fmt.Errorf("provider %q: unknown transport %q (want %q or %q)", name, pc.Transport, ProviderOpenAICompat, ProviderAnthropic)
+		}
+		if pc.Model == "" {
+			return nil, nil, fmt.Errorf("provider %q: missing model", name)
+		}
+		if pc.Transport == ProviderOpenAICompat && pc.Endpoint == "" {
+			return nil, nil, fmt.Errorf("provider %q: transport %q requires endpoint", name, ProviderOpenAICompat)
+		}
+	}
+	routes := make(map[Kind]RouteConfig, len(c.Routes))
+	for key, rc := range c.Routes {
+		kind := Kind(key)
+		if _, ok := acceptedKinds[kind]; !ok {
+			return nil, nil, fmt.Errorf("route %q: unknown call kind", key)
+		}
+		if len(rc.Chain) == 0 {
+			return nil, nil, fmt.Errorf("route %q: empty chain", key)
+		}
+		if rc.NoFallback && len(rc.Chain) > 1 {
+			return nil, nil, fmt.Errorf("route %q: no_fallback with a chain of %d — a no-fallback route may name only its head", key, len(rc.Chain))
+		}
+		seen := make(map[string]struct{}, len(rc.Chain))
+		for _, name := range rc.Chain {
+			if _, ok := c.Providers[name]; !ok {
+				return nil, nil, fmt.Errorf("route %q: names undeclared provider %q", key, name)
+			}
+			if _, dup := seen[name]; dup {
+				return nil, nil, fmt.Errorf("route %q: provider %q listed twice (a chain is an ordered set)", key, name)
+			}
+			seen[name] = struct{}{}
+		}
+		routes[kind] = rc
+	}
+	// Completeness: every accepted kind must have a route (FR-003).
+	for kind := range acceptedKinds {
+		if _, ok := routes[kind]; !ok {
+			return nil, nil, fmt.Errorf("call kind %q has no route", kind)
+		}
+	}
+	return c.Providers, routes, nil
 }
 
 // WriteDefault writes the default llm.json (used by `promptworld new`).
