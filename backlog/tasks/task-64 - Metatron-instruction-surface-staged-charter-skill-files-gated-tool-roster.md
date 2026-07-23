@@ -4,7 +4,7 @@ title: 'Metatron instruction surface: staged charter + skill files + gated tool 
 status: In Progress
 assignee: []
 created_date: '2026-07-23 03:27'
-updated_date: '2026-07-23 05:20'
+updated_date: '2026-07-23 05:21'
 labels:
   - review-2026-07-22
   - teaching-game
@@ -43,8 +43,6 @@ Spec: specs/021-metatron-instruction-surface
 - [ ] #12 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
-
-
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
@@ -53,4 +51,6 @@ Started 2026-07-23. Running full Spec Kit flow (specify → clarify → plan →
 Spec written: specs/021-metatron-instruction-surface/spec.md (3 user stories, FR-001..012, SC-001..006, quality checklist passing, zero NEEDS CLARIFICATION — ambiguities resolved from TASK-64/68 board artifacts + existing charter/registry semantics per Principle I; chosen defaults recorded in spec Assumptions). NOTE: .specify/feature.json left pointing at specs/020 (TASK-63 agent's live pointer, shared state) — downstream speckit commands for this task get SPECIFY_FEATURE_DIRECTORY=specs/021-metatron-instruction-surface passed explicitly.
 
 Plan complete: plan.md, research.md (R1-R9 decision log), data-model.md, contracts/{instruction-surface,capability-manifest,status}.md, quickstart.md under specs/021-metatron-instruction-surface/. Key decisions: skills/ + capabilities.json at worldDir root beside charter.md; lexicographic composition, 4000 chars/file, 8 files max, charter-style notices; fixed frame compile-time constant appended LAST on every path; manifest missing=full grant (byte-compat), malformed=permissive fallback+notice; three-layer gating (declaration/prose/door); miracle cost single source moves to leaf internal/tool, sim derives (import direction already exists); Status gains Skills/GrantedTools/ManifestDefault, TUI delta confined to console header (TASK-63 collision minimized). Constitution Check PASS pre+post design. Implementation tier: Opus 4.8 — rubric: cross-package (tool/sim/metatron/ipc/tui) + doctrine-adjacent (fixed frame, injection-sound capability gating).
+
+Spec 021 linked via spec-bridge (marker + 6 phase ACs seeded, gate green), artifacts committed to main (88cfee3). Worktree .worktrees/task-64 cut from origin/main at 88cfee3, branch task-64-metatron-instruction-surface. Implementation delegated 2026-07-23 to spec-implementer on Opus 4.8 (rubric: cross-package tool/sim/metatron/ipc/tui + doctrine-adjacent fixed-frame/gating work). Orchestrator gates the implementer report before PR.
 <!-- SECTION:NOTES:END -->
