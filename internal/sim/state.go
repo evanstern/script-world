@@ -607,10 +607,6 @@ func (s *State) Apply(e store.Event) error {
 		a.Needs.Food = p.FoodAfter
 
 	// --- spec 012 resources/food/crafting v2 event surface ---
-	// Registered as explicit no-ops in Phase 2 so each later story fills its own
-	// case without merge collisions, and so the reducer documents the v2 event
-	// vocabulary. Until wired, behavior is identical to the unknown-type
-	// fall-through: recorded history, zero state effect (contracts/events.md).
 	case "agent.quarried":
 		var p HarvestPayload
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -752,12 +748,6 @@ func (s *State) Apply(e store.Event) error {
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
 
 	// --- spec 013 inventory/storage v1 event surface ---
-	// Registered as explicit no-ops in Phase 2 (T009) so each later story fills
-	// its own case without merge collisions, and so the reducer documents the
-	// v3 storage vocabulary. Until wired, behavior is identical to the
-	// unknown-type fall-through: recorded history, zero state effect
-	// (contracts/events.md). The format bump (2→3, T008) shields v2 logs from
-	// these changed semantics.
 	case "agent.dropped":
 		// T016 (spec 013 US2): move the recorded count of Kind from inventory
 		// to the tile's pile (create-or-merge). The payload carries the actual

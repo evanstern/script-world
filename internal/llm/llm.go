@@ -94,14 +94,6 @@ type Request struct {
 	// folded musing into the planner loop; the mechanism stays doctrine for any
 	// future drop-when-busy kind.)
 	BestEffort bool `json:"best_effort,omitempty"`
-	// ResponseSchema, when set, constrains the reply to this JSON Schema at
-	// the sampler level via the OpenAI-compat response_format {type:
-	// json_schema} envelope (Ollama honors it; TASK-58). SchemaName names the
-	// schema in that envelope. The cloud (Anthropic) provider ignores both —
-	// the caller's parser remains the final gate — so a request never fails
-	// for carrying a schema on a tier that can't use it.
-	ResponseSchema json.RawMessage `json:"response_schema,omitempty"`
-	SchemaName     string          `json:"schema_name,omitempty"`
 	// --- agent tool-use loop transport (TASK-52; all additive) ---
 	// Tools declares the tools the model may call this round. nil = no tools
 	// parameter is sent on the wire (today's behavior for every single-shot

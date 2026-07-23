@@ -11,9 +11,8 @@ const (
 	DegradeSkip     Degrade = "skip"     // nothing replaces the thought (recorded, not silent)
 	DegradeReflex   Degrade = "reflex"   // the deterministic reflex floor covers
 	DegradeTemplate Degrade = "template" // pre-authored text stands (meeting rephrase)
-	// DegradeFasterTier is registry-expressible but not wired in v1: a class
-	// declaring it is treated as DegradeSkip until a faster tier exists.
-	DegradeFasterTier Degrade = "faster-tier"
+	// A faster-tier degrade (DegradeFasterTier) was removed as unwired dead
+	// code (TASK-71); git history has it if a faster tier is ever built.
 )
 
 // DecisionClass is one registered category of model-reaching decision: its

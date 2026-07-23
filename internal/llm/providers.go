@@ -149,23 +149,6 @@ func (o *openaiCompat) callNative(ctx context.Context, req Request) (callResult,
 			})
 		}
 		payload["tools"] = tools
-	} else if len(req.ResponseSchema) > 0 {
-		// Structured outputs (TASK-58): when the caller supplies a schema and
-		// declares no tools, pin the reply to it at the sampler level. Absent
-		// a schema the payload is byte-identical to before — only planner
-		// calls set one. response_format MUST NOT ride alongside tools in
-		// native mode (provider-wire.md §2), hence the else.
-		name := req.SchemaName
-		if name == "" {
-			name = "reply"
-		}
-		payload["response_format"] = map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   name,
-				"schema": req.ResponseSchema,
-			},
-		}
 	}
 
 	out, err := o.do(ctx, payload)
