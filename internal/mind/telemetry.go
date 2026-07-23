@@ -85,18 +85,25 @@ func (md *Mind) emitSuppressed(class string, agent int, snapshotTick int64, v co
 	go md.emitCog(e)
 }
 
-// estimating is the optional orchestrator surface for live
-// seconds-per-point; test fakes without it fall back to bootstrap seeds.
+// estimating is the optional orchestrator surface for live per-provider
+// seconds-per-point (spec 024 FR-013): the mind asks about a kind and gets the
+// estimate of that kind's serving provider (its chain head), so a fast small
+// model is never averaged with a slow quality model. Test fakes without the
+// seam fall back to the bootstrap seed.
 type estimating interface {
-	SecondsPerPoint(t llm.Tier) float64
+	EstimateForKind(kind llm.Kind) (string, float64, bool)
 }
 
 func (md *Mind) secondsPerPoint(kind llm.Kind) float64 {
-	tierName, _ := llm.TierFor(kind)
 	if e, ok := md.orch.(estimating); ok {
-		return e.SecondsPerPoint(tierName)
+		if _, spp, ok := e.EstimateForKind(kind); ok {
+			return spp
+		}
 	}
-	return cognition.SeedFor(nil, string(tierName))
+	// Fallback for a test fake lacking the seam: the pessimistic bootstrap seed
+	// (the local/zero-priced constant is the slower of the two — fail toward
+	// reflex, never toward stale action).
+	return cognition.SeedFor(nil, "", true)
 }
 
 func cogThoughtEvent(m thoughtMeta) store.Event {
@@ -227,10 +234,13 @@ func (md *Mind) emitCog(events ...store.Event) {
 }
 
 // RecalibrateSignal is the orchestrator's drift hook (installed by the
-// daemon): the live estimator's spike rate breached threshold — record it.
-func (md *Mind) RecalibrateSignal(tierName llm.Tier, estimate, spikeRate float64) {
+// daemon): the live estimator's spike rate breached threshold — record it. The
+// hook is per provider now (spec 024 T009); the breaching provider's name rides
+// the payload's Tier field, which stays named Tier because it is a recorded
+// telemetry field (replay-relevant schema — untouched by the rename).
+func (md *Mind) RecalibrateSignal(provider string, estimate, spikeRate float64) {
 	b, _ := json.Marshal(sim.RecalibrationPayload{
-		Tier: string(tierName), EstimateSPerPt: estimate,
+		Tier: provider, EstimateSPerPt: estimate,
 		SpikeRate: spikeRate, Window: cognition.WindowSize,
 	})
 	md.emitCog(store.Event{Type: "cog.recalibration_recommended", Payload: b})

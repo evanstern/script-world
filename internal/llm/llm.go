@@ -1,10 +1,16 @@
-// Package llm is the orchestrator for all model traffic (TASK-6): two
-// tiers (local Ollama-style HTTP, cloud Anthropic), kind-based routing,
-// bounded queues with backpressure feeding N concurrent local workers
-// (configurable via local.parallel, default 1; cloud is always single-worker,
-// TASK-45), a persisted monthly spend meter with a hard ceiling, and per-tier
-// circuit breakers so unreachable inference degrades the AI layer — never the
-// simulation.
+// Package llm is the orchestrator for all model traffic (TASK-6, generalized in
+// spec 024): a registry of named PROVIDERS (each a transport — OpenAI-compatible
+// HTTP or Anthropic — with its own model, pricing, queues, workers, breaker, and
+// latency estimator) and per-kind ordered ROUTES that chain them. Each call kind
+// resolves to its chain and dispatches to the first admissible provider, walking
+// past any that are circuit-open, wallet-exhausted, or busy (US3). A single
+// monthly spend meter with a hard ceiling governs the one wallet while attributing
+// spend per provider (US4), and an opt-in advisory endpoint-lease pool bounds
+// combined cross-world concurrency on a shared endpoint (US5). Bounded queues with
+// backpressure feed each provider's N workers (its clamped parallel, TASK-45), and
+// per-provider circuit breakers keep unreachable inference degrading the AI layer
+// — never the simulation. Legacy local/cloud worlds derive a two-provider registry
+// and behave byte-identically (US1).
 //
 // The orchestrator lives entirely OUTSIDE the deterministic sim loop. LLM
 // results reach the world only as recorded inputs (TASK-7's job), so replay
@@ -24,7 +30,8 @@ import (
 	"github.com/evanstern/promptworld/internal/cognition"
 )
 
-// Kind classifies a call; routing to a tier follows the grounding decisions.
+// Kind classifies a call; each kind resolves to an ordered provider chain (its
+// route) per the operator's config.
 type Kind string
 
 const (
@@ -41,6 +48,14 @@ const (
 	KindMeeting Kind = "meeting"
 )
 
+// Tier is the retired routing concept (decision-5): routing is now per named
+// provider along ordered chains, and pricing (zero vs nonzero) is the only
+// surviving local-vs-cloud distinction. The type is no longer a routing or
+// estimator key; it remains ONLY as load-bearing wire compat — Response.Tier
+// carries the serving provider's name for telemetry/CLI consumers not yet moved
+// off it. `promptworld calibrate` moved off Tier-keyed iteration onto declared
+// provider names in the US6 surfacing slice (T020); TierLocal/TierCloud persist
+// as the string values legacy configs' two derived providers are named.
 type Tier string
 
 const (
@@ -48,24 +63,27 @@ const (
 	TierCloud Tier = "cloud"
 )
 
-// routing: high-volume ambient cognition stays local (free, ~3800+ calls/day
-// only viable self-hosted); low-volume high-quality work goes cloud.
-var routing = map[Kind]Tier{
-	KindPlanner:       TierLocal,
-	KindConversation:  TierLocal,
-	KindConsolidation: TierCloud,
-	KindNarrator:      TierCloud,
-	KindDrama:         TierCloud,
-	KindMetatron:      TierCloud,
-	KindMeeting:       TierLocal,
+// acceptedKinds is the static set of call kinds the orchestrator accepts. The
+// routes table is boot-validated against it in both directions (FR-003
+// completeness): every accepted kind must have a route, and every route must
+// name an accepted kind — so an unregistered kind can never reach a model, and
+// a config typo dies at boot rather than at runtime.
+var acceptedKinds = map[Kind]struct{}{
+	KindPlanner:       {},
+	KindConversation:  {},
+	KindConsolidation: {},
+	KindNarrator:      {},
+	KindDrama:         {},
+	KindMetatron:      {},
+	KindMeeting:       {},
 }
 
 // Kinds returns every call kind the orchestrator accepts, sorted — the
 // cognition registry's completeness gate (FR-002) iterates this at daemon
 // start so an unregistered kind can never reach a model at runtime.
 func Kinds() []Kind {
-	out := make([]Kind, 0, len(routing))
-	for k := range routing {
+	out := make([]Kind, 0, len(acceptedKinds))
+	for k := range acceptedKinds {
 		out = append(out, k)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
@@ -74,6 +92,7 @@ func Kinds() []Kind {
 
 var (
 	ErrUnknownKind     = errors.New("unknown call kind")
+	ErrUnknownProvider = errors.New("unknown provider (config drift: a pin named an undeclared provider)")
 	ErrBudgetExhausted = errors.New("monthly cloud budget exhausted; call refused (raise monthly_budget_usd in llm.json or wait for the month to roll over)")
 	ErrTierDown        = errors.New("tier is down (circuit open); the world keeps running degraded")
 	ErrQueueFull       = errors.New("tier queue full; back off and retry")
@@ -86,6 +105,13 @@ type Request struct {
 	System    string `json:"system,omitempty"`
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
+	// Provider optionally pins the call to a named declared provider (spec 024
+	// R3), bypassing chain routing while honoring that provider's admission
+	// (breaker, wallet if priced, queue). Empty = route by the kind's chain
+	// (every existing caller unchanged). An unknown name → ErrUnknownProvider.
+	// The conversation layer stamps this to keep a scene on one provider (US3);
+	// tests and the CLI one-shot use it to force a provider.
+	Provider string `json:"provider,omitempty"`
 	// BestEffort requests drop-when-busy admission: the call is refused
 	// with ErrTierBusy when no worker slot is free — any queued work, or all
 	// N slots in flight (TASK-45). Callers that may not displace real
@@ -105,20 +131,30 @@ type Request struct {
 	// replayed.
 	Turns []Turn `json:"turns,omitempty"`
 	// SkipObserve marks a loop-internal call: the worker feeds NO per-call
-	// sample to the tier estimator (the loop reports one whole-cognition
+	// sample to the provider estimator (the loop reports one whole-cognition
 	// observation via Orchestrator.ObserveCognition instead). Metering,
 	// admission, and the circuit breaker are unaffected.
 	SkipObserve bool `json:"skip_observe,omitempty"`
 }
 
 type Response struct {
-	Text         string  `json:"text"`
+	Text string `json:"text"`
+	// Provider names the serving provider — always set (FR-011). Tier is the
+	// legacy alias (= provider name), retained so telemetry/CLI consumers that
+	// still read it keep working until they move per provider in a later slice.
+	Provider     string  `json:"provider"`
 	Tier         Tier    `json:"tier"`
 	Model        string  `json:"model"`
 	InputTokens  int64   `json:"input_tokens"`
 	OutputTokens int64   `json:"output_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
 	Millis       int64   `json:"ms"`
+	// Skipped records, in chain order, the candidates the dispatch walk passed
+	// over before the serving provider accepted the call (spec 024 US3): each is
+	// a {Provider, Reason} pair with a mechanical, observable reason. Empty on a
+	// head dispatch (the common case) and on a pinned / no_fallback route (which
+	// never walk). Operator-facing only — routing carries no game-state meaning.
+	Skipped []RouteSkip `json:"skipped,omitempty"`
 	// --- agent tool-use loop transport (TASK-52; additive) ---
 	// ToolCalls holds the calls the model emitted this round, in emission
 	// order; nil for a plain-text reply. Stop is the provider's stop reason,
@@ -127,10 +163,31 @@ type Response struct {
 	Stop      StopReason `json:"stop,omitempty"`
 }
 
+// RouteSkip is one candidate the dispatch walk passed over and why (spec 024
+// US3, data-model "Chain-walk admission"). Reasons are mechanical and
+// observable — never a score or a judgment: a chain is the operator's ordered
+// ruling and a skip is a deterministic admission fact.
+type RouteSkip struct {
+	Provider string `json:"provider"`
+	Reason   string `json:"reason"`
+}
+
+// Chain-walk skip reasons (data-model.md): the only four conditions that make a
+// candidate inadmissible at dispatch. circuit-open and queue-full apply to every
+// call; wallet-exhausted applies to priced candidates only; busy applies to
+// best-effort calls only (they additionally require an idle slot and empty
+// queues).
+const (
+	SkipCircuitOpen     = "circuit-open"
+	SkipWalletExhausted = "wallet-exhausted"
+	SkipQueueFull       = "queue-full"
+	SkipBusy            = "busy"
+)
+
 // --- tool-call transport model (TASK-52) ---
 //
 // These types are the wire-agnostic currency between the loop driver and the
-// per-tier callers: a caller translates Request{Tools,Turns} out to its
+// per-provider callers: a caller translates Request{Tools,Turns} out to its
 // provider's shape and Response{ToolCalls,Stop} back. They are transport-only
 // and ephemeral — never persisted and never replayed (data-model §3).
 
@@ -194,26 +251,36 @@ const (
 	StopOther     StopReason = "other"      // any other/unmapped reason
 )
 
-// TierStatus and Status feed the protocol status shape and the TUI.
-type TierStatus struct {
-	Model    string `json:"model"`
-	Endpoint string `json:"endpoint,omitempty"`
-	Up       bool   `json:"up"`
-	Queue    int    `json:"queue"`
+// ProviderStatus is one provider's operator-facing row (FR-012,
+// contracts/status.md): one shape for legacy and v2 worlds alike. Contended
+// reflects the endpoint-lease pool's live congestion (US5); SpentUSD is the
+// provider's attributed share of the month's spend (US4).
+type ProviderStatus struct {
+	Name      string  `json:"name"`
+	Model     string  `json:"model"`
+	Endpoint  string  `json:"endpoint,omitempty"`
+	Up        bool    `json:"up"`
+	Queue     int     `json:"queue"`
+	Inflight  int     `json:"inflight"`
+	Slots     int     `json:"slots"`
+	Contended bool    `json:"contended"`
+	SpentUSD  float64 `json:"spent_usd"`
 }
 
+// Status feeds the protocol status shape and the TUI. The per-provider table
+// replaces the fixed local/cloud pair — legacy worlds simply show two rows
+// (named local, cloud). Providers is sorted by Name for a deterministic marshal.
 type Status struct {
-	Local  TierStatus `json:"local"`
-	Cloud  TierStatus `json:"cloud"`
-	Month  string     `json:"month"`
-	Spent  float64    `json:"spent_usd"`
-	Budget float64    `json:"budget_usd"`
+	Providers []ProviderStatus `json:"providers"`
+	Month     string           `json:"month"`
+	Spent     float64          `json:"spent_usd"`
+	Budget    float64          `json:"budget_usd"`
 }
 
 const queueCap = 32
 
 // workerCallCap bounds any single provider call at the worker, the last
-// line of defense against a hung transport freezing a tier.
+// line of defense against a hung transport freezing a provider.
 const workerCallCap = 2 * time.Minute
 
 type job struct {
@@ -227,200 +294,446 @@ type result struct {
 	err  error
 }
 
-type tier struct {
-	name   Tier
+// provider is one declared model source and its private machinery (FR-005):
+// each owns a full instance of what every tier owned before — bounded queue +
+// interactive priority lane, N worker slots, a circuit breaker, and a live
+// latency estimator — with unchanged semantics, now per named provider rather
+// than per fixed tier (decision-5).
+type provider struct {
+	name   string
+	cfg    ProviderConfig
 	caller caller
 	health *tierHealth
 	queue  chan job
 	prio   chan job // interactive work (conversations) jumps the line
-	// slots is the tier's concurrent capacity: the number of worker
-	// goroutines draining its channels (TASK-45). Local is configurable
-	// (LocalConfig.Workers()); cloud is always 1 (FR-008).
+	// slots is the provider's concurrent capacity: the number of worker
+	// goroutines draining its channels (TASK-45), from its clamped parallel.
 	slots int
 	// inflight counts jobs a worker has dequeued and not yet replied to —
 	// incremented at dequeue, decremented on every reply path. It drives
 	// slot-aware best-effort admission: 0 ≤ inflight ≤ slots.
 	inflight atomic.Int32
-	// est is the live seconds-per-point estimate for this tier (TASK-32):
+	// est is the live seconds-per-point estimate for this provider (TASK-32):
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
 	est *cognition.Estimator
+	// leases is the advisory endpoint-lease pool bounding COMBINED cross-world
+	// concurrency on this provider's normalized endpoint (spec 024 US5), or nil
+	// when endpoint_capacity was not declared — nil means zero lease syscalls and
+	// today's behavior. Providers sharing one normalized endpoint in this process
+	// share the pool instance.
+	leases *leasePool
 }
 
-// TierFor exposes a kind's tier — the mind needs it to read the right
-// estimator when routing.
-func TierFor(kind Kind) (Tier, bool) {
-	t, ok := routing[kind]
-	return t, ok
+// priced reports whether a provider bills for traffic — the surviving budget
+// distinction (decision-5). Zero-priced providers are never budget-refused.
+func (p *provider) priced() bool {
+	return p.cfg.InputUSDPerMTok > 0 || p.cfg.OutputUSDPerMTok > 0
+}
+
+// route is one call kind's resolved ordered chain plus the no-fallback flag,
+// built once at New() from validated config and immutable thereafter. This
+// slice dispatches to chain[0] (the head) only; the admissible-head walk and
+// fallback arrive in US3.
+type route struct {
+	chain      []*provider
+	noFallback bool
 }
 
 // Orchestrator routes, queues, meters, and degrades. One per daemon.
 type Orchestrator struct {
 	cfg       Config
 	meter     *Meter
-	tiers     map[Tier]*tier
+	providers map[string]*provider
+	routes    map[Kind]route
 	done      chan struct{}
 	closeOnce sync.Once
 
-	// recalibrate is invoked (in its own goroutine) when a tier's estimator
+	// recalibrate is invoked (in its own goroutine) when a provider's estimator
 	// first breaches the spike-rate threshold — the mind turns it into a
-	// cog.recalibration_recommended telemetry event.
+	// cog.recalibration_recommended telemetry event. It carries the serving
+	// provider's name (spec 024 T009: the hook is per provider, not per tier).
 	recalMu     sync.Mutex
-	recalibrate func(tier Tier, estimate, spikeRate float64)
+	recalibrate func(provider string, estimate, spikeRate float64)
 }
 
 func New(cfg Config, st MeterStore) (*Orchestrator, error) {
-	meter, err := NewMeter(st, cfg.MonthlyBudgetUSD)
+	// resolveRegistry normalizes both config shapes (legacy local/cloud or the
+	// v2 registry) into the validated provider set + kind→chain routes. A direct
+	// caller that hands New() a malformed registry gets the same boot error
+	// LoadConfig would raise — New() never builds machinery from an invalid map.
+	pcs, rcs, err := cfg.resolveRegistry()
 	if err != nil {
 		return nil, err
 	}
-	// Local tier concurrency is operator-configurable (clamped in Workers());
-	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
-	// at one worker (FR-008).
-	localSlots, _ := cfg.Local.Workers()
-	localToolMode, _ := cfg.Local.ToolModeResolved()
-	o := &Orchestrator{
-		cfg:   cfg,
-		meter: meter,
-		done:  make(chan struct{}),
-		tiers: map[Tier]*tier{
-			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
-				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none"), localToolMode),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				slots: localSlots,
-				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
-			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				slots: 1,
-				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
-		},
+	// The meter learns the declared provider roster so it can reload each one's
+	// persisted per-provider attribution at open and enumerate them in the
+	// snapshot (spec 024 US4). The total key still governs the one wallet.
+	names := make([]string, 0, len(pcs))
+	for name := range pcs {
+		names = append(names, name)
 	}
+	meter, err := NewMeter(st, cfg.MonthlyBudgetUSD, names)
+	if err != nil {
+		return nil, err
+	}
+	o := &Orchestrator{
+		cfg:       cfg,
+		meter:     meter,
+		done:      make(chan struct{}),
+		providers: make(map[string]*provider, len(pcs)),
+		routes:    make(map[Kind]route, len(rcs)),
+	}
+	// Each provider owns a full instance of the per-provider machinery (FR-005),
+	// with worker slots from its clamped parallel (warn discarded here — the
+	// daemon surfaces boot warnings; the clamp itself is the invariant).
+	for name, pc := range pcs {
+		slots, _ := pc.workers(name)
+		o.providers[name] = &provider{
+			name: name, cfg: pc, caller: newProviderCaller(pc),
+			health: &tierHealth{},
+			queue:  make(chan job, queueCap), prio: make(chan job, queueCap),
+			slots: slots,
+			// Cold-start seed by pricing class (spec 024 R5): a zero-priced
+			// provider bootstraps local, a priced one cloud (SeedCalibration
+			// re-seeds from a recorded profile before traffic when present).
+			est: cognition.NewEstimator(cognition.SeedFor(nil, name, pc.zeroPriced())),
+		}
+	}
+	// Resolve each route's provider names to the live provider instances; the
+	// config was validated so every name is present.
+	for kind, rc := range rcs {
+		chain := make([]*provider, 0, len(rc.Chain))
+		for _, name := range rc.Chain {
+			chain = append(chain, o.providers[name])
+		}
+		o.routes[kind] = route{chain: chain, noFallback: rc.NoFallback}
+	}
+	// Endpoint lease pools (spec 024 US5): a provider that declares
+	// endpoint_capacity gets an advisory flock pool bounding COMBINED in-flight
+	// calls to its normalized endpoint across every world sharing it. Providers
+	// with the same normalized endpoint in THIS process share one pool instance
+	// (two models on one Ollama); cross-process they share the on-disk dir.
+	// Undeclared capacity ⇒ nil pool ⇒ zero lease syscalls (legacy behavior), so
+	// the base dir is resolved only when at least one provider opted in.
+	o.attachLeasePools(pcs)
 	// One worker goroutine per slot: N identical copies of the existing loop
 	// drain the same two channels, preserving every per-job invariant while
 	// unlocking concurrency (TASK-45 R1).
-	for _, t := range o.tiers {
-		for i := 0; i < t.slots; i++ {
-			go o.worker(t)
+	for _, p := range o.providers {
+		for i := 0; i < p.slots; i++ {
+			go o.worker(p)
 		}
 	}
 	return o, nil
 }
 
+// attachLeasePools wires an advisory lease pool onto every provider that declared
+// endpoint_capacity (spec 024 US5). It is a no-op when none did — no home-dir
+// lookup, no directory touched — so an undeclared world makes zero lease
+// syscalls. A pool that cannot be created (home dir unresolved, or a dir-creation
+// failure) disables leases for that provider with a boot warning rather than
+// failing the boot (warn-not-error doctrine).
+func (o *Orchestrator) attachLeasePools(pcs map[string]ProviderConfig) {
+	anyCapacity := false
+	for _, pc := range pcs {
+		if pc.EndpointCapacity > 0 {
+			anyCapacity = true
+			break
+		}
+	}
+	if !anyCapacity {
+		return
+	}
+	base, ok := leaseBaseDir()
+	if !ok {
+		for name, pc := range pcs {
+			if pc.EndpointCapacity > 0 {
+				leaseWarnf("provider %q: endpoint leases disabled (cannot resolve home dir)", name)
+			}
+		}
+		return
+	}
+	// Share one pool instance per normalized endpoint within this process.
+	pools := make(map[string]*leasePool)
+	for name, pc := range pcs {
+		if pc.EndpointCapacity <= 0 {
+			continue
+		}
+		norm := normalizeEndpoint(pc.Endpoint)
+		lp, ok := pools[norm]
+		if !ok {
+			var err error
+			lp, err = newLeasePool(base, pc.Endpoint, pc.EndpointCapacity)
+			if err != nil {
+				leaseWarnf("provider %q: endpoint lease pool disabled (%v)", name, err)
+				continue
+			}
+			pools[norm] = lp
+		}
+		o.providers[name].leases = lp
+	}
+}
+
 func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
 
-// SeedCalibration re-seeds both tiers' estimators from a calibration
-// profile (nil = keep bootstrap defaults). Called once at daemon start,
-// before traffic.
+// SeedCalibration re-seeds every provider's estimator from a calibration
+// profile (nil = keep bootstrap defaults), keyed by provider name — legacy
+// tier-keyed profiles keep matching the derived local/cloud providers by name.
+// A provider with no recorded entry bootstraps by its pricing class (zero-priced
+// → local constant, priced → cloud constant, spec 024 R5). Called once at daemon
+// start, before traffic.
 func (o *Orchestrator) SeedCalibration(p *cognition.Profile) {
-	for name, t := range o.tiers {
-		t.est = cognition.NewEstimator(cognition.SeedFor(p, string(name)))
+	for name, pv := range o.providers {
+		pv.est = cognition.NewEstimator(cognition.SeedFor(p, name, pv.cfg.zeroPriced()))
 	}
 }
 
-// SecondsPerPoint is the live estimate for a tier — the router's bridge
-// from Fibonacci points to this deployment's wall clock.
-func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
-	if t, ok := o.tiers[tierName]; ok {
-		return t.est.Estimate()
+// ProviderNames returns every declared provider name, sorted — the operator-
+// facing roster for status/telemetry surfaces.
+func (o *Orchestrator) ProviderNames() []string {
+	out := make([]string, 0, len(o.providers))
+	for name := range o.providers {
+		out = append(out, name)
 	}
-	return cognition.SeedFor(nil, string(tierName))
+	sort.Strings(out)
+	return out
 }
 
-// feedEstimate reports one completed-cognition wall time to a tier's
+// ProviderConfig returns the named provider's declared configuration (model,
+// endpoint, pricing) and whether that name is registered — the read-only
+// surface `promptworld calibrate` (T020) uses to classify a provider's
+// pricing class and label its profile entry, without duplicating
+// resolveRegistry's legacy-vs-v2 derivation in cmd/promptworld.
+func (o *Orchestrator) ProviderConfig(name string) (ProviderConfig, bool) {
+	p, ok := o.providers[name]
+	if !ok {
+		return ProviderConfig{}, false
+	}
+	return p.cfg, true
+}
+
+// admissibleHead returns the chain candidate a kind currently resolves to: the
+// first provider whose breaker is closed and (if priced) whose wallet has not
+// hit the ceiling — the same stable admission the dispatch walk applies, minus
+// the transient queue/busy checks so the answer is a routing statement, not a
+// snapshot of momentary load. When every candidate is inadmissible it falls back
+// to the chain head (a routing seam must always name a provider). This is a pure
+// read: it uses the non-mutating breaker check (down()), never admit(), so the
+// mind may call it on every routing decision without consuming a half-open probe.
+func (o *Orchestrator) admissibleHead(rt route) *provider {
+	for _, p := range rt.chain {
+		if p.priced() && !o.meter.Allow() {
+			continue
+		}
+		if p.health.down() {
+			continue
+		}
+		return p
+	}
+	return rt.chain[0]
+}
+
+// ResolveProvider names the provider a kind currently resolves to (FR-013): a
+// dry chain-walk returning the current admissible head (research R3). The
+// conversation layer resolves a scene's provider once through this seam and pins
+// every turn to it, so a scene never switches voices mid-dialogue.
+func (o *Orchestrator) ResolveProvider(kind Kind) (string, error) {
+	rt, ok := o.routes[kind]
+	if !ok {
+		return "", fmt.Errorf("%w: %q", ErrUnknownKind, kind)
+	}
+	return o.admissibleHead(rt).name, nil
+}
+
+// EstimateForKind returns the serving provider's name and its live seconds-per-
+// point estimate for a kind — the cognition horizon's provider-granular seam
+// (FR-013), so a fast small model is never averaged with a slow quality model.
+// It reports the CURRENT ADMISSIBLE chain head (deterministic: the first
+// candidate passing the breaker/wallet checks, falling back to the chain head
+// when none is admissible), so the mind budgets against the provider that would
+// actually serve the next call. ok is false for an unknown kind.
+func (o *Orchestrator) EstimateForKind(kind Kind) (string, float64, bool) {
+	rt, ok := o.routes[kind]
+	if !ok {
+		return "", 0, false
+	}
+	head := o.admissibleHead(rt)
+	return head.name, head.est.Estimate(), true
+}
+
+// feedEstimate reports one completed-cognition wall time to a provider's
 // seconds-per-point estimator, normalized by the kind's registered point cost,
 // and fires the recalibrate hook (in its own goroutine) on a spike-rate breach.
 // Shared by the per-call worker path (TASK-32) and the whole-loop
 // ObserveCognition seam (TASK-52), so both feed the estimator identically.
-func (o *Orchestrator) feedEstimate(t *tier, kind Kind, millis int64) {
+func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 	dc, ok := cognition.ClassForKind(string(kind))
 	if !ok || dc.Points <= 0 {
 		return
 	}
-	if t.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
-		est, rate, _, _ := t.est.Stats()
+	if p.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+		est, rate, _, _ := p.est.Stats()
 		o.recalMu.Lock()
 		hook := o.recalibrate
 		o.recalMu.Unlock()
 		if hook != nil {
-			go hook(t.name, est, rate)
+			// The hook fires per provider: the breaching provider's own name
+			// rides the drift signal (observational telemetry, not routing).
+			go hook(p.name, est, rate)
 		}
 	}
 }
 
-// ObserveCognition reports one whole-cognition wall-time observation to the
-// tier estimator (TASK-52). It is the agent tool-use loop's replacement for
-// per-call worker feeding: the loop marks every internal Submit SkipObserve so
-// no fractional per-round samples reach the estimator, then reports the summed
-// loop duration here exactly once. Unknown kinds are ignored (no tier). Safe
-// for concurrent use — the estimator and hook lock are the same ones the
-// worker uses.
-func (o *Orchestrator) ObserveCognition(kind Kind, totalMillis int64) {
-	tierName, ok := routing[kind]
+// ObserveCognition reports one whole-cognition wall-time observation to a
+// provider's estimator (TASK-52). It is the agent tool-use loop's replacement
+// for per-call worker feeding: the loop marks every internal Submit SkipObserve
+// so no fractional per-round samples reach the estimator, then reports the summed
+// loop duration here exactly once. The observation feeds the NAMED serving
+// provider's estimator (spec 024 T009: the loop passes Response.Provider, so a
+// fallback that served a different provider than the chain head is measured on
+// the estimator that actually did the work); an empty name (or one that no
+// longer resolves) falls back to the kind's chain head. Unknown kinds are
+// ignored. Safe for concurrent use — the estimator and hook lock are the same
+// ones the worker uses.
+func (o *Orchestrator) ObserveCognition(kind Kind, provider string, totalMillis int64) {
+	rt, ok := o.routes[kind]
 	if !ok {
 		return
 	}
-	o.feedEstimate(o.tiers[tierName], kind, totalMillis)
+	p := rt.chain[0]
+	if provider != "" {
+		if pv, ok := o.providers[provider]; ok {
+			p = pv
+		}
+	}
+	o.feedEstimate(p, kind, totalMillis)
 }
 
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
 // hook runs in its own goroutine and must be idempotent per breach episode
 // — the estimator already fires once per breach.
-func (o *Orchestrator) SetRecalibrateHook(fn func(tier Tier, estimate, spikeRate float64)) {
+func (o *Orchestrator) SetRecalibrateHook(fn func(provider string, estimate, spikeRate float64)) {
 	o.recalMu.Lock()
 	o.recalibrate = fn
 	o.recalMu.Unlock()
 }
 
-// Submit routes a request to its tier and blocks until the result (or the
-// caller's ctx expires). Admission control is immediate: budget ceiling,
-// open circuit, and full queue all fail fast rather than piling work up —
-// that backpressure is what lets local throughput cap sim speed later.
+// Submit routes a request along its kind's chain and blocks until the serving
+// provider replies (or the caller's ctx expires). Admission control is immediate
+// per candidate — budget ceiling, open circuit, best-effort busy, and full queue
+// all fail fast rather than piling work up — that backpressure is what lets local
+// throughput cap sim speed. Fallback is chain-walking (spec 024 US3): the walk
+// visits each candidate in the operator's declared order and dispatches to the
+// first admissible one, recording the ordered skips it passed over.
 func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error) {
-	tierName, ok := routing[req.Kind]
-	if !ok {
-		return Response{}, fmt.Errorf("%w: %q", ErrUnknownKind, req.Kind)
+	// Resolve the candidate set. An explicit Request.Provider pin (R3) names a
+	// declared provider and bypasses chain-walking (scene pinning, the CLI, and
+	// tests use it) while honoring ALL of that provider's admission checks; a
+	// no_fallback route considers only its head; otherwise the whole chain walks.
+	var candidates []*provider
+	if req.Provider != "" {
+		p, ok := o.providers[req.Provider]
+		if !ok {
+			return Response{}, fmt.Errorf("%w: %q", ErrUnknownProvider, req.Provider)
+		}
+		candidates = []*provider{p}
+	} else {
+		rt, ok := o.routes[req.Kind]
+		if !ok {
+			return Response{}, fmt.Errorf("%w: %q", ErrUnknownKind, req.Kind)
+		}
+		if rt.noFallback {
+			candidates = rt.chain[:1]
+		} else {
+			candidates = rt.chain
+		}
 	}
-	t := o.tiers[tierName]
 
-	if tierName == TierCloud && !o.meter.Allow() {
-		return Response{}, ErrBudgetExhausted
-	}
-	if !t.health.admit() {
-		return Response{}, ErrTierDown
+	// Walk the candidates in order. A candidate is skipped ONLY for a mechanical
+	// admission fact, in the data-model's order: wallet ceiling (priced only),
+	// open circuit, best-effort busy, then full queue. The first admissible
+	// candidate is dispatched to; every skip that preceded it is recorded on the
+	// response. When none is admissible the walk returns the HEAD's refusal error
+	// (the first skip is the head's, since the walk records in chain order).
+	var skipped []RouteSkip
+	for _, t := range candidates {
+		// Budget throttles priced providers before the call (never after the
+		// money is spent); zero-priced providers are never budget-refused
+		// (decision-5).
+		if t.priced() && !o.meter.Allow() {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipWalletExhausted})
+			continue
+		}
+		if !t.health.admit() {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipCircuitOpen})
+			continue
+		}
+		// Best-effort work is admitted only when a slot is free, refused
+		// instantly otherwise. With N workers, "free slot" means no queued work
+		// AND at least one idle worker (inflight < slots) — a non-empty queue
+		// already implies every slot is busy, so the queue checks are the
+		// fast-path refusal (R3).
+		if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipBusy})
+			continue
+		}
+		// Conversations are interactive — a turn mid-dialogue must not wait
+		// behind a backlog of planner thoughts (which tolerate staleness; the
+		// reflex grace covers them). Everything else rides the normal queue.
+		q := t.queue
+		if req.Kind == KindConversation {
+			q = t.prio
+		}
+		j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
+		select {
+		case q <- j:
+		default:
+			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipQueueFull})
+			continue
+		}
+		// Accepted: this candidate serves the call. Post-dispatch failure is
+		// FINAL — a provider error here is never re-dispatched down the chain
+		// (the model may have already done partial work; re-running it would
+		// double-spend and double-act). The recorded skips ride the response.
+		select {
+		case res := <-j.reply:
+			if res.err != nil {
+				return res.resp, res.err
+			}
+			res.resp.Skipped = skipped
+			return res.resp, nil
+		case <-ctx.Done():
+			return Response{}, ctx.Err()
+		case <-o.done:
+			return Response{}, ErrClosed
+		}
 	}
 
-	// Conversations are interactive — a turn mid-dialogue must not wait
-	// behind a backlog of planner thoughts (which tolerate staleness; the
-	// reflex grace covers them). Everything else rides the normal queue.
-	// Best-effort work is the opposite extreme: admitted only
-	// when a slot is free, refused instantly otherwise. With N local
-	// workers, "free slot" means no queued work AND at least one idle
-	// worker (inflight < slots) — a non-empty queue already implies every
-	// slot is busy, so the queue checks remain the fast-path refusal (R3).
-	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
-		return Response{}, ErrTierBusy
-	}
-	q := t.queue
-	if req.Kind == KindConversation {
-		q = t.prio
-	}
-	j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
-	select {
-	case q <- j:
-	default:
-		return Response{}, ErrQueueFull
-	}
-	select {
-	case res := <-j.reply:
-		return res.resp, res.err
-	case <-ctx.Done():
-		return Response{}, ctx.Err()
-	case <-o.done:
-		return Response{}, ErrClosed
+	// Every candidate was inadmissible: refuse with the head's reason (skipped[0]
+	// is the head — the walk records in chain order, and a pin/no_fallback set has
+	// exactly one candidate, its own head).
+	return Response{}, refusalFor(skipped[0].Reason)
+}
+
+// refusalFor maps a chain-head skip reason onto the admission-ladder sentinel
+// the caller (and the toolloop's terminationForSubmitErr) already switch on, so
+// an all-inadmissible walk refuses exactly as a single-tier refusal did before
+// fallback existed — legacy single-entry chains are byte-identical.
+func refusalFor(reason string) error {
+	switch reason {
+	case SkipWalletExhausted:
+		return ErrBudgetExhausted
+	case SkipCircuitOpen:
+		return ErrTierDown
+	case SkipBusy:
+		return ErrTierBusy
+	default: // SkipQueueFull
+		return ErrQueueFull
 	}
 }
 
-func (o *Orchestrator) worker(t *tier) {
+func (o *Orchestrator) worker(t *provider) {
 	for {
 		// Two-level priority: drain interactive work first.
 		var j job
@@ -453,10 +766,27 @@ func (o *Orchestrator) worker(t *tier) {
 				j.reply <- result{err: j.ctx.Err()}
 				return
 			}
-			start := time.Now()
-			// Worker-side hard cap: no single call may wedge the tier,
+			// Worker-side hard cap: no single call may wedge the provider,
 			// regardless of the caller's context or transport behavior.
 			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
+			// Endpoint lease (spec 024 US5): a lease-enabled provider acquires a
+			// slot BEFORE the call, bounded by the same callCtx. The wait precedes
+			// the model call, so it never strikes the breaker and never enters the
+			// estimator sample (start is taken AFTER acquisition). A wait that
+			// exhausts callCtx surfaces as its context error, handled exactly like a
+			// caller who gave up in the queue — reply the error, leave the breaker
+			// untouched. Undeclared capacity ⇒ nil pool ⇒ this whole block is
+			// skipped (zero syscalls, legacy behavior).
+			if t.leases != nil {
+				release, _, aerr := t.leases.acquire(callCtx)
+				if aerr != nil {
+					cancel()
+					j.reply <- result{err: aerr}
+					return
+				}
+				defer release()
+			}
+			start := time.Now()
 			cr, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
@@ -471,16 +801,20 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 			t.health.succeed()
 			resp := Response{
-				Text:         cr.text,
-				ToolCalls:    cr.toolCalls,
-				Stop:         cr.stop,
-				Tier:         t.name,
+				Text:      cr.text,
+				ToolCalls: cr.toolCalls,
+				Stop:      cr.stop,
+				// Provider always names the serving provider (FR-011); Tier is
+				// the legacy alias (= provider name) for consumers not yet moved.
+				Provider:     t.name,
+				Tier:         Tier(t.name),
+				Model:        t.cfg.Model,
 				InputTokens:  cr.inTok,
 				OutputTokens: cr.outTok,
 				Millis:       time.Since(start).Milliseconds(),
 			}
 			// Cognition-horizon sampling (TASK-32): completed calls feed the
-			// tier's seconds-per-point estimate, normalized by the kind's
+			// provider's seconds-per-point estimate, normalized by the kind's
 			// registered point cost. Successes only — a fast failure is not
 			// a latency observation of completed thought, and the estimator's
 			// spike rejection only guards the high side. A loop-internal call
@@ -492,36 +826,43 @@ func (o *Orchestrator) worker(t *tier) {
 			if !j.req.SkipObserve {
 				o.feedEstimate(t, j.req.Kind, resp.Millis)
 			}
-			if t.name == TierCloud {
-				resp.Model = o.cfg.Cloud.Model
-				resp.CostUSD = float64(cr.inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
-					float64(cr.outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
-				if merr := o.meter.Add(resp.CostUSD); merr != nil {
+			// Every call is priced by its serving provider's rates; a priced
+			// provider bills the wallet (zero-priced providers cost nothing and
+			// never touch the meter — byte-identical to the local tier today).
+			// Per-provider attribution keys land in US4; this slice writes only
+			// the total via the provider-scoped Add signature.
+			if t.priced() {
+				resp.CostUSD = float64(cr.inTok)*t.cfg.InputUSDPerMTok/1e6 +
+					float64(cr.outTok)*t.cfg.OutputUSDPerMTok/1e6
+				if merr := o.meter.Add(t.name, resp.CostUSD); merr != nil {
 					// Metering must never lose money silently: surface it.
 					j.reply <- result{err: fmt.Errorf("spend meter: %w", merr)}
 					return
 				}
-			} else {
-				resp.Model = o.cfg.Local.Model
 			}
 			j.reply <- result{resp: resp}
 		}()
 	}
 }
 
-// StatusSnapshot reports tier health, queue depths, and spend.
+// StatusSnapshot reports each provider's health, queue depth, and worker
+// occupancy plus its attributed spend and the global total (FR-012). Rows are
+// sorted by name for a deterministic marshal; SpentUSD is the provider's share
+// of the month's spend (spec 024 US4) — the total minus Σ(rows) is the
+// (unattributed) remainder a surface renders. Contended is the lease pool's live
+// congestion flag (US5), false for any provider without an endpoint_capacity.
 func (o *Orchestrator) StatusSnapshot() Status {
-	month, spent, budget := o.meter.Snapshot()
-	local, cloud := o.tiers[TierLocal], o.tiers[TierCloud]
-	return Status{
-		Local: TierStatus{
-			Model: o.cfg.Local.Model, Endpoint: o.cfg.Local.Endpoint,
-			Up: !local.health.down(), Queue: len(local.queue),
-		},
-		Cloud: TierStatus{
-			Model: o.cfg.Cloud.Model,
-			Up:    !cloud.health.down(), Queue: len(cloud.queue),
-		},
-		Month: month, Spent: spent, Budget: budget,
+	month, spent, budget, perProvider := o.meter.Snapshot()
+	rows := make([]ProviderStatus, 0, len(o.providers))
+	for _, p := range o.providers {
+		rows = append(rows, ProviderStatus{
+			Name: p.name, Model: p.cfg.Model, Endpoint: p.cfg.Endpoint,
+			Up: !p.health.down(), Queue: len(p.queue),
+			Inflight: int(p.inflight.Load()), Slots: p.slots,
+			Contended: p.leases != nil && p.leases.contended.Load(),
+			SpentUSD:  perProvider[p.name],
+		})
 	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+	return Status{Providers: rows, Month: month, Spent: spent, Budget: budget}
 }

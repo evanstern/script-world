@@ -210,19 +210,19 @@ contended surfaced.
 
 **Independent Test**: quickstart §3 + §8.
 
-- [ ] T017 [P] [US6] TUI provider table per contracts/status.md: the pane rendering tier
+- [x] T017 [P] [US6] TUI provider table per contracts/status.md: the pane rendering tier
   health/spend today renders one row per provider (name, model, up/down glyph, queue,
   inflight/slots, contended marker, spend share incl. `(unattributed)` when nonzero),
   sorted by name; view tests beside the existing TUI tests
-- [ ] T018 [P] [US6] CLI surfaces in cmd/promptworld: `promptworld llm` one-shot prints
+- [x] T018 [P] [US6] CLI surfaces in cmd/promptworld: `promptworld llm` one-shot prints
   serving provider and any `Skipped` reasons; `promptworld status` JSON passes the
   per-provider table through verbatim; calibrate output names providers; update command
   help strings that say local/cloud
-- [ ] T019 [US6] End-to-end proof per quickstart §3/§8 against a live world (v2 config
+- [x] T019 [US6] End-to-end proof per quickstart §3/§8 against a live world (v2 config
   with two local providers): capture the one-shot naming each expected provider, a
   forced-fallback skip reason, and the TUI table; record evidence in task-35 board notes
 
-- [ ] T020 [US6] v2-registry calibration in cmd/promptworld/calibrate.go: replace the
+- [x] T020 [US6] v2-registry calibration in cmd/promptworld/calibrate.go: replace the
   legacy `--tier local|cloud|all` iteration with iteration over the declared providers
   (legacy configs iterate their two derived providers — unchanged UX), pinning each
   reference call via `Request.Provider` and writing one profile entry per provider name
@@ -237,13 +237,13 @@ contended surfaced.
 mid-implementation; research.md R9 records the composition rulings. Opus tier
 (toolloop/llm concurrency + conflict-bearing rebase).
 
-- [ ] T021 Rebase task-35-provider-routing onto origin/main across the spec-025 merge
+- [x] T021 Rebase task-35-provider-routing onto origin/main across the spec-025 merge
   and reconcile internal/llm/config.go: the v2 registry Config keeps
   `MaxTokens *TokenBudgets` + normalizer methods and `LoopMaxRounds` top-level in both
   shapes, shape-aware MarshalJSON round-trips them byte-for-byte (omitempty preserved),
   legacy derivation untouched by them; re-run the full -race suite including spec 025's
   retry/token tests and the legacy-equivalence suite
-- [ ] T022 Run-level provider pinning in internal/toolloop/loop.go per research.md R9 /
+- [x] T022 Run-level provider pinning in internal/toolloop/loop.go per research.md R9 /
   FR-008 extension: resolve ResolveProvider(kind) once at Run start, stamp
   Request.Provider on every round INCLUDING the spec-025 in-loop retry;
   ObserveCognition attribution uses the pinned provider (exact by construction). Tests:

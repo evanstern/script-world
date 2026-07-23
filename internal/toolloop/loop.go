@@ -60,6 +60,15 @@ type Job struct {
 	MaxRounds int
 	MaxTokens int64
 	Record    func(CallRecord) // artifact sink; the consumer buffers/lands records
+	// Provider optionally pins every round's Submit to one EXPLICIT declared
+	// provider (spec 024 R3), riding straight through to llm.Request.Provider and
+	// overriding the run-level resolve below. `promptworld calibrate` (T020) sets
+	// it so a reference loop sample measures the NAMED provider. Empty (the
+	// default, and every live mind/metatron caller) is NOT unpinned: Run resolves
+	// the kind's provider ONCE at run start (ResolveProvider) and pins the whole
+	// run to it (spec 024 R9 / FR-008 extension), so a multi-round cognition — and
+	// the spec-025 in-loop retry — never changes providers mid-transcript.
+	Provider string
 }
 
 // Termination is how a Run ended (data-model.md §4). landed / model_done /
@@ -99,9 +108,14 @@ type Result struct {
 // Run takes the concrete orchestrator (the contract surface) and delegates to
 // run over this interface, so the driver's control flow is unit-testable
 // against a scripted stub without a network or a real orchestrator.
+// ResolveProvider is the run-level pin seam (spec 024 R9 / FR-008 extension): a
+// dry chain-walk naming the provider the kind currently resolves to, called once
+// at run start so every round — including the spec-025 retry — targets one
+// provider (research R9, the cognition-run analog of scene pinning).
 type submitter interface {
 	Submit(ctx context.Context, req llm.Request) (llm.Response, error)
-	ObserveCognition(kind llm.Kind, totalMillis int64)
+	ObserveCognition(kind llm.Kind, provider string, totalMillis int64)
+	ResolveProvider(kind llm.Kind) (string, error)
 }
 
 // Run drives the bounded loop. Guarantees (contracts/loop-api.md): it
@@ -134,6 +148,27 @@ func Run(ctx context.Context, orch *llm.Orchestrator, j Job) (Result, error) {
 
 func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 	start := time.Now()
+	// Run-level provider pin (spec 024 R9 / FR-008 extension, spec 025
+	// composition): a multi-round cognition resolves its provider ONCE at run
+	// start and stamps it on EVERY round — including the spec-025 in-loop
+	// transport retry — so a thought never changes models mid-transcript. This is
+	// the cognition-run analog of a conversation scene's pin: with per-call
+	// chain-walking, the breaker strike from the very failure being retried is
+	// itself a walk trigger, so a retry (or any later round) could land on a
+	// different provider than the transcript's earlier rounds, mixing native vs
+	// JSON tool-call conventions and mis-attributing the whole-run observation.
+	// An explicit Job.Provider (calibrate's reference pin) is honored as-is and
+	// never re-resolved. A ResolveProvider miss (unknown kind — a boot-validated
+	// impossibility in production; a stub that omits the seam in tests) leaves the
+	// pin empty, falling back to today's per-kind routing; a genuinely down pinned
+	// provider fails the run per spec 025 semantics (the retry re-hits the SAME
+	// provider) and the NEXT cognition's resolve walks the chain to a fallback.
+	pin := j.Provider
+	if pin == "" {
+		if resolved, rerr := s.ResolveProvider(j.Kind); rerr == nil {
+			pin = resolved
+		}
+	}
 	// The whole-loop governor observation (data-model.md §8): SUCCESSES-ONLY,
 	// mirroring the worker path's doctrine (internal/llm/llm.go — "a fast
 	// failure is not a latency observation of completed thought"). res.TotalMillis
@@ -144,12 +179,17 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 	// did no completed thought and feeds NOTHING, so a refused/errored loop cannot
 	// skew the EWMA toward zero. Per-round Submits set SkipObserve so no fractional
 	// samples reach the estimator either. This is a single exit-path mechanism, so
-	// it still fires at most once (never double-fires).
+	// it still fires at most once (never double-fires). Attribution rides the run
+	// PIN, exact by construction: every round Submits with Provider: pin, so a
+	// completed run was served entirely by the pinned provider — no need to read
+	// back a per-round serving name that could only ever equal the pin. When the
+	// pin is empty (an unresolvable kind — a failure path that never reaches this
+	// success-only observe), ObserveCognition falls back to the chain head.
 	defer func() {
 		res.TotalMillis = time.Since(start).Milliseconds()
 		switch res.Term {
 		case TermLanded, TermModelDone, TermCapExhausted:
-			s.ObserveCognition(j.Kind, res.TotalMillis)
+			s.ObserveCognition(j.Kind, pin, res.TotalMillis)
 		}
 	}()
 
@@ -213,6 +253,7 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 			Tools:       tools,
 			Turns:       transcript,
 			MaxTokens:   j.MaxTokens,
+			Provider:    pin,
 			SkipObserve: true,
 		})
 		if serr != nil {

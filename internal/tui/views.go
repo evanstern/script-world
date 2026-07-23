@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/worldmap"
@@ -1347,13 +1348,10 @@ func (m Model) metatronView() string {
 	content := header + "\n\n" + body
 	if m.status != nil && m.status.LLM != nil {
 		l := m.status.LLM
-		up := func(b bool) string {
-			if b {
-				return styleAgent.Render("up")
-			}
-			return styleErr.Render("down")
+		for _, row := range llmProviderLines(l) {
+			content += "\n" + row
 		}
-		content += "\n" + styleDim.Render(fmt.Sprintf("cloud %s %s · spend $%.2f of $%.0f", l.Cloud.Model, up(l.Cloud.Up), l.Spent, l.Budget))
+		content += "\n" + styleDim.Render(fmt.Sprintf("spend $%.2f of $%.0f", l.Spent, l.Budget))
 		if l.Spent >= l.Budget {
 			content += "\n" + styleErr.Render("budget exhausted — the angel's voice is stilled")
 		}
@@ -1363,6 +1361,54 @@ func (m Model) metatronView() string {
 	// bordered pane, which adds its own chrome on top.
 	content += "\n\n" + m.minibufferView(width)
 	return styleBox.Render(content)
+}
+
+// llmProviderNameWidth / llmProviderModelWidth are the provider table's fixed
+// column widths (contracts/status.md's TUI section): declared names/models
+// run short (local, cloud, cogito, gemma4:12b-mlx) and a fixed width keeps
+// every row's glyph/queue/spend columns aligned without measuring the whole
+// Providers slice first.
+const (
+	llmProviderNameWidth  = 10
+	llmProviderModelWidth = 18
+)
+
+// llmProviderLines renders the operator-facing provider table (spec 024
+// US6, contracts/status.md "TUI"): one row per provider — name, model,
+// up/down glyph, queue depth, inflight/slots, a contended marker, and this
+// provider's spend share of the month — sorted by name (the wire order,
+// StatusSnapshot already sorts). A trailing `(unattributed)` row appears
+// only when the global spend total exceeds Σ(rows), the legacy-spend
+// remainder contracts/status.md documents.
+func llmProviderLines(l *llm.Status) []string {
+	if l == nil || len(l.Providers) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(l.Providers)+1)
+	attributed := 0.0
+	for _, p := range l.Providers {
+		glyph := styleAgent.Render("●")
+		if !p.Up {
+			glyph = styleErr.Render("○")
+		}
+		contended := " "
+		if p.Contended {
+			contended = stylePaused.Render("⏳")
+		}
+		attributed += p.SpentUSD
+		lines = append(lines, fmt.Sprintf("%-*s %-*s %s q%-3d %2d/%-2d %s $%.2f",
+			llmProviderNameWidth, truncateTail(p.Name, llmProviderNameWidth),
+			llmProviderModelWidth, truncateTail(p.Model, llmProviderModelWidth),
+			glyph, p.Queue, p.Inflight, p.Slots, contended, p.SpentUSD))
+	}
+	// The (unattributed) remainder (US4/US6): legacy-metered spend the
+	// per-provider rows don't cover. A cent of floating-point noise never
+	// earns its own row.
+	if rem := l.Spent - attributed; rem > 0.005 {
+		lines = append(lines, styleDim.Render(fmt.Sprintf("%-*s %-*s   %-4s %-5s   $%.2f",
+			llmProviderNameWidth, "(unattributed)", llmProviderModelWidth, "", "", "", rem)))
+	}
+	return lines
 }
 
 // minibufferView renders the one-line Metatron input at its three states

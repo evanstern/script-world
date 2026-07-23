@@ -145,7 +145,7 @@ func Run(dir string) error {
 		} else if prof != nil {
 			orch.SeedCalibration(prof)
 			fmt.Printf("daemon: calibration seeded (local %.1fs/pt, cloud %.1fs/pt, calibrated %s)\n",
-				cognition.SeedFor(prof, "local"), cognition.SeedFor(prof, "cloud"), prof.CalibratedAt)
+				cognition.SeedFor(prof, "local", true), cognition.SeedFor(prof, "cloud", false), prof.CalibratedAt)
 		} else {
 			fmt.Printf("daemon: no calibration profile — bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt); run `promptworld calibrate`\n",
 				cognition.BootstrapLocalSecPerPt, cognition.BootstrapCloudSecPerPt)

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"flag"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/world"
 	"github.com/evanstern/promptworld/internal/worlds"
 )
@@ -279,5 +281,44 @@ func TestCmdStopUnknownNameFailsClearly(t *testing.T) {
 	var nf *worlds.ErrNotFound
 	if !errors.As(err, &nf) {
 		t.Errorf("expected worlds.ErrNotFound, got %v (%T)", err, err)
+	}
+}
+
+// --- T018: formatLLMOneShot (spec 024 US6) ---
+
+// TestFormatLLMOneShotNamesServingProvider: the header names the serving
+// provider, not the legacy tier — a head dispatch carries no Skipped line.
+func TestFormatLLMOneShotNamesServingProvider(t *testing.T) {
+	resp := llm.Response{
+		Provider: "cogito", Model: "cogito:3b",
+		InputTokens: 12, OutputTokens: 34, CostUSD: 0, Millis: 812,
+		Text: "hi there",
+	}
+	out := formatLLMOneShot(resp)
+	if !strings.HasPrefix(out, "[cogito · cogito:3b · 12 in / 34 out tokens · $0.0000 · 812ms]\n") {
+		t.Errorf("header = %q", out)
+	}
+	if strings.Contains(out, "skipped:") {
+		t.Errorf("a head dispatch must not print a skipped line: %q", out)
+	}
+	if !strings.HasSuffix(out, "hi there\n") {
+		t.Errorf("body missing: %q", out)
+	}
+}
+
+// TestFormatLLMOneShotPrintsSkippedReasons: a fallback response's Skipped
+// candidates each print with their mechanical reason (contracts/status.md).
+func TestFormatLLMOneShotPrintsSkippedReasons(t *testing.T) {
+	resp := llm.Response{
+		Provider: "gemma", Model: "gemma4:12b-mlx",
+		Skipped: []llm.RouteSkip{
+			{Provider: "cogito", Reason: llm.SkipCircuitOpen},
+			{Provider: "bogus", Reason: llm.SkipQueueFull},
+		},
+		Text: "hi there",
+	}
+	out := formatLLMOneShot(resp)
+	if !strings.Contains(out, "skipped: cogito (circuit-open), bogus (queue-full)\n") {
+		t.Errorf("skipped line missing/wrong: %q", out)
 	}
 }
