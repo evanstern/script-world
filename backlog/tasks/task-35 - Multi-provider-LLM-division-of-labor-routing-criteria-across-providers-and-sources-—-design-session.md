@@ -3,10 +3,10 @@ id: TASK-35
 title: >-
   Multi-provider LLM division of labor: routing criteria across providers and
   sources — design session
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-23 15:16'
 labels:
   - engine
   - llm
@@ -42,6 +42,12 @@ Related: TASK-6 (two-tier orchestrator, Done), TASK-15 (9router cloud tier, Done
 - [ ] #2 The design states how routing interacts with the spend meter, circuit breakers, and the TASK-24 contention scenario
 - [ ] #3 Follow-on implementation tasks (or a Spec Kit spec) are cut from the design and placed on the board
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Follow the TASK-32 design-session pattern: 1) Cut worktree .worktrees/task-35 (branch task-35-provider-routing) from fresh origin/main. 2) Write decision-5 (provider-routing doctrine: registry + deterministic ordered fallback chains, per-provider breakers/slots/estimators, one global wallet) via backlog CLI in the worktree so it rides the PR. 3) speckit-specify the provider-routing spec (registry shape in llm.json, routing criteria, fallback semantics incl. no-fallback kinds, meter/breaker/TASK-24 interactions, status legibility). 4) spec-bridge:link the spec to TASK-35. 5) speckit-plan + speckit-tasks. 6) Delegate implementation to spec-implementer on Opus 4.8 (concurrency/scheduling logic in internal/llm — escalation rubric match). 7) Check ACs as artifacts land, sync, PR, wiki-update, Done.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
