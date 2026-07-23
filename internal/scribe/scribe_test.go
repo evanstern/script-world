@@ -55,9 +55,10 @@ func TestSoulRendersFromEvents(t *testing.T) {
 	t.Fatalf("soul.md never rendered the memory; content:\n%s", data)
 }
 
-// TestSoulRendersSituatedContext (spec 019 US1/US2, T009/T011): a situated
-// memory renders its place/why/conv suffixes in order, and a pre-019 memory
-// (no situated fields) renders byte-identically to today's format — no suffix.
+// TestSoulRendersSituatedContext (spec 019 US1/US2, T009/T011, dedup T024): a
+// situated memory's place/why live in its TEXT (no duplicating suffix); the
+// ONLY suffix is the conversation ref; a pre-019 memory renders byte-identically
+// to today's format — no suffix.
 func TestSoulRendersSituatedContext(t *testing.T) {
 	dir := t.TempDir()
 	if err := persona.Genesis(dir); err != nil {
@@ -89,9 +90,10 @@ func TestSoulRendersSituatedContext(t *testing.T) {
 	for time.Now().Before(deadline) {
 		data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
 		s := string(data)
-		if strings.Contains(s, "· at the rock outcrop (23,41)") &&
-			strings.Contains(s, "· why: keep the Gru away.") &&
-			strings.Contains(s, "· at (7,12)") &&
+		if // place + why live in the memory text, verbatim, with NO duplicating suffix.
+		strings.Contains(s, "Built a fire at the rock outcrop (23,41) — keep the Gru away.") &&
+			!strings.Contains(s, "· at ") && !strings.Contains(s, "· why:") &&
+			// the conversation ref is the one remaining suffix.
 			strings.Contains(s, "· [conv 3600]") &&
 			// The pre-019 line renders with NO situated suffix (byte-identical form).
 			strings.Contains(s, "An old bare memory.\n") &&

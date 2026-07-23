@@ -119,7 +119,7 @@ func (d *villagerDispatch) handleWorldVerb(name string) toolloop.Handler {
 		kind, qty := argKindQty(call.Args)
 		err := d.md.loop.InjectIntent(sim.InjectArgs{
 			Agent: d.job.agent, Goal: name, TargetAgent: target,
-			Kind: kind, Qty: qty,
+			Kind: kind, Qty: qty, Reason: reasonArg(call.Args),
 			Class: d.job.meta.class.Class, JobID: d.job.meta.job,
 			SnapshotTick: d.job.meta.snapshotTick, Generation: d.job.meta.generation,
 			PredictedWallMs: d.job.meta.predictedWallMs,
@@ -152,7 +152,7 @@ func (d *villagerDispatch) handleSetPlan(_ context.Context, call llm.ToolCall) t
 		SnapshotTick: d.job.meta.snapshotTick, Generation: d.job.meta.generation,
 		PredictedWallMs: d.job.meta.predictedWallMs,
 		ActualWallMs:    time.Since(d.start).Milliseconds(),
-		Plan:            steps,
+		Plan:            steps, Reason: reasonArg(call.Args),
 	})
 	d.doorOutcome = true
 	if err != nil {
@@ -378,6 +378,19 @@ func (d *villagerDispatch) parsePlanSteps(raw json.RawMessage) ([]sim.PlanStep, 
 		})
 	}
 	return steps, ""
+}
+
+// reasonArg reads the optional per-action `reason` argument (spec 019 R12 /
+// T024), trimmed and defensively capped at tool.ReasonCapRunes. The loop's
+// validateArgs already enforces the cap for world verbs (Params-derived); the
+// truncation is belt-and-suspenders and also covers set_plan (whose structural
+// validator does not length-check the top-level reason).
+func reasonArg(raw json.RawMessage) string {
+	r := strings.TrimSpace(argString(raw, "reason"))
+	if rs := []rune(r); len(rs) > tool.ReasonCapRunes {
+		r = string(rs[:tool.ReasonCapRunes])
+	}
+	return r
 }
 
 // argString reads a string-valued argument from a tool call's raw JSON object;

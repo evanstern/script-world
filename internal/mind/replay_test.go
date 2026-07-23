@@ -300,8 +300,11 @@ func TestJournalAndSituatedReplayByteIdentical(t *testing.T) {
 		}
 	}
 	// The renders must actually carry the feature's output, or the proof is vacuous.
-	if !strings.Contains(liveFiles["ash/soul.md"], "· at the rock outcrop (23,41) · why: keep the Gru away.") {
-		t.Errorf("soul.md missing the situated line:\n%s", liveFiles["ash/soul.md"])
+	// (T024 dedup: place/why live in the memory TEXT, not a suffix; only the conv
+	// ref renders as a suffix.)
+	if !strings.Contains(liveFiles["ash/soul.md"], "Built a fire at the rock outcrop (23,41) — keep the Gru away.") ||
+		!strings.Contains(liveFiles["ash/soul.md"], "· [conv 100]") {
+		t.Errorf("soul.md missing the situated line / conv ref:\n%s", liveFiles["ash/soul.md"])
 	}
 	if !strings.Contains(liveFiles["ash/journal.md"], "owe Birch a meal") ||
 		strings.Contains(liveFiles["ash/journal.md"], "the fire held through the cold night") {

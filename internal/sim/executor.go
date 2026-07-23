@@ -703,10 +703,10 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		}
 	case "build_fire":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "fire", X: in.TargetX, Y: in.TargetY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salFire, where, in.Reason, "Built a fire."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salFire, placeForBuild(s, a.X, a.Y, "fire"), in.Reason, "Built a fire."))
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason,
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, placeForBuild(s, a.X, a.Y, "shelter"), in.Reason,
 			"Raised a shelter with my own hands."))
 	case "build_oven":
 		// T030: the flagship station. "First oven" wording (research R8) is
@@ -719,7 +719,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Raised the village's first oven — meals and baths, at last."
 		}
-		events = append(events, situatedMemoryEvent(nextTick, i, salOvenBuilt, where, in.Reason, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salOvenBuilt, placeForBuild(s, a.X, a.Y, "oven"), in.Reason, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue
@@ -742,7 +742,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Built the village's first chest — a place to keep things safe."
 		}
-		events = append(events, situatedMemoryEvent(nextTick, i, salChestBuilt, where, in.Reason, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salChestBuilt, placeForBuild(s, a.X, a.Y, "chest"), in.Reason, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue

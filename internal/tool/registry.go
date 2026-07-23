@@ -71,6 +71,11 @@ func setPlanSchema(goals []string) json.RawMessage {
 				"maxItems": PlanStepCap,
 				"items":    step,
 			},
+			// Optional plan-level reason (spec 019 R12 / T024): the model's why
+			// for the whole plan, threaded to InjectArgs.Reason (agent.thought
+			// narration). Capability-only description, not required.
+			"reason": map[string]any{"type": "string", "maxLength": ReasonCapRunes,
+				"description": "optionally, why you're doing this"},
 		},
 		"required":             []string{"steps"},
 		"additionalProperties": false,
@@ -138,6 +143,22 @@ func miracleParams() []Param {
 	}
 }
 
+// ReasonCapRunes bounds the optional per-action `reason` text — the same rune
+// budget muse's text carries (a wire sanity cap, not usage guidance). Exported
+// so the mind handler's defensive truncation reads the one authoritative value.
+const ReasonCapRunes = 200
+
+// reasonParam is the OPTIONAL free-text "why" every acting villager world tool
+// carries (spec 019 R12 / T024): the model's reason for the action, threaded to
+// InjectArgs.Reason and baked into the completion memory's Why (situated
+// " — <why>" clause). Capability-only description — no cadence/format/content
+// guidance. NOT added to muse (interiority is already free-standing) or any
+// metatron tool.
+func reasonParam() Param {
+	return Param{Name: "reason", Kind: Text, Required: false, MaxRunes: ReasonCapRunes,
+		Description: "optionally, why you're doing this"}
+}
+
 // storageParams is the shared `kind`+`qty` descriptor for the four storage
 // verbs (drop/pick_up/deposit/withdraw; build_chest takes neither). `qty` is
 // a Number param (Min 1, Max unbounded) — spec 017 R12 pays the spec-014 debt
@@ -186,7 +207,19 @@ const (
 // separately, rather than as one registry literal, so that set_plan (spec
 // 017 R11) can be built from worldTools alone and then spliced in after it —
 // see setPlanTool and the registry assembly below.
-var worldTools = []Tool{
+// worldTools carries every acting villager world verb. Each entry gains the
+// optional `reason` param (spec 019 R12 / T024) via a post-declaration pass, so
+// the shared param is defined once and no verb's literal repeats it — every
+// acting tool can carry a why without touching 24 rows.
+var worldTools = func() []Tool {
+	tools := worldToolsBase
+	for i := range tools {
+		tools[i].Params = append(append([]Param(nil), tools[i].Params...), reasonParam())
+	}
+	return tools
+}()
+
+var worldToolsBase = []Tool{
 	{Name: "forage", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 120}, PlanStep: true, ReflexEligible: true},
 	{Name: "chop", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, ReflexEligible: true},
 	{Name: "hunt", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, ReflexEligible: true},

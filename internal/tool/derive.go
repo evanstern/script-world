@@ -166,30 +166,33 @@ func InputSchema(t Tool) json.RawMessage {
 //     (a bound of 0 means unset, matching Param's own 0,0-is-unbounded
 //     convention — the qty param is never legitimately bounded to exactly 0).
 func paramSchema(p Param) map[string]any {
+	var s map[string]any
 	switch p.Kind {
 	case AgentName:
-		return map[string]any{"type": "string"}
+		s = map[string]any{"type": "string"}
 	case Text:
-		s := map[string]any{"type": "string"}
+		s = map[string]any{"type": "string"}
 		switch {
 		case p.MaxRunes > 0:
 			s["maxLength"] = p.MaxRunes
 		case p.MaxBytes > 0:
 			s["maxLength"] = p.MaxBytes
 		}
-		return s
 	case Enum:
-		return map[string]any{"type": "string", "enum": p.Enum}
+		s = map[string]any{"type": "string", "enum": p.Enum}
 	case Number:
-		s := map[string]any{"type": "integer"}
+		s = map[string]any{"type": "integer"}
 		if p.Min != 0 {
 			s["minimum"] = p.Min
 		}
 		if p.Max != 0 {
 			s["maximum"] = p.Max
 		}
-		return s
 	default:
-		return map[string]any{"type": "string"}
+		s = map[string]any{"type": "string"}
 	}
+	if p.Description != "" {
+		s["description"] = p.Description
+	}
+	return s
 }

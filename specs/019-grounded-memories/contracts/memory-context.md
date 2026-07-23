@@ -37,10 +37,19 @@ Rules: no fabricated clause when data is absent; punctuation of the base templat
 Memory line format (scribe):
 
 ```
-- **<clock>** (<N>★) <text>[ · at <desc> (x,y) | · at (x,y)][ · why: <reason>][ · [conv <id>]]
+- **<clock>** (<N>★) <text>[ · [conv <id>]]
 ```
 
-- Suffixes render only when the field is present — pre-019 memories render byte-identically to today's format.
+- **Dedup (T024, revised)**: the situated place/why already live in the memory `<text>`
+  itself (composed by `situateText`: base + " at <desc> (x,y)" + " — <why>"), so the scribe
+  renders NO `· at …` / `· why: …` suffix — those duplicated the text (live evidence:
+  "Built a fire at the woods (10,40). · at the woods (10,40)"). The ONLY suffix is
+  `· [conv <id>]`, the conversation ref, which has no in-text representation (conversation
+  memories keep their gist text and carry `Conv` structurally). The `Where`/`Why` fields
+  remain on the reduced `Memory` for programmatic consumers (prompts/consolidation) — only
+  the redundant render is dropped.
+- The suffix renders only for conversation memories (`Conv != 0`) — a pre-019 memory and
+  every non-conversation memory render byte-identically to the pre-019 format.
 - The scribe reads ONLY reduced `Memory` fields; it never re-derives place or joins other events.
 - soul.md remains a faithful regenerable view: identical state ⇒ identical bytes.
 

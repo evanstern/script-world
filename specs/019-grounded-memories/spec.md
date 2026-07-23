@@ -18,6 +18,10 @@
 - Q: Are read_journal / delete_from_journal in scope? → A: Yes — all four tools ship; cap without delete would make a full journal permanently read-only.
 - Q: Journal size budget? → A: ~4,000 characters total per agent (single configurable default) — tight enough that curation pressure arrives within a few in-world days.
 
+### Session 2026-07-23
+
+- Q: In the tool-use era the free-text planner "reason" no longer reaches the sim, so situated memories never carried a `Why` live — how should the reason return? → A: Add an OPTIONAL, bounded per-action `reason` param (Text, muse's rune cap) to every acting villager world tool, plus an optional top-level `reason` on `set_plan`; the mind handler threads it into `InjectArgs.Reason` and the existing pipeline (intent_set Reason → Intent.Reason → executor bakes Why → situated " — <why>" text) fires. NOT on `muse` (interiority is already free-standing) and NOT on any Metatron tool. The reason stays optional — a memory with no reason simply carries no `Why` (never fabricated).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Situated deterministic memories (Priority: P1)

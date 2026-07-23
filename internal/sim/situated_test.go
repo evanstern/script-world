@@ -127,6 +127,56 @@ func TestPre019RoundTripByteIdentical(t *testing.T) {
 	}
 }
 
+// TestReasonBakedIntoCompletionMemory (spec 019 R12 / T024, end-to-end): a
+// planner intent that carries a reason (as the reason param now threads it)
+// completes into a memory whose Why is that reason verbatim AND whose situated
+// text carries the " — <reason>" clause.
+func TestReasonBakedIntoCompletionMemory(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	const reason = "starving — I have to find food now"
+
+	// What the door would resolve for agent 0 "forage" at tick 30.
+	pre := NewState(seed, m)
+	driveTicks(t, pre, m, 30, nil)
+	intent, direct, err := resolveGoal(pre, m, 0, "forage", -1, "", 0, 30)
+	if err != nil || direct != "" || intent == nil {
+		t.Fatalf("resolveGoal: %v %q %v", err, direct, intent)
+	}
+
+	s := NewState(seed, m)
+	s.Agents[0].Needs.Food = 100 // below the 150 starving threshold → forage marks a memory
+	timeline := map[int64][]store.Event{
+		30: {{Tick: 30, Type: "agent.intent_set", Payload: mustPayload(IntentSetPayload{
+			Agent: 0, Goal: intent.Goal, TargetX: intent.TargetX, TargetY: intent.TargetY,
+			Source: "planner", Reason: reason})}},
+	}
+	log := driveTicks(t, s, m, 3600, timeline)
+
+	found := false
+	for _, e := range log {
+		if e.Type != "agent.memory_added" {
+			continue
+		}
+		var p MemoryAddedPayload
+		if json.Unmarshal(e.Payload, &p) != nil {
+			continue
+		}
+		if p.Agent == 0 && p.Why == reason {
+			found = true
+			if !strings.Contains(p.Text, "— "+reason) {
+				t.Errorf("completion memory text missing the why clause: %q", p.Text)
+			}
+			if p.Where == nil {
+				t.Error("completion memory carries no Where")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no completion memory carried the planner reason as Why")
+	}
+}
+
 // TestIntentReasonSurvivesToState (T005): a planner intent_set carrying a reason
 // populates Intent.Reason; a reflex intent_set (no reason) leaves it "".
 func TestIntentReasonSurvivesToState(t *testing.T) {
@@ -201,6 +251,37 @@ func plainCenter(s *State) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// TestBuildMemoryExcludesSameKind (T024): a build-completion memory describes
+// its tile WITHOUT the structure kind just built, so "Built a fire" never
+// resolves to "at the fire" — building a fire by the woods reads "at the woods".
+func TestBuildMemoryExcludesSameKind(t *testing.T) {
+	m := testMap(42)
+	s := NewState(42, m)
+
+	// Find a passable tile whose natural feature scan describes it as "the woods".
+	bx, by, found := 0, 0, false
+	for y := 0; y < m.H && !found; y++ {
+		for x := 0; x < m.W && !found; x++ {
+			if m.Passable(x, y) && describePlace(s, x, y) == "the woods" {
+				bx, by, found = x, y, true
+			}
+		}
+	}
+	if !found {
+		t.Skip("no passable tile describes as the woods on this map")
+	}
+
+	// A fire stands on that tile: the ordinary scan names the fire...
+	s.Structures = []Structure{{Kind: "fire", X: bx, Y: by}}
+	if d := describePlace(s, bx, by); d != "the fire" {
+		t.Fatalf("describePlace on the fire tile = %q, want \"the fire\"", d)
+	}
+	// ...but a build memory excludes the just-built kind and recovers the woods.
+	if d := placeForBuild(s, bx, by, "fire").Desc; d != "the woods" {
+		t.Errorf("placeForBuild(fire) = %q, want \"the woods\" (never \"the fire\")", d)
+	}
 }
 
 // TestSituateText (T007): the situated text grammar, composed in the exact

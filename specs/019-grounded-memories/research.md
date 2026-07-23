@@ -93,6 +93,20 @@ All four join `LoopRosterVillager()` (roster.go:57). The two Expressive tools de
 
 **Rationale**: SC-003 is the load-bearing invariant; the suite already proves it for every prior feature — this feature adds cases, not a new harness.
 
+## R12 — The reason channel in the tool era: an optional per-action `reason` param (post-live-smoke, 2026-07-23)
+
+**Decision**: Add an OPTIONAL, bounded `reason` param (Text, `tool.ReasonCapRunes` = 200, muse's rune budget) to every acting villager World tool's `Params`, and an optional top-level `reason` string to `set_plan`'s authored `InputSchemaJSON`. The mind handlers (`handleWorldVerb`, `handleSetPlan`) thread the arg into `InjectArgs.Reason`; the R2 pipeline (intent_set `Reason` → `Intent.Reason` → executor bakes `Why` → situated " — <why>" text) then fires, and the planner-landing `agent.thought` narration returns for reasoned intents. NOT added to `muse` (interiority is already a free-standing act) or any Metatron tool. The param carries a neutral, capability-only description ("optionally, why you're doing this") — no cadence/format/content guidance.
+
+**The 017 tension it resolves**: spec 017 (agent tool-use loop) replaced the free-text planner reply — whose `reason` field fed `InjectArgs.Reason` — with the tool-use loop, and the world verbs "declare no reason param" (internal/mind/handlers.go's original `handleWorldVerb` comment: "the tool era carries [reason] via the muse tool rather than a per-action field"). So in the loop era `InjectArgs.Reason` was always empty for world verbs, and situated memories never carried a live `Why` (only the deterministic reflex path, which has no reason). This decision restores the channel as first-class tool data: the reason is now an explicit, optional, bounded argument the model may attach to any action, rather than smuggled through muse or lost. It is recorded input (already narrated as the sibling `agent.thought`), so replay repopulates it from `agent.intent_set` and determinism holds with zero new event types.
+
+**Alternatives considered**: (a) infer the reason from a preceding `muse` in the same cognition — rejected: muse is deliberately free-standing interiority (spec 017), not per-action justification, and correlating them is fragile; (b) a required `reason` on every action — rejected: forces fabrication when the agent has no articulable why, violating the spec's "never fabricate" rule (FR-002); optional is the honest shape.
+
+## R13 — Soul render dedup + build-memory place fix (post-live-smoke, 2026-07-23)
+
+**Decision (dedup)**: The situated memory TEXT already carries where/why (" at <desc> (x,y) — <why>"), so the scribe's `· at …` / `· why: …` soul.md suffixes duplicated them (live: "Built a fire at the woods (10,40). · at the woods (10,40)"). Drop those two suffixes; keep only `· [conv <id>]` (the conversation ref, which has no in-text representation). The structured `Where`/`Why` fields stay on the reduced `Memory` for programmatic consumers — only the redundant render is removed. Pre-019 and non-conversation memories render byte-identically to the pre-019 format.
+
+**Decision (build fix)**: `describePlace` at a build completion could name a same-kind structure near the build tile ("Built a fire at the fire (7,48)"). Add `describePlaceExcept(s, x, y, excludeKind)` / `placeForBuild(s, x, y, builtKind)` that hold the just-built kind out of the feature scan, so a fire built by the woods reads "at the woods (x,y)", never "at the fire". Deterministic and needs no ordering dance with the not-yet-reduced `agent.built` event.
+
 ## Decision summary
 
 | # | Decision | Closes |
@@ -108,3 +122,5 @@ All four join `LoopRosterVillager()` (roster.go:57). The two Expressive tools de
 | R9 | Deterministic substring search, private, replica-backed | FR-012 |
 | R10 | soul.md suffixes + journal.md scribe view | FR-006, 008 |
 | R11 | Determinism suite extension | FR-007, 011, 014 (SC-003/007) |
+| R12 | Optional per-action `reason` param (world tools + set_plan) restores the tool-era why | FR-002/004 (live) |
+| R13 | Soul render dedup (place/why in text) + build-memory place fix | FR-006 |

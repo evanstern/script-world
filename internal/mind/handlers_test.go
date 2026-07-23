@@ -144,6 +144,41 @@ func TestHandlerWorldVerbLands(t *testing.T) {
 	}
 }
 
+// TestHandlerWorldVerbThreadsReason (spec 019 R12 / T024): the optional per-
+// action `reason` arg is threaded into InjectArgs.Reason, so the landed
+// agent.intent_set carries it (→ Intent.Reason → the executor bakes Why) and the
+// planner-landing agent.thought narrates it.
+func TestHandlerWorldVerbThreadsReason(t *testing.T) {
+	lm := newLoopMind(t)
+	job := lm.newJob(0)
+	d := &villagerDispatch{md: lm.md, job: job, start: time.Now()}
+	h := lm.md.villagerHandlers(d)
+
+	const reason = "restless — I need to move before dark"
+	out := h["wander"](context.Background(), call("wander", `{"reason":"`+reason+`"}`))
+	if out.Verdict != toolloop.VerdictLanded {
+		t.Fatalf("wander verdict = %q (%s)", out.Verdict, out.ResultForModel)
+	}
+	intents := lm.events(t, "agent.intent_set")
+	if len(intents) == 0 {
+		t.Fatal("no intent_set landed")
+	}
+	var p sim.IntentSetPayload
+	json.Unmarshal(intents[0].Payload, &p)
+	if p.Reason != reason {
+		t.Errorf("intent_set Reason = %q, want the threaded reason", p.Reason)
+	}
+	thoughts := lm.events(t, "agent.thought")
+	if len(thoughts) == 0 {
+		t.Fatal("a reasoned intent must narrate an agent.thought")
+	}
+	var tp sim.ThoughtPayload
+	json.Unmarshal(thoughts[0].Payload, &tp)
+	if tp.Text != reason || tp.Source != "planner" {
+		t.Errorf("agent.thought = %+v, want the reason narrated (planner)", tp)
+	}
+}
+
 // TestHandlerWorldVerbRejectedGate: a door rejection (talk_to a dead target,
 // caught by the alive guard) comes back as rejected_gate carrying the door's
 // queryable reason, and does not consume the action.

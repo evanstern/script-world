@@ -39,18 +39,26 @@ const placeScanRadius = 2
 // situate the memory). Baked into the event at emission (research R3); the
 // scribe renders what the payload carries and never re-derives, so replay is
 // byte-identical with no map lookup.
-func describePlace(s *State, x, y int) string {
+func describePlace(s *State, x, y int) string { return describePlaceExcept(s, x, y, "") }
+
+// describePlaceExcept is describePlace with one structure kind held out of the
+// scan — the build-memory fix (T024): a build completion describes its tile as
+// it was WITHOUT the thing just placed (and without any same-kind neighbour), so
+// "Built a fire" never resolves to "at the fire". Excluding the kind is
+// deterministic and needs no ordering dance with the not-yet-reduced built
+// event. excludeKind == "" is the ordinary describePlace.
+func describePlaceExcept(s *State, x, y int, excludeKind string) string {
 	if s.m == nil {
 		return ""
 	}
 	for r := 0; r <= placeScanRadius; r++ {
 		for dy := -r; dy <= r; dy++ {
 			dx := r - abs(dy)
-			if d := featureDesc(s, x+dx, y+dy); d != "" {
+			if d := featureDesc(s, x+dx, y+dy, excludeKind); d != "" {
 				return d
 			}
 			if dx != 0 {
-				if d := featureDesc(s, x-dx, y+dy); d != "" {
+				if d := featureDesc(s, x-dx, y+dy, excludeKind); d != "" {
 					return d
 				}
 			}
@@ -61,13 +69,14 @@ func describePlace(s *State, x, y int) string {
 
 // featureDesc names the notable feature on one tile — a station structure
 // first (the most salient), then the terrain kind — as a noun phrase that reads
-// after "at" ("the fire", "the rock outcrop"). "" for ordinary or off-map tiles.
-func featureDesc(s *State, x, y int) string {
+// after "at" ("the fire", "the rock outcrop"). A structure whose kind equals
+// excludeKind is skipped (build fix, T024). "" for ordinary or off-map tiles.
+func featureDesc(s *State, x, y int, excludeKind string) string {
 	if s.m == nil || x < 0 || y < 0 || x >= s.m.W || y >= s.m.H {
 		return ""
 	}
 	for _, st := range s.Structures {
-		if st.X == x && st.Y == y {
+		if st.X == x && st.Y == y && st.Kind != excludeKind {
 			switch st.Kind {
 			case "fire":
 				return "the fire"
@@ -99,6 +108,13 @@ func featureDesc(s *State, x, y int) string {
 // same helper the executor uses. Never nil — coords alone satisfy FR-001.
 func PlaceAt(s *State, x, y int) *MemoryPlace {
 	return &MemoryPlace{X: x, Y: y, Desc: describePlace(s, x, y)}
+}
+
+// placeForBuild situates a build-completion memory: the tile described as it was
+// without the just-built structure kind, so a fire built by the woods reads
+// "at the woods (x,y)", never "at the fire (x,y)" (T024).
+func placeForBuild(s *State, x, y int, builtKind string) *MemoryPlace {
+	return &MemoryPlace{X: x, Y: y, Desc: describePlaceExcept(s, x, y, builtKind)}
 }
 
 // situateText composes a situated memory text from a base template and its

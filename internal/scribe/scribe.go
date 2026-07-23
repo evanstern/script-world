@@ -256,28 +256,20 @@ func (s *Scribe) renderJournal(idx int) {
 	os.WriteFile(persona.JournalPath(s.worldDir, a.Name), []byte(b.String()), 0o644)
 }
 
-// memorySuffix renders a memory's situated context (spec 019) as deterministic
-// soul.md suffixes, in the exact order pinned by contracts/memory-context.md:
-// place, then why, then the conversation ref. Reads ONLY the reduced Memory
-// fields — never re-derives place or joins other events. A pre-019 memory
-// (all fields absent) yields "", so its line renders byte-identically to today
+// memorySuffix renders the ONLY situated suffix soul.md carries — the
+// conversation ref (spec 019, T024 dedup). Place and why are NOT re-rendered as
+// suffixes: the situated memory TEXT already carries them (" at <desc> (x,y)
+// — <why>"), so a `· at …`/`· why: …` suffix duplicated them
+// ("Built a fire at the woods (10,40). · at the woods (10,40)"). The structured
+// Where/Why fields remain on the Memory for programmatic consumers; only the
+// redundant render is dropped. A pre-019 memory (and any non-conversation
+// memory) yields "", so its line renders byte-identically to the pre-019 format
 // (FR-006, FR-014, SC-007).
 func memorySuffix(m sim.Memory) string {
-	var b strings.Builder
-	if m.Where != nil {
-		if m.Where.Desc != "" {
-			fmt.Fprintf(&b, " · at %s (%d,%d)", m.Where.Desc, m.Where.X, m.Where.Y)
-		} else {
-			fmt.Fprintf(&b, " · at (%d,%d)", m.Where.X, m.Where.Y)
-		}
-	}
-	if m.Why != "" {
-		fmt.Fprintf(&b, " · why: %s", m.Why)
-	}
 	if m.Conv != 0 {
-		fmt.Fprintf(&b, " · [conv %d]", m.Conv)
+		return fmt.Sprintf(" · [conv %d]", m.Conv)
 	}
-	return b.String()
+	return ""
 }
 
 // render writes one agent's soul.md from replica state.
