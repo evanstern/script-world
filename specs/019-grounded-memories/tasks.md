@@ -14,7 +14,7 @@
 
 **Purpose**: branch/worktree per constitution Principle II; no scaffolding needed (existing module).
 
-- [ ] T001 Create worktree `.worktrees/task-16` on branch `task-16-grounded-memories` from fresh `origin/main`; all subsequent tasks execute inside it
+- [x] T001 Create worktree `.worktrees/task-16` on branch `task-16-grounded-memories` from fresh `origin/main`; all subsequent tasks execute inside it
 
 ---
 
