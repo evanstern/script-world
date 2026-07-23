@@ -38,7 +38,7 @@ func newLiveTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateI
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds)
+	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}

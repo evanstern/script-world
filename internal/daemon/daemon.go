@@ -179,7 +179,23 @@ func Run(dir string) error {
 		fmt.Printf("daemon: llm orchestrator on (%s, cloud %s, budget $%.0f/mo)\n",
 			localDesc, cloudDesc, llmCfg.MonthlyBudgetUSD)
 		loopRounds, _ := llmCfg.Rounds()
-		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir), loopRounds)
+		// Cognition token budgets (spec 025 US2): resolve the three per-kind
+		// max_tokens knobs and surface any clamp/out-of-range warning on the same
+		// boot channel — warn, never fatal. Effective values (defaults when absent)
+		// thread into the constructors like loopRounds does.
+		plannerTokens, plannerTokWarn := llmCfg.PlannerTokens()
+		if plannerTokWarn != "" {
+			fmt.Printf("daemon: %s\n", plannerTokWarn)
+		}
+		metatronTurnTokens, turnTokWarn := llmCfg.MetatronTurnTokens()
+		if turnTokWarn != "" {
+			fmt.Printf("daemon: %s\n", turnTokWarn)
+		}
+		consolidationTokens, consolTokWarn := llmCfg.ConsolidationTokens()
+		if consolTokWarn != "" {
+			fmt.Printf("daemon: %s\n", consolTokWarn)
+		}
+		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir), loopRounds, plannerTokens, consolidationTokens)
 		if err != nil {
 			return err
 		}
@@ -190,7 +206,7 @@ func Run(dir string) error {
 		orch.SetRecalibrateHook(md.RecalibrateSignal)
 		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
 			sim.AgentCount, sim.PlannerCadenceTicks/60)
-		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir, loopRounds)
+		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir, loopRounds, metatronTurnTokens)
 		if err != nil {
 			return err
 		}

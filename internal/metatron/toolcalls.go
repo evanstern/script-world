@@ -194,3 +194,27 @@ func (mt *Metatron) emitToolCalls(records []toolloop.CallRecord, snapshotTick in
 		log.Printf("metatron: cog.tool_call telemetry rejected: %v", err)
 	}
 }
+
+// emitRetried surfaces the console turn's one in-loop transport retry (spec 025
+// FR-004/SC-003): when the loop consumed its retry — recovered OR twice-failed —
+// it lands a NON-TERMINAL cog.outcome carrying sim.OutcomeRetried and the first
+// failure's reason, through the same InjectSocial door the cog.tool_call batch
+// rides. No new event type (cog.outcome/retried is the TASK-42 vocabulary — the
+// digest catalog stays green), and a silent retry is a contract violation: this
+// makes the recovery countable from the trail alone. jobID/snapshotTick match
+// the turn's cog.tool_call correlation key so the marker joins the same chain.
+func (mt *Metatron) emitRetried(jobID string, snapshotTick int64, reason string) {
+	if mt.social == nil {
+		return
+	}
+	b, _ := json.Marshal(sim.CogOutcomePayload{
+		Job:          jobID,
+		Outcome:      sim.OutcomeRetried,
+		SnapshotTick: snapshotTick,
+		Reason:       reason,
+	})
+	if err := mt.social.InjectSocial([]store.Event{{Type: "cog.outcome", Payload: b}}); err != nil {
+		// The world outlives its observability — logged, never fatal.
+		log.Printf("metatron: retry telemetry rejected: %v", err)
+	}
+}

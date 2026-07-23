@@ -1343,3 +1343,97 @@ func TestKindsCompleteAndRegistered(t *testing.T) {
 		t.Errorf("ValidateKinds over all llm kinds: %v", err)
 	}
 }
+
+// TestTokenBudgetNormalization (spec 025 US2, FR-007/FR-008): each max_tokens
+// key normalizes independently to (effective, warning) — absent/0 is the silent
+// per-kind default (512/1024/1024), 1..4096 pass verbatim, negatives fall back
+// to the default with a warning, and > 4096 clamps to 4096 with a warning.
+// Nothing errors. The warning names max_tokens.<key>, the offending value, and
+// the effective value.
+func TestTokenBudgetNormalization(t *testing.T) {
+	cases := []struct {
+		name    string
+		resolve func(Config) (int64, string)
+		key     string
+		def     int64
+	}{
+		{"planner", Config.PlannerTokens, "max_tokens.planner", 512},
+		{"metatron_turn", Config.MetatronTurnTokens, "max_tokens.metatron_turn", 1024},
+		{"consolidation", Config.ConsolidationTokens, "max_tokens.consolidation", 1024},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mk := func(v int64) Config {
+				var b TokenBudgets
+				switch tc.name {
+				case "planner":
+					b.Planner = v
+				case "metatron_turn":
+					b.MetatronTurn = v
+				case "consolidation":
+					b.Consolidation = v
+				}
+				return Config{MaxTokens: &b}
+			}
+			rows := []struct {
+				raw      int64
+				wantN    int64
+				wantWarn bool
+			}{
+				{0, tc.def, false},   // absent / explicit 0 → default, silent
+				{1, 1, false},        // floor, verbatim
+				{2048, 2048, false},  // in-range, verbatim
+				{4096, 4096, false},  // cap, verbatim, no warning
+				{-5, tc.def, true},   // negative → default with warning
+				{4097, 4096, true},   // one past the cap → clamped with warning
+				{999999, 4096, true}, // far above → clamped with warning
+			}
+			for _, r := range rows {
+				n, warn := tc.resolve(mk(r.raw))
+				if n != r.wantN {
+					t.Errorf("%s(%d) n=%d, want %d", tc.name, r.raw, n, r.wantN)
+				}
+				if (warn != "") != r.wantWarn {
+					t.Errorf("%s(%d) warn=%q, wantWarn=%v", tc.name, r.raw, warn, r.wantWarn)
+				}
+				if warn != "" && !strings.Contains(warn, tc.key) {
+					t.Errorf("%s(%d) warning %q does not name %q", tc.name, r.raw, warn, tc.key)
+				}
+			}
+			// Absent field on a zero Config is byte-identical to 0 → default, silent.
+			if n, warn := tc.resolve(Config{}); n != tc.def || warn != "" {
+				t.Errorf("absent %s → (%d,%q), want (%d,\"\")", tc.name, n, warn, tc.def)
+			}
+		})
+	}
+}
+
+// TestTokenBudgetsNormalizeIndependently (spec 025 edge case): the three knobs
+// coexist and each normalizes on its own — one clamp warning does not suppress
+// another, and a valid sibling stays verbatim while an invalid one warns.
+func TestTokenBudgetsNormalizeIndependently(t *testing.T) {
+	cfg := Config{MaxTokens: &TokenBudgets{Planner: 768, MetatronTurn: -1, Consolidation: 999999}}
+	if n, warn := cfg.PlannerTokens(); n != 768 || warn != "" {
+		t.Errorf("planner → (%d,%q), want (768,\"\") verbatim", n, warn)
+	}
+	if n, warn := cfg.MetatronTurnTokens(); n != 1024 || warn == "" {
+		t.Errorf("metatron_turn → (%d,%q), want (1024, warning)", n, warn)
+	}
+	if n, warn := cfg.ConsolidationTokens(); n != 4096 || warn == "" {
+		t.Errorf("consolidation → (%d,%q), want (4096, warning)", n, warn)
+	}
+}
+
+// TestMaxTokensOmittedWhenAbsent (spec 025 contracts/llm-json.md compatibility):
+// a config without max_tokens marshals WITHOUT the key (omitempty) — WriteDefault
+// stays minimal and the knob stays opt-in, so every pre-025 world round-trips
+// byte-for-byte.
+func TestMaxTokensOmittedWhenAbsent(t *testing.T) {
+	data, err := json.Marshal(DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "max_tokens") {
+		t.Errorf("default config emitted max_tokens (should be omitempty): %s", data)
+	}
+}

@@ -87,6 +87,13 @@ type Mind struct {
 	// the hard iteration cap (llm.json loop_max_rounds, normalized).
 	runLoop    func(ctx context.Context, j toolloop.Job) (toolloop.Result, error)
 	loopRounds int
+	// plannerTokens / consolidationTokens are the normalized per-kind response
+	// budgets (llm.json max_tokens.planner / .consolidation, spec 025 US2),
+	// threaded from the daemon exactly as loopRounds is. Absent knobs resolve to
+	// the built-in defaults (512 / 1024) at the config boundary, so these are
+	// always effective values — the packages never see a raw operator input.
+	plannerTokens       int64
+	consolidationTokens int64
 
 	// Nightly consolidation (TASK-9): FIFO queue + per-agent in-flight guard.
 	consolQ        chan consolJob
@@ -119,7 +126,7 @@ type Mind struct {
 // driver BEFORE any goroutine starts (race-free), for tests that stub the model
 // through the Submitter interface rather than a real *llm.Orchestrator.
 // Production omits it — New wires runLoop from the concrete orchestrator.
-func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string, loopRounds int, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Mind, error) {
+func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string, loopRounds int, plannerTokens, consolidationTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Mind, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -143,6 +150,8 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		done:      make(chan struct{}),
 	}
 	md.loopRounds = loopRounds
+	md.plannerTokens = plannerTokens
+	md.consolidationTokens = consolidationTokens
 	// The tool-use loop needs the concrete orchestrator (toolloop.Run's
 	// contract surface). Production passes it; test seams that stub the model
 	// through the Submitter interface install their own runLoop after New.
@@ -370,13 +379,6 @@ func (md *Mind) planWorker() {
 	}
 }
 
-// loopMaxTokens is the per-round token budget for a villager tool-use loop.
-// The pre-loop planner used 256 with a bare JSON reply; a tool-era round must
-// carry a tool_use block (the call name + JSON arguments) alongside any prose,
-// so 256 truncates a structured call mid-arguments. 512 gives headroom for the
-// call plus a short accompanying line without inviting the model to ramble.
-const loopMaxTokens = 512
-
 // runPlan drives one villager cognition through the bounded tool-use loop
 // (spec 017, FR-002/FR-004). The model may look things up with read tools, then
 // commit to one acting tool — a world verb, a plan (set_plan), or a passing
@@ -402,7 +404,7 @@ func (md *Mind) runPlan(job planJob) {
 		Roster:    tool.LoopRosterVillager(),
 		Handlers:  handlers,
 		MaxRounds: md.loopRounds,
-		MaxTokens: loopMaxTokens,
+		MaxTokens: md.plannerTokens, // llm.json max_tokens.planner (spec 025 US2), default 512
 		Record:    d.record,
 	})
 	cancel()
@@ -415,6 +417,18 @@ func (md *Mind) runPlan(job planJob) {
 	// default case's terminal outcome follows the switch, so this dedicated
 	// batch reorders neither.
 	md.emitToolCalls(d.records, job.meta.snapshotTick)
+
+	// Transport retry visibility (spec 025 FR-004/SC-003): when the loop consumed
+	// its one in-loop retry (recovered OR twice-failed), surface it as a
+	// NON-TERMINAL cog.outcome carrying sim.OutcomeRetried and the first failure's
+	// reason — the TASK-42 marker vocabulary, so no new event type and the digest
+	// catalog stays green. A silent retry is a defect: this makes the recovery
+	// countable from the trail alone. The terminal outcome the run earns is still
+	// owned by the landing door (landed) or the switch below (unusable); this
+	// marker only annotates that a retry happened.
+	if res.Retried {
+		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeRetried, res.RetryReason, res.TotalMillis))
+	}
 
 	// Termination -> outcome + rearm, mirroring the pre-loop paths:
 	//   - landed: the landing door (world/set_plan) or the muse social batch
