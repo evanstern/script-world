@@ -3,10 +3,10 @@ id: TASK-33
 title: >-
   Adaptive time throttling: speed as a ceiling, staleness debt as the governor —
   design session
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-20 20:48'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-23 19:17'
 labels:
   - design
 dependencies:
@@ -18,10 +18,22 @@ ordinal: 11000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Split from TASK-32 (user, 2026-07-20). PROBLEM — even with the cognition horizon scoping LLM authority by speed, there are moments where the player wants high speed AND high thought fidelity (a crisis unfolding at 32x). Rather than forcing a manual speed drop, the loop could govern itself. CANDIDATE DESIGN — the speed setting becomes a CEILING, not a promise: the sim tracks aggregate in-flight staleness debt (sum over pending planner/conversation jobs of predicted game-time drift, using TASK-32's calibrated seconds-per-point and telemetry) and sheds a speed notch when debt exceeds a budget, recovering when it drains. A feedback controller over a measurable signal — RimWorld-style adaptive time, but driven by cognition load instead of frame rate. QUESTIONS for the session: shed policy (notch-down vs proportional vs micro-pause at decision-critical moments); hysteresis so speed doesn't oscillate; whether debt is global or per-agent-weighted by salience; interaction with the existing SpeedMax-refused-with-LLM rule (does adaptive throttle subsume it?); how the TUI communicates 'you asked for 32x, running at 16x because 3 minds are in flight'; determinism boundary — throttling changes tick pacing (wall-side, like pause) and must never change tick CONTENT, so replay stays byte-identical. DEPENDS on TASK-32: needs the staleness telemetry, seconds-per-point calibration, and debt definition to exist before a governor can act on them. Output: a spec under specs/ linked via spec-bridge.
+
+Spec: specs/028-adaptive-throttle
 <!-- SECTION:DESCRIPTION:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1) Ground in TASK-32 outputs: specs/007-cognition-horizon (telemetry, calibration, debt definition), internal/cognition code, docs/wiki notes. 2) Cut worktree .worktrees/task-33 (branch task-33-adaptive-throttle) from fresh origin/main. 3) Design session: resolve the enumerated questions (shed policy, hysteresis, debt scoping, SpeedMax interaction, TUI surface, determinism boundary) — user decisions via clarify where artifacts don't already answer. 4) speckit-specify the adaptive-throttle spec (028). 5) spec-bridge:link to TASK-33; ACs, sync, commit, PR.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Re-grounding 2026-07-22: dependency TASK-32 is Done — the staleness/sec-per-point telemetry and calibration this design needs now exist (internal/cognition). Unblocked.
+
+Session start 2026-07-23: began design session. GitHub #33 is an unrelated merged PR (TASK-51); this is board TASK-33.
+
+Design session decisions (user, 2026-07-23): (1) SHED POLICY — notch-down on the existing six-value speed ladder (32x→16x→8x→4x→1x), one notch per breach window, notch-by-notch recovery as debt drains; proportional pacing and auto micro-pause rejected (ladder legibility wins; micro-pause may return as a future opt-in). (2) DEBT SCOPE — global sum: one world-level debt = Σ predicted game-tick drift over all in-flight/queued planner+conversation jobs (from orchestrator queue+inflight × estimator sec/pt × ticksPerSecond); salience weighting deferred until telemetry shows need. (3) SPEEDMAX — refusal with LLM configured retained unchanged (spec 007 assumption stands); governor governs only the capped ladder, floor 1x. Doctrine-answered (not re-asked): determinism boundary — governing is wall-side pacing like pause; sheds/recoveries land as recorded clock.* events per the auto-slow precedent, tick CONTENT never changes, replay byte-identical. Hysteresis: asymmetric (fast shed, slow recover) with distinct thresholds+windows, spec'd not asked.
 <!-- SECTION:NOTES:END -->
