@@ -732,8 +732,24 @@ func TestEstimatorSampleCountUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"}); err != nil {
-				errs <- err
+			// A synchronized 40-wide burst at Parallel=8 outruns the workers'
+			// dequeues, so the bounded tier queue (cap 32) fills and Submit
+			// fails fast with ErrQueueFull — designed backpressure, exactly the
+			// "back off and retry" that error instructs. Retrying keeps every
+			// call completing, so the exact-count assertion (one sample per
+			// call) still holds; the deadline stops a real regression from
+			// hanging the test.
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"})
+				if err == nil {
+					return
+				}
+				if !errors.Is(err, ErrQueueFull) || time.Now().After(deadline) {
+					errs <- err
+					return
+				}
+				time.Sleep(2 * time.Millisecond)
 			}
 		}()
 	}
