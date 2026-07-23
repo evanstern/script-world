@@ -3,10 +3,10 @@ id: TASK-48
 title: >-
   Flaky test: TestEstimatorSampleCountUnderConcurrency loses samples under queue
   pressure
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-21 19:10'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-23 04:59'
 labels: []
 dependencies: []
 priority: medium
@@ -21,6 +21,20 @@ Pre-existing failure on clean main (found at a4b9c92 while baselining TASK-43): 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Root cause pinned: test expectation vs estimator behavior under queue-full
-- [ ] #2 go test ./internal/llm/ -count=10 green
+- [x] #1 Root cause pinned: test expectation vs estimator behavior under queue-full
+- [x] #2 go test ./internal/llm/ -count=10 green
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Reproduce failure on fresh main. 2. Read test (llm_test.go:739 area) + estimator sample path to pin root cause (AC#1). 3. Decide trivial exemption vs spec per constitution. 4. Worktree task-48, delegate fix per model-tier rubric, verify -count=10 (AC#2), one PR.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+ROOT CAUSE (AC#1): test expectation bug, not an estimator defect. llm_test.go fires a synchronized 40-wide burst of non-best-effort submits at Parallel=8; Submit (llm.go:417-419) fails fast with ErrQueueFull when the tier queue (queueCap=32, llm.go:221) is full — documented backpressure design ('full queue fails fast rather than piling work up', llm.go:384). When the burst outruns worker dequeues, up to 8 submits lose the race. Estimator is exact in every failure: samples == server hits == completed calls (37==37) — 'one sample per completed call' holds. FIX: test backs off and retries on ErrQueueFull (what the error instructs), preserving the exact-count assertion at n=40. SPEC RIGOR: trivial exemption applies — surgical test-only fix, file:line diagnosis above, ACs on task. TIER: Opus 4.8 per rubric line 'concurrency/scheduling logic (internal/llm)' — the test encodes concurrent admission semantics.
+
+AC#2 evidence (orchestrator's independent run, commit 67c648b): go test ./internal/llm/ -count=10 → ok 8.435s; -race -count=5 on the fixed test → ok. Implementer (Opus 4.8) run also green: -count=10 ok 8.396s, vet clean, build clean. NOTE: one orchestrator gate run hung 10m in TestQueueBackpressure (NOT touched by this diff) under CPU contention from a concurrent session's go test — pre-existing flaw, filed as TASK-69.
+<!-- SECTION:NOTES:END -->
