@@ -319,3 +319,73 @@ func TestVillagerDecisionsBodyScrollRevealsLaterContent(t *testing.T) {
 		t.Error("an out-of-range scroll must clamp defensively, not blank the pane")
 	}
 }
+
+// --- T015: US2 — Metatron inline verdict rows (contract R12-R14) ---
+
+func TestMetatronToolCallAppendsOneVerdictRow(t *testing.T) {
+	m := testModel(t)
+	m.applyEvent(toolCallEvent(1, "turn-metatron-100", 1, "grant_item", "rejected_gate", "budget exhausted"))
+	if len(m.transcript) != 1 {
+		t.Fatalf("want 1 transcript row, got %d: %v", len(m.transcript), m.transcript)
+	}
+	row := m.transcript[0]
+	if !strings.Contains(row, "grant_item") || !strings.Contains(row, "budget exhausted") {
+		t.Errorf("verdict row missing tool name/reason: %q", row)
+	}
+	if strings.Contains(row, "rejected_gate") {
+		t.Errorf("the raw verdict enum must never reach the transcript: %q", row)
+	}
+}
+
+func TestMetatronToolCallsAppendInEmissionOrder(t *testing.T) {
+	m := testModel(t)
+	m.applyEvent(toolCallEvent(1, "turn-metatron-100", 1, "grant_item", "landed", ""))
+	m.applyEvent(toolCallEvent(2, "turn-metatron-100", 2, "snap_time", "rejected_gate", "no charges"))
+	if len(m.transcript) != 2 {
+		t.Fatalf("want 2 rows, got %d: %v", len(m.transcript), m.transcript)
+	}
+	if !strings.Contains(m.transcript[0], "grant_item") || !strings.Contains(m.transcript[1], "snap_time") {
+		t.Errorf("rows out of emission order: %v", m.transcript)
+	}
+}
+
+func TestVillagerToolCallDoesNotTouchMetatronTranscript(t *testing.T) {
+	m := testModel(t)
+	m.applyEvent(toolCallEvent(1, "reflex-0-100", 1, "gather", "landed", ""))
+	if len(m.transcript) != 0 {
+		t.Errorf("a villager's cog.tool_call must never add a transcript row, got %v", m.transcript)
+	}
+}
+
+func TestMetatronProseOnlyTurnAddsNoVerdictRows(t *testing.T) {
+	m := testModel(t)
+	// A prose-only turn never emits cog.tool_call at all (no calls made) —
+	// nothing here should touch the transcript.
+	m.applyEvent(thoughtEvent(1, 100, "turn-metatron-100", "metatron", 0, 0))
+	if len(m.transcript) != 0 {
+		t.Errorf("a prose-only turn (no tool calls) must add no verdict rows, got %v", m.transcript)
+	}
+}
+
+func TestMetatronVerdictRowRespectsTranscriptCap(t *testing.T) {
+	m := testModel(t)
+	for i := 0; i < 210; i++ {
+		m.applyEvent(toolCallEvent(int64(i+1), fmt.Sprintf("turn-metatron-%d", i), 1, "grant_item", "landed", ""))
+	}
+	if len(m.transcript) != 200 {
+		t.Errorf("the existing 200-row transcript cap must still hold, got %d", len(m.transcript))
+	}
+}
+
+func TestClassifyTranscriptLineVerdictRowStylesAsTelemetry(t *testing.T) {
+	label, text, style := classifyTranscriptLine(transcriptVerdictPrefix + "grant_item — went through")
+	if label != "note" {
+		t.Errorf("verdict row should carry the note label so it wraps, got %q", label)
+	}
+	if !strings.Contains(text, "grant_item") {
+		t.Errorf("verdict row text should be the stripped content, got %q", text)
+	}
+	if !style.GetFaint() {
+		t.Error("verdict rows should style as telemetry (styleFamilyCog, faint) — distinct from moments/nudges (styleAgent, bold)")
+	}
+}

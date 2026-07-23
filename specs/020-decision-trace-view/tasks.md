@@ -94,13 +94,13 @@ scroll; `esc` unwinds.
 **Independent Test**: quickstart.md §4 — a Metatron turn with tool calls shows one
 verdict row per call, in order, before the reply row; prose-only turns add none.
 
-- [ ] T013 [US2] Append a styled transcript row per ingested `turn-metatron-*`
+- [x] T013 [US2] Append a styled transcript row per ingested `turn-metatron-*`
       cog.tool_call (tool + glossary phrase + reason) from the applyEvent path,
       preserving the 200-row cap, in `internal/tui/tui.go` (contract R12–R14)
-- [ ] T014 [US2] Add the verdict-row prefix to `classifyTranscriptLine` /
+- [x] T014 [US2] Add the verdict-row prefix to `classifyTranscriptLine` /
       `transcriptRowLines` so verdict rows style as telemetry (distinct from
       you/angel) and wrap correctly, in `internal/tui/views.go`
-- [ ] T015 [US2] US2 tests: one row per metatron call in emission order; villager
+- [x] T015 [US2] US2 tests: one row per metatron call in emission order; villager
       calls add no transcript rows; prose-only turn adds none; row cap holds;
       wrapping/styling classification, in `internal/tui/decisions_test.go`
 
