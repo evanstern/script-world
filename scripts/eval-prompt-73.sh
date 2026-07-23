@@ -46,6 +46,10 @@ HOURS="${HOURS:-6}"
 SPEED="${SPEED:-16x}"
 MODEL="${MODEL:-cogito:3b}"
 ENDPOINT="${ENDPOINT:-http://localhost:11434/v1}"
+# cogito:3b's native OpenAI-compat function-calling is unreliable; the
+# schema-constrained JSON envelope (tool_mode "json") is the documented mode for
+# it (docs/wiki llm-providers). Pinned identically for every variant.
+TOOL_MODE="${TOOL_MODE:-json}"
 
 # TickGameSeconds == 1 (internal/clock), so the target tick is HOURS*3600.
 TARGET_TICK=$(( HOURS * 3600 ))
@@ -75,7 +79,8 @@ export PROMPTWORLD_HOME="$WORK/home"
 mkdir -p "$BUILD_DIR" "$PROMPTWORLD_HOME"
 BIN="$WORK/promptworld"
 WORLD="eval73-${VARIANT}"
-WORLD_DIR="$PROMPTWORLD_HOME/$WORLD"
+# Name-form worlds live at <PROMPTWORLD_HOME>/worlds/<name> (worlds.WorldsHome).
+WORLD_DIR="$PROMPTWORLD_HOME/worlds/$WORLD"
 
 cleanup() {
   # Best-effort: stop the daemon and remove the temp workspace.
@@ -102,8 +107,8 @@ echo "eval73: creating world $WORLD (seed $SEED)"
 LLM_JSON="$WORLD_DIR/llm.json"
 [[ -f "$LLM_JSON" ]] || { echo "eval73: no llm.json at $LLM_JSON" >&2; exit 1; }
 tmp_json="$(mktemp)"
-jq --arg model "$MODEL" --arg ep "$ENDPOINT" \
-   '.providers.local.model = $model | .providers.local.endpoint = $ep' \
+jq --arg model "$MODEL" --arg ep "$ENDPOINT" --arg tm "$TOOL_MODE" \
+   '.providers.local.model = $model | .providers.local.endpoint = $ep | .providers.local.tool_mode = $tm' \
    "$LLM_JSON" > "$tmp_json"
 mv "$tmp_json" "$LLM_JSON"
 echo "eval73: local tier pinned -> $(jq -c '.providers.local' "$LLM_JSON")"
@@ -152,13 +157,20 @@ TAIL="$WORK/tail.txt"
 TYPED="$WORK/typed.tsv"
 awk 'index($0,"{")>0 { print $6 "\t" substr($0, index($0,"{")) }' "$TAIL" > "$TYPED"
 
+# Diagnostic: event-type histogram (a soak that collected no planner cognitions
+# is a setup failure, not a zero-rejection win).
+echo "eval73: event-type counts (top 12):"
+cut -f1 "$TYPED" | sort | uniq -c | sort -rn | head -12 | sed 's/^/  /'
+
+# grep may legitimately match nothing (empty log); guard against pipefail. cut
+# on tab keeps only the JSON payload.
 PLANNER_JOBS="$WORK/planner_jobs.json"
-grep -F 'cog.thought' "$TYPED" | cut -f2- \
+{ grep -F 'cog.thought' "$TYPED" || true; } | cut -f2- \
   | jq -c 'select(.class=="planner") | .job' \
   | jq -s 'unique' > "$PLANNER_JOBS"
 
 CALLS="$WORK/calls.json"
-grep -F 'cog.tool_call' "$TYPED" | cut -f2- \
+{ grep -F 'cog.tool_call' "$TYPED" || true; } | cut -f2- \
   | jq -s '.' > "$CALLS"
 
 TALLY="$WORK/tally.json"
@@ -170,8 +182,8 @@ jq -n \
   | (reduce $jobs[] as $j ({}; .[$j] = true)) as $set
   | [ ($calls[0] // [])[] | select($set[.job] == true) ] as $p
   | ($p | length) as $denom
-  | ($p | map(.verdict) | group_by(.) | map({key: .[0], count: length}) | from_entries) as $verdicts
-  | ([ $p[] | select(.verdict=="landed") ] | map(.tool) | group_by(.) | map({key: .[0], count: length}) | from_entries) as $dist
+  | ($p | map(.verdict) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $verdicts
+  | ([ $p[] | select(.verdict=="landed") ] | map(.tool) | group_by(.) | map({key: .[0], value: length}) | from_entries) as $dist
   | {
       planner_tool_calls: $denom,
       rejected_malformed: ($verdicts.rejected_malformed // 0),
