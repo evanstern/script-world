@@ -48,6 +48,32 @@ var speeds = map[Speed]float64{
 	SpeedMax: 0, // sentinel: uncapped
 }
 
+// cappedLadder is the watchable speed ladder the adaptive-throttle governor
+// (spec 028) moves the effective speed along: the five finite multipliers in
+// ascending order, excluding the uncapped SpeedMax (which the governor never
+// touches — FR-004/FR-012). 1x is the hard floor, 32x the ceiling.
+var cappedLadder = []Speed{Speed1x, Speed4x, Speed8x, Speed16x, Speed32x}
+
+// CappedLadder returns the governor's speed ladder in ascending order
+// (1x…32x, SpeedMax excluded) — a fresh copy so callers cannot mutate the
+// doctrine order.
+func CappedLadder() []Speed {
+	return append([]Speed(nil), cappedLadder...)
+}
+
+// LadderIndex is the position of s on the capped ladder (0 = the 1x floor,
+// 4 = the 32x ceiling), or -1 when s is off the ladder (SpeedMax or an unknown
+// value). Governor validation uses it to require decisions land exactly one
+// notch apart in the implied direction.
+func LadderIndex(s Speed) int {
+	for i, sp := range cappedLadder {
+		if sp == s {
+			return i
+		}
+	}
+	return -1
+}
+
 func ParseSpeed(s string) (Speed, error) {
 	sp := Speed(s)
 	if _, ok := speeds[sp]; !ok {
