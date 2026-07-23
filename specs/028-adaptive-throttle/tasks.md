@@ -43,12 +43,12 @@ concurrency/sim slices → Opus 4.8; TUI/status/doc slices → Sonnet).
 **Independent Test**: quickstart §2 — debt rises/drains in `promptworld status` with a slow model; exactly zero
 when quiescent; fields absent/zero with no `llm.json`.
 
-- [ ] T004 [US1] Add the daemon governor sampler: goroutine constructed only when the orchestrator exists,
+- [X] T004 [US1] Add the daemon governor sampler: goroutine constructed only when the orchestrator exists,
       polling `PendingCognition()` + loop status every `GovernorCadence`, computing `cognition.Debt`, exposing
       `GovernorSnapshot{Debt, Jobs}` (no decisions yet) in the daemon wiring (`internal/daemon/`)
-- [ ] T005 [US1] Add `RequestedSpeed`, `GovernorDebt`, `GovernorJobs` to `Status` in `internal/ipc/protocol.go`
+- [X] T005 [US1] Add `RequestedSpeed`, `GovernorDebt`, `GovernorJobs` to `Status` in `internal/ipc/protocol.go`
       and fold the daemon snapshot in `internal/ipc/server.go` per contracts/status-protocol.md
-- [ ] T006 [US1] Tests: debt-visible integration (fake orchestrator jobs → status fields), quiesce-to-zero, and
+- [X] T006 [US1] Tests: debt-visible integration (fake orchestrator jobs → status fields), quiesce-to-zero, and
       no-LLM inertness (zero machinery, zero values) in `internal/daemon/` and `internal/ipc/` test files
 
 **Checkpoint**: US1 shippable — observability only, simulation behavior untouched (SC-004 provable).

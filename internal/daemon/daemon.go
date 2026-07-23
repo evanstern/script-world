@@ -136,6 +136,16 @@ func Run(dir string) error {
 		}
 		defer orch.Close()
 		srv.SetLLM(orch)
+		// Adaptive-throttle debt sampler (spec 028 US1): a daemon-owned
+		// goroutine that reads aggregate staleness debt every GovernorCadence
+		// and exposes it for status. Built ONLY here, inside the orchestrator
+		// branch, so a no-LLM world constructs zero governor machinery (FR-003,
+		// SC-004). Observability only in this slice — no decisions, no events;
+		// sampling rides the loop's non-blocking status door so it never blocks
+		// the tick schedule.
+		sampler := newGovernorSampler(orch, loop)
+		srv.SetGovernor(sampler)
+		go sampler.run(ctx)
 		// Seed the seconds-per-point estimators from the calibration
 		// profile before any traffic; a missing or unreadable file means
 		// pessimistic bootstrap defaults (fail toward reflex, never toward

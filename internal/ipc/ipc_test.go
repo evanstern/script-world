@@ -677,6 +677,60 @@ func TestStatusDataShape(t *testing.T) {
 	}
 }
 
+// fakeGovernor is a scripted daemon governor surface for the status-fold tests.
+type fakeGovernor struct {
+	debt float64
+	jobs int
+}
+
+func (f fakeGovernor) GovernorStatus() (float64, int) { return f.debt, f.jobs }
+
+// TestStatusGovernorFold (spec 028 US1): when a governor is attached its debt
+// snapshot folds into the clock section, exactly the way the LLM snapshot folds.
+func TestStatusGovernorFold(t *testing.T) {
+	h := newHarness(t, clock.Speed16x)
+	h.srv.SetGovernor(fakeGovernor{debt: 1.4, jobs: 3})
+	c := h.dial(t)
+
+	sd, err := c.Status("status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sd.Clock.GovernorDebt != 1.4 || sd.Clock.GovernorJobs != 3 {
+		t.Errorf("governor fold = debt %v jobs %d, want 1.4/3", sd.Clock.GovernorDebt, sd.Clock.GovernorJobs)
+	}
+	// RequestedSpeed is always empty in US1 — the sim-state ceiling arrives in US2.
+	if sd.Clock.RequestedSpeed != "" {
+		t.Errorf("RequestedSpeed = %q, want empty in US1", sd.Clock.RequestedSpeed)
+	}
+}
+
+// TestStatusNoGovernorZero (US1-AC4): with no governor attached (a no-LLM
+// world), status reports zero governor values — no machinery, no debt.
+func TestStatusNoGovernorZero(t *testing.T) {
+	h := newHarness(t, clock.Speed4x)
+	c := h.dial(t)
+
+	sd, err := c.Status("status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sd.Clock.GovernorDebt != 0 || sd.Clock.GovernorJobs != 0 || sd.Clock.RequestedSpeed != "" {
+		t.Errorf("no-governor status carried governor values: %+v", sd.Clock)
+	}
+}
+
+// TestStatusGovernorOmitempty: the three spec-028 fields are omitempty, so an
+// inert governor keeps status byte-identical to a pre-028 status.
+func TestStatusGovernorOmitempty(t *testing.T) {
+	b, _ := json.Marshal(StatusData{})
+	for _, key := range []string{"requested_speed", "governor_debt", "governor_jobs"} {
+		if strings.Contains(string(b), key) {
+			t.Errorf("zero status must omit %q (pre-028 byte shape) in %s", key, b)
+		}
+	}
+}
+
 // TestLLMCallAndDegradedWorld covers the llm_call protocol command and AC#3:
 // a dead inference endpoint degrades LLM calls while the simulation ticks on
 // untouched.
