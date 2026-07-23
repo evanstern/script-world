@@ -1,0 +1,43 @@
+---
+id: TASK-79
+title: >-
+  Epistemic hygiene for emergent lore: honest belief provenance, hearsay decay,
+  attribution-preserving gists
+status: To Do
+assignee: []
+created_date: '2026-07-23 17:49'
+labels:
+  - emergent-lore
+  - epistemics
+dependencies: []
+priority: medium
+ordinal: 72000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+From the 2026-07-23 world-01 Thornspire investigation. The villagers collectively invented a place ("Thornspire") and phenomena ("glowing tendrils", "green tangles") that do not exist in world state — emergent mythology we WANT — but the epistemic machinery records the fiction as fact:
+
+- Origin: Metatron omen at tick 102060 (seq 50664, rainbow "pointing toward the forest's edge... something is being shown to them") → conv 107943 at tick 108001 (seq 53114-53119) invents Thornspire + green tangles as sensemaking. 271 events reference Thornspire; 133 are social.rumor_told.
+- Conversation gists flatten speculation into shared fact: "The team discussed storm signs near Thornspire after Rowan observed unusual green tangles" (seq 53119) becomes identical salience-4 memories for all participants; later "discussed the glowy tendrils after investigating" (seq 64555) claims an investigation that never happened.
+- Belief provenance is dishonest: seq 62654 (Birch) records the tendril belief at confidence 68 with provenance "witnessed" — the omen was witnessed, the tendrils never existed. seq 55078 (Cedar) confidence 58 "inferred".
+- Nothing decays confidence on beliefs never confirmed by direct observation.
+
+Scope (hygiene, NOT suppression — invention must survive, as myth rather than fact):
+1. Provenance honesty: a belief formed from conversation/rumor content records hearsay/inferred, never witnessed; witnessed is reserved for direct perception (own executed-action memories, delivered omens/dreams).
+2. Confidence decay: beliefs never reinforced by direct observation decay over game-days (analogous to memory salience half-life); leave a reinforcement seam for the future grounded-observation channel (see perception-of-absence task).
+3. Gist attribution: the conversation-gist prompt preserves attribution for unverified claims ("Rowan claimed he saw glowing tendrils") instead of flattening to communal fact, and never asserts completed actions that did not occur.
+
+Non-goals: preventing invention of places/phenomena; grounding conversation content against world state (that is the perception-of-absence task); rumor-mechanics changes.
+
+Item 3 is prompt-behavior-affecting → eval-gated per TASK-73 precedent, not vibes-gated. Items 1-2 touch belief/reducer state → replay determinism must hold.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Belief revision sourced from talk/rumor content can never record provenance 'witnessed'; witnessed requires a direct-perception source (test proving both directions)
+- [ ] #2 Never-reinforced beliefs decay in confidence deterministically over game-days; decay constants + rationale recorded on the task; replay/determinism suite passes
+- [ ] #3 Gist prompt preserves attribution: before/after eval on scripted fixtures + live sample shows no fact-flattened confabulation of the 'after investigating' shape; eval numbers recorded on the task
+- [ ] #4 A reinforcement seam exists for future grounded observations to refresh belief confidence (documented, even if no producer yet)
+<!-- AC:END -->
