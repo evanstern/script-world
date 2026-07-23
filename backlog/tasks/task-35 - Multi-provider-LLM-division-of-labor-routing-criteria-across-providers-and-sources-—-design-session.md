@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 17:01'
+updated_date: '2026-07-23 17:16'
 labels:
   - engine
   - llm
@@ -54,6 +54,7 @@ Spec: specs/024-provider-routing
 - [x] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
 - [x] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
 - [ ] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
+- [ ] #13 Spec phase: Composition with spec 025 (post-merge reconciliation)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -86,4 +87,8 @@ Slice 2 (Opus 4.8, T008-T012) landed: 21477a3 (per-provider estimators + calibra
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4
 
 Slice 3 (Opus 4.8, T013-T016) landed: 91ed103 (flock lease pool + worker integration), 94e6a98 (package docs reconciled to providers/chains). Full -race suite green; quickstart automated sections all pass (T016 outputs recorded by implementer; orchestrator re-ran lease + validation tests green). Gate rulings: (1) quickstart §2 regex was an authoring bug — fixed in quickstart.md ('Validation|ValidV2|LoadConfig'); (2) contended is pool-scoped by design ruling — endpoint congestion is one truth shared by providers on that endpoint; data-model.md updated to say so; (3) lease boot warnings via overridable leaseWarnf to stderr accepted (warn-not-error; UserHomeDir failure only discoverable inside New). Remaining: slice 4 (Sonnet) — T017 TUI table, T018 CLI surfaces, T019 live e2e proof, T020 v2 calibrate.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4 · Composition with spec 025 (post-merge reconciliation): 0/2
+
+Composition review vs TASK-72/spec 025 (user-requested, 2026-07-23): (1) max_tokens composes by construction — 025 made budgets top-level and KIND-scoped, exactly decision-5's kind/provider split; no per-tier token limits existed in 024's assumptions and no per-provider token fields are added; v2 marshal must round-trip max_tokens+loop_max_rounds byte-for-byte (cut as T021 with the conflict-bearing rebase of config.go). (2) 025's in-loop retry exposed a mid-cognition provider-switch hazard under per-call chain-walking (retry could land on a different provider than the transcript's earlier rounds — ID-convention mixing + estimator mis-attribution); ruled: tool-use loop pins its provider at run start incl. the retry, the run-level analog of scene pinning — FR-008 extended, research R9 added, cut as T022 (Opus). Rebase waits for the in-flight Sonnet US6 slice to land.
 <!-- SECTION:NOTES:END -->

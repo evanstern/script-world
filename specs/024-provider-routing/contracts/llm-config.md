@@ -79,6 +79,13 @@ field rules; this file fixes the concrete JSON shapes.
 }
 ```
 
+## Kind-scoped top-level knobs (spec 025 composition)
+
+`loop_max_rounds` and `max_tokens` (`{planner, metatron_turn, consolidation}`, spec 025)
+are properties of the thought class, not the provider: they stay top-level in both
+shapes, apply unchanged whichever chain candidate serves, and round-trip byte-for-byte
+through the v2 marshal/parse. There are no per-provider token fields.
+
 ## Legacy shape (loads forever, no edits)
 
 Today's `{"monthly_budget_usd", "local": {...}, "cloud": {...}}` derives exactly the

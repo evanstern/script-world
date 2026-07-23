@@ -103,6 +103,16 @@ All skipped → return chain-head's refusal error (`ErrBudgetExhausted` / `ErrTi
 `ProviderStatus{Name, Model, Endpoint, Up, Queue, Inflight, Slots, Contended, SpentUSD}`,
 sorted by Name.
 
+## Composition with spec 025 knobs (post-merge, R9)
+
+- `Config.MaxTokens *TokenBudgets` and `LoopMaxRounds` stay top-level and kind-scoped in
+  BOTH config shapes; the v2 marshal/parse round-trips them byte-for-byte. No
+  per-provider token fields.
+- The tool-use loop pins: `toolloop.Run` resolves `ResolveProvider(kind)` once at run
+  start and stamps `Request.Provider` on every round including the spec-025 in-loop
+  retry (which therefore never changes provider). Scene pin (conversation) and run pin
+  (loop) are the two instances of one continuity rule (FR-008).
+
 ## Cognition seam
 
 - `cognition.SeedFor(profile, name)`: profile keyed by provider name; miss → bootstrap

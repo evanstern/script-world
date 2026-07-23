@@ -265,6 +265,12 @@ skip reason.
 - **FR-008**: A conversation scene MUST resolve its provider once at scene start and use
   it for every turn of that scene; mid-scene inadmissibility or failure surfaces as
   failure to the existing tolerance machinery. A scene MUST never change providers.
+  The same continuity rule applies to a multi-round cognition (tool-use loop) run: the
+  run resolves its provider once at run start and uses it for every round — including
+  the spec-025 in-loop transport retry, which therefore always retries the SAME
+  provider. A thought never changes models mid-transcript; if the pinned provider is
+  genuinely down, the run fails per spec 025's existing semantics and the NEXT
+  cognition's resolution walks the chain to a fallback.
 - **FR-009**: A single global monthly spend ceiling MUST govern all priced traffic;
   refusal happens at admission (before any network call) exactly as today. Zero-priced
   providers MUST never be budget-refused. Per-provider budgets are explicitly out of

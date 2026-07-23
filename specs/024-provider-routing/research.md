@@ -129,3 +129,30 @@ dual-publishing would be permanent compat surface for zero external consumers.
   beyond what the seam interfaces already carry (they never name tiers).
 - Determinism/replay: no routing artifact enters recorded events' meaning (FR-018);
   telemetry additions are observational fields only.
+
+## R9 — Composition with spec 025 (TASK-72: in-loop retry + per-kind max_tokens) — added 2026-07-23 after 025 merged
+
+**max_tokens: orthogonal by construction.** Spec 025 deliberately made token budgets
+top-level and KIND-scoped (`max_tokens: {planner, metatron_turn, consolidation}` on
+`llm.Config`) — a property of the thought class, never of the serving model. That is
+exactly decision-5's split (kind properties stay kind-scoped; provider choice is the
+chain's business), so no per-provider token field exists or is added: budgets ride
+`Request.MaxTokens` unchanged whichever candidate serves. The v2 config shape carries
+the top-level `max_tokens` object (and `loop_max_rounds`) verbatim in both legacy and
+registry forms; the shape-aware v2 marshal/parse must round-trip it byte-for-byte
+(reconciliation task T021). Per-provider token overrides remain rejected scope, with
+declared-but-advisory `context_tokens` still deferred as before.
+
+**In-loop retry: composes only under run-level pinning (FR-008 extension).** Spec 025's
+retry re-Submits mid-cognition; with per-call chain-walking, the retry — or any later
+round — could land on a different provider than the transcript's earlier rounds (the
+breaker strike from the very failure being retried is a walk trigger), mixing native vs
+JSON-mode tool-call ID conventions mid-transcript and mis-attributing the whole-run
+`ObserveCognition` observation. Ruling: the tool-use loop resolves its provider once at
+run start (`ResolveProvider(kind)`) and stamps `Request.Provider` on every round
+INCLUDING the retry — the cognition-run analog of scene pinning. Consequences: the
+retry always retries the same provider (matching 025's transport-blip intent); a
+genuinely dead pinned provider fails the run exactly as 025 defines (no silent
+re-route) and the next cognition's resolve walks to the fallback; whole-run estimator
+attribution is exact by construction. Single-shot kinds are single Submits — no
+mid-thought switch exists to defend against. Implementation: task T022.

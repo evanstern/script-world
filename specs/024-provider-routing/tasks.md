@@ -231,6 +231,29 @@ contended surfaced.
   named profile entries; legacy config output is byte-identical to today's
 ---
 
+## Phase 10: Composition with spec 025 (post-merge reconciliation)
+
+**Purpose**: TASK-72 (spec 025: in-loop retry + per-kind max_tokens) merged to main
+mid-implementation; research.md R9 records the composition rulings. Opus tier
+(toolloop/llm concurrency + conflict-bearing rebase).
+
+- [ ] T021 Rebase task-35-provider-routing onto origin/main across the spec-025 merge
+  and reconcile internal/llm/config.go: the v2 registry Config keeps
+  `MaxTokens *TokenBudgets` + normalizer methods and `LoopMaxRounds` top-level in both
+  shapes, shape-aware MarshalJSON round-trips them byte-for-byte (omitempty preserved),
+  legacy derivation untouched by them; re-run the full -race suite including spec 025's
+  retry/token tests and the legacy-equivalence suite
+- [ ] T022 Run-level provider pinning in internal/toolloop/loop.go per research.md R9 /
+  FR-008 extension: resolve ResolveProvider(kind) once at Run start, stamp
+  Request.Provider on every round INCLUDING the spec-025 in-loop retry;
+  ObserveCognition attribution uses the pinned provider (exact by construction). Tests:
+  retry lands on the pinned provider even when the chain's fallback is admissible and
+  preferable; a multi-round run never changes provider mid-transcript; pinned-provider
+  hard-down fails the run per spec 025 semantics and the NEXT run resolves to the
+  fallback
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
