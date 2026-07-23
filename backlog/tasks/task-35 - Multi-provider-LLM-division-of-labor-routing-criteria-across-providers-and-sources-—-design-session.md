@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 16:40'
+updated_date: '2026-07-23 17:01'
 labels:
   - engine
   - llm
@@ -51,8 +51,8 @@ Spec: specs/024-provider-routing
 - [x] #7 Spec phase: User Story 2 — Division of labor: per-provider speed truth (Priority: P2)
 - [x] #8 Spec phase: User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3)
 - [x] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
-- [ ] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
-- [ ] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
+- [x] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
+- [x] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
 - [ ] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
 <!-- AC:END -->
 
@@ -82,4 +82,8 @@ Slice 1 (Opus 4.8, T001-T007) landed on the branch: commits 636df4e (registry ge
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4
 
 Slice 2 (Opus 4.8, T008-T012) landed: 21477a3 (per-provider estimators + calibration seam), a4e1f47 (chain-walk fallback + scene pinning), dffc8e3 (spend attribution). Full -race suite green incl. unmodified legacy-equivalence suite; orchestrator spot-check re-ran llm/toolloop/cognition green. Gate ruling on the implementer's open question: v2-registry calibration in calibrate.go is real scope, added explicitly as T020 [US6] on the Sonnet slice (pin mechanism from slice 1 makes it view-layer work); legacy worlds already calibrate correctly via derived provider names. Remaining: US5 leases + engine polish (slice 3, Opus), US6 surfaces incl. T020 (slice 4, Sonnet).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4
+
+Slice 3 (Opus 4.8, T013-T016) landed: 91ed103 (flock lease pool + worker integration), 94e6a98 (package docs reconciled to providers/chains). Full -race suite green; quickstart automated sections all pass (T016 outputs recorded by implementer; orchestrator re-ran lease + validation tests green). Gate rulings: (1) quickstart §2 regex was an authoring bug — fixed in quickstart.md ('Validation|ValidV2|LoadConfig'); (2) contended is pool-scoped by design ruling — endpoint congestion is one truth shared by providers on that endpoint; data-model.md updated to say so; (3) lease boot warnings via overridable leaseWarnf to stderr accepted (warn-not-error; UserHomeDir failure only discoverable inside New). Remaining: slice 4 (Sonnet) — T017 TUI table, T018 CLI surfaces, T019 live e2e proof, T020 v2 calibrate.
 <!-- SECTION:NOTES:END -->

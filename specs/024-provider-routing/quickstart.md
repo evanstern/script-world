@@ -23,7 +23,7 @@ routing/admission/metering/status tests that pinned old behavior still pass unmo
 ## 2. Boot validation matrix (US1 / SC-008) — automated
 
 ```sh
-go test ./internal/llm/ -run 'Validate|LoadConfig'
+go test ./internal/llm/ -run 'Validation|ValidV2|LoadConfig'
 ```
 
 Expected: every row of the [validation matrix](contracts/llm-config.md#load-time-validation-matrix-boot-errors)

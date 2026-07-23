@@ -93,7 +93,9 @@ All skipped → return chain-head's refusal error (`ErrBudgetExhausted` / `ErrTi
 - dir: `~/.promptworld/endpoint-leases/<sha256[:16](normalizedEndpoint)>/`
 - `acquire(ctx) (release func(), waited time.Duration, err)` — non-blocking flock sweep
   over `slot-00…slot-(C-1)`, jittered retry until ctx done
-- contended flag: waited > 2 s sets; waited < 2 s clears
+- contended flag: waited > 2 s sets; waited < 2 s clears. The flag lives on the POOL
+  (providers sharing a normalized endpoint share one pool and one flag — endpoint
+  congestion is one truth); `StatusSnapshot` reads it per provider row
 
 ### Status
 

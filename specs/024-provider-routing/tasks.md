@@ -174,12 +174,12 @@ contended surfaced.
 
 **Independent Test**: quickstart §7.
 
-- [ ] T013 [US5] New internal/llm/lease.go per contracts/endpoint-lease.md: endpoint
+- [x] T013 [US5] New internal/llm/lease.go per contracts/endpoint-lease.md: endpoint
   normalization, pool dir `~/.promptworld/endpoint-leases/<sha256[:16]>/` with lazy slot
   files + `endpoint` name file, non-blocking flock sweep with jittered ~100 ms retry
   bounded by ctx, release-on-close; provider `contended` atomic set on wait > 2 s /
   cleared on wait < 2 s
-- [ ] T014 [US5] Worker integration in internal/llm/llm.go: lease-enabled providers
+- [x] T014 [US5] Worker integration in internal/llm/llm.go: lease-enabled providers
   acquire after the stale-skip check, inside `callCtx` (2-min cap), before
   `caller.call`; estimator measures from post-acquisition start; lease-wait expiry never
   strikes the breaker; `contended` flows into `ProviderStatus`. Tests in
@@ -194,11 +194,11 @@ contended surfaced.
 
 ## Phase 8: Polish for the engine slices (Opus tier wrap-up)
 
-- [ ] T015 [P] Reconcile package docs and comments: internal/llm package comment
+- [x] T015 [P] Reconcile package docs and comments: internal/llm package comment
   (llm.go:1) and config.go/meter.go/health.go headers describe providers + chains
   instead of two tiers; drop retired exports (`TierFor`, `SecondsPerPoint(tier)`,
   `Tier` in routing contexts) and confirm no stragglers via `go vet ./...` + grep
-- [ ] T016 Full-suite gate: `go test -race ./...` green in the worktree; run quickstart
+- [x] T016 Full-suite gate: `go test -race ./...` green in the worktree; run quickstart
   §1/§2/§4/§5/§6/§7 automated commands verbatim and record outputs in task-35 board
   notes
 
