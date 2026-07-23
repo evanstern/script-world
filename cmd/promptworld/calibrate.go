@@ -283,6 +283,13 @@ func cmdCalibrate(args []string) error {
 		} else {
 			tp.Model, tp.Endpoint = cfg.Cloud.Model, cfg.Cloud.Endpoint
 		}
+		// The profile is keyed by PROVIDER NAME now (spec 024 R5): a legacy
+		// config derives providers named exactly "local"/"cloud", so writing the
+		// tier string writes the provider-named entry the daemon's SeedFor reads
+		// by name with no translation. Calibrating an arbitrary v2 registry (one
+		// entry per declared provider, pinned via Request.Provider) rides in with
+		// the provider-aware CLI surface (US6/T018); this command still speaks the
+		// legacy two-tier shape it always has.
 		prof.Tiers[string(t)] = tp
 
 		fmt.Printf("tier %s  (%s)\n", t, tp.Model)

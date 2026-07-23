@@ -101,8 +101,9 @@ func (md *Mind) secondsPerPoint(kind llm.Kind) float64 {
 		}
 	}
 	// Fallback for a test fake lacking the seam: the pessimistic bootstrap seed
-	// (fail toward reflex, never toward stale action).
-	return cognition.SeedFor(nil, "")
+	// (the local/zero-priced constant is the slower of the two — fail toward
+	// reflex, never toward stale action).
+	return cognition.SeedFor(nil, "", true)
 }
 
 func cogThoughtEvent(m thoughtMeta) store.Event {
@@ -233,10 +234,13 @@ func (md *Mind) emitCog(events ...store.Event) {
 }
 
 // RecalibrateSignal is the orchestrator's drift hook (installed by the
-// daemon): the live estimator's spike rate breached threshold — record it.
-func (md *Mind) RecalibrateSignal(tierName llm.Tier, estimate, spikeRate float64) {
+// daemon): the live estimator's spike rate breached threshold — record it. The
+// hook is per provider now (spec 024 T009); the breaching provider's name rides
+// the payload's Tier field, which stays named Tier because it is a recorded
+// telemetry field (replay-relevant schema — untouched by the rename).
+func (md *Mind) RecalibrateSignal(provider string, estimate, spikeRate float64) {
 	b, _ := json.Marshal(sim.RecalibrationPayload{
-		Tier: string(tierName), EstimateSPerPt: estimate,
+		Tier: provider, EstimateSPerPt: estimate,
 		SpikeRate: spikeRate, Window: cognition.WindowSize,
 	})
 	md.emitCog(store.Event{Type: "cog.recalibration_recommended", Payload: b})

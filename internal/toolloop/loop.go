@@ -101,7 +101,7 @@ type Result struct {
 // against a scripted stub without a network or a real orchestrator.
 type submitter interface {
 	Submit(ctx context.Context, req llm.Request) (llm.Response, error)
-	ObserveCognition(kind llm.Kind, totalMillis int64)
+	ObserveCognition(kind llm.Kind, provider string, totalMillis int64)
 }
 
 // Run drives the bounded loop. Guarantees (contracts/loop-api.md): it
@@ -134,6 +134,14 @@ func Run(ctx context.Context, orch *llm.Orchestrator, j Job) (Result, error) {
 
 func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 	start := time.Now()
+	// serving tracks the provider that actually handled the loop's rounds (spec
+	// 024 T009): the loop routes by kind (no pin), so under a chain-walk a
+	// fallback may serve a different provider than the head — the whole-loop
+	// observation must land on the estimator that did the work. Set from each
+	// round's Response.Provider; on a completed termination at least one round
+	// succeeded, so it names the serving provider (empty only on failure paths,
+	// which feed nothing anyway).
+	var serving string
 	// The whole-loop governor observation (data-model.md §8): SUCCESSES-ONLY,
 	// mirroring the worker path's doctrine (internal/llm/llm.go — "a fast
 	// failure is not a latency observation of completed thought"). res.TotalMillis
@@ -149,7 +157,7 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 		res.TotalMillis = time.Since(start).Milliseconds()
 		switch res.Term {
 		case TermLanded, TermModelDone, TermCapExhausted:
-			s.ObserveCognition(j.Kind, res.TotalMillis)
+			s.ObserveCognition(j.Kind, serving, res.TotalMillis)
 		}
 	}()
 
@@ -237,6 +245,7 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 		rounds++
 		res.Rounds = rounds
 		res.Final = resp.Text
+		serving = resp.Provider
 		tier := string(resp.Tier)
 
 		// Echo the model's turn (text + tool_use blocks) — exactly one

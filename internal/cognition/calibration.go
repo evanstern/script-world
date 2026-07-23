@@ -68,17 +68,26 @@ func (p *Profile) Save(path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-// SeedFor returns the seconds-per-point seed for a tier: the profile's
-// recorded baseline when present and positive, else the pessimistic
-// bootstrap default.
-func SeedFor(p *Profile, tier string) float64 {
+// SeedFor returns the seconds-per-point seed for a provider (spec 024 R5): the
+// profile's recorded baseline when present and positive, else a bootstrap by
+// pricing class. The profile is keyed by PROVIDER NAME now — legacy worlds
+// derive providers named "local"/"cloud", so a pre-spec-024 tier-keyed
+// calibration.json keeps matching by name with no translation table.
+//
+// The miss fallback is by pricing class (decision-5's surviving local/cloud
+// distinction), not by name: a zero-priced provider seeds from the local
+// bootstrap constant, a priced one from the cloud constant. So a fresh v2
+// provider named neither "local" nor "cloud" still cold-starts sanely, and the
+// legacy names land on their historical constants (local is zero-priced, cloud
+// is priced) — byte-identical to the pre-spec-024 name-keyed fallback.
+func SeedFor(p *Profile, name string, zeroPriced bool) float64 {
 	if p != nil {
-		if tp, ok := p.Tiers[tier]; ok && tp.SecondsPerPoint > 0 {
+		if tp, ok := p.Tiers[name]; ok && tp.SecondsPerPoint > 0 {
 			return tp.SecondsPerPoint
 		}
 	}
-	if tier == "cloud" {
-		return BootstrapCloudSecPerPt
+	if zeroPriced {
+		return BootstrapLocalSecPerPt
 	}
-	return BootstrapLocalSecPerPt
+	return BootstrapCloudSecPerPt
 }

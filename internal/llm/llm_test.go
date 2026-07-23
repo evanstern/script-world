@@ -990,11 +990,11 @@ func TestObserveCognitionFeedsOnce(t *testing.T) {
 
 	const millis = 6000
 	const points = 3 // planner's registered point cost
-	ref := cognition.NewEstimator(cognition.SeedFor(nil, "local"))
+	ref := cognition.NewEstimator(cognition.SeedFor(nil, "local", true))
 	ref.Sample(float64(millis) / 1000 / float64(points))
 	want := ref.Estimate()
 
-	o.ObserveCognition(KindPlanner, millis)
+	o.ObserveCognition(KindPlanner, "", millis)
 	est, _, samples, _ := lt.est.Stats()
 	if samples != samples0+1 {
 		t.Errorf("ObserveCognition fed %d samples, want 1", samples-samples0)
@@ -1004,7 +1004,7 @@ func TestObserveCognitionFeedsOnce(t *testing.T) {
 	}
 
 	// Unknown kind has no tier: no-op, no sample.
-	o.ObserveCognition("sorcery", 1000)
+	o.ObserveCognition("sorcery", "", 1000)
 	if _, _, samples2, _ := lt.est.Stats(); samples2 != samples {
 		t.Errorf("unknown kind fed the estimator: %d -> %d", samples, samples2)
 	}

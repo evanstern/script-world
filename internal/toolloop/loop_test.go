@@ -26,11 +26,12 @@ import (
 // round's response (or a transport error). It captures every request (to assert
 // SkipObserve and transcript growth) and every ObserveCognition report.
 type stubOrch struct {
-	t        *testing.T
-	scripts  []func(req llm.Request) (llm.Response, error)
-	calls    int
-	reqs     []llm.Request
-	observes []int64
+	t         *testing.T
+	scripts   []func(req llm.Request) (llm.Response, error)
+	calls     int
+	reqs      []llm.Request
+	observes  []int64
+	observedP []string // the serving provider each ObserveCognition carried
 }
 
 func (s *stubOrch) Submit(ctx context.Context, req llm.Request) (llm.Response, error) {
@@ -46,8 +47,9 @@ func (s *stubOrch) Submit(ctx context.Context, req llm.Request) (llm.Response, e
 	return f(req)
 }
 
-func (s *stubOrch) ObserveCognition(kind llm.Kind, totalMillis int64) {
+func (s *stubOrch) ObserveCognition(kind llm.Kind, provider string, totalMillis int64) {
 	s.observes = append(s.observes, totalMillis)
+	s.observedP = append(s.observedP, provider)
 }
 
 // --- helpers ---
@@ -71,6 +73,17 @@ func resp(text string, calls ...llm.ToolCall) func(llm.Request) (llm.Response, e
 
 func fail(err error) func(llm.Request) (llm.Response, error) {
 	return func(llm.Request) (llm.Response, error) { return llm.Response{}, err }
+}
+
+// respFrom scripts a response served by a NAMED provider (spec 024): the loop
+// captures resp.Provider so the whole-loop observation lands on the estimator
+// that actually did the work, not blindly on the kind's chain head.
+func respFrom(provider, text string, calls ...llm.ToolCall) func(llm.Request) (llm.Response, error) {
+	return func(req llm.Request) (llm.Response, error) {
+		r, _ := resp(text, calls...)(req)
+		r.Provider = provider
+		return r, nil
+	}
 }
 
 // readTool is the read-effect fixture: the registry ships zero Read entries
@@ -633,5 +646,29 @@ func TestCapArgs(t *testing.T) {
 	}
 	if capArgs(nil) != nil {
 		t.Errorf("capArgs(nil) must stay nil (omitempty)")
+	}
+}
+
+// TestObserveCarriesServingProvider (spec 024 T009): the whole-loop observation
+// carries the provider that actually served the loop's rounds — captured from
+// Response.Provider — so under a chain-walk the estimator that did the work is
+// the one that is fed, not the kind's chain head by assumption. A read → act
+// loop both of whose rounds are served by "slow" observes exactly once, naming
+// "slow".
+func TestObserveCarriesServingProvider(t *testing.T) {
+	forage := lookup(t, "forage")
+	h := drive(t, 4, []tool.Tool{readTool, forage},
+		map[string]Handler{"peek": readHandler("berries nearby"), "forage": landHandler("ok")},
+		respFrom("slow", "", call("r1", "peek", "{}")),
+		respFrom("slow", "", call("a1", "forage", "{}")),
+	)
+	if h.res.Term != TermLanded {
+		t.Fatalf("term = %q, want landed", h.res.Term)
+	}
+	if len(h.orch.observedP) != 1 {
+		t.Fatalf("observed %d times, want exactly 1", len(h.orch.observedP))
+	}
+	if h.orch.observedP[0] != "slow" {
+		t.Errorf("whole-loop observation named provider %q, want the serving provider slow", h.orch.observedP[0])
 	}
 }

@@ -308,10 +308,10 @@ type Orchestrator struct {
 
 	// recalibrate is invoked (in its own goroutine) when a provider's estimator
 	// first breaches the spike-rate threshold — the mind turns it into a
-	// cog.recalibration_recommended telemetry event. It still carries a Tier
-	// (the provider name cast) until the hook consumer moves per provider.
+	// cog.recalibration_recommended telemetry event. It carries the serving
+	// provider's name (spec 024 T009: the hook is per provider, not per tier).
 	recalMu     sync.Mutex
-	recalibrate func(tier Tier, estimate, spikeRate float64)
+	recalibrate func(provider string, estimate, spikeRate float64)
 }
 
 func New(cfg Config, st MeterStore) (*Orchestrator, error) {
@@ -344,7 +344,10 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 			health: &tierHealth{},
 			queue:  make(chan job, queueCap), prio: make(chan job, queueCap),
 			slots: slots,
-			est:   cognition.NewEstimator(cognition.SeedFor(nil, name)),
+			// Cold-start seed by pricing class (spec 024 R5): a zero-priced
+			// provider bootstraps local, a priced one cloud (SeedCalibration
+			// re-seeds from a recorded profile before traffic when present).
+			est: cognition.NewEstimator(cognition.SeedFor(nil, name, pc.zeroPriced())),
 		}
 	}
 	// Resolve each route's provider names to the live provider instances; the
@@ -371,12 +374,13 @@ func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
 
 // SeedCalibration re-seeds every provider's estimator from a calibration
 // profile (nil = keep bootstrap defaults), keyed by provider name — legacy
-// tier-keyed profiles keep matching the derived local/cloud providers. Called
-// once at daemon start, before traffic. (Pricing-class bootstrap fallback for
-// unprofiled v2 providers arrives with the calibration seam in US2.)
+// tier-keyed profiles keep matching the derived local/cloud providers by name.
+// A provider with no recorded entry bootstraps by its pricing class (zero-priced
+// → local constant, priced → cloud constant, spec 024 R5). Called once at daemon
+// start, before traffic.
 func (o *Orchestrator) SeedCalibration(p *cognition.Profile) {
 	for name, pv := range o.providers {
-		pv.est = cognition.NewEstimator(cognition.SeedFor(p, name))
+		pv.est = cognition.NewEstimator(cognition.SeedFor(p, name, pv.cfg.zeroPriced()))
 	}
 }
 
@@ -391,28 +395,52 @@ func (o *Orchestrator) ProviderNames() []string {
 	return out
 }
 
-// ResolveProvider names the provider a kind currently resolves to (FR-013): the
-// chain head this slice. The admissible-head walk and per-scene pinning arrive
-// in US3; the seam is stable now so the conversation layer can adopt it.
+// admissibleHead returns the chain candidate a kind currently resolves to: the
+// first provider whose breaker is closed and (if priced) whose wallet has not
+// hit the ceiling — the same stable admission the dispatch walk applies, minus
+// the transient queue/busy checks so the answer is a routing statement, not a
+// snapshot of momentary load. When every candidate is inadmissible it falls back
+// to the chain head (a routing seam must always name a provider). This is a pure
+// read: it uses the non-mutating breaker check (down()), never admit(), so the
+// mind may call it on every routing decision without consuming a half-open probe.
+func (o *Orchestrator) admissibleHead(rt route) *provider {
+	for _, p := range rt.chain {
+		if p.priced() && !o.meter.Allow() {
+			continue
+		}
+		if p.health.down() {
+			continue
+		}
+		return p
+	}
+	return rt.chain[0]
+}
+
+// ResolveProvider names the provider a kind currently resolves to (FR-013): a
+// dry chain-walk returning the current admissible head (research R3). The
+// conversation layer resolves a scene's provider once through this seam and pins
+// every turn to it, so a scene never switches voices mid-dialogue.
 func (o *Orchestrator) ResolveProvider(kind Kind) (string, error) {
 	rt, ok := o.routes[kind]
 	if !ok {
 		return "", fmt.Errorf("%w: %q", ErrUnknownKind, kind)
 	}
-	return rt.chain[0].name, nil
+	return o.admissibleHead(rt).name, nil
 }
 
 // EstimateForKind returns the serving provider's name and its live seconds-per-
 // point estimate for a kind — the cognition horizon's provider-granular seam
 // (FR-013), so a fast small model is never averaged with a slow quality model.
-// This slice returns the chain head; the admissible-head walk arrives in US3.
-// ok is false for an unknown kind.
+// It reports the CURRENT ADMISSIBLE chain head (deterministic: the first
+// candidate passing the breaker/wallet checks, falling back to the chain head
+// when none is admissible), so the mind budgets against the provider that would
+// actually serve the next call. ok is false for an unknown kind.
 func (o *Orchestrator) EstimateForKind(kind Kind) (string, float64, bool) {
 	rt, ok := o.routes[kind]
 	if !ok {
 		return "", 0, false
 	}
-	head := rt.chain[0]
+	head := o.admissibleHead(rt)
 	return head.name, head.est.Estimate(), true
 }
 
@@ -432,36 +460,42 @@ func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 		hook := o.recalibrate
 		o.recalMu.Unlock()
 		if hook != nil {
-			// The hook still carries a Tier; the provider name casts cleanly
-			// (legacy names are exactly "local"/"cloud", and the field is
-			// observational telemetry, not routing).
-			go hook(Tier(p.name), est, rate)
+			// The hook fires per provider: the breaching provider's own name
+			// rides the drift signal (observational telemetry, not routing).
+			go hook(p.name, est, rate)
 		}
 	}
 }
 
-// ObserveCognition reports one whole-cognition wall-time observation to the
-// tier estimator (TASK-52). It is the agent tool-use loop's replacement for
-// per-call worker feeding: the loop marks every internal Submit SkipObserve so
-// no fractional per-round samples reach the estimator, then reports the summed
-// loop duration here exactly once. Unknown kinds are ignored (no tier). Safe
-// for concurrent use — the estimator and hook lock are the same ones the
-// worker uses.
-func (o *Orchestrator) ObserveCognition(kind Kind, totalMillis int64) {
+// ObserveCognition reports one whole-cognition wall-time observation to a
+// provider's estimator (TASK-52). It is the agent tool-use loop's replacement
+// for per-call worker feeding: the loop marks every internal Submit SkipObserve
+// so no fractional per-round samples reach the estimator, then reports the summed
+// loop duration here exactly once. The observation feeds the NAMED serving
+// provider's estimator (spec 024 T009: the loop passes Response.Provider, so a
+// fallback that served a different provider than the chain head is measured on
+// the estimator that actually did the work); an empty name (or one that no
+// longer resolves) falls back to the kind's chain head. Unknown kinds are
+// ignored. Safe for concurrent use — the estimator and hook lock are the same
+// ones the worker uses.
+func (o *Orchestrator) ObserveCognition(kind Kind, provider string, totalMillis int64) {
 	rt, ok := o.routes[kind]
 	if !ok {
 		return
 	}
-	// The whole-cognition observation feeds the serving provider's estimator;
-	// this slice serves the chain head, so the head receives it (the explicit-
-	// provider ObserveCognition seam arrives in US2).
-	o.feedEstimate(rt.chain[0], kind, totalMillis)
+	p := rt.chain[0]
+	if provider != "" {
+		if pv, ok := o.providers[provider]; ok {
+			p = pv
+		}
+	}
+	o.feedEstimate(p, kind, totalMillis)
 }
 
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
 // hook runs in its own goroutine and must be idempotent per breach episode
 // — the estimator already fires once per breach.
-func (o *Orchestrator) SetRecalibrateHook(fn func(tier Tier, estimate, spikeRate float64)) {
+func (o *Orchestrator) SetRecalibrateHook(fn func(provider string, estimate, spikeRate float64)) {
 	o.recalMu.Lock()
 	o.recalibrate = fn
 	o.recalMu.Unlock()
