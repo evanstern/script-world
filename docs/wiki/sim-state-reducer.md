@@ -7,7 +7,8 @@ sources:
   - internal/sim/agents.go
   - internal/sim/recipes.go
   - internal/sim/miracles.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+  - internal/sim/journal.go
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Sim state & reducer
@@ -18,7 +19,12 @@ inventories (the v2 resource set, spec 012 — [[executor]])/memories (with
 `IdleSince` for the reflex grace, a `NearDeath`
 latch, a `Generation` interrupt counter and pending `Plan` steps for the
 [[cognition]] horizon — both `omitempty` so pre-TASK-32 snapshots stay
-byte-stable), structures (`fire`/`shelter`/`oven`/`chest`, fires carrying a
+byte-stable — plus, since spec 019 US3, a self-authored `Journal *Journal`
+(`journal.go`): a durable per-agent notebook mutated ONLY by the two `journal.*`
+Apply arms; an `omitempty` pointer on the Hail precedent, so a never-journaling
+agent stays byte-identical to a pre-019 snapshot; each `Memory` also now carries
+`omitempty` situated context `Where`/`Why`/`Conv`, byte-stable when absent),
+structures (`fire`/`shelter`/`oven`/`chest`, fires carrying a
 `FuelUntil`; chests (spec 013 US3) carrying a permanent `Owner` — the builder's
 agent index, zero-value round-tripping unambiguously since every chest has one —
 and a `Store *Inventory` capped at `chestCap` via the same derived `bulk()` used
@@ -82,9 +88,12 @@ storage goal's `Kind`/`Qty` onto the `Intent`, spec 013 R4, and also stamps
 `Agent.LastGoal`/`LastGoalTick` — spec 015 R1, `omitempty`, written here and
 never cleared by any event, so the [[tui-client]] villagers tab can show an
 idle villager's most recent objective from any snapshot; since spec 017 the
-payload's LAST field, `Job` (`omitempty`), carries the tool-use loop's job id
-when a planner-loop landing set it — reflex/executor-authored intents carry
-none, so those emissions marshal byte-identically to before), movement, work
+payload carries `Job` (`omitempty`), the tool-use loop's job id when a
+planner-loop landing set it, and since spec 019 the payload's LAST field,
+`Reason` (`omitempty`), the planner's free-text reason — copied onto
+`Intent.Reason` so it survives to completion, where the executor bakes it into
+the memory's `Why`; reflex/executor-authored intents carry neither `omitempty`
+tail, so those emissions marshal byte-identically to before), movement, work
 products (inventory + overlays + structures), eating (`agent.ate`'s `AtePayload`
 sets the absolute post-eat food need and decrements each carried food form by its
 consumed count — no reducer-side arithmetic), sleep, talk, needs (absolute
@@ -118,10 +127,24 @@ the `sim.gathering_observed` watch event (TASK-36) — dispatch to
 fields: after checking the payload's `State.Seed` matches (a mismatched payload
 no-ops, keeping `Apply` total), it replaces `*s` wholesale with the embedded state —
 [[world-migration]] is the only producer.
-`agent.memory_added` additionally bumps `Agent.Generation` when the memory's
+`agent.memory_added` copies the payload's situated context — `Where`/`Why`/`Conv`,
+all `omitempty` — verbatim onto the appended `Memory` (spec 019: baked at
+emission, never re-derived at render or replay, so live and replay agree), and
+additionally bumps `Agent.Generation` when the memory's
 salience is at or above `GenerationBumpSalience` (9) — in-flight thoughts
 snapshotted under the old generation are superseded at landing ([[cognition]],
-[[sim-loop]]). The plan family maintains `Agent.Plan`: `agent.plan_set`
+[[sim-loop]]). The journal family (spec 019 US3) is the agent notebook's only
+mutation path and, unlike the cognition telemetry types below, does mutate state:
+`journal.entry_written` appends a reducer-id'd `JournalEntry` via `appendEntry`,
+which enforces the per-agent `journalBudgetRunes` (4000) rune budget INSIDE
+`Apply` — the budget participates in the accept/reject decision, so the
+`InjectSocial` dry-run turns an over-budget append into a door rejection rather
+than trusting handler courtesy (Principle III, the same door-facing gate the
+miracle dry-run uses — [[agent-mind]]); `journal.entry_deleted`
+removes an entry by id (ids never reused or renumbered, freed runes reclaimable),
+a missing id erroring. The budget lives here as a version-stable sim constant,
+not config, so a replay can never reject an event that landed live. The plan
+family maintains `Agent.Plan`: `agent.plan_set`
 replaces the steps, `agent.plan_step_started` pops the head, and
 `agent.plan_expired` clears the whole remaining plan (a broken sequence is
 not resumed). The hail family (TASK-47) maintains `Agent.Hail *AgentHail`
@@ -152,7 +175,9 @@ verification and the determinism tests. Wall-clock time never appears in state.
 [[sim-loop]] generates events via the [[executor]] and applies them here;
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
 [[event-types]] lists every payload struct (the cognition-horizon payloads
-live in sibling files `cognition.go`, `guard.go`, and `plan.go`); [[world-migration]]
+live in sibling files `cognition.go`, `guard.go`, and `plan.go`; the `Journal`
+type, its rune budget, and the two `journal.*` payloads live in `journal.go`);
+[[world-migration]]
 is the sole producer of `world.migrated`; [[metatron-miracles]] covers the
 miracle payload shapes, cost table, and the `rebaseTicks` shift-semantics
 taxonomy `applyTimeSnapped` uses.

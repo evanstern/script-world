@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Social fabric
@@ -62,7 +62,13 @@ at `theftMemoryTone` (−60) regardless of distance — a `TellableFor` gossip s
 the same any-distance exemption a chest owner's "my things were taken" grievance
 needs to travel; and every living, awake villager within `witnessRadius` (8) of
 the chest, excluding the taker and the owner (who already has the stronger
-any-distance memory), gets its own witness memory at the same tone. A
+any-distance memory), gets its own witness memory at the same tone. Since spec
+019 (US1) both are built through `situatedMemoryAboutEvent` (memory.go) rather
+than the bare `memoryAboutEvent`, so each carries a `Where` situated by the
+rememberer's OWN tile — `PlaceAt(s, owner.X, owner.Y)` for the owner,
+`PlaceAt(s, witness.X, witness.Y)` for each witness (a witness remembers where
+it stood, not where the chest was). Witness memories carry no `Why` — the
+witness did not drive the act ([[agent-mind]]'s situated-memory grammar). A
 dead owner still gets the record, the relation delta, and the witness memories —
 only the owner's own memory is skipped (the dead don't remember; the village
 does). Owner withdrawing from their own chest emits `agent.withdrew` alone, no
@@ -87,7 +93,15 @@ call returns gist, 1–3 topic tags, per-participant tones (the pre-TASK-22
 ONE atomic `inject_social` batch — turns, summary, and per participant×counterpart
 fodder: a gist memory **about** the counterpart (subject-tagged, toned ×30 — a
 `TellableFor` gossip seed) and a tone edge per pair, reason-tagged with the first
-topic; at most one rumor between the founding pair. The scene's terminal
+topic; at most one rumor between the founding pair. Since spec 019 (US2) each
+gist memory carries two situating fields set directly on the payload: `Where`
+(`PlaceAt` on the remembering agent's own tile in the mind replica) and `Conv`
+(`cc.conv`, the founding-talk tick that keys every `social.conversation_turn` of
+the scene), so the full transcript is recoverable from the memory alone via the
+log. The gist TEXT is left unchanged — no where/why clause is spliced into a
+conversation memory (unlike executor-emitted memories, [[agent-mind]]); the
+`Conv` ref IS its situating, and the scribe renders it as a `· [conv <id>]`
+suffix. The scene's terminal
 `cog.outcome{landed}` rides the same batch — the scene and its record land
 atomically. Landing is also staleness-enforced (TASK-32): a completed scene
 whose wall time overran the conversation class's budget in ticks (the router

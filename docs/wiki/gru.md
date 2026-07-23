@@ -4,7 +4,7 @@ description: The nocturnal sight-triggered predator — an event-sourced entity 
 kind: component
 sources:
   - internal/sim/gru.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # The gru
@@ -52,7 +52,12 @@ names "the gru" as the cause when the last wound was recent (`LastVictim` /
 as gossip — a witnessed attack becomes a village-wide rumor with mutating
 confidence. Any awake agent within sight range — safe ones by the fire included —
 gets one `gru.sighted{agent, x, y}` plus an omen memory per night (a `Seen`
-bitmask on the `Gru` struct latches it). [[event-types]] catalogs the family.
+bitmask on the `Gru` struct latches it). Sighting, attack, and witness memories
+are situated (spec 019): each is built with `situatedMemoryEvent`/
+`situatedMemoryAboutEvent` and `Where` set to the remembering agent's own tile
+at the moment of the memory (the sighter's or victim's tile for sighting/attack,
+the witness's own tile for the witness memory) — not the gru's position.
+[[event-types]] catalogs the family.
 
 ## Connections
 

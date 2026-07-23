@@ -10,8 +10,9 @@ sources:
   - internal/sim/gru.go
   - internal/sim/loop.go
   - internal/sim/miracles.go
+  - internal/sim/journal.go
   - internal/daemon/daemon.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Event types
@@ -31,7 +32,13 @@ zero-bulk give guard, inventory death-spill) that a v2 replay under this build w
 get wrong; the format gate shields old logs from the new semantics. A v1 world
 cannot boot under this build — it must run `promptworld migrate` first
 ([[world-migration]]), chaining 1→2→3 in one run; its sole output event,
-`world.migrated`, is also cataloged here.
+`world.migrated`, is also cataloged here. Spec 019 (grounded memories — situated
+episodic memories + agent journal) adds **no** format bump: every addition is
+`omitempty`, byte-stable against pre-019 logs. `MemoryAddedPayload` gains
+situated context (`where`/`why`/`conv`), `IntentSetPayload` gains `reason`
+(carried onto the intent so the executor can bake it into a memory's `why` at
+completion), and TWO new whitelisted event types — `journal.entry_written` /
+`journal.entry_deleted` — drive the agent-authored journal ([[agent-mind]]).
 
 ## How it works
 
@@ -44,7 +51,7 @@ cannot boot under this build — it must run `promptworld migrate` first
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
 | `sim.day_started` / `sim.night_started` | `DayPayload{day}` | executor, 06:00/22:00 | `Night` flag only — waking is explicit |
 | `sim.forage_regrown` | `RegrownPayload{x, y}` | executor, regrow tick | harvest overlay removed |
-| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res, source, kind?, qty?, job?}` | reflex (grace-gated), planner injection, or a plan step firing | intent installed; `source` (`reflex`/`planner`/`plan`/`meeting`) says which mind chose it; also stamps `Agent.LastGoal`/`LastGoalTick` (spec 015 — never cleared by any event, the villagers tab's past-objective line, [[tui-client]]); `job` (spec 017, omitempty, LAST field) is set ONLY at the `inject_intent` landing site from `InjectArgs.JobID` — a planner-loop landing carries its job id, reflex/executor-authored intents carry none, so pre-feature and reflex/executor emissions marshal byte-identically |
+| `agent.intent_set` | `IntentSetPayload{agent, goal, target, res, source, kind?, qty?, job?, reason?}` | reflex (grace-gated), planner injection, or a plan step firing | intent installed; `source` (`reflex`/`planner`/`plan`/`meeting`) says which mind chose it; also stamps `Agent.LastGoal`/`LastGoalTick` (spec 015 — never cleared by any event, the villagers tab's past-objective line, [[tui-client]]); `job` (spec 017, omitempty) is set ONLY at the `inject_intent` landing site from `InjectArgs.JobID` — a planner-loop landing carries its job id, reflex/executor-authored intents carry none; `reason` (spec 019, omitempty, now the LAST field) is likewise set ONLY at that landing site from `InjectArgs.Reason` — the planner's free-text reason, copied onto `Intent.Reason` by the reducer so it survives to completion where the executor bakes it into a memory's `why`; both `omitempty` tails stay empty on reflex/executor emissions, so those marshal byte-identically to pre-feature |
 | `agent.work_started` | `WorkStartedPayload{agent, tick}` | executor at target | `WorkStart` stamped |
 | `agent.intent_done` | `AgentPayload{agent}` | executor (done/invalid/unreachable) | intent cleared |
 | `agent.moved` | `AgentMovedPayload{agent, x, y}` | executor pathing | position updated |
@@ -68,8 +75,10 @@ cannot boot under this build — it must run `promptworld migrate` first
 | `agent.needs_changed` | `NeedsPayload{agent, …}` | per-game-minute heartbeat | needs set to absolute values |
 | `agent.died` | `DiedPayload{agent, cause}` | heartbeat at 0 health | `Dead`, intent cleared; spec 013 (US2, FR-006, research R7): the agent's entire carried inventory spills into a pile at the death tile (created/merged, food batches stamped `tick + rotWindowTicks`), emptying `Inv` — reducer-internal, no new event |
 | `agent.talked` | `TalkedPayload{a, b}` | executor, adjacent pair (chat-while-working) | +morale both, talk cooldown; both remember |
-| `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone}` | executor heuristics; convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds ([[agent-mind]], [[social-fabric]]) |
+| `agent.memory_added` | `MemoryAddedPayload{agent, text, salience, subject, tone, where?, why?, conv?}` | executor/social/governance/gru heuristics (situated by the acting-or-witnessing agent's tile); convo gists (injected) | append to `Memories`; subject/tone mark gossip seeds; spec 019 (US1) copies the situated context verbatim onto the reduced `Memory` — `where` (`*MemoryPlace{x,y,desc}`, the tile plus a `describePlace`-baked terrain/feature phrase, nil = unsituated), `why` (the driving intent's `Reason`, verbatim; witness memories carry none), `conv` (a conversation ref = founding-talk tick, set by convo gists) — all `omitempty`, so a pre-019 payload reduces to a pre-019-shaped memory (baked at emission, never re-derived, [[agent-mind]], [[social-fabric]]) |
 | `agent.thought` | `ThoughtPayload{agent, text, source}` | `inject_intent` command (planner); `inject_social` (musing) | none (chronicle material) |
+| `journal.entry_written` | `JournalWrittenPayload{agent, text}` (`journal.go`) | mind journal tool (`write_journal_entry`, injected via `InjectSocial` — spec 019 US3) | the ONLY journal-growth path: appends a reducer-id'd `JournalEntry{id, tick, text}` to the agent's `Journal` via `appendEntry`, which enforces the per-agent `journalBudgetRunes` (4000) rune budget INSIDE `Apply` — the `InjectSocial` dry-run turns an over-budget append into a door rejection, so no over-budget event lands (SC-005, [[agent-mind]]) |
+| `journal.entry_deleted` | `JournalDeletedPayload{agent, entry}` (`journal.go`) | mind journal tool (`delete_from_journal`, injected) | removes the entry with that id from the agent's `Journal` (survivor order preserved, ids never reused or renumbered so freed runes are immediately reclaimable); a missing id errors at the door |
 | `daemon.started` / `daemon.stopped` | `DaemonStartedPayload` / `DaemonStoppedPayload` | daemon lifecycle | none |
 | `social.*` family | see `specs/003-social-fabric/contracts/social-events.md` | executor rules, genesis, convo driver (injected) | edges, ledger, rumors, secrets; `social.conversation` appends the bounded record ring (TASK-22, [[social-fabric]]); `social.gave` (spec 013 US1) is additionally skipped by the executor when the receiver has zero free bulk and the reducer clamps defensively (never over `bulkCap`) |
 | `social.chest_taken` | `ChestTakenPayload{owner, taker, x, y}` (`social.go`) | executor, same batch as a non-owner `agent.withdrew` (spec 013 US4, FR-011) | none beyond the record itself — the distinct taking happening; chronicle/TUI material ([[social-fabric]]) |

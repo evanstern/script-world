@@ -9,9 +9,10 @@ sources:
   - internal/sim/miracles_test.go
   - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
+  - internal/mind/replay_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 8a5604f0e875b4475193b05458871dc1490e8cc8
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Testing strategy
@@ -63,6 +64,20 @@ over 30k ticks → byte-identical event sequences and equal state hashes; differ
 seeds diverge; replaying the logged events over genesis (then re-living the quiet
 tail) reproduces the live state hash exactly; the day/night cycle behaves (nobody
 moves at night).
+
+**Loop-era replay determinism** (`internal/mind/replay_test.go`): a real `Loop` +
+`loopMind` pair proves live-vs-replay byte identity above the pure-reducer layer.
+`TestLoopRunReplayByteIdenticalSC002` (TASK-52, SC-002) drives cognitions, tool
+calls, and a muse through the real loop, then asserts a from-genesis replay
+reproduces the identical `State` with the model seam invoked zero times.
+`TestJournalAndSituatedReplayByteIdentical` (spec 019 US4, T019, SC-003) extends
+this to the grounded-memories feature: injected situated memories (place/why,
+place/conv), a journal write→write→delete cognition sequence, and a scripted
+over-budget write that the gate refuses (landing nothing but a rejected
+`cog.tool_call`) — genesis replay reproduces the identical `State` *and*
+byte-identical rendered `soul.md`/`journal.md` over both live and replayed
+state, with the model seam invoked exactly once per live cognition and zero
+times during replay.
 
 **IPC integration** (`internal/ipc/ipc_test.go`): a real loop + server + store on a
 temp world. Proves: status round trip <2 s; subscribe-from-zero delivers strictly
@@ -129,8 +144,9 @@ writer vs IPC readers — now atomic).
 Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
 [[ipc-server]]/[[ipc-client]] (integration), and [[cli-promptworld]]/
 [[daemon-lifecycle]] (e2e). [[metatron-miracles]] covers the reducer arms and
-doors these suites exercise. Manual validation results live in
-`specs/001-world-daemon/quickstart-results.md`.
+doors these suites exercise. [[agent-mind]]/[[tool-loop]] are what the
+loop-era replay suite drives through a real `Loop` + `loopMind`. Manual
+validation results live in `specs/001-world-daemon/quickstart-results.md`.
 
 ## Operational notes
 

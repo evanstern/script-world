@@ -8,7 +8,8 @@ sources:
   - internal/sim/plan.go
   - internal/sim/terrain.go
   - internal/sim/recipes.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+  - internal/sim/memory.go
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Executor
@@ -225,7 +226,22 @@ hails exactly as a planner landing does. The ambient beat's talk founding is
 shared with the sweep via `talkEvents` (`executor.go`).
 
 The executor also emits `agent.memory_added` events from the salience table in
-`memory.go` ([[agent-mind]]) alongside memorable happenings, and regenerates
+`memory.go` ([[agent-mind]]) alongside memorable happenings — and since spec 019
+(US1) every one is *situated*. The emission sites now go through the situated
+constructors (`situatedMemoryEvent`/`situatedMemoryToned`/`situatedMemoryAboutEvent`,
+`memory.go`; T008b removed the pre-019 bare `memoryEvent`/`memoryEventToned`/
+`memoryAboutEvent` once every site had migrated, so no sim memory can be emitted
+unsituated). Each bakes a `Where` — the acting-or-witnessing agent's tile via
+`PlaceAt` → `describePlace`, a deterministic Manhattan-radius nearest-feature scan
+that names a station ("the fire") or terrain ("the woods") — and, for a driven
+personal act, a `Why` (the completing intent's `Reason`, `""` for reflex/witness)
+into the `MemoryAddedPayload`, and composes both into the memory text via
+`situateText`; the [[chronicle]]/scribe render what the payload carries with no
+re-derivation, so replay is byte-identical. Build completions situate through
+`placeForBuild`, which excludes the just-built structure kind from the scan so
+"Built a fire" resolves to the tile as it was ("at the woods (x,y)"), never
+"at the fire" (T024). Gossip/witness memories carry no `Why` — a witness did not
+drive the act. It also regenerates
 Metatron's nudge charges (`metatron.charge_regenerated` at absolute 6-game-hour
 tick boundaries while below the cap — [[metatron]]); its reflex fires only
 on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the

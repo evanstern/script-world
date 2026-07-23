@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Sim loop
@@ -87,7 +87,11 @@ world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
    rejected the nine spec-012 verbs — FR-012, the migration's sole behavioral
    delta; missing `Until` defaults to `state.Tick + PlanDefaultWindowTicks`)
    and recorded as `agent.plan_set`; a `resolveGoal` failure is itself
-   `rejected-guard`. A
+   `rejected-guard`. Since spec 019 (R2), a non-empty `InjectArgs.Reason` also
+   rides onto the landed `agent.intent_set` event's `Reason` field (reflex-
+   and executor-authored intent_set events carry none), so the planner's
+   free-text reason survives to completion as recorded input rather than a
+   second event. A
    successful `talk_to` landing with a `hailable` target additionally emits
    `social.hailed` (in- or out-of-radius — the courtesy pause is uniform;
    [[executor]] enforces it and resolves met/expiry).
@@ -114,10 +118,13 @@ the four `metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`
 their reducer arms enforce presence/destination/charge before anything lands,
 the whitelist is only the isolation boundary — `meeting.proposal_rephrased` swaps
 an enacted norm's text and nothing else,
-and the `cog.*` telemetry — `cog.thought`, `cog.outcome`,
+the `cog.*` telemetry — `cog.thought`, `cog.outcome`,
 `cog.recalibration_recommended`, and (since spec 017) `cog.tool_call` (the
 tool-use loop's per-call trace, [[tool-loop]]) — is whitelisted as reducer
-no-ops so the [[cognition]] layer's observability is recorded, never silent):
+no-ops so the [[cognition]] layer's observability is recorded, never silent,
+and (since spec 019, US3) `journal.entry_written`/`journal.entry_deleted` —
+the two mind-injectable journal mutations, whose reducer dry-run enforces the
+rune budget (written) and entry existence (deleted) before either lands):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
 nudge, miracle, phrasing, or telemetry effects, dry-run on a state copy before
 applying — the dry-run probe is reconstructed from bytes and so carries no

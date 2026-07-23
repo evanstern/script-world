@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/governance.go
   - internal/mind/meeting.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Governance (norms and votes)
@@ -67,7 +67,12 @@ vote). Proposer always yea; yea iff score ≥ 0; strict majority passes, ties
 fail. `meeting.proposal_resolved` carries the denormalized proposal + per-voter
 positions; its reducer enacts/amends/repeals `State.Norms` and applies pairwise
 voter edge deltas (aligned +affection, opposed −trust) reducer-internally.
-Attendees remember outcomes (subject-tagged, toned — gossip seeds).
+Attendees remember outcomes (subject-tagged, toned — gossip seeds). Since spec
+019, the turn-taken speaking memory, the proposer's pass/fail outcome memory,
+each voter's outcome memory, and an exiled target's cast-out memory are all
+situated: each is built with `situatedMemoryEvent`/`situatedMemoryAboutEvent`
+and `Where` set to the remembering agent's own tile at meeting time (speaker,
+proposer, each voter, or the exiled target respectively).
 
 **Teeth**: norms are a closed vocabulary (`curfew`, `repay_debts`, `exile`)
 because only observable behavior can be judged. Detectors are deterministic and
@@ -82,8 +87,9 @@ law keeps enforcing it even before any convention exists;
 repay-debts piggybacks the hourly due-check's `promise_broken`; exile-defiance
 fires when the exile lingers near the village (latch hourly). `norm.violated`
 appends the norm's bounded violation ring (amend/repeal fodder) and moves
-witness→violator edges; companion witness memories are `TellableFor`-eligible,
-so violations become rumors with zero new machinery. Agents are *not*
+witness→violator edges; companion witness memories (situated since spec 019,
+`Where` the witness's own tile) are `TellableFor`-eligible, so violations
+become rumors with zero new machinery. Agents are *not*
 hard-enforced: norms enter planner context as a "Village law" block
 (`prompt.go`), and obey/skirt/defy is persona; the [[reflex-policy]] stays
 norm-blind so defiance survives degraded mode.

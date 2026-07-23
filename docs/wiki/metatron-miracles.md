@@ -9,7 +9,7 @@ sources:
   - internal/metatron/toolcalls.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
 ---
 
 # Metatron's miracles
@@ -102,8 +102,14 @@ classified SHIFT or KEEP in its doc comment:
   `Debt.Due`, `Gru.LastAttack`, `Meeting.OpenedTick`, `Meeting.GatherStart`.
 - **KEEP** — a historical timestamp or an identity/counter; rewriting it would
   rewrite history or break a reference. `Agent.Generation`, `Agent.LastGoalTick`,
-  `Memory.Tick`, `Belief.Tick`, `ChronicleEntry.Tick`/`Day`/`FromTick`/`ToTick`,
+  `Memory.Tick`, `Memory.Conv` (spec 019: a conversation-ref identity, the same
+  founding-talk tick as `ConvoRecord.Conv` — an identity, not a duration anchor),
+  `JournalEntry.Tick` (spec 019: when the entry was written, a historical
+  timestamp), `Belief.Tick`, `ChronicleEntry.Tick`/`Day`/`FromTick`/`ToTick`,
   and every other identity/history field — see the doc comment for the full list.
+  `TestRebaseTaxonomyComplete` caught both spec-019 additions as new
+  tick-anchored `int64` fields requiring classification, confirming the taxonomy
+  guard holds across features outside miracles' own spec.
 
 `TestRebaseTaxonomyComplete` (`internal/sim/miracles_test.go`) is the taxonomy guard:
 it fails the build when a new tick-anchored `int64` field appears in the state
