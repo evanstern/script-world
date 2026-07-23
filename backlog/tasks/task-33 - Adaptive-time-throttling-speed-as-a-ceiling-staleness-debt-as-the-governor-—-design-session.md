@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-20 20:48'
-updated_date: '2026-07-23 20:55'
+updated_date: '2026-07-23 21:24'
 labels:
   - design
 dependencies:
@@ -63,4 +63,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · Us
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 0/2 · Polish & Cross-Cutting Concerns: 0/3
 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 2/2 · Polish & Cross-Cutting Concerns: 0/3
+
+Implementation complete (2026-07-23): all four stories + T016/T017 polish proven; PR #55 open (https://github.com/evanstern/promptworld/pull/55) — 15 commits on task-33-adaptive-throttle. Live validation captured real shed {32x→16x, debt 1.29, jobs 5} and recovery on gemma4:12b-mlx; full suite + replay byte-identity + no-format-bump gates green. Remaining before Done: merge PR, then T018 (wiki re-pin + player-docs + final sync + worktree cleanup). Follow-up filed: TASK-83 (pre-existing gofmt drift found by the T017 gate).
 <!-- SECTION:NOTES:END -->
