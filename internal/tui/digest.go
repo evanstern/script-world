@@ -19,10 +19,12 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
 	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 )
@@ -91,6 +93,14 @@ func join(parts ...[]seg) []seg {
 	return out
 }
 
+// debtPercent expresses a measured governor debt (a budget-fraction sum,
+// spec 028 FR-001) as a whole percent of cognition.ShedThreshold, rounded to
+// the nearest percent — the shared arithmetic behind both the header's
+// governed-speed suffix (views.go) and the governor digest lines below.
+func debtPercent(debt float64) int {
+	return int(math.Round(debt / cognition.ShedThreshold * 100))
+}
+
 // gratisMark appends a visible " (forced)" annotation when a miracle's
 // Gratis flag waived its charge (internal/sim/miracles.go) — the operator
 // force spec 016 SC-004 requires stay enumerable must be visible in the
@@ -147,6 +157,30 @@ var digestRegistry = map[string]digestFunc{
 		return join([]seg{txt("degraded ")}, labeled(fmt.Sprintf("rate=%.2f", p.EffectiveRate))), true
 	},
 	"clock.recovered": func(e store.Event, names []string) ([]seg, bool) { return []seg{txt("recovered")}, true },
+	// clock.governor_shed / clock.governor_recovered (spec 028 FR-008): the
+	// governor's speed-ladder decisions, one line each in the clock.degraded
+	// line's style — the notch transition plus the debt/jobs arithmetic that
+	// justified it (contracts/status-protocol.md "TUI" §). requested is
+	// omitted here (unlike the header) since from→to already carries the
+	// interesting delta and every other clock.* digest row stays this terse.
+	"clock.governor_shed": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.GovernorPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("governor shed "), emph(string(p.From) + "→" + string(p.To)), txt(" "),
+		}, labeled(fmt.Sprintf("debt=%d%%", debtPercent(p.Debt)), fmt.Sprintf("jobs=%d", p.Jobs))), true
+	},
+	"clock.governor_recovered": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.GovernorPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("governor recovered "), emph(string(p.From) + "→" + string(p.To)), txt(" "),
+		}, labeled(fmt.Sprintf("debt=%d%%", debtPercent(p.Debt)), fmt.Sprintf("jobs=%d", p.Jobs))), true
+	},
 	// daemon.started/stopped: "labeled dump of payload fields" (contract §3)
 	// — verified against internal/daemon/daemon.go's appendDaemonEvent calls.
 	"daemon.started": func(e store.Event, names []string) ([]seg, bool) {

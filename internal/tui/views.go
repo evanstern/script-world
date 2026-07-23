@@ -111,12 +111,32 @@ func (m Model) headerView() string {
 	if c.Paused {
 		state = stylePaused.Render("PAUSED")
 	}
-	line := fmt.Sprintf("%s — tick %d · %s · %s · speed %s (%.1f t/s)",
-		name, c.Tick, c.GameTime, state, c.Speed, c.EffectiveRate)
+	speedSeg := fmt.Sprintf("speed %s (%.1f t/s)", c.Speed, c.EffectiveRate)
+	if c.RequestedSpeed != "" && c.RequestedSpeed != c.Speed {
+		speedSeg += " " + governedSpeedSuffix(c.RequestedSpeed, c.GovernorDebt, c.GovernorJobs)
+	}
+	line := fmt.Sprintf("%s — tick %d · %s · %s · %s",
+		name, c.Tick, c.GameTime, state, speedSeg)
 	if c.Degraded {
 		line += " " + styleErr.Render("[degraded]")
 	}
 	return styleHeader.Render(line)
+}
+
+// governedSpeedSuffix renders the plain-language annotation the header's
+// speed segment gains while the governor holds effective speed below the
+// player's requested ceiling (spec 028 FR-015, US4-AC1) — e.g. "asked 32x —
+// 3 minds in flight, debt 140%". Ungoverned worlds never call this (the
+// caller gates on RequestedSpeed being set and differing from Speed), so
+// their header renders byte-identically to pre-028. debt is expressed via
+// the shared debtPercent (digest.go) — a whole-percent fraction of
+// cognition.ShedThreshold, rounded to the nearest percent.
+func governedSpeedSuffix(requested string, debt float64, jobs int) string {
+	mind := "minds"
+	if jobs == 1 {
+		mind = "mind"
+	}
+	return fmt.Sprintf("asked %s — %d %s in flight, debt %d%%", requested, jobs, mind, debtPercent(debt))
 }
 
 func (m Model) tabsView() string {

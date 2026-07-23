@@ -195,9 +195,9 @@ func (s *Server) statusData(cs sim.Status) StatusData {
 			EffectiveRate:   cs.EffectiveRate,
 			Degraded:        cs.Degraded,
 			MetatronCharges: cs.MetatronCharges,
-			// RequestedSpeed folds from the sim-state ceiling once US2 (T007)
-			// adds the field to sim.Status; this US1 slice leaves it empty
-			// (ungoverned) — omitempty keeps the pre-028 byte shape.
+			// RequestedSpeed folds from the sim-state ceiling (spec 028 US2);
+			// empty/omitempty when ungoverned keeps the pre-028 byte shape.
+			RequestedSpeed: string(cs.RequestedSpeed),
 		},
 		Daemon: DaemonStatus{
 			Pid:           os.Getpid(),
