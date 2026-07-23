@@ -860,4 +860,21 @@ var digestRegistry = map[string]digestFunc{
 			fmt.Sprintf("spikes=%.2f", p.SpikeRate), fmt.Sprintf("window=%d", p.Window),
 		), true
 	},
+	// cog.tool_call: Args and SnapshotTick are deliberately elided — the
+	// detail pane bounds them, same reasoning as world.migrated's elided
+	// state.
+	"cog.tool_call": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.CogToolCallPayload](e)
+		if !ok {
+			return nil, false
+		}
+		pairs := []string{
+			"job=" + p.Job, fmt.Sprintf("ord=%d", p.Ordinal), "tool=" + p.Tool,
+			p.Verdict, "tier=" + p.Tier,
+		}
+		if p.Reason != "" {
+			pairs = append(pairs, "reason="+p.Reason)
+		}
+		return labeled(pairs...), true
+	},
 }
