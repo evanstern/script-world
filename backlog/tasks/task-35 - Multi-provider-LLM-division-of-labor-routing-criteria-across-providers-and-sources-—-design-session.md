@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 16:06'
+updated_date: '2026-07-23 16:40'
 labels:
   - engine
   - llm
@@ -48,9 +48,9 @@ Spec: specs/024-provider-routing
 - [x] #4 Spec phase: Setup
 - [x] #5 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #6 Spec phase: User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP
-- [ ] #7 Spec phase: User Story 2 — Division of labor: per-provider speed truth (Priority: P2)
-- [ ] #8 Spec phase: User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3)
-- [ ] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
+- [x] #7 Spec phase: User Story 2 — Division of labor: per-provider speed truth (Priority: P2)
+- [x] #8 Spec phase: User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3)
+- [x] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
 - [ ] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
 - [ ] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
 - [ ] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
@@ -78,4 +78,8 @@ AC-3 proven: follow-on implementation cut from the design as spec 024's tasks.md
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 0/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 0/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 0/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/3
 
 Slice 1 (Opus 4.8, T001-T007) landed on the branch: commits 636df4e (registry generalization T002-T004) + a80b0b8 (equivalence/validation/chain-head tests T005-T007). T001 baseline: pre-change go test -race ./... fully green, 20 packages, no flakes. Post-slice: full -race suite green (uncached), go vet clean; orchestrator-session spot-check re-ran internal/llm green. Two spec-directed deviations accepted by gate review: budget gating keys on pricing class not tier identity (FR-009/decision-5), reasoning-effort nil-default keys on pricing class (data-model). Chain-walking, estimator seeding, attribution, leases, surface polish deliberately deferred to their slices.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 0/2 · Polish for the engine slices (Opus tier wrap-up): 0/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4
+
+Slice 2 (Opus 4.8, T008-T012) landed: 21477a3 (per-provider estimators + calibration seam), a4e1f47 (chain-walk fallback + scene pinning), dffc8e3 (spend attribution). Full -race suite green incl. unmodified legacy-equivalence suite; orchestrator spot-check re-ran llm/toolloop/cognition green. Gate ruling on the implementer's open question: v2-registry calibration in calibrate.go is real scope, added explicitly as T020 [US6] on the Sonnet slice (pin mechanism from slice 1 makes it view-layer work); legacy worlds already calibrate correctly via derived provider names. Remaining: US5 leases + engine polish (slice 3, Opus), US6 surfaces incl. T020 (slice 4, Sonnet).
 <!-- SECTION:NOTES:END -->

@@ -103,11 +103,11 @@ chain-head estimates.
 
 **Independent Test**: quickstart §3 (live) + estimator tests.
 
-- [ ] T008 [P] [US2] internal/cognition/calibration.go: key `SeedFor` by provider name
+- [x] T008 [P] [US2] internal/cognition/calibration.go: key `SeedFor` by provider name
   with pricing-class bootstrap fallback (zero-priced → local constant, priced → cloud
   constant) per research.md R5; legacy profile keys `local`/`cloud` keep matching by
   name; update cmd/promptworld/calibrate.go to write per-provider profile entries
-- [ ] T009 [US2] Orchestrator estimator seam in internal/llm/llm.go: per-provider
+- [x] T009 [US2] Orchestrator estimator seam in internal/llm/llm.go: per-provider
   estimators seeded via `SeedCalibration`; `EstimateForKind(kind)` returns the current
   admissible chain head's name + estimate (deterministic, falls back to chain head when
   none admissible); `ObserveCognition(kind, provider, millis)` feeds the named serving
@@ -128,7 +128,7 @@ pinning in the conversation layer.
 
 **Independent Test**: quickstart §4–§5.
 
-- [ ] T010 [US3] Chain-walk admission in internal/llm/llm.go per data-model.md: walk
+- [x] T010 [US3] Chain-walk admission in internal/llm/llm.go per data-model.md: walk
   skips only circuit-open / wallet-exhausted (priced) / queue-full (best-effort
   additionally requires idle slot + empty queues per candidate); `Response.Skipped`
   records ordered `{Provider, Reason}`; all-inadmissible returns the head's refusal
@@ -137,7 +137,7 @@ pinning in the conversation layer.
   post-dispatch failure is final (no re-dispatch). Tests in internal/llm/llm_test.go for
   each skip reason, walk order, no_fallback refusal, pin admission, and no-redispatch
   under `-race`
-- [ ] T011 [US3] Scene pinning in internal/mind/convo.go: resolve the scene's provider
+- [x] T011 [US3] Scene pinning in internal/mind/convo.go: resolve the scene's provider
   once at scene start via `ResolveProvider(KindConversation)` and stamp
   `Request.Provider` on both conversation Submit sites (convo.go:417, convo.go:465 —
   the scene struct carries the pin); mid-scene failure flows into the TASK-42 tolerance
@@ -155,7 +155,7 @@ pinning in the conversation layer.
 
 **Independent Test**: quickstart §6.
 
-- [ ] T012 [US4] internal/llm/meter.go per research.md R4: `Add(provider, cost)` writes
+- [x] T012 [US4] internal/llm/meter.go per research.md R4: `Add(provider, cost)` writes
   the unchanged total key AND `llm_spend_YYYY-MM:<provider>` under one lock; `Snapshot`
   returns per-provider attribution; month rollover clears both; legacy months surface
   the total-minus-attributed remainder as unattributed. Tests: Σ(providers) +
@@ -222,6 +222,13 @@ contended surfaced.
   with two local providers): capture the one-shot naming each expected provider, a
   forced-fallback skip reason, and the TUI table; record evidence in task-35 board notes
 
+- [ ] T020 [US6] v2-registry calibration in cmd/promptworld/calibrate.go: replace the
+  legacy `--tier local|cloud|all` iteration with iteration over the declared providers
+  (legacy configs iterate their two derived providers — unchanged UX), pinning each
+  reference call via `Request.Provider` and writing one profile entry per provider name
+  (the shape `cognition.SeedFor` already reads, slice-2 seam comment marks the site);
+  `--provider <name>` narrows to one. Tests: a v2 three-provider config produces three
+  named profile entries; legacy config output is byte-identical to today's
 ---
 
 ## Dependencies & Execution Order
