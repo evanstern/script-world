@@ -237,13 +237,13 @@ contended surfaced.
 mid-implementation; research.md R9 records the composition rulings. Opus tier
 (toolloop/llm concurrency + conflict-bearing rebase).
 
-- [ ] T021 Rebase task-35-provider-routing onto origin/main across the spec-025 merge
+- [x] T021 Rebase task-35-provider-routing onto origin/main across the spec-025 merge
   and reconcile internal/llm/config.go: the v2 registry Config keeps
   `MaxTokens *TokenBudgets` + normalizer methods and `LoopMaxRounds` top-level in both
   shapes, shape-aware MarshalJSON round-trips them byte-for-byte (omitempty preserved),
   legacy derivation untouched by them; re-run the full -race suite including spec 025's
   retry/token tests and the legacy-equivalence suite
-- [ ] T022 Run-level provider pinning in internal/toolloop/loop.go per research.md R9 /
+- [x] T022 Run-level provider pinning in internal/toolloop/loop.go per research.md R9 /
   FR-008 extension: resolve ResolveProvider(kind) once at Run start, stamp
   Request.Provider on every round INCLUDING the spec-025 in-loop retry;
   ObserveCognition attribution uses the pinned provider (exact by construction). Tests:
