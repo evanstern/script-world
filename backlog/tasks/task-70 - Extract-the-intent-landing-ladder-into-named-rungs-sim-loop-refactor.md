@@ -4,7 +4,7 @@ title: Extract the intent-landing ladder into named rungs (sim loop refactor)
 status: In Progress
 assignee: []
 created_date: '2026-07-23 06:34'
-updated_date: '2026-07-23 08:44'
+updated_date: '2026-07-23 09:04'
 labels:
   - review-2026-07-22
   - code-quality
@@ -25,14 +25,14 @@ Spec: specs/022-landing-ladder-rungs
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Landing logic extracted from handleCommand into named rungs; the adapted/failed/hailTarget flag interplay is gone
-- [ ] #2 Determinism harness proves bit-identical replay on existing seeds across the refactor
-- [ ] #3 Each rung has isolated unit tests, including the hail special-cases (mutual-hailer, in-radius, moved-target)
+- [x] #1 Landing logic extracted from handleCommand into named rungs; the adapted/failed/hailTarget flag interplay is gone
+- [x] #2 Determinism harness proves bit-identical replay on existing seeds across the refactor
+- [x] #3 Each rung has isolated unit tests, including the hail special-cases (mutual-hailer, in-radius, moved-target)
 - [ ] #4 go test -race ./... passes; docs/wiki sim-loop note re-pinned
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: User Story 1 — named-rung extraction (P1) 🎯 MVP
-- [ ] #7 Spec phase: User Story 2 — behavior-identity proof (P1)
-- [ ] #8 Spec phase: User Story 3 — rung isolation tests (P2)
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: User Story 1 — named-rung extraction (P1) 🎯 MVP
+- [x] #7 Spec phase: User Story 2 — behavior-identity proof (P1)
+- [x] #8 Spec phase: User Story 3 — rung isolation tests (P2)
 - [ ] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
@@ -46,4 +46,8 @@ Full Spec Kit at specs/022-landing-ladder-rungs (spec/plan/research/data-model/q
 
 <!-- SECTION:NOTES:BEGIN -->
 Tier decision (constitution V rubric): Opus 4.8 via spec-implementer. Justification: core sim-loop change in the review-flagged worst complexity hotspot; doctrine-adjacent (the ladder is doctrine enforcement — outcome vocabulary, hail relaxation D6, metered rejection pairing); a behavioral slip ships a live defect. Not routine/single-mechanism work, so the Sonnet default does not apply.
+
+spec-bridge sync: Setup: 2/2 · User Story 1 — named-rung extraction (P1) 🎯 MVP: 4/4 · User Story 2 — behavior-identity proof (P1): 3/3 · User Story 3 — rung isolation tests (P2): 3/3 · Polish & Cross-Cutting: 1/2
+
+Implementation merged-ready: PR #47 open (branch task-70-landing-ladder-rungs, commits a981a7b extraction + 7540186 tests, forked from 213a6fa). Gates re-verified by orchestrator: determinism/replay subset + TestLanding green (9.2s), go vet clean, full go test -race ./... green (19 pkgs, exit 0), diff surface = internal/sim/{loop.go,landing.go,landing_test.go} only. AC #4 pending merge + wiki re-pin (T014). PR merge blocked by session permissions — awaiting user merge of PR #47.
 <!-- SECTION:NOTES:END -->
