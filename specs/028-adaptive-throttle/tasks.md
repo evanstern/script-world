@@ -63,20 +63,20 @@ speed.
 **Independent Test**: quickstart §3 first half — scripted burst at 32x produces `clock.governor_shed` events with
 full arithmetic payloads; router verdicts at 16x admit what 32x refused.
 
-- [ ] T007 [US2] Add `RequestedSpeed` state field (`omitempty`), `GovernorPayload`, reducer arms for BOTH
+- [x] T007 [US2] Add `RequestedSpeed` state field (`omitempty`), `GovernorPayload`, reducer arms for BOTH
       `clock.governor_shed` and `clock.governor_recovered`, and the `clock.speed_set` governed-state-clearing
       amendment in `internal/sim/state.go` per contracts/events.md; reducer + snapshot-byte-compatibility tests
       in `internal/sim/state_test.go`
-- [ ] T008 [US2] Add `Loop.Govern(to, debt, jobs)` — new `govern` command with boundary validation (one-notch,
+- [x] T008 [US2] Add `Loop.Govern(to, debt, jobs)` — new `govern` command with boundary validation (one-notch,
       capped ladder, stale-decision drop, paused drop, direction→event-type) in `internal/sim/loop.go`; command
       semantics tests in `internal/sim/loop_test.go`
-- [ ] T009 [US2] Implement the `Governor` state machine shed path (breach-window accrual, resets on decision/
+- [x] T009 [US2] Implement the `Governor` state machine shed path (breach-window accrual, resets on decision/
       player-change/pause/start) in `internal/cognition/governor.go`; table-driven tests: shed at sustained
       breach, multi-notch descent, 1x-floor saturation-no-decision, blip-no-shed in
       `internal/cognition/governor_test.go`
-- [ ] T010 [US2] Wire sampler decisions to `Loop.Govern` in the daemon governor (`internal/daemon/`); integration
+- [x] T010 [US2] Wire sampler decisions to `Loop.Govern` in the daemon governor (`internal/daemon/`); integration
       test with scripted debt driving a real loop shed
-- [ ] T011 [US2] Replay + composition proofs: log containing governor_shed events replays byte-identical
+- [x] T011 [US2] Replay + composition proofs: log containing governor_shed events replays byte-identical
       (SC-001); mind-replica applies governor events so `routeVerdict` at the governed speed admits a class the
       requested speed refused (FR-010) — in `internal/sim/` and `internal/mind/` test files
 
