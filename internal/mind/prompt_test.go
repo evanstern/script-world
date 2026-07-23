@@ -141,6 +141,42 @@ func TestSystemPromptPersonaBlock(t *testing.T) {
 	}
 }
 
+// C5 — exemplar constraints (this test lives only in the new+exemplar variant
+// commit; reverting that commit removes it with the exemplar). The worked
+// example is part of the static frame (C1 still holds), uses no real villager
+// name (C2 still counts 1), shows no literal tool-call JSON arguments, and does
+// not feature muse as its chosen action (research D5).
+func TestSystemPromptExemplar(t *testing.T) {
+	frame := frameWithoutPersona(t, sentinelName, framePersona)
+	lower := strings.ToLower(frame)
+
+	i := strings.Index(lower, "for example")
+	if i < 0 {
+		t.Fatalf("exemplar variant: no worked example present in the frame (C5)")
+	}
+	exemplar := lower[i:]
+
+	// No real villager name anywhere in the worked example (anchoring risk, D5).
+	for _, n := range []string{"ash", "birch", "cedar", "rowan", "fern", "hazel", "oak", "sage"} {
+		if strings.Contains(exemplar, n) {
+			t.Errorf("exemplar names a real villager %q — anchoring risk (C5, research D5)", n)
+		}
+	}
+	// No literal tool-call JSON arguments in the frame.
+	if strings.ContainsAny(frame, "{}") {
+		t.Errorf("frame contains JSON braces — the exemplar must show no literal tool-call args (C5)")
+	}
+	// The exemplar's chosen action is not muse (part 3's muse mention precedes
+	// the exemplar, so the exemplar substring must be muse-free).
+	if strings.Contains(exemplar, "muse") {
+		t.Errorf("exemplar features muse as its worked action — teaches thinking-as-default (C5, research D5)")
+	}
+	// Purity/name-once still hold with the exemplar present.
+	if n := strings.Count(frame, sentinelName); n != 1 {
+		t.Errorf("exemplar variant frame names the agent %d times, want 1 (C5 keeps C2)", n)
+	}
+}
+
 // TestPromptFrameReport renders the frame for a fixed representative sample
 // agent and logs byte / word / approximate-token counts (research D4:
 // approx tokens = len(bytes)/4). Run with `-run TestPromptFrameReport -v` at
