@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # TUI client
@@ -89,7 +89,11 @@ see below), **metatron** (the angel transcript — replies stream here, or
 badge the tab `metatron •` when it isn't visible; the pane header shows the charge
 bank plus the spec-021 instruction/capability provenance summary — charter
 default/custom, skill-file count when non-zero, and the granted-tool summary from
-`Status.GrantedTools`, quiet for a full-grant default world — [[metatron]]), and **villagers** (renamed from
+`Status.GrantedTools`, quiet for a full-grant default world — [[metatron]]; the
+same pane renders the LLM provider table since spec 024 — `llmProviderLines`,
+one row per provider with name, model, up/down glyph, queue, inflight/slots, a
+contended marker, and spend share, plus an `(unattributed)` row for pre-024
+months, followed by a `spend $X of $Y` wallet line — [[llm-orchestrator]]), and **villagers** (renamed from
 "souls", spec 015/TASK-56 — now a two-view inspector rather than a flat
 roster). The villagers **roster** shows per agent: a selection cursor,
 status, current goal, needs gauges, a leading `bulk n/24` derived-load

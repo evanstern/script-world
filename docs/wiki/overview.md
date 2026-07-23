@@ -6,7 +6,7 @@ sources:
   - README.md
   - cmd/promptworld/main.go
   - go.mod
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Overview
@@ -27,7 +27,7 @@ decision by how stale its answer will be when it lands.
 One Go module (`github.com/evanstern/promptworld`, Go 1.26; external deps: pure-Go
 SQLite, Bubble Tea/Lipgloss for the TUI — plus termenv, which the TUI's style tests
 import directly to pin a color profile — and the official Anthropic Go SDK for the
-cloud inference tier) builds one binary, `cmd/promptworld`, which is both the daemon
+`anthropic`-transport providers) builds one binary, `cmd/promptworld`, which is both the daemon
 and every client tool. Data planes:
 
 - **Simulation plane**: a single goroutine in `internal/sim` owns all world state and

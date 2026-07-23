@@ -31,7 +31,8 @@ identical to the old two-tier defaults.
     "gemma":  { "transport": "openai_compat", "endpoint": "http://localhost:11434/v1",
                 "model": "gemma4:12b-mlx", "parallel": 2, "endpoint_capacity": 4 },
     "cogito": { "transport": "openai_compat", "endpoint": "http://localhost:11434/v1",
-                "model": "cogito:3b", "parallel": 4, "endpoint_capacity": 4 },
+                "model": "cogito:3b", "parallel": 4, "endpoint_capacity": 4,
+                "tool_mode": "json" },
     "cloud":  { "transport": "anthropic", "model": "claude-opus-4-8",
                 "input_usd_per_mtok": 5, "output_usd_per_mtok": 25,
                 "api_key_env": "ANTHROPIC_API_KEY" }
@@ -66,7 +67,7 @@ Each named entry declares one model source. Fields:
 | `api_key` | inline key — LAN-local routers only; wins over `api_key_env` |
 | `parallel` | concurrent worker slots against this provider (1–16, warn-and-clamp) |
 | `reasoning_effort` | hidden chain-of-thought posture; zero-priced default `"none"`, priced default omit |
-| `tool_mode` | `"native"` (default) or `"json"` fallback envelope; `anthropic` transport ignores it |
+| `tool_mode` | `"native"` (default) or `"json"` fallback envelope; `anthropic` transport ignores it. cogito:3b needs `"json"` — measured live (TASK-52): it never function-calls natively. Inert on non-tool kinds (conversation/meeting), so set it on the entry regardless — a future chain edit then can't trip the native-mode failure |
 | `endpoint_capacity` | opt-in cross-world concurrency bound for the endpoint (see leases below) |
 
 Every knob that used to be per-tier is now per-provider. Zero-priced providers are

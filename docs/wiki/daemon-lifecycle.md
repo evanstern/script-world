@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Daemon lifecycle
@@ -72,7 +72,7 @@ Startup sequence:
    (`cognition.BootstrapLocalSecPerPt`/`BootstrapCloudSecPerPt` — fail toward
    reflex, never toward stale action), with a printed hint to run
    `promptworld calibrate`. `orch.SetRecalibrateHook(md.RecalibrateSignal)` wires
-   the drift signal: a tier's estimator breaching its spike-rate threshold lands
+   the drift signal: a provider's estimator breaching its spike-rate threshold lands
    as `cog.recalibration_recommended` telemetry.
 7. Wire-up: `ipc.NewServer(w, st, cancel)` where cancel is the
    `signal.NotifyContext(SIGTERM, SIGINT)` cancel — so the protocol `shutdown`

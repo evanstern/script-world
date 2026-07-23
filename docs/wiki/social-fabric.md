@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Social fabric
@@ -78,9 +78,14 @@ companion batch (FR-011).
 `agent.talked` beat, the driver (slot = 1, immutable snapshot, 10-min deadline —
 sized for a full scene at honest local pace)
 forms a **scene**. Since TASK-32 the beat first passes the [[cognition]]
-router gate: a scene is the tier's most expensive thought (13 points), and if
+router gate: a scene is the costliest conversation-class thought (13 points), and if
 it can't land inside its staleness budget at the current speed the encounter
-stays a primitive talk with a `cog.outcome{suppressed}` record. An admitted
+stays a primitive talk with a `cog.outcome{suppressed}` record. An admitted scene also pins its PROVIDER at founding (spec 024 US3,
+`Mind.sceneProvider` → the orchestrator's `ResolveProvider(KindConversation)`
+dry chain-walk): every utterance and the outcome call stamp the same
+`Request.Provider`, so a persona keeps one voice for the whole dialogue even if
+a preferable candidate frees up mid-scene — mid-scene failure flows into the
+TASK-42 tolerance path, never a re-resolve or provider switch. An admitted
 scene mints a telemetry identity at founding (`conversation-<founding tick>`,
 agent = founding speaker) and emits `cog.thought` before the first turn.
 The scene is the founding pair plus any awake villager within
@@ -105,7 +110,7 @@ suffix. The scene's terminal
 `cog.outcome{landed}` rides the same batch — the scene and its record land
 atomically. Landing is also staleness-enforced (TASK-32): a completed scene
 whose wall time overran the conversation class's budget in ticks (the router
-admitted it, but the tier ran slower than predicted) injects nothing and
+admitted it, but the provider ran slower than predicted) injects nothing and
 records `cog.outcome{rejected-stale}` with the arithmetic. Since TASK-42
 (specs/011-conversation-robustness) a scene tolerates one bad reply per site
 rather than dying on the first: a parse-failed utterance gets one same-speaker

@@ -13,7 +13,7 @@ sources:
   - internal/sim/miracles.go
   - internal/sim/journal.go
   - internal/daemon/daemon.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Event types

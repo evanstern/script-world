@@ -8,7 +8,7 @@ sources:
   - cmd/promptworld/calibrate.go
   - cmd/promptworld/ps.go
   - cmd/promptworld/miracle.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # promptworld CLI
@@ -102,17 +102,29 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   from the angel's own turn. Prints the miracle summary (`(forced)` suffix when
   gratis) and the remaining charge bank.
 - `llm <world> <kind> <prompt...> [--system] [--max-tokens]` — one-shot model call via
-  the daemon's `llm_call` command, printing tier, model, tokens, cost, and latency
-  ([[llm-orchestrator]]). `new` also writes the default `llm.json` config.
-- `calibrate <world> [--tier local|cloud|all] [--samples N]` — the cognition horizon's
-  setup stage ([[cognition]], TASK-32): benchmarks the configured host+model per tier
-  against fixed reference prompt shapes (default 5 samples per shape, local tier only;
-  cloud spend is opt-in and announced up front), takes the median seconds-per-point,
-  writes/merges `calibration.json` in the save directory, and prints the horizon the
-  hardware buys (e.g. "planner suppressed above 16x") by evaluating the registry
+  the daemon's `llm_call` command; `formatLLMOneShot` prints the serving PROVIDER
+  (never a tier — spec 024 FR-011), model, tokens, cost, and latency, plus a
+  `skipped: name (reason)` line whenever the chain-walk passed over candidates
+  ([[llm-orchestrator]]). `new` also writes the default `llm.json` config (v2
+  registry shape; its hint says "edit providers/routes/budget").
+- `calibrate <world> [--provider <name>] [--samples N]` (`--tier local|cloud|all`
+  kept as a deprecated alias — on a v2 registry `local`/`cloud` select every
+  zero-priced/priced provider with a deprecation note; on a legacy config it
+  behaves exactly as before) — the cognition horizon's
+  setup stage ([[cognition]], TASK-32): benchmarks the DECLARED PROVIDERS (spec
+  024 T020: a legacy config runs the untouched pre-024 path over its two derived
+  providers, byte-identical output; any v2 registry — or `--provider` — iterates
+  `orch.ProviderNames()`, each reference call pinned via `Request.Provider` so
+  the sample measures the named provider regardless of what its kind's chain
+  currently resolves to) against fixed reference prompt shapes (default 5
+  samples per shape; priced-provider spend is opt-in and announced up front),
+  takes the median seconds-per-point, writes/merges `calibration.json` (one
+  profile entry per provider name — the shape `cognition.SeedFor` reads), and
+  prints the horizon the hardware buys (e.g. "planner suppressed above 16x") by
+  evaluating the registry
   across the watchable speed ladder (`planner`/`conversation`/`meeting` — `musing`
   dropped from the ladder with its retirement as a scheduled kind, spec 017). Since
-  spec 017 (FR-011) the local tier's `planner-3pt` shape is a LOOP probe, not a bare
+  spec 017 (FR-011) the `planner-3pt` shape is a LOOP probe, not a bare
   completion: `villagerProbeJob` drives `toolloop.Run` with the real
   `tool.LoopRosterVillager()` roster and a no-op handler per tool (every read
   reports `read_ok`, every acting call reports `landed` — ending the loop on the
@@ -121,13 +133,16 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   unit `Orchestrator.ObserveCognition` later feeds live ([[llm-orchestrator]],
   [[tool-loop]]) — a representative tool loop's wall time, not one call's. The
   probe's round cap is `cfg.Rounds()` (the daemon's own `loop_max_rounds`), so the
-  calibration and the live cognition share one horizon. The cloud tier's
+  calibration and the live cognition share one horizon. Reference shapes select
+  by PRICING CLASS (`refShapesFor(priced)`, spec 024 T020 generalizing the old
+  tier branch): zero-priced providers get the loop probe, priced providers'
   `consolidation-5pt` shape stays a plain single-shot `Submit` (consolidation did
   not adopt the loop, FR-014) — Metatron IS the cloud's loop cognition, but
   calibrating it would drive extra metered cloud calls the spec 017 contract
   doesn't invite; its live whole-loop observations converge the cloud estimator
   at run time instead. Uses an in-memory meter so it never contends
-  with a running daemon's store; a tier whose every sample fails is not written.
+  with a running daemon's store; a provider whose every sample fails is not
+  written.
 
 `parseDirFlags` accepts both `cmd <arg> --flag` and `cmd --flag <arg>` orderings
 (`parseWorldFlags` adds name resolution on top).

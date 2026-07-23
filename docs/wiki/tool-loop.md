@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/toolloop/loop.go
   - internal/toolloop/record.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Tool-use loop
@@ -35,11 +35,15 @@ world mutation.
 
 **`Run` contract** (`Run(ctx, orch *llm.Orchestrator, j Job) (Result, error)`,
 delegating to an unexported `run` over a `submitter` interface — `Submit` +
-`ObserveCognition` — so the control flow is unit-testable against a scripted
+`ObserveCognition` + `ResolveProvider` (the run-level pin seam, spec 024) — so
+the control flow is unit-testable against a scripted
 stub with no network or real orchestrator): a `Job` carries `JobID` (the
 existing cognition job identifier, threading every `CallRecord`), `Kind`,
 `System`, `Seed` (the initial user turn), `Roster []tool.Tool`, `Handlers
-map[string]Handler`, `MaxRounds`, `MaxTokens`, and `Record func(CallRecord)`
+map[string]Handler`, `MaxRounds`, `MaxTokens`, an optional `Provider` (an
+explicit pin — `promptworld calibrate` sets it so a reference sample measures a
+NAMED provider; empty for every live mind/metatron caller), and
+`Record func(CallRecord)`
 (the artifact sink; the consumer buffers/lands records — never touched by the
 driver beyond calling it). `MaxRounds <= 0` is defensively treated as 1 (the
 real normalization is `llm.Config.Rounds()`, upstream). `Run` guarantees
@@ -51,6 +55,23 @@ read-effect tool never consumes the action; `SkipObserve` rides every internal
 a completed termination (successes-only, below); and a transport-level
 provider failure is retried EXACTLY ONCE per run (spec 025, below) before it
 terminates.
+
+**Run-level provider pin** (spec 024 R9, the FR-008 extension; spec 025
+composition): an empty `Job.Provider` is NOT unpinned — `run` resolves the
+kind's provider ONCE at run start (`submitter.ResolveProvider`, a dry
+chain-walk naming the current admissible chain head) and stamps
+`Request.Provider` on EVERY round's `Submit`, so a multi-round cognition never
+changes models mid-transcript. The transport retry below inherits the pin
+structurally (it re-enters the same `Submit`), so a retry always re-hits the
+SAME provider; a genuinely down pinned provider fails the run per spec 025
+semantics and the NEXT cognition's resolve walks the chain to a fallback. This
+is the cognition-run analog of [[social-fabric]]'s conversation scene pin: with
+per-call chain-walking, the breaker strike from the very failure being retried
+would itself be a walk trigger — a mid-run switch would mix native vs JSON
+tool-call ID conventions and mis-attribute the whole-run observation. An
+explicit `Job.Provider` is honored as-is, never re-resolved; a `ResolveProvider`
+miss (a test stub without the seam) leaves the pin empty, falling back to
+per-kind routing.
 
 **Transport retry — one per run** (spec 025, TASK-72,
 `specs/025-llm-robustness-knobs/contracts/loop-retry.md`): when a `Submit`
@@ -129,7 +150,9 @@ record even when the loop dies mid-batch.
 
 **Successes-only whole-loop estimator feeding**: `Run`'s deferred exit hook
 always sets `res.TotalMillis` (part of `Result` regardless of outcome), but
-feeds `Orchestrator.ObserveCognition(j.Kind, res.TotalMillis)` ONLY on a
+feeds `Orchestrator.ObserveCognition(j.Kind, pin, res.TotalMillis)` — the run
+PIN names the provider whose estimator receives the sample, exact by
+construction since every round Submitted to it — ONLY on a
 completed termination — `TermLanded`, `TermModelDone`, `TermCapExhausted` —
 each of which measured completed model work (`TermCapExhausted` did N full
 provider rounds). The failure family (`TermAdmissionRefused`/

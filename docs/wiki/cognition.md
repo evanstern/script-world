@@ -9,7 +9,7 @@ sources:
   - internal/cognition/route.go
   - internal/cognition/calibration.go
   - internal/sim/cognition.go
-verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Cognition horizon
@@ -55,7 +55,7 @@ a string (e.g. `3pt x 17.0s/pt x 32x = 1632 ticks > budget 1200`) so every
 suppression is auditable in telemetry. `ticksPerSecond <= 0` (uncapped max
 speed) always suppresses — prediction at unbounded speed is meaningless.
 
-**Estimation** (`estimate.go`): `Estimator` holds one tier's live
+**Estimation** (`estimate.go`): `Estimator` holds one provider's live
 seconds-per-point as an EWMA (`EWMAAlpha` 0.2) over per-point-normalized call
 durations. A sample beyond `SpikeFactor` (3.0) times the current estimate is
 excluded from the EWMA but counted in a `WindowSize`-20 ring; when the rolling
@@ -69,13 +69,17 @@ world save directory (`World.CalibrationPath()`), written only by the
 `promptworld calibrate` subcommand (full-file replace via `Save`) — the daemon
 never writes it, so the recorded baseline moves only under a human's hand.
 `LoadProfile` treats a missing file as legal (nil, nil) and a malformed one as
-a warning the daemon downgrades to bootstrap defaults. `SeedFor` returns a
-tier's recorded seconds-per-point, or the deliberately pessimistic bootstrap
-constants (`BootstrapLocalSecPerPt` 20.0, `BootstrapCloudSecPerPt` 10.0) — an
+a warning the daemon downgrades to bootstrap defaults.
+`SeedFor(p, name, zeroPriced)` returns a provider's recorded seconds-per-point
+— the profile is keyed by PROVIDER NAME since spec 024; legacy worlds derive
+providers named `local`/`cloud`, so pre-024 tier-keyed profiles keep matching
+with no translation — or, on a miss, a bootstrap by pricing class: zero-priced
+providers seed `BootstrapLocalSecPerPt` (20.0), priced ones
+`BootstrapCloudSecPerPt` (10.0) — an
 uncalibrated world fails toward reflex, never toward stale action.
 `TierProfile.SecondsPerPoint`'s unit is doctrine, spelled out since spec 017:
 for a single-shot kind it is one model call's wall time per point; for a loop
-cognition (the villager planner on the local tier) it is the WHOLE tool-use
+cognition (the villager planner) it is the WHOLE tool-use
 loop's wall time per point — the same unit [[llm-orchestrator]]'s live
 estimator observes via `Orchestrator.ObserveCognition` ([[tool-loop]]), so a
 seeded baseline and a live observation stay directly comparable and the
@@ -101,9 +105,11 @@ The [[agent-mind]] consults `Route` before every enqueue (`routeVerdict` in
 `internal/mind/telemetry.go`) and records suppressions and thought outcomes as
 `cog.thought` / `cog.outcome` events ([[event-types]]); the suppression floors
 are the [[reflex-policy]] and pre-authored templates. The [[llm-orchestrator]]
-owns one `Estimator` per tier, feeds it each completed call's duration
-normalized by the kind's point cost (successes only), and exposes the live
-estimate back to the mind. Since spec 017 the planner's per-round calls
+owns one `Estimator` per provider (spec 024), feeds it each completed call's
+duration normalized by the kind's point cost (successes only), and exposes the
+live estimate back to the mind via `EstimateForKind` — the kind's currently
+admissible chain-head provider's estimate, so a fast small model is never
+averaged with a slow quality model. Since spec 017 the planner's per-round calls
 inside [[tool-loop]] each opt out of that per-call feed (`Request.SkipObserve`)
 and the loop itself reports exactly one whole-cognition observation via
 `Orchestrator.ObserveCognition` when it finishes — and only on a completed

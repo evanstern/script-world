@@ -12,7 +12,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
 ---
 
 # Agent mind
@@ -117,7 +117,7 @@ own due via `nextPhasePreservingDue`, never from the current tick, so a shared
 stall cannot collapse agents into lockstep) plus triggers — wake, completion
 idle, nightfall, first-adjacency encounters (2-game-hour pair cooldown) — floored
 by a 5-game-minute per-agent debounce (completion triggers otherwise form a
-feedback loop that saturates the local tier). Planner prompts carry a social
+feedback loop that saturates the planner's provider). Planner prompts carry a social
 context block (bonds, debts, reputation, loudest rumor, and the
 last-conversation callback from the record ring — [[social-fabric]], TASK-22;
 since TASK-42 scene replies get bounded parse-failure tolerance: `parse.go`'s
@@ -294,7 +294,7 @@ an ordinary roster tool (`muse`, Expressive, `handleMuse` above) the model may
 choose inside its planner tool-use loop — interiority carries the SAME
 opportunity cost as any other action, since choosing to muse means not
 choosing to act, rather than riding a parallel best-effort channel that could
-never compete with real cognition for a tier slot. A musing still lands as a
+never compete with real cognition for a worker slot. A musing still lands as a
 single `agent.thought{source: "musing"}` batched atomically with its
 `cog.outcome{landed}`, and it is still recorded via the loop's normal
 `cog.tool_call` trace like any other call — but there is no separate call kind,
@@ -310,8 +310,13 @@ is still exactly what a plain-text reply needs.
 [[executor]] emits memories and runs the intents; [[reflex-policy]] shares
 `resolveGoal` and provides the fallback; [[cognition]] owns the decision-class
 registry, the router the mind gates on, and the latency estimate behind
-predictions and future-dating; [[llm-orchestrator]] carries the calls
-(local tier); [[tool-loop]] is `runPlan`'s driver (spec 017) — `md.runLoop`
+predictions and future-dating — since spec 024 the mind reads it through the
+orchestrator's `EstimateForKind` seam (the kind's admissible chain-head
+provider's estimate; `RecalibrateSignal` is per-provider, the breaching name
+riding the recorded payload's `Tier` field, kept for replay-schema stability);
+[[llm-orchestrator]] carries the calls
+(routed by the kind's provider chain in llm.json); [[tool-loop]] is `runPlan`'s
+driver (spec 017) — `md.runLoop`
 wraps `toolloop.Run`, `tool.LoopRosterVillager()` ([[tool-registry]]) is its
 declared roster (since spec 019 including the four journal tools), and
 `villagerHandlers` (handlers.go) wraps every acting tool's landing door;
@@ -335,4 +340,5 @@ Live-verified against real Ollama: personas visibly steer reasoning (Hazel: "wil
 charm my way into doing it"), souls accrete and survive restarts, persona hashes
 stay intact. Known gap: at `max` speed the mind replica can drop event batches
 (overflow policy) — resync-on-overflow is future work; ≤16x is drop-free. Planner
-volume at 4x ≈ 16 calls/game-hour for 8 agents, all local-tier.
+volume at 4x ≈ 16 calls/game-hour for 8 agents, all on zero-priced local
+providers.
