@@ -53,8 +53,9 @@ const (
 // surviving local-vs-cloud distinction. The type is no longer a routing or
 // estimator key; it remains ONLY as load-bearing wire compat — Response.Tier
 // carries the serving provider's name for telemetry/CLI consumers not yet moved
-// off it, and TierLocal/TierCloud back cmd/promptworld's legacy `--tier` calibrate
-// iteration until the US6 surfacing slice (T020) moves it to provider names.
+// off it. `promptworld calibrate` moved off Tier-keyed iteration onto declared
+// provider names in the US6 surfacing slice (T020); TierLocal/TierCloud persist
+// as the string values legacy configs' two derived providers are named.
 type Tier string
 
 const (
@@ -497,6 +498,19 @@ func (o *Orchestrator) ProviderNames() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ProviderConfig returns the named provider's declared configuration (model,
+// endpoint, pricing) and whether that name is registered — the read-only
+// surface `promptworld calibrate` (T020) uses to classify a provider's
+// pricing class and label its profile entry, without duplicating
+// resolveRegistry's legacy-vs-v2 derivation in cmd/promptworld.
+func (o *Orchestrator) ProviderConfig(name string) (ProviderConfig, bool) {
+	p, ok := o.providers[name]
+	if !ok {
+		return ProviderConfig{}, false
+	}
+	return p.cfg, true
 }
 
 // admissibleHead returns the chain candidate a kind currently resolves to: the

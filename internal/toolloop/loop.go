@@ -60,6 +60,13 @@ type Job struct {
 	MaxRounds int
 	MaxTokens int64
 	Record    func(CallRecord) // artifact sink; the consumer buffers/lands records
+	// Provider optionally pins every round's Submit to one declared provider
+	// (spec 024 R3), riding straight through to llm.Request.Provider. Empty
+	// (the default, and every live mind/metatron caller) leaves the kind's
+	// chain to route normally; `promptworld calibrate` (T020) sets it so a
+	// reference loop sample measures the NAMED provider, not whichever the
+	// chain currently resolves to.
+	Provider string
 }
 
 // Termination is how a Run ended (data-model.md §4). landed / model_done /
@@ -221,6 +228,7 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 			Tools:       tools,
 			Turns:       transcript,
 			MaxTokens:   j.MaxTokens,
+			Provider:    j.Provider,
 			SkipObserve: true,
 		})
 		if serr != nil {
