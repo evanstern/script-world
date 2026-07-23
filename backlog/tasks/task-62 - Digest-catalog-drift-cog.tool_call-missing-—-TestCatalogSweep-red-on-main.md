@@ -1,10 +1,10 @@
 ---
 id: TASK-62
 title: 'Digest catalog drift: cog.tool_call missing — TestCatalogSweep red on main'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 03:09'
-updated_date: '2026-07-23 04:59'
+updated_date: '2026-07-23 05:05'
 labels:
   - events
   - tui
@@ -21,7 +21,7 @@ internal/tui TestCatalogSweep (digest_test.go:183) fails on clean main: docs/wik
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 TestCatalogSweep green on main
+- [x] #1 TestCatalogSweep green on main
 - [x] #2 cog.tool_call renders a readable digest line consistent with the spec-018 grammar
 <!-- AC:END -->
 
@@ -39,4 +39,12 @@ Tier: Sonnet spec-implementer — routine single-package view/rendering change p
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on branch task-62-cog-tool-call-digest (worktree .worktrees/task-62), commit 6bcda8d, PR #43 open: https://github.com/evanstern/promptworld/pull/43. Sonnet spec-implementer per Principle V rubric (routine single-package view/rendering slice). Labeled-voice digest job/ord/tool/verdict/tier + conditional reason; args+snapshot_tick elided (detail pane bounds them, world.migrated precedent). go test ./... fully green in worktree; go vet clean. AC#2 proven by TestCatalogSweep+TestDigestRoleSpans on the branch. AC#1 (green on main) pends the PR merge — merge blocked by permission classifier, awaiting user.
+
+PR #43 merged (4d9088a). TestCatalogSweep verified green on merged main. Worktree .worktrees/task-62 removed, branch deleted, root ff-pulled. Wiki re-pinned: docs/wiki/tui-client.md 9495150 → d38330a after reading the diff (registry-only addition; note claims unchanged); plan + freshness gates pass (36 notes fresh).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+cog.tool_call now renders a labeled-voice digest (job/ord/tool/verdict/tier, reason when present; args+snapshot_tick elided to the detail pane) with a catalog fixture row + TestDigestRoleSpans coverage. TestCatalogSweep green on main (PR #43, merge 4d9088a). Wiki tui-client.md re-pinned; freshness gate green.
+<!-- SECTION:FINAL_SUMMARY:END -->
