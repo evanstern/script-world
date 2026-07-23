@@ -4,7 +4,7 @@ title: Surface the cognition horizon live in the TUI/status
 status: To Do
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-23 17:00'
 labels:
   - ux
   - tui
@@ -25,4 +25,6 @@ From TASK-39: suppression exists only in raw cog.outcome payloads; no TUI/status
 Sequencing: depends on TASK-34's dock landing (its natural home is a dock status surface) — open/merge the TASK-34 PR first. Scope note: pair with the metatron cloud-tier-unreachable spinner fix recorded on TASK-34 (same 'daemon knows, UI doesn't say' family).
 
 Re-grounding 2026-07-22: narrate.go router gate holds (~:261). Blocker cleared — TASK-34's dock is Done and landed; the sequencing note about merging the TASK-34 PR first is obsolete. Unblocked.
+
+TASK-66 / decision-6 (2026-07-23): horizon legibility is a PREREQUISITE for classroom mode — a suppressed planner without a visible verdict reads to a learner as 'my prompt did nothing.' The client-decided teaching posture (TASK-77 chain-completion, TASK-78 soft speed cap) folds its learner-facing legibility needs into this task rather than a new one; spec 024 US6 (routing legibility) is the adjacent surface.
 <!-- SECTION:NOTES:END -->
