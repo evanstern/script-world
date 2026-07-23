@@ -4,7 +4,7 @@ title: 'Metatron instruction surface: staged charter + skill files + gated tool 
 status: In Progress
 assignee: []
 created_date: '2026-07-23 03:27'
-updated_date: '2026-07-23 06:02'
+updated_date: '2026-07-23 06:03'
 labels:
   - review-2026-07-22
   - teaching-game
@@ -55,4 +55,6 @@ Plan complete: plan.md, research.md (R1-R9 decision log), data-model.md, contrac
 Spec 021 linked via spec-bridge (marker + 6 phase ACs seeded, gate green), artifacts committed to main (88cfee3). Worktree .worktrees/task-64 cut from origin/main at 88cfee3, branch task-64-metatron-instruction-surface. Implementation delegated 2026-07-23 to spec-implementer on Opus 4.8 (rubric: cross-package tool/sim/metatron/ipc/tui + doctrine-adjacent fixed-frame/gating work). Orchestrator gates the implementer report before PR.
 
 Implementation complete: Opus 4.8 spec-implementer finished T001-T023 (5 checkpoint commits, HEAD 459b984 on task-64-metatron-instruction-surface, pushed). Orchestrator gate PASSED: independent go test ./... 20/20 ok (e2e fresh 182s); leaf constraint, fixed-frame-last, three-layer gating, manifest fallbacks, TUI region confinement all verified in the diff; 3 deviations reviewed & accepted (doctrine line gated on work_miracle grant; {} manifest = full grant; kinds mirror-test retained). PR #45 opened. MERGE BLOCKED by session permissions — awaiting user merge. Post-merge remaining: wiki re-pin (6 sources), spec-bridge sync, tick ACs 1-6, worktree cleanup, Done.
+
+PR #45 MERGED by Evan (f651ab8, 2026-07-23). Proceeding post-merge: wiki re-pin, spec-bridge sync, AC ticks, worktree cleanup.
 <!-- SECTION:NOTES:END -->
