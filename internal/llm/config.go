@@ -22,6 +22,92 @@ type Config struct {
 	// (8); normalized (and clamped) by Rounds(), never an error — a world
 	// never fails to boot over a tuning knob (mirrors LocalConfig.Workers()).
 	LoopMaxRounds int `json:"loop_max_rounds,omitempty"`
+	// MaxTokens carries the per-kind cognition token budgets (spec 025 US2):
+	// planner loop / metatron console turn / nightly consolidation. Optional and
+	// additive — an absent object (every pre-025 world) yields today's built-in
+	// defaults byte-for-byte (FR-010). Each field normalizes independently via
+	// PlannerTokens()/MetatronTurnTokens()/ConsolidationTokens(), warn-not-error
+	// like Rounds(). A POINTER so json:"omitempty" actually suppresses it —
+	// WriteDefault must not emit the object (contracts/llm-json.md: the knob
+	// stays opt-in and a default file stays byte-for-byte compatible). A value
+	// struct would marshal as "max_tokens":{}, which omitempty cannot drop.
+	MaxTokens *TokenBudgets `json:"max_tokens,omitempty"`
+}
+
+// TokenBudgets is the optional llm.json max_tokens object (spec 025 US2,
+// contracts/llm-json.md): three per-kind response budgets an operator may tune
+// without a rebuild. Each is 0 (absent = default) or a positive request budget;
+// normalization/clamping lives on Config (PlannerTokens et al.), so packages
+// never see a raw operator value.
+type TokenBudgets struct {
+	Planner       int64 `json:"planner,omitempty"`       // villager planner tool-loop round budget
+	MetatronTurn  int64 `json:"metatron_turn,omitempty"` // metatron console-turn round budget
+	Consolidation int64 `json:"consolidation,omitempty"` // nightly consolidation call budget
+}
+
+// Token-budget defaults and the shared upper clamp (spec 025 US2, R8). The
+// defaults MUST equal the former hardcodes so a config without max_tokens is
+// byte-for-byte compatible (FR-010): planner 512 (a tool-era round carries a
+// tool_use block — the call name + JSON arguments — alongside any prose, so 256
+// truncated a structured call mid-arguments; 512 gives headroom without inviting
+// rambling); metatron_turn 1024 (a full charter-voiced reply must not crowd out
+// a same-round act, spec 017 T020); consolidation 1024 (a night's digest —
+// promotions, fades, gist, beliefs, narrative — as one JSON object). The bound
+// 4096 is 4–8× the defaults: real headroom for verbose local models while
+// bounding pathological configs, mirroring maxLocalWorkers/maxLoopMaxRounds
+// (16) an order of magnitude above their sweet spot.
+const (
+	defaultPlannerTokens       = 512
+	defaultMetatronTurnTokens  = 1024
+	defaultConsolidationTokens = 1024
+	maxTokenBudget             = 4096
+)
+
+// normalizeTokenBudget clamps one max_tokens field into an effective request
+// budget and an optional operator-facing warning, mirroring Rounds():
+//
+//	absent / 0  → kind default, no warning (safe compat default)
+//	1 … 4096    → as given, no warning
+//	< 0         → kind default, warning
+//	> 4096      → 4096, warning
+//
+// It never errors — a world can never fail to boot over these knobs (FR-008).
+func normalizeTokenBudget(key string, raw, def int64) (n int64, warn string) {
+	switch {
+	case raw == 0:
+		return def, ""
+	case raw < 0:
+		return def, fmt.Sprintf("llm.json max_tokens.%s %d out of range (min 1) — using %d", key, raw, def)
+	case raw > maxTokenBudget:
+		return maxTokenBudget, fmt.Sprintf("llm.json max_tokens.%s %d out of range (max %d) — clamped to %d", key, raw, maxTokenBudget, maxTokenBudget)
+	default:
+		return raw, ""
+	}
+}
+
+// tokenBudgets returns the config's budgets, nil-safe: an absent max_tokens
+// object reads as the all-zero struct, so every field falls to its default.
+func (c Config) tokenBudgets() TokenBudgets {
+	if c.MaxTokens == nil {
+		return TokenBudgets{}
+	}
+	return *c.MaxTokens
+}
+
+// PlannerTokens / MetatronTurnTokens / ConsolidationTokens resolve each per-kind
+// budget to (effective, warning), independently and accumulating (spec 025
+// US2). The daemon prints any warning on its boot channel and passes the
+// effective value into mind.New / metatron.New (data-model.md §5).
+func (c Config) PlannerTokens() (int64, string) {
+	return normalizeTokenBudget("planner", c.tokenBudgets().Planner, defaultPlannerTokens)
+}
+
+func (c Config) MetatronTurnTokens() (int64, string) {
+	return normalizeTokenBudget("metatron_turn", c.tokenBudgets().MetatronTurn, defaultMetatronTurnTokens)
+}
+
+func (c Config) ConsolidationTokens() (int64, string) {
+	return normalizeTokenBudget("consolidation", c.tokenBudgets().Consolidation, defaultConsolidationTokens)
 }
 
 // loop iteration-cap bounds. 8 rounds covers read-then-act patterns with

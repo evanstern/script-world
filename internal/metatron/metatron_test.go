@@ -20,8 +20,12 @@ import (
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
-// testLoopRounds is the iteration cap the test angel runs with.
-const testLoopRounds = 8
+// testLoopRounds is the iteration cap the test angel runs with; testTurnTokens
+// is the console-turn budget it runs with (the pre-025 hardcode, spec 025 US2).
+const (
+	testLoopRounds = 8
+	testTurnTokens = 1024
+)
 
 // mockOrch cans one reply (or error) and records every request.
 type mockOrch struct {
@@ -88,7 +92,7 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds)
+	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1508,5 +1512,118 @@ func TestStatusProvenance(t *testing.T) {
 	s = mt.Status()
 	if len(s.GrantedTools) != 0 {
 		t.Errorf("conversation-only granted tools = %v, want none", s.GrantedTools)
+	}
+}
+
+// cogOutcomes extracts every cog.outcome payload injected through the door, in
+// order — the spec 025 retry marker rides this channel (toolcalls.go emitRetried).
+func cogOutcomes(inj *stateInjector) []sim.CogOutcomePayload {
+	var out []sim.CogOutcomePayload
+	for _, b := range inj.batches {
+		for _, e := range b {
+			if e.Type != "cog.outcome" {
+				continue
+			}
+			var p sim.CogOutcomePayload
+			if json.Unmarshal(e.Payload, &p) == nil {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// TestTurnRetryEmitsRetriedOutcome (spec 025 US1, FR-004/SC-003): a console turn
+// whose loop consumed its one transport retry emits a non-terminal cog.outcome
+// carrying sim.OutcomeRetried + the first failure's reason through the InjectSocial
+// door, so the recovery is countable from the trail alone.
+func TestTurnRetryEmitsRetriedOutcome(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Peace, traveller.")
+	// The loop recovered via retry, then conversed (model_done, Final = text).
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		resp, err := bridgeSubmit(mt, ctx, j)
+		if err != nil {
+			return toolloop.Result{Term: termForErr(err)}, err
+		}
+		return toolloop.Result{Final: resp.Text, Term: toolloop.TermModelDone,
+			Retried: true, RetryReason: "chat-completions HTTP 502"}, nil
+	}
+
+	if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+		t.Fatalf("recovered turn returned error: %v", err)
+	}
+
+	outs := cogOutcomes(inj)
+	var retried int
+	for _, o := range outs {
+		if o.Outcome != sim.OutcomeRetried {
+			continue
+		}
+		retried++
+		if !strings.HasPrefix(o.Job, "turn-metatron-") {
+			t.Errorf("retried marker job = %q, want a turn-metatron- correlation id", o.Job)
+		}
+		if o.Reason != "chat-completions HTTP 502" {
+			t.Errorf("retried marker reason = %q, want the first failure's text", o.Reason)
+		}
+	}
+	if retried != 1 {
+		t.Fatalf("cog.outcome retried markers = %d, want exactly 1 (%+v)", retried, outs)
+	}
+}
+
+// TestTurnNoRetryEmitsNoRetriedOutcome: a turn that never retried emits no
+// retried marker — present iff a retry actually happened (SC-003).
+func TestTurnNoRetryEmitsNoRetriedOutcome(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Peace, traveller.") // default converseLoop, no retry
+
+	if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+		t.Fatalf("turn returned error: %v", err)
+	}
+
+	for _, o := range cogOutcomes(inj) {
+		if o.Outcome == sim.OutcomeRetried {
+			t.Errorf("a non-retried turn emitted a retried marker: %+v", o)
+		}
+	}
+}
+
+// TestTurnBudgetPassedToLoop (spec 025 US2, FR-007/FR-010): the console-turn
+// token budget the angel holds rides Job.MaxTokens into the tool-use loop — a
+// custom value and the pre-025 default 1024 both flow through verbatim.
+func TestTurnBudgetPassedToLoop(t *testing.T) {
+	for _, want := range []int64{1024, 888} {
+		mt, _, _, _ := newTestAngel(t, "Peace.")
+		mt.turnTokens = want
+		var got int64
+		mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+			got = j.MaxTokens
+			return toolloop.Result{Final: "ok", Term: toolloop.TermModelDone}, nil
+		}
+		if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+			t.Fatalf("turn: %v", err)
+		}
+		if got != want {
+			t.Errorf("Job.MaxTokens = %d, want %d (the injected turn budget)", got, want)
+		}
+	}
+}
+
+// TestMetatronNewStoresTurnBudget: metatron.New records the turn-budget param as
+// a field, the plumbing daemon boot relies on (spec 025 US2, data-model.md §5).
+func TestMetatronNewStoresTurnBudget(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+	mt, err := New(&mockOrch{}, &stateInjector{state: state}, m, 42, state.Marshal(), dir, testLoopRounds, 1500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mt.Close()
+	if mt.turnTokens != 1500 {
+		t.Errorf("New stored turnTokens=%d, want 1500", mt.turnTokens)
 	}
 }

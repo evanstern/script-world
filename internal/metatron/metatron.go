@@ -61,6 +61,13 @@ type Metatron struct {
 	// cap (llm.json loop_max_rounds, normalized), threaded from the daemon.
 	runLoop    func(ctx context.Context, j toolloop.Job) (toolloop.Result, error)
 	loopRounds int
+	// turnTokens is the normalized console-turn response budget (llm.json
+	// max_tokens.metatron_turn, spec 025 US2), threaded from the daemon exactly
+	// as loopRounds is. Absent resolves to the built-in default (1024) at the
+	// config boundary, so this is always an effective value. It governs the
+	// console-turn loop ONLY — the metatron digest budget (400) is a different
+	// call and stays hardcoded (spec 025 Assumption 2).
+	turnTokens int64
 
 	// fileMu guards soul.md / transcript.md appends (turn worker vs absorb
 	// goroutine both write).
@@ -97,7 +104,7 @@ type Metatron struct {
 // seam: it installs a scripted loop BEFORE any goroutine starts, for tests that
 // stub the model rather than pass a real *llm.Orchestrator. Production omits it —
 // New wires runLoop from the concrete orchestrator.
-func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
+func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, turnTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -115,6 +122,7 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 		done:     make(chan struct{}),
 	}
 	mt.loopRounds = loopRounds
+	mt.turnTokens = turnTokens
 	// The tool-use loop needs the concrete orchestrator (toolloop.Run's contract
 	// surface — Submit + ObserveCognition). Production passes it; test seams that
 	// stub the model install their own runLoop via runLoopOverride.

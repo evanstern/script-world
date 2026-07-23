@@ -31,15 +31,7 @@ var nudgeTextMax = func() int {
 // of this prompt; villagers can only ever receive the model's `nudge.text`
 // rendering, validated and landed through the InjectSocial door.
 
-const (
-	playerTextMax = 2000
-	// turnMaxTokens is the per-round token budget for one console turn. The
-	// pre-loop turn used 700 for a bare JSON reply; a tool-era round must carry a
-	// tool_use block (the call name + JSON arguments) ALONGSIDE any converse prose
-	// in the same round, so it is bumped to 1024 to keep a full charter-voiced
-	// reply from crowding out a same-round act (spec 017 T020).
-	turnMaxTokens = 1024
-)
+const playerTextMax = 2000
 
 // ErrTurnBusy is returned while another console turn is in flight.
 var ErrTurnBusy = errors.New("the angel is attending another matter")
@@ -154,7 +146,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		Roster:    roster,
 		Handlers:  mt.turnHandlers(d),
 		MaxRounds: mt.loopRounds,
-		MaxTokens: turnMaxTokens,
+		MaxTokens: mt.turnTokens, // llm.json max_tokens.metatron_turn (spec 025 US2), default 1024
 		Record:    d.record,
 	})
 	cancel()
@@ -165,6 +157,14 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	// InjectSocial door as the nudge/miracle grounding events, so it neither
 	// reorders nor entangles with them.
 	mt.emitToolCalls(d.records, tick)
+
+	// Transport retry visibility (spec 025 FR-004/SC-003): when the loop consumed
+	// its one in-loop retry (recovered OR twice-failed), surface it as a
+	// non-terminal cog.outcome through the same door — emitted BEFORE the
+	// error-return below so a twice-failed turn's retry is still countable.
+	if res.Retried {
+		mt.emitRetried(jobID, tick, res.RetryReason)
+	}
 
 	if err != nil {
 		// Honest unavailability; nothing landed (a landing returns a nil error),

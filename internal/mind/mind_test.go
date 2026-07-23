@@ -18,8 +18,14 @@ import (
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
-// testLoopRounds is the loop iteration cap harness minds run with.
-const testLoopRounds = 8
+// testLoopRounds is the loop iteration cap harness minds run with;
+// testPlannerTokens / testConsolidationTokens are the per-kind response budgets
+// (the pre-025 hardcodes, spec 025 US2) harness minds run with.
+const (
+	testLoopRounds          = 8
+	testPlannerTokens       = 512
+	testConsolidationTokens = 1024
+)
 
 // replyToCalls translates a legacy JSON planner reply (the string form the mind
 // tests script) into the tool call the tool-use loop would receive, so migrated
@@ -218,7 +224,7 @@ func newHarnessAt(t *testing.T, reply string, speed clock.Speed) *harness {
 	}
 	h.loop = sim.NewLoop(state, m, st, notify)
 
-	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, mockLoop(model))
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, testPlannerTokens, testConsolidationTokens, mockLoop(model))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,5 +387,114 @@ func TestPromptWindowBound(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "What do you do next?") {
 		t.Error("prompt missing the ask")
+	}
+}
+
+// TestRunPlanRetryEmitsRetriedOutcome (spec 025 US1, FR-004/SC-003): a planner
+// cognition whose loop consumed its one transport retry emits a NON-TERMINAL
+// cog.outcome carrying sim.OutcomeRetried + the first failure's reason, BEFORE
+// the terminal outcome the run earns — so the recovery is countable from the
+// trail alone. A run that never retried emits no such marker.
+func TestRunPlanRetryEmitsRetriedOutcome(t *testing.T) {
+	lm := newLoopMind(t)
+	job := lm.newJob(0)
+	// The loop recovered via retry, then the model finished with prose (no tool
+	// call) → model_done, which runPlan records as the terminal unusable outcome.
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		return toolloop.Result{Term: toolloop.TermModelDone, Retried: true, RetryReason: "chat-completions HTTP 502"}, nil
+	}
+
+	lm.md.runPlan(job)
+
+	outs := lm.outcomesFor(t, job.meta.job)
+	if len(outs) != 2 {
+		t.Fatalf("job outcomes = %+v, want exactly 2 (the retried marker + the terminal)", outs)
+	}
+	if outs[0].Outcome != sim.OutcomeRetried {
+		t.Errorf("first outcome = %q, want the non-terminal retried marker BEFORE the terminal", outs[0].Outcome)
+	}
+	if outs[0].Reason != "chat-completions HTTP 502" {
+		t.Errorf("retried marker reason = %q, want the first failure's text", outs[0].Reason)
+	}
+	if outs[1].Outcome != sim.OutcomeUnusable {
+		t.Errorf("terminal outcome = %q, want unusable (model_done)", outs[1].Outcome)
+	}
+}
+
+// TestRunPlanNoRetryEmitsNoRetriedOutcome: a non-retried cognition emits no
+// retried marker — the marker is present iff a retry actually happened (SC-003).
+func TestRunPlanNoRetryEmitsNoRetriedOutcome(t *testing.T) {
+	lm := newLoopMind(t)
+	job := lm.newJob(0)
+	lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		return toolloop.Result{Term: toolloop.TermModelDone}, nil
+	}
+
+	lm.md.runPlan(job)
+
+	for _, o := range lm.outcomesFor(t, job.meta.job) {
+		if o.Outcome == sim.OutcomeRetried {
+			t.Errorf("a non-retried cognition emitted a retried marker: %+v", o)
+		}
+	}
+}
+
+// TestPlannerBudgetPassedToLoop (spec 025 US2, FR-007): the planner token budget
+// the mind holds rides Job.MaxTokens into the tool-use loop — a custom value and
+// the pre-025 default 512 (FR-010) both flow through the call site verbatim.
+func TestPlannerBudgetPassedToLoop(t *testing.T) {
+	for _, want := range []int64{512, 777} {
+		lm := newLoopMind(t)
+		lm.md.plannerTokens = want
+		var got int64
+		lm.md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+			got = j.MaxTokens
+			return toolloop.Result{Term: toolloop.TermModelDone}, nil
+		}
+		lm.md.runPlan(lm.newJob(0))
+		if got != want {
+			t.Errorf("Job.MaxTokens = %d, want %d (the injected planner budget)", got, want)
+		}
+	}
+}
+
+// TestConsolidationBudgetPassedToSubmit (spec 025 US2, FR-007/FR-010): the
+// consolidation budget rides Request.MaxTokens on the nightly cloud call, and the
+// harness's default (1024) reproduces the pre-025 hardcode.
+func TestConsolidationBudgetPassedToSubmit(t *testing.T) {
+	cap := &capturingConsolModel{reply: goodConsolidation()}
+	h, md := setupConsol(t, cap)
+	md.maybeConsolidate(sleptEvent(t, 80000, 0))
+	h.waitEvents(t, 10*time.Second, func(e store.Event) bool { return e.Type == "agent.consolidated" })
+	if got := cap.maxTokens.Load(); got != testConsolidationTokens {
+		t.Errorf("consolidation Request.MaxTokens = %d, want %d (default reproduces the pre-025 hardcode)", got, testConsolidationTokens)
+	}
+}
+
+// capturingConsolModel records the MaxTokens of the consolidation Submit.
+type capturingConsolModel struct {
+	reply     string
+	maxTokens atomic.Int64
+}
+
+func (c *capturingConsolModel) Submit(_ context.Context, req llm.Request) (llm.Response, error) {
+	if req.Kind == llm.KindConsolidation {
+		c.maxTokens.Store(req.MaxTokens)
+	}
+	return llm.Response{Text: c.reply, Tier: llm.TierCloud, Model: "mock"}, nil
+}
+
+// TestMindNewStoresBudgets: mind.New records the token-budget params as fields,
+// the plumbing daemon boot relies on (spec 025 US2, data-model.md §5).
+func TestMindNewStoresBudgets(t *testing.T) {
+	h := newHarness(t, "")
+	state := sim.NewState(42, h.m)
+	md, err := New(h.model, h.loop, h.loop, h.m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, 321, 654, noopLoop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer md.Close()
+	if md.plannerTokens != 321 || md.consolidationTokens != 654 {
+		t.Errorf("New stored (planner=%d, consolidation=%d), want (321, 654)", md.plannerTokens, md.consolidationTokens)
 	}
 }

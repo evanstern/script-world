@@ -205,6 +205,16 @@ func (dt *decisionTraces) ingestOutcome(e store.Event) {
 	if !ok || strings.HasPrefix(p.Job, conversationJobPrefix) {
 		return
 	}
+	// OutcomeRetried is a NON-TERMINAL marker (contracts/telemetry.md rule 1):
+	// a transport retry was consumed (spec 025 FR-004), emitted by the tool-loop
+	// consumers AFTER the door may already have recorded the run's real terminal
+	// outcome. This projection tracks only terminal outcomes, so the marker is
+	// skipped here — it never overwrites the earned terminal — while remaining in
+	// the event log for trail-level retry counting (SC-003). Same disregard the
+	// conversation retried marker gets via the conversationJobPrefix guard above.
+	if p.Outcome == sim.OutcomeRetried {
+		return
+	}
 	dt.ensureMaps()
 	c := dt.chainFor(p.Job)
 	c.Outcome = p.Outcome

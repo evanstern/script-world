@@ -418,11 +418,16 @@ func TestAdmissionRefusedMidLoop(t *testing.T) {
 	h.assertNotObserved(t)
 }
 
-// (8a) A generic Submit failure terminates provider_error.
+// (8a) A generic Submit failure terminates provider_error. Since spec 025 a
+// transport provider error is retried ONCE first, so termination needs TWO
+// consecutive failures — the retry is exercised in retry_test.go; here the pin
+// is that a spent-retry provider error still terminates as before (rounds 0, no
+// records, the error propagated, nothing observed).
 func TestProviderErrorFromSubmit(t *testing.T) {
 	boom := errors.New("chat-completions HTTP 500")
 	h := drive(t, 8, []tool.Tool{readTool},
 		map[string]Handler{"peek": readHandler("x")},
+		fail(boom),
 		fail(boom),
 	)
 	if h.res.Term != TermProviderError {

@@ -130,7 +130,7 @@ func (md *Mind) runConsolidation(job consolJob) {
 		Kind:      llm.KindConsolidation,
 		System:    consolidateSystemPrompt(job),
 		Prompt:    consolidateUserPrompt(job),
-		MaxTokens: 1024,
+		MaxTokens: md.consolidationTokens, // llm.json max_tokens.consolidation (spec 025 US2), default 1024
 	})
 	cancel()
 	if err != nil {

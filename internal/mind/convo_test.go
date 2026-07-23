@@ -507,7 +507,7 @@ func setupConvo(t *testing.T, model Submitter) (*harness, *Mind) {
 	state.Agents[0].Memories = append(state.Agents[0].Memories,
 		sim.Memory{Text: "Watched Cedar break his word.", Salience: 6, Tick: 10, Subject: 2, Tone: -60})
 
-	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, noopLoop)
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, testPlannerTokens, testConsolidationTokens, noopLoop)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +639,7 @@ func TestSceneConversation(t *testing.T) {
 		`{"gist": "argued about who tends the fire", "topics": ["fire", "chores"], "tones": [2, 0, -1], "retold": null}`)
 	model := &scriptedModel{replies: replies}
 
-	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, noopLoop)
+	md, err := New(model, h.loop, h.loop, m, 42, state.Marshal(), [sim.AgentCount]string{}, testLoopRounds, testPlannerTokens, testConsolidationTokens, noopLoop)
 	if err != nil {
 		t.Fatal(err)
 	}

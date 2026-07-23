@@ -85,6 +85,14 @@ type Result struct {
 	Rounds      int
 	TotalMillis int64
 	Term        Termination
+	// Retried / RetryReason record the run's ONE in-loop transport retry (spec
+	// 025 FR-001/FR-004, contracts/loop-retry.md): Retried is set when a
+	// transport-level provider error was re-submitted once (recovered OR
+	// twice-failed), and RetryReason carries the FIRST failure's error text.
+	// RetryReason is non-empty iff Retried is true. The consumer surfaces this
+	// as a non-terminal cog.outcome so a recovery is never silent (SC-003).
+	Retried     bool
+	RetryReason string
 }
 
 // submitter is the transport seam Run drives. *llm.Orchestrator satisfies it;
@@ -105,6 +113,21 @@ type submitter interface {
 // landed / model_done / cap_exhausted), never on the failure family
 // (admission_refused / provider_error / ctx_done) — mirroring the worker path's
 // "a fast failure is not a latency observation of completed thought".
+//
+// Transport retry (spec 025 FR-001..FR-006, contracts/loop-retry.md): a run
+// retries a failed Submit EXACTLY ONCE, and only when the failure classifies as
+// a transport-level provider error (terminationForSubmitErr → provider_error).
+// The retry re-submits the identical transcript (a failed Submit appended
+// nothing) and consumes no round (rounds count model responses). On a second
+// transport failure — or on the first, if the run's retry is already spent — the
+// run terminates provider_error with the latest error, exactly as a single
+// failure terminates without this feature. Admission refusals and context
+// cancellation never retry (the governor spoke; busy-is-not-down is preserved),
+// and the tool-handler infrastructure-failure sites below are NOT transport
+// failures (the model call succeeded) and are never retried. A retry recovered
+// in the success family produces exactly one ObserveCognition, a twice-failed
+// run zero — the estimator/breaker invariance is structural, not new mechanism.
+// Result.Retried / Result.RetryReason report the retry for the consumer to surface.
 func Run(ctx context.Context, orch *llm.Orchestrator, j Job) (Result, error) {
 	return run(ctx, orch, j)
 }
@@ -193,6 +216,20 @@ func run(ctx context.Context, s submitter, j Job) (res Result, err error) {
 			SkipObserve: true,
 		})
 		if serr != nil {
+			// Transport retry (spec 025 FR-001/FR-002, contracts/loop-retry.md):
+			// ONE re-submit per run on a transport-level provider error only.
+			// terminationForSubmitErr already excludes admission refusals
+			// (TermAdmissionRefused — the governor spoke, retrying would fight
+			// busy-is-not-down) and context cancellation/deadline (TermCtxDone).
+			// A failed Submit appended nothing, so the transcript is byte-identical
+			// on re-submission, and no round is consumed (rounds++ is below, after
+			// a SUCCESSFUL Submit). RetryReason keeps the FIRST failure's text; the
+			// second failure (if any) propagates from the terminate branch as today.
+			if !res.Retried && terminationForSubmitErr(serr) == TermProviderError {
+				res.Retried = true
+				res.RetryReason = serr.Error()
+				continue
+			}
 			res.Rounds = rounds
 			res.Term = terminationForSubmitErr(serr)
 			return res, serr
