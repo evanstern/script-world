@@ -242,9 +242,9 @@ const (
 )
 
 // ProviderStatus is one provider's operator-facing row (FR-012,
-// contracts/status.md): one shape for legacy and v2 worlds alike. Contended and
-// SpentUSD are wired in later slices (US5 leases, US4 attribution); this slice
-// reports them zero.
+// contracts/status.md): one shape for legacy and v2 worlds alike. Contended
+// reflects the endpoint-lease pool's live congestion (US5); SpentUSD is the
+// provider's attributed share of the month's spend (US4).
 type ProviderStatus struct {
 	Name      string  `json:"name"`
 	Model     string  `json:"model"`
@@ -307,6 +307,12 @@ type provider struct {
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
 	est *cognition.Estimator
+	// leases is the advisory endpoint-lease pool bounding COMBINED cross-world
+	// concurrency on this provider's normalized endpoint (spec 024 US5), or nil
+	// when endpoint_capacity was not declared — nil means zero lease syscalls and
+	// today's behavior. Providers sharing one normalized endpoint in this process
+	// share the pool instance.
+	leases *leasePool
 }
 
 // priced reports whether a provider bills for traffic — the surviving budget
@@ -393,6 +399,14 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		}
 		o.routes[kind] = route{chain: chain, noFallback: rc.NoFallback}
 	}
+	// Endpoint lease pools (spec 024 US5): a provider that declares
+	// endpoint_capacity gets an advisory flock pool bounding COMBINED in-flight
+	// calls to its normalized endpoint across every world sharing it. Providers
+	// with the same normalized endpoint in THIS process share one pool instance
+	// (two models on one Ollama); cross-process they share the on-disk dir.
+	// Undeclared capacity ⇒ nil pool ⇒ zero lease syscalls (legacy behavior), so
+	// the base dir is resolved only when at least one provider opted in.
+	o.attachLeasePools(pcs)
 	// One worker goroutine per slot: N identical copies of the existing loop
 	// drain the same two channels, preserving every per-job invariant while
 	// unlocking concurrency (TASK-45 R1).
@@ -402,6 +416,53 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		}
 	}
 	return o, nil
+}
+
+// attachLeasePools wires an advisory lease pool onto every provider that declared
+// endpoint_capacity (spec 024 US5). It is a no-op when none did — no home-dir
+// lookup, no directory touched — so an undeclared world makes zero lease
+// syscalls. A pool that cannot be created (home dir unresolved, or a dir-creation
+// failure) disables leases for that provider with a boot warning rather than
+// failing the boot (warn-not-error doctrine).
+func (o *Orchestrator) attachLeasePools(pcs map[string]ProviderConfig) {
+	anyCapacity := false
+	for _, pc := range pcs {
+		if pc.EndpointCapacity > 0 {
+			anyCapacity = true
+			break
+		}
+	}
+	if !anyCapacity {
+		return
+	}
+	base, ok := leaseBaseDir()
+	if !ok {
+		for name, pc := range pcs {
+			if pc.EndpointCapacity > 0 {
+				leaseWarnf("provider %q: endpoint leases disabled (cannot resolve home dir)", name)
+			}
+		}
+		return
+	}
+	// Share one pool instance per normalized endpoint within this process.
+	pools := make(map[string]*leasePool)
+	for name, pc := range pcs {
+		if pc.EndpointCapacity <= 0 {
+			continue
+		}
+		norm := normalizeEndpoint(pc.Endpoint)
+		lp, ok := pools[norm]
+		if !ok {
+			var err error
+			lp, err = newLeasePool(base, pc.Endpoint, pc.EndpointCapacity)
+			if err != nil {
+				leaseWarnf("provider %q: endpoint lease pool disabled (%v)", name, err)
+				continue
+			}
+			pools[norm] = lp
+		}
+		o.providers[name].leases = lp
+	}
 }
 
 func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
@@ -682,10 +743,27 @@ func (o *Orchestrator) worker(t *provider) {
 				j.reply <- result{err: j.ctx.Err()}
 				return
 			}
-			start := time.Now()
 			// Worker-side hard cap: no single call may wedge the tier,
 			// regardless of the caller's context or transport behavior.
 			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
+			// Endpoint lease (spec 024 US5): a lease-enabled provider acquires a
+			// slot BEFORE the call, bounded by the same callCtx. The wait precedes
+			// the model call, so it never strikes the breaker and never enters the
+			// estimator sample (start is taken AFTER acquisition). A wait that
+			// exhausts callCtx surfaces as its context error, handled exactly like a
+			// caller who gave up in the queue — reply the error, leave the breaker
+			// untouched. Undeclared capacity ⇒ nil pool ⇒ this whole block is
+			// skipped (zero syscalls, legacy behavior).
+			if t.leases != nil {
+				release, _, aerr := t.leases.acquire(callCtx)
+				if aerr != nil {
+					cancel()
+					j.reply <- result{err: aerr}
+					return
+				}
+				defer release()
+			}
+			start := time.Now()
 			cr, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
@@ -748,7 +826,8 @@ func (o *Orchestrator) worker(t *provider) {
 // occupancy plus its attributed spend and the global total (FR-012). Rows are
 // sorted by name for a deterministic marshal; SpentUSD is the provider's share
 // of the month's spend (spec 024 US4) — the total minus Σ(rows) is the
-// (unattributed) remainder a surface renders. Contended is wired in US5.
+// (unattributed) remainder a surface renders. Contended is the lease pool's live
+// congestion flag (US5), false for any provider without an endpoint_capacity.
 func (o *Orchestrator) StatusSnapshot() Status {
 	month, spent, budget, perProvider := o.meter.Snapshot()
 	rows := make([]ProviderStatus, 0, len(o.providers))
@@ -757,7 +836,8 @@ func (o *Orchestrator) StatusSnapshot() Status {
 			Name: p.name, Model: p.cfg.Model, Endpoint: p.cfg.Endpoint,
 			Up: !p.health.down(), Queue: len(p.queue),
 			Inflight: int(p.inflight.Load()), Slots: p.slots,
-			Contended: false, SpentUSD: perProvider[p.name],
+			Contended: p.leases != nil && p.leases.contended.Load(),
+			SpentUSD:  perProvider[p.name],
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
