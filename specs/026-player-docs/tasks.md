@@ -6,11 +6,11 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create `docs/player/` directory and verify Node ≥ 18 available (`node --version`); no scaffolding files — pages arrive in later phases
+- [X] T001 Create `docs/player/` directory and verify Node ≥ 18 available (`node --version`); no scaffolding files — pages arrive in later phases
 
 ## Phase 2: Foundational (blocks all user stories)
 
-- [ ] T002 Author `.claude/skills/player-docs/SKILL.md`: frontmatter (`name: player-docs`, description stating it generates/refreshes docs/player and is the recommended follow-on after `/grounding-wiki:wiki-update`); the check-first regeneration procedure (run script → stop if exit 0 → rewrite only stale/missing pages → re-run script, must exit 0; fresh pages never opened for writing); the canonical page HTML skeleton with the shared inlined CSS block (system font stack, readable measure, CSS custom properties with `prefers-color-scheme: dark` overrides, no external assets, no JS); the provenance meta-tag format per contracts/provenance-and-check.md; and the page→source mapping table from research.md D5
+- [X] T002 Author `.claude/skills/player-docs/SKILL.md`: frontmatter (`name: player-docs`, description stating it generates/refreshes docs/player and is the recommended follow-on after `/grounding-wiki:wiki-update`); the check-first regeneration procedure (run script → stop if exit 0 → rewrite only stale/missing pages → re-run script, must exit 0; fresh pages never opened for writing); the canonical page HTML skeleton with the shared inlined CSS block (system font stack, readable measure, CSS custom properties with `prefers-color-scheme: dark` overrides, no external assets, no JS); the provenance meta-tag format per contracts/provenance-and-check.md; and the page→source mapping table from research.md D5
 
 ## Phase 3: User Story 1 — new player gets to a running world (P1) 🎯 MVP
 
