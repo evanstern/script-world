@@ -85,18 +85,24 @@ func (md *Mind) emitSuppressed(class string, agent int, snapshotTick int64, v co
 	go md.emitCog(e)
 }
 
-// estimating is the optional orchestrator surface for live
-// seconds-per-point; test fakes without it fall back to bootstrap seeds.
+// estimating is the optional orchestrator surface for live per-provider
+// seconds-per-point (spec 024 FR-013): the mind asks about a kind and gets the
+// estimate of that kind's serving provider (its chain head), so a fast small
+// model is never averaged with a slow quality model. Test fakes without the
+// seam fall back to the bootstrap seed.
 type estimating interface {
-	SecondsPerPoint(t llm.Tier) float64
+	EstimateForKind(kind llm.Kind) (string, float64, bool)
 }
 
 func (md *Mind) secondsPerPoint(kind llm.Kind) float64 {
-	tierName, _ := llm.TierFor(kind)
 	if e, ok := md.orch.(estimating); ok {
-		return e.SecondsPerPoint(tierName)
+		if _, spp, ok := e.EstimateForKind(kind); ok {
+			return spp
+		}
 	}
-	return cognition.SeedFor(nil, string(tierName))
+	// Fallback for a test fake lacking the seam: the pessimistic bootstrap seed
+	// (fail toward reflex, never toward stale action).
+	return cognition.SeedFor(nil, "")
 }
 
 func cogThoughtEvent(m thoughtMeta) store.Event {

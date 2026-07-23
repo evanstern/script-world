@@ -59,8 +59,12 @@ func (m *Meter) Allow() bool {
 	return m.spent < m.budget
 }
 
-// Add records the actual cost of a completed call and persists it.
-func (m *Meter) Add(costUSD float64) error {
+// Add records the actual cost of a completed call and persists it. The provider
+// name is threaded now so per-provider attribution keys can land in US4 without
+// another signature churn; this slice writes only the authoritative total key
+// (llm_spend_YYYY-MM) — the meaning Allow() reads — so legacy persisted spend
+// carries forward untouched (research R4).
+func (m *Meter) Add(provider string, costUSD float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rollover()

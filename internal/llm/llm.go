@@ -41,6 +41,11 @@ const (
 	KindMeeting Kind = "meeting"
 )
 
+// Tier is the retiring routing concept (decision-5): pricing (zero vs nonzero)
+// is now the only local-vs-cloud distinction. The type survives as the
+// estimator/calibration key and the legacy provider names ("local"/"cloud"),
+// and rides Response.Tier plus the recalibrate hook until those consumers move
+// per provider in later slices of spec 024.
 type Tier string
 
 const (
@@ -48,24 +53,27 @@ const (
 	TierCloud Tier = "cloud"
 )
 
-// routing: high-volume ambient cognition stays local (free, ~3800+ calls/day
-// only viable self-hosted); low-volume high-quality work goes cloud.
-var routing = map[Kind]Tier{
-	KindPlanner:       TierLocal,
-	KindConversation:  TierLocal,
-	KindConsolidation: TierCloud,
-	KindNarrator:      TierCloud,
-	KindDrama:         TierCloud,
-	KindMetatron:      TierCloud,
-	KindMeeting:       TierLocal,
+// acceptedKinds is the static set of call kinds the orchestrator accepts. The
+// routes table is boot-validated against it in both directions (FR-003
+// completeness): every accepted kind must have a route, and every route must
+// name an accepted kind — so an unregistered kind can never reach a model, and
+// a config typo dies at boot rather than at runtime.
+var acceptedKinds = map[Kind]struct{}{
+	KindPlanner:       {},
+	KindConversation:  {},
+	KindConsolidation: {},
+	KindNarrator:      {},
+	KindDrama:         {},
+	KindMetatron:      {},
+	KindMeeting:       {},
 }
 
 // Kinds returns every call kind the orchestrator accepts, sorted — the
 // cognition registry's completeness gate (FR-002) iterates this at daemon
 // start so an unregistered kind can never reach a model at runtime.
 func Kinds() []Kind {
-	out := make([]Kind, 0, len(routing))
-	for k := range routing {
+	out := make([]Kind, 0, len(acceptedKinds))
+	for k := range acceptedKinds {
 		out = append(out, k)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
@@ -74,6 +82,7 @@ func Kinds() []Kind {
 
 var (
 	ErrUnknownKind     = errors.New("unknown call kind")
+	ErrUnknownProvider = errors.New("unknown provider (config drift: a pin named an undeclared provider)")
 	ErrBudgetExhausted = errors.New("monthly cloud budget exhausted; call refused (raise monthly_budget_usd in llm.json or wait for the month to roll over)")
 	ErrTierDown        = errors.New("tier is down (circuit open); the world keeps running degraded")
 	ErrQueueFull       = errors.New("tier queue full; back off and retry")
@@ -86,6 +95,13 @@ type Request struct {
 	System    string `json:"system,omitempty"`
 	Prompt    string `json:"prompt"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
+	// Provider optionally pins the call to a named declared provider (spec 024
+	// R3), bypassing chain routing while honoring that provider's admission
+	// (breaker, wallet if priced, queue). Empty = route by the kind's chain
+	// (every existing caller unchanged). An unknown name → ErrUnknownProvider.
+	// The conversation layer stamps this to keep a scene on one provider (US3);
+	// tests and the CLI one-shot use it to force a provider.
+	Provider string `json:"provider,omitempty"`
 	// BestEffort requests drop-when-busy admission: the call is refused
 	// with ErrTierBusy when no worker slot is free — any queued work, or all
 	// N slots in flight (TASK-45). Callers that may not displace real
@@ -112,7 +128,11 @@ type Request struct {
 }
 
 type Response struct {
-	Text         string  `json:"text"`
+	Text string `json:"text"`
+	// Provider names the serving provider — always set (FR-011). Tier is the
+	// legacy alias (= provider name), retained so telemetry/CLI consumers that
+	// still read it keep working until they move per provider in a later slice.
+	Provider     string  `json:"provider"`
 	Tier         Tier    `json:"tier"`
 	Model        string  `json:"model"`
 	InputTokens  int64   `json:"input_tokens"`
@@ -194,20 +214,30 @@ const (
 	StopOther     StopReason = "other"      // any other/unmapped reason
 )
 
-// TierStatus and Status feed the protocol status shape and the TUI.
-type TierStatus struct {
-	Model    string `json:"model"`
-	Endpoint string `json:"endpoint,omitempty"`
-	Up       bool   `json:"up"`
-	Queue    int    `json:"queue"`
+// ProviderStatus is one provider's operator-facing row (FR-012,
+// contracts/status.md): one shape for legacy and v2 worlds alike. Contended and
+// SpentUSD are wired in later slices (US5 leases, US4 attribution); this slice
+// reports them zero.
+type ProviderStatus struct {
+	Name      string  `json:"name"`
+	Model     string  `json:"model"`
+	Endpoint  string  `json:"endpoint,omitempty"`
+	Up        bool    `json:"up"`
+	Queue     int     `json:"queue"`
+	Inflight  int     `json:"inflight"`
+	Slots     int     `json:"slots"`
+	Contended bool    `json:"contended"`
+	SpentUSD  float64 `json:"spent_usd"`
 }
 
+// Status feeds the protocol status shape and the TUI. The per-provider table
+// replaces the fixed local/cloud pair — legacy worlds simply show two rows
+// (named local, cloud). Providers is sorted by Name for a deterministic marshal.
 type Status struct {
-	Local  TierStatus `json:"local"`
-	Cloud  TierStatus `json:"cloud"`
-	Month  string     `json:"month"`
-	Spent  float64    `json:"spent_usd"`
-	Budget float64    `json:"budget_usd"`
+	Providers []ProviderStatus `json:"providers"`
+	Month     string           `json:"month"`
+	Spent     float64          `json:"spent_usd"`
+	Budget    float64          `json:"budget_usd"`
 }
 
 const queueCap = 32
@@ -227,44 +257,59 @@ type result struct {
 	err  error
 }
 
-type tier struct {
-	name   Tier
+// provider is one declared model source and its private machinery (FR-005):
+// each owns a full instance of what every tier owned before — bounded queue +
+// interactive priority lane, N worker slots, a circuit breaker, and a live
+// latency estimator — with unchanged semantics, now per named provider rather
+// than per fixed tier (decision-5).
+type provider struct {
+	name   string
+	cfg    ProviderConfig
 	caller caller
 	health *tierHealth
 	queue  chan job
 	prio   chan job // interactive work (conversations) jumps the line
-	// slots is the tier's concurrent capacity: the number of worker
-	// goroutines draining its channels (TASK-45). Local is configurable
-	// (LocalConfig.Workers()); cloud is always 1 (FR-008).
+	// slots is the provider's concurrent capacity: the number of worker
+	// goroutines draining its channels (TASK-45), from its clamped parallel.
 	slots int
 	// inflight counts jobs a worker has dequeued and not yet replied to —
 	// incremented at dequeue, decremented on every reply path. It drives
 	// slot-aware best-effort admission: 0 ≤ inflight ≤ slots.
 	inflight atomic.Int32
-	// est is the live seconds-per-point estimate for this tier (TASK-32):
+	// est is the live seconds-per-point estimate for this provider (TASK-32):
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
 	est *cognition.Estimator
 }
 
-// TierFor exposes a kind's tier — the mind needs it to read the right
-// estimator when routing.
-func TierFor(kind Kind) (Tier, bool) {
-	t, ok := routing[kind]
-	return t, ok
+// priced reports whether a provider bills for traffic — the surviving budget
+// distinction (decision-5). Zero-priced providers are never budget-refused.
+func (p *provider) priced() bool {
+	return p.cfg.InputUSDPerMTok > 0 || p.cfg.OutputUSDPerMTok > 0
+}
+
+// route is one call kind's resolved ordered chain plus the no-fallback flag,
+// built once at New() from validated config and immutable thereafter. This
+// slice dispatches to chain[0] (the head) only; the admissible-head walk and
+// fallback arrive in US3.
+type route struct {
+	chain      []*provider
+	noFallback bool
 }
 
 // Orchestrator routes, queues, meters, and degrades. One per daemon.
 type Orchestrator struct {
 	cfg       Config
 	meter     *Meter
-	tiers     map[Tier]*tier
+	providers map[string]*provider
+	routes    map[Kind]route
 	done      chan struct{}
 	closeOnce sync.Once
 
-	// recalibrate is invoked (in its own goroutine) when a tier's estimator
+	// recalibrate is invoked (in its own goroutine) when a provider's estimator
 	// first breaches the spike-rate threshold — the mind turns it into a
-	// cog.recalibration_recommended telemetry event.
+	// cog.recalibration_recommended telemetry event. It still carries a Tier
+	// (the provider name cast) until the hook consumer moves per provider.
 	recalMu     sync.Mutex
 	recalibrate func(tier Tier, estimate, spikeRate float64)
 }
@@ -274,33 +319,49 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Local tier concurrency is operator-configurable (clamped in Workers());
-	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
-	// at one worker (FR-008).
-	localSlots, _ := cfg.Local.Workers()
-	localToolMode, _ := cfg.Local.ToolModeResolved()
+	// resolveRegistry normalizes both config shapes (legacy local/cloud or the
+	// v2 registry) into the validated provider set + kind→chain routes. A direct
+	// caller that hands New() a malformed registry gets the same boot error
+	// LoadConfig would raise — New() never builds machinery from an invalid map.
+	pcs, rcs, err := cfg.resolveRegistry()
+	if err != nil {
+		return nil, err
+	}
 	o := &Orchestrator{
-		cfg:   cfg,
-		meter: meter,
-		done:  make(chan struct{}),
-		tiers: map[Tier]*tier{
-			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
-				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none"), localToolMode),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				slots: localSlots,
-				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
-			TierCloud: {name: TierCloud, caller: newCloudCaller(cfg.Cloud),
-				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
-				slots: 1,
-				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierCloud)))},
-		},
+		cfg:       cfg,
+		meter:     meter,
+		done:      make(chan struct{}),
+		providers: make(map[string]*provider, len(pcs)),
+		routes:    make(map[Kind]route, len(rcs)),
+	}
+	// Each provider owns a full instance of the per-tier machinery (FR-005),
+	// with worker slots from its clamped parallel (warn discarded here — the
+	// daemon surfaces boot warnings; the clamp itself is the invariant).
+	for name, pc := range pcs {
+		slots, _ := pc.workers(name)
+		o.providers[name] = &provider{
+			name: name, cfg: pc, caller: newProviderCaller(pc),
+			health: &tierHealth{},
+			queue:  make(chan job, queueCap), prio: make(chan job, queueCap),
+			slots: slots,
+			est:   cognition.NewEstimator(cognition.SeedFor(nil, name)),
+		}
+	}
+	// Resolve each route's provider names to the live provider instances; the
+	// config was validated so every name is present.
+	for kind, rc := range rcs {
+		chain := make([]*provider, 0, len(rc.Chain))
+		for _, name := range rc.Chain {
+			chain = append(chain, o.providers[name])
+		}
+		o.routes[kind] = route{chain: chain, noFallback: rc.NoFallback}
 	}
 	// One worker goroutine per slot: N identical copies of the existing loop
 	// drain the same two channels, preserving every per-job invariant while
 	// unlocking concurrency (TASK-45 R1).
-	for _, t := range o.tiers {
-		for i := 0; i < t.slots; i++ {
-			go o.worker(t)
+	for _, p := range o.providers {
+		for i := 0; i < p.slots; i++ {
+			go o.worker(p)
 		}
 	}
 	return o, nil
@@ -308,22 +369,51 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 
 func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
 
-// SeedCalibration re-seeds both tiers' estimators from a calibration
-// profile (nil = keep bootstrap defaults). Called once at daemon start,
-// before traffic.
+// SeedCalibration re-seeds every provider's estimator from a calibration
+// profile (nil = keep bootstrap defaults), keyed by provider name — legacy
+// tier-keyed profiles keep matching the derived local/cloud providers. Called
+// once at daemon start, before traffic. (Pricing-class bootstrap fallback for
+// unprofiled v2 providers arrives with the calibration seam in US2.)
 func (o *Orchestrator) SeedCalibration(p *cognition.Profile) {
-	for name, t := range o.tiers {
-		t.est = cognition.NewEstimator(cognition.SeedFor(p, string(name)))
+	for name, pv := range o.providers {
+		pv.est = cognition.NewEstimator(cognition.SeedFor(p, name))
 	}
 }
 
-// SecondsPerPoint is the live estimate for a tier — the router's bridge
-// from Fibonacci points to this deployment's wall clock.
-func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
-	if t, ok := o.tiers[tierName]; ok {
-		return t.est.Estimate()
+// ProviderNames returns every declared provider name, sorted — the operator-
+// facing roster for status/telemetry surfaces.
+func (o *Orchestrator) ProviderNames() []string {
+	out := make([]string, 0, len(o.providers))
+	for name := range o.providers {
+		out = append(out, name)
 	}
-	return cognition.SeedFor(nil, string(tierName))
+	sort.Strings(out)
+	return out
+}
+
+// ResolveProvider names the provider a kind currently resolves to (FR-013): the
+// chain head this slice. The admissible-head walk and per-scene pinning arrive
+// in US3; the seam is stable now so the conversation layer can adopt it.
+func (o *Orchestrator) ResolveProvider(kind Kind) (string, error) {
+	rt, ok := o.routes[kind]
+	if !ok {
+		return "", fmt.Errorf("%w: %q", ErrUnknownKind, kind)
+	}
+	return rt.chain[0].name, nil
+}
+
+// EstimateForKind returns the serving provider's name and its live seconds-per-
+// point estimate for a kind — the cognition horizon's provider-granular seam
+// (FR-013), so a fast small model is never averaged with a slow quality model.
+// This slice returns the chain head; the admissible-head walk arrives in US3.
+// ok is false for an unknown kind.
+func (o *Orchestrator) EstimateForKind(kind Kind) (string, float64, bool) {
+	rt, ok := o.routes[kind]
+	if !ok {
+		return "", 0, false
+	}
+	head := rt.chain[0]
+	return head.name, head.est.Estimate(), true
 }
 
 // feedEstimate reports one completed-cognition wall time to a tier's
@@ -331,18 +421,21 @@ func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
 // and fires the recalibrate hook (in its own goroutine) on a spike-rate breach.
 // Shared by the per-call worker path (TASK-32) and the whole-loop
 // ObserveCognition seam (TASK-52), so both feed the estimator identically.
-func (o *Orchestrator) feedEstimate(t *tier, kind Kind, millis int64) {
+func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 	dc, ok := cognition.ClassForKind(string(kind))
 	if !ok || dc.Points <= 0 {
 		return
 	}
-	if t.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
-		est, rate, _, _ := t.est.Stats()
+	if p.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+		est, rate, _, _ := p.est.Stats()
 		o.recalMu.Lock()
 		hook := o.recalibrate
 		o.recalMu.Unlock()
 		if hook != nil {
-			go hook(t.name, est, rate)
+			// The hook still carries a Tier; the provider name casts cleanly
+			// (legacy names are exactly "local"/"cloud", and the field is
+			// observational telemetry, not routing).
+			go hook(Tier(p.name), est, rate)
 		}
 	}
 }
@@ -355,11 +448,14 @@ func (o *Orchestrator) feedEstimate(t *tier, kind Kind, millis int64) {
 // for concurrent use — the estimator and hook lock are the same ones the
 // worker uses.
 func (o *Orchestrator) ObserveCognition(kind Kind, totalMillis int64) {
-	tierName, ok := routing[kind]
+	rt, ok := o.routes[kind]
 	if !ok {
 		return
 	}
-	o.feedEstimate(o.tiers[tierName], kind, totalMillis)
+	// The whole-cognition observation feeds the serving provider's estimator;
+	// this slice serves the chain head, so the head receives it (the explicit-
+	// provider ObserveCognition seam arrives in US2).
+	o.feedEstimate(rt.chain[0], kind, totalMillis)
 }
 
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
@@ -376,13 +472,29 @@ func (o *Orchestrator) SetRecalibrateHook(fn func(tier Tier, estimate, spikeRate
 // open circuit, and full queue all fail fast rather than piling work up —
 // that backpressure is what lets local throughput cap sim speed later.
 func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error) {
-	tierName, ok := routing[req.Kind]
-	if !ok {
-		return Response{}, fmt.Errorf("%w: %q", ErrUnknownKind, req.Kind)
+	// Resolve the serving provider: an explicit Request.Provider pin (R3) names
+	// a declared provider and bypasses chain routing (US3's scene pinning and
+	// the CLI/tests use it) while honoring ALL of that provider's admission
+	// checks; otherwise the kind's route selects the chain head. Full chain-
+	// walking / fallback is a later slice — this slice dispatches to the head.
+	var t *provider
+	if req.Provider != "" {
+		p, ok := o.providers[req.Provider]
+		if !ok {
+			return Response{}, fmt.Errorf("%w: %q", ErrUnknownProvider, req.Provider)
+		}
+		t = p
+	} else {
+		rt, ok := o.routes[req.Kind]
+		if !ok {
+			return Response{}, fmt.Errorf("%w: %q", ErrUnknownKind, req.Kind)
+		}
+		t = rt.chain[0]
 	}
-	t := o.tiers[tierName]
 
-	if tierName == TierCloud && !o.meter.Allow() {
+	// Budget throttles priced providers before the call (never after the money
+	// is spent); zero-priced providers are never budget-refused (decision-5).
+	if t.priced() && !o.meter.Allow() {
 		return Response{}, ErrBudgetExhausted
 	}
 	if !t.health.admit() {
@@ -393,10 +505,10 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
 	// Best-effort work is the opposite extreme: admitted only
-	// when a slot is free, refused instantly otherwise. With N local
-	// workers, "free slot" means no queued work AND at least one idle
-	// worker (inflight < slots) — a non-empty queue already implies every
-	// slot is busy, so the queue checks remain the fast-path refusal (R3).
+	// when a slot is free, refused instantly otherwise. With N workers,
+	// "free slot" means no queued work AND at least one idle worker
+	// (inflight < slots) — a non-empty queue already implies every slot is
+	// busy, so the queue checks remain the fast-path refusal (R3).
 	if req.BestEffort && (len(t.queue) > 0 || len(t.prio) > 0 || t.inflight.Load() >= int32(t.slots)) {
 		return Response{}, ErrTierBusy
 	}
@@ -420,7 +532,7 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	}
 }
 
-func (o *Orchestrator) worker(t *tier) {
+func (o *Orchestrator) worker(t *provider) {
 	for {
 		// Two-level priority: drain interactive work first.
 		var j job
@@ -471,10 +583,14 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 			t.health.succeed()
 			resp := Response{
-				Text:         cr.text,
-				ToolCalls:    cr.toolCalls,
-				Stop:         cr.stop,
-				Tier:         t.name,
+				Text:      cr.text,
+				ToolCalls: cr.toolCalls,
+				Stop:      cr.stop,
+				// Provider always names the serving provider (FR-011); Tier is
+				// the legacy alias (= provider name) for consumers not yet moved.
+				Provider:     t.name,
+				Tier:         Tier(t.name),
+				Model:        t.cfg.Model,
 				InputTokens:  cr.inTok,
 				OutputTokens: cr.outTok,
 				Millis:       time.Since(start).Milliseconds(),
@@ -492,36 +608,40 @@ func (o *Orchestrator) worker(t *tier) {
 			if !j.req.SkipObserve {
 				o.feedEstimate(t, j.req.Kind, resp.Millis)
 			}
-			if t.name == TierCloud {
-				resp.Model = o.cfg.Cloud.Model
-				resp.CostUSD = float64(cr.inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
-					float64(cr.outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
-				if merr := o.meter.Add(resp.CostUSD); merr != nil {
+			// Every call is priced by its serving provider's rates; a priced
+			// provider bills the wallet (zero-priced providers cost nothing and
+			// never touch the meter — byte-identical to the local tier today).
+			// Per-provider attribution keys land in US4; this slice writes only
+			// the total via the provider-scoped Add signature.
+			if t.priced() {
+				resp.CostUSD = float64(cr.inTok)*t.cfg.InputUSDPerMTok/1e6 +
+					float64(cr.outTok)*t.cfg.OutputUSDPerMTok/1e6
+				if merr := o.meter.Add(t.name, resp.CostUSD); merr != nil {
 					// Metering must never lose money silently: surface it.
 					j.reply <- result{err: fmt.Errorf("spend meter: %w", merr)}
 					return
 				}
-			} else {
-				resp.Model = o.cfg.Local.Model
 			}
 			j.reply <- result{resp: resp}
 		}()
 	}
 }
 
-// StatusSnapshot reports tier health, queue depths, and spend.
+// StatusSnapshot reports each provider's health, queue depth, and worker
+// occupancy plus the global spend (FR-012). Rows are sorted by name for a
+// deterministic marshal; Contended and per-provider SpentUSD are wired in later
+// slices (US5 leases, US4 attribution) and report zero here.
 func (o *Orchestrator) StatusSnapshot() Status {
 	month, spent, budget := o.meter.Snapshot()
-	local, cloud := o.tiers[TierLocal], o.tiers[TierCloud]
-	return Status{
-		Local: TierStatus{
-			Model: o.cfg.Local.Model, Endpoint: o.cfg.Local.Endpoint,
-			Up: !local.health.down(), Queue: len(local.queue),
-		},
-		Cloud: TierStatus{
-			Model: o.cfg.Cloud.Model,
-			Up:    !cloud.health.down(), Queue: len(cloud.queue),
-		},
-		Month: month, Spent: spent, Budget: budget,
+	rows := make([]ProviderStatus, 0, len(o.providers))
+	for _, p := range o.providers {
+		rows = append(rows, ProviderStatus{
+			Name: p.name, Model: p.cfg.Model, Endpoint: p.cfg.Endpoint,
+			Up: !p.health.down(), Queue: len(p.queue),
+			Inflight: int(p.inflight.Load()), Slots: p.slots,
+			Contended: false, SpentUSD: 0,
+		})
 	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+	return Status{Providers: rows, Month: month, Spent: spent, Budget: budget}
 }

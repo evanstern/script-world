@@ -1353,7 +1353,13 @@ func (m Model) metatronView() string {
 			}
 			return styleErr.Render("down")
 		}
-		content += "\n" + styleDim.Render(fmt.Sprintf("cloud %s %s · spend $%.2f of $%.0f", l.Cloud.Model, up(l.Cloud.Up), l.Spent, l.Budget))
+		// Per-provider rows (spec 024, contracts/status.md): one line per
+		// provider, sorted by name on the wire. Plain rendering here — the
+		// full inflight/slots/contended table is the US6 polish slice.
+		for _, p := range l.Providers {
+			content += "\n" + styleDim.Render(fmt.Sprintf("%s %s %s", p.Name, p.Model, up(p.Up)))
+		}
+		content += "\n" + styleDim.Render(fmt.Sprintf("spend $%.2f of $%.0f", l.Spent, l.Budget))
 		if l.Spent >= l.Budget {
 			content += "\n" + styleErr.Render("budget exhausted — the angel's voice is stilled")
 		}

@@ -496,6 +496,40 @@ func newCloudCaller(cfg CloudConfig) caller {
 	return newAnthropicCaller(cfg)
 }
 
+// newProviderCaller builds one provider's transport from its config (spec 024):
+// openai_compat gets the chat-completions caller with the provider's resolved
+// tool mode; anthropic gets the Messages-API caller (always native, tool_mode
+// ignored). The reasoning-effort default mirrors today's local/cloud defaults
+// keyed by pricing class — "none" for zero-priced (interiority prose never needs
+// hidden reasoning, and latency caps sim speed), omitted for priced. The
+// anthropic path ignores reasoning entirely.
+func newProviderCaller(pc ProviderConfig) caller {
+	if pc.Transport == ProviderOpenAICompat {
+		def := ""
+		if pc.zeroPriced() {
+			def = "none"
+		}
+		mode, _ := resolveToolMode(pc.Model, pc.ToolMode)
+		return newOpenAICompat(pc.Endpoint, pc.Model, pc.key(),
+			resolveReasoningEffort(pc.ReasoningEffort, def), mode)
+	}
+	return newAnthropicProviderCaller(pc)
+}
+
+// newAnthropicProviderCaller builds the Anthropic Messages-API caller from a
+// provider config — the v2 analogue of newAnthropicCaller (which reads the
+// legacy CloudConfig). Key resolution and the optional base-URL override match.
+func newAnthropicProviderCaller(pc ProviderConfig) *anthropicCaller {
+	var opts []option.RequestOption
+	if key := pc.key(); key != "" {
+		opts = append(opts, option.WithAPIKey(key))
+	}
+	if pc.Endpoint != "" {
+		opts = append(opts, option.WithBaseURL(pc.Endpoint))
+	}
+	return &anthropicCaller{client: anthropic.NewClient(opts...), model: pc.Model}
+}
+
 func (a *anthropicCaller) call(ctx context.Context, req Request) (callResult, error) {
 	resp, err := a.client.Messages.New(ctx, a.buildParams(req))
 	if err != nil {
