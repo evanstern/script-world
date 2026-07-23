@@ -155,6 +155,16 @@ func TestDebtIsDeterministic(t *testing.T) {
 
 const overThreshold = ShedThreshold + 0.5 // a comfortably-breaching debt reading
 
+// recoverDebt is low enough that debt projected one capped notch up (ratio ≤ 4)
+// stays under ShedThreshold × RecoverHeadroom, so recovery accrues. marginalDebt
+// sits under ShedThreshold (no shed) yet projects over the headroom one notch up
+// (0.4 × 2 = 0.8 > 0.5) — the steady marginal load that must park without
+// oscillating (US3-AC2, SC-003).
+const (
+	recoverDebt  = 0.1
+	marginalDebt = 0.4
+)
+
 // TestGovernorShedFiresAtWindowBoundary (US2-AC1): a shed fires on the sample
 // that completes the breach window — the fifth consecutive over-threshold
 // sample — and not one sample earlier, carrying the measured arithmetic.
@@ -271,5 +281,147 @@ func TestGovernorEffectiveChangeResets(t *testing.T) {
 	d := g.Sample(overThreshold, 3, false, clock.Speed16x, clock.Speed16x)
 	if d.Action != ActionShed || d.To != clock.Speed8x {
 		t.Fatalf("post-change window did not shed 16x->8x at the boundary: %+v", d)
+	}
+}
+
+// --- Governor state machine: recover path (spec 028 US3, T012) ---
+//
+// Recovery accrues only while governed with room to climb and while the debt
+// PROJECTED at the candidate notch (debt × candidateTPS/currentTPS) stays under
+// ShedThreshold × RecoverHeadroom; a recover fires after recoverSamples (= 20)
+// consecutive holding samples — deliberately longer than a breach window.
+
+// TestGovernorRecoverFiresAtWindowBoundary (US3-AC1): a recover fires on the
+// sample that completes the recovery window — the twentieth consecutive holding
+// sample — and not one sample earlier, carrying the measured arithmetic and
+// climbing exactly one notch.
+func TestGovernorRecoverFiresAtWindowBoundary(t *testing.T) {
+	g := &Governor{}
+	for i := 1; i < recoverSamples; i++ {
+		if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("sample %d/%d recovered early: %+v", i, recoverSamples, d)
+		}
+	}
+	d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x)
+	if d.Action != ActionRecover {
+		t.Fatalf("sample %d did not recover: %+v", recoverSamples, d)
+	}
+	if d.To != clock.Speed16x {
+		t.Errorf("recover To = %q, want 16x (one notch up)", d.To)
+	}
+	if d.Debt != recoverDebt || d.Jobs != 1 {
+		t.Errorf("recover arithmetic = {Debt:%v Jobs:%d}, want {%v 1}", d.Debt, d.Jobs, recoverDebt)
+	}
+}
+
+// TestGovernorRecoverClimbsNotchByNotch (US3-AC1): sustained headroom climbs one
+// notch per full recovery window up the capped ladder toward the requested
+// ceiling — two recoveries need two full windows — and stops exactly at 32x.
+func TestGovernorRecoverClimbsNotchByNotch(t *testing.T) {
+	g := &Governor{}
+	eff := clock.Speed8x
+	const req = clock.Speed32x
+	var recoveries []clock.Speed
+	for i := 0; i < 3*recoverSamples; i++ {
+		d := g.Sample(recoverDebt, 1, false, eff, req)
+		if d.Action == ActionRecover {
+			recoveries = append(recoveries, d.To)
+			eff = d.To // the world applies the recover; the next sample sees the new speed
+		}
+	}
+	want := []clock.Speed{clock.Speed16x, clock.Speed32x}
+	if len(recoveries) != len(want) {
+		t.Fatalf("recoveries = %v, want %v", recoveries, want)
+	}
+	for i := range want {
+		if recoveries[i] != want[i] {
+			t.Errorf("recover %d = %q, want %q", i, recoveries[i], want[i])
+		}
+	}
+}
+
+// TestGovernorMarginalLoadParks (US3-AC2, SC-003): a steady marginal load whose
+// debt is under threshold at the current notch but whose projection breaches the
+// headroom one notch up parks the effective speed forever — no shed, no recover,
+// no oscillation across many recovery windows.
+func TestGovernorMarginalLoadParks(t *testing.T) {
+	g := &Governor{}
+	for i := 0; i < 10*recoverSamples; i++ {
+		if d := g.Sample(marginalDebt, 2, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("sample %d flapped off the parked notch: %+v", i, d)
+		}
+	}
+}
+
+// TestGovernorQuiescentAtCeiling (US3-AC3): recovered to the requested ceiling,
+// effective equals requested and debt stays low — the governor is quiescent, no
+// room to climb and nothing to shed, so every sample returns ActionNone.
+func TestGovernorQuiescentAtCeiling(t *testing.T) {
+	g := &Governor{}
+	for i := 0; i < 3*recoverSamples; i++ {
+		if d := g.Sample(0.05, 0, false, clock.Speed32x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("sample %d acted at the ceiling: %+v", i, d)
+		}
+	}
+}
+
+// TestGovernorWindowAsymmetry (US3-AC4): the recovery window is observably longer
+// than the breach window — recoverSamples exceeds breachSamples, and a full
+// breach window's worth of headroom is not yet enough to recover.
+func TestGovernorWindowAsymmetry(t *testing.T) {
+	if recoverSamples <= breachSamples {
+		t.Fatalf("recoverSamples (%d) must exceed breachSamples (%d) — asymmetric hysteresis (FR-006)", recoverSamples, breachSamples)
+	}
+	g := &Governor{}
+	for i := 0; i < breachSamples; i++ {
+		if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("recovered within a breach window (%d samples): %+v", breachSamples, d)
+		}
+	}
+}
+
+// TestGovernorRecoverInterruptedRestarts: a recovery accrual interrupted by even
+// one projection-failing sample restarts the window — a full fresh recovery
+// window is then required before a recover can fire.
+func TestGovernorRecoverInterruptedRestarts(t *testing.T) {
+	g := &Governor{}
+	for i := 0; i < recoverSamples-1; i++ { // one short of a full window
+		g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x)
+	}
+	// One projection-failing sample (still under threshold, so no shed) resets it.
+	if d := g.Sample(marginalDebt, 2, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+		t.Fatalf("interrupting sample produced a decision: %+v", d)
+	}
+	// A full fresh window is now required: recoverSamples-1 stay quiet, then recover.
+	for i := 1; i < recoverSamples; i++ {
+		if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("post-interrupt sample %d recovered before a fresh window completed: %+v", i, d)
+		}
+	}
+	if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionRecover {
+		t.Fatalf("post-interrupt window did not recover at the boundary: %+v", d)
+	}
+}
+
+// TestGovernorPausedResetsRecovery (FR-013): a paused sample clears the recovery
+// window just as it clears the breach window, so a resume starts a fresh
+// recovery window — a pause never converts accrued headroom into an instant
+// recover.
+func TestGovernorPausedResetsRecovery(t *testing.T) {
+	g := &Governor{}
+	for i := 0; i < recoverSamples-2; i++ { // partway into a window
+		g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x)
+	}
+	if d := g.Sample(recoverDebt, 1, true /*paused*/, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+		t.Fatalf("paused sample returned a decision: %+v", d)
+	}
+	// A full fresh window is now required.
+	for i := 1; i < recoverSamples; i++ {
+		if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionNone {
+			t.Fatalf("post-pause sample %d recovered before a fresh window completed: %+v", i, d)
+		}
+	}
+	if d := g.Sample(recoverDebt, 1, false, clock.Speed8x, clock.Speed32x); d.Action != ActionRecover {
+		t.Fatalf("post-pause window did not recover at the boundary: %+v", d)
 	}
 }

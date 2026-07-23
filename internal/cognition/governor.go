@@ -88,7 +88,8 @@ const (
 	// ActionShed drops the effective speed one capped-ladder notch (US2).
 	ActionShed Action = "shed"
 	// ActionRecover raises the effective speed one notch toward the ceiling
-	// (US3, T012 — not yet emitted by this slice).
+	// (US3): the debt projected at that notch holds under the recovery headroom
+	// through a full RecoveryWindow.
 	ActionRecover Action = "recover"
 )
 
@@ -107,6 +108,13 @@ type Decision struct {
 // that completes the window, never before.
 const breachSamples = int(BreachWindow / GovernorCadence)
 
+// recoverSamples is how many consecutive headroom samples make up one
+// RecoveryWindow at the GovernorCadence (20s / 1s = 20): a recover fires on the
+// sample that completes the window. Deliberately larger than breachSamples —
+// the asymmetric hysteresis (FR-006) that keeps the effective speed from
+// flapping between notches (US3-AC4, SC-003).
+const recoverSamples = int(RecoveryWindow / GovernorCadence)
+
 // Governor is the pure hysteresis state machine behind adaptive throttling
 // (research R6). The daemon owns the wall clock and calls Sample once per
 // GovernorCadence; the Governor owns only the decision logic — no goroutines,
@@ -114,19 +122,38 @@ const breachSamples = int(BreachWindow / GovernorCadence)
 // not durations: a window is a run of consecutive qualifying samples.
 type Governor struct {
 	breach  int         // consecutive over-threshold samples accrued toward a shed
-	recover int         // consecutive headroom samples accrued toward a recover (US3, T012)
+	recover int         // consecutive headroom samples accrued toward a recover (US3)
 	lastEff clock.Speed // effective speed at the previous sample; a change resets the windows
 }
 
 // Sample feeds one debt reading to the controller and returns its decision.
-// Windows reset — accruals zeroed — on any decision, any pause, and any change
-// in the effective speed between samples (the player moved the ceiling, or a
-// prior decision took effect); a paused sample resets and returns ActionNone
-// (FR-013). A construction-fresh Governor starts with zeroed windows.
+// The controller counts SAMPLES, not durations: a window is a run of
+// consecutive qualifying samples at the GovernorCadence.
 //
-// This slice implements ONLY the shed side (US2). Recovery (US3) lands in T012:
-// the recover window and its projection/headroom test are stubbed here so the
-// state machine's shape is complete, but no ActionRecover is ever returned yet.
+// State-machine invariants (both windows are wall-side observer state, never
+// persisted — spec 028 Key Entities):
+//   - Each sample advances AT MOST one accumulator. An over-threshold sample
+//     advances breach and zeroes recover (climbing only multiplies an already
+//     breaching debt); a sample whose projection holds advances recover (breach
+//     was zeroed by its own else-branch); a sample qualifying for neither zeroes
+//     both.
+//   - Both windows reset on any decision, any pause, and any change in the
+//     effective speed between samples (the player moved the ceiling, or a prior
+//     decision took effect). A paused sample resets and returns ActionNone
+//     (FR-013) — elapsed pause time never counts toward either window.
+//   - A construction-fresh Governor starts with zeroed windows.
+//
+// Shed (US2): breach accrues while debt sits over ShedThreshold AND there is a
+// lower notch to shed to; at the 1x floor the governor saturates — debt over
+// threshold yields no decision, visible in status (US2-AC4).
+//
+// Recover (US3): recovery accrues only while GOVERNED with room to climb — the
+// effective speed sits below the requested ceiling on the capped ladder — and
+// while the debt PROJECTED at the candidate notch (current debt scaled by the
+// notch's tick-rate ratio, FR-006) stays below ShedThreshold × RecoverHeadroom.
+// The candidate is one notch up, never above the requested ceiling. A recover
+// fires after the full RecoveryWindow; recoverSamples > breachSamples is the
+// asymmetric hysteresis that prevents flapping (US3-AC2/AC4, SC-003).
 func (g *Governor) Sample(debt float64, jobs int, paused bool, effective, requested clock.Speed) Decision {
 	none := Decision{Action: ActionNone, To: effective, Debt: debt, Jobs: jobs}
 
@@ -149,12 +176,15 @@ func (g *Governor) Sample(debt float64, jobs int, paused bool, effective, reques
 
 	// --- shed path (US2) ---
 	// Breach accrues only while debt sits over the threshold AND there is a lower
-	// notch to shed to (effective above the 1x floor). At the floor the governor
-	// saturates: debt over threshold yields no decision, visible in status
-	// (US2-AC4). A single under-threshold sample resets the run (a blip cannot
-	// shed by itself — the breach window is the hysteresis).
-	if debt > ShedThreshold && idx > 0 {
+	// notch to shed to (effective above the 1x floor). A breaching sample can
+	// never also be recovering — climbing multiplies an already over-threshold
+	// debt — so it zeroes the recovery window. A single under-threshold sample
+	// resets the run (a blip cannot shed by itself — the breach window is the
+	// hysteresis).
+	breaching := debt > ShedThreshold && idx > 0
+	if breaching {
 		g.breach++
+		g.recover = 0
 		if g.breach >= breachSamples {
 			to := clock.CappedLadder()[idx-1]
 			g.reset(to)
@@ -164,15 +194,36 @@ func (g *Governor) Sample(debt float64, jobs int, paused bool, effective, reques
 		g.breach = 0
 	}
 
-	// --- recover path (US3) — T012 scope ---
-	// The recovery window (g.recover) accrues while governed and the debt
-	// PROJECTED at the next notch up would sit below ShedThreshold × RecoverHeadroom
-	// (FR-006), firing an ActionRecover after RecoveryWindow. That logic — and the
-	// only reads of g.recover and requested — land in T012; this slice never
-	// accrues or returns a recover.
-	_ = requested
+	// --- recover path (US3) ---
+	// Recovery accrues only while governed with room to climb: the effective
+	// speed sits below the requested ceiling on the capped ladder. The candidate
+	// is the next notch up (never above requested). Accrue while the debt
+	// projected at that notch — current debt scaled by candidateTPS/currentTPS
+	// (FR-006) — stays under ShedThreshold × RecoverHeadroom; a failing
+	// projection, or no room to climb, resets the window. A breaching sample has
+	// already zeroed g.recover above and is skipped here.
+	if !breaching {
+		reqIdx := clock.LadderIndex(requested)
+		if idx >= 0 && reqIdx > idx {
+			candidate := clock.CappedLadder()[idx+1]
+			projected := debt * candidate.TicksPerSecond() / effective.TicksPerSecond()
+			if projected < ShedThreshold*RecoverHeadroom {
+				g.recover++
+				if g.recover >= recoverSamples {
+					g.reset(candidate)
+					return Decision{Action: ActionRecover, To: candidate, Debt: debt, Jobs: jobs}
+				}
+			} else {
+				g.recover = 0
+			}
+		} else {
+			// At the ceiling / ungoverned, or effective off the capped ladder:
+			// recovery cannot accrue.
+			g.recover = 0
+		}
+	}
 
-	return Decision{Action: ActionNone, To: effective, Debt: debt, Jobs: jobs}
+	return none
 }
 
 // reset zeroes both windows and re-anchors the effective-speed watch to eff, so
