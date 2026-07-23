@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="docs/wiki/game-clock.md@c8fe41323c1155e8fda1619e4e0ed70ff3f37645">
+<meta name="promptworld-docs:source" content="docs/wiki/sim-loop.md@6b869e1c1b2b9f73749fdf3991ff6d7568aee290">
+<meta name="promptworld-docs:source" content="docs/wiki/cli-promptworld.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<title>Time and speed — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Time and speed</h1>
+<p class="lede">Your village runs on its own clock. Here's how game time maps to real
+time, how to speed it up or slow it down, and how pausing actually works.</p>
+
+<h2>The game clock</h2>
+<p>Every "tick" of the simulation is exactly one game second — the smallest unit of
+time the world tracks. The calendar starts at day 1, 06:00 (tick 0), and a full game
+day is 86,400 ticks. The clock never drifts or rounds oddly, so the game time you see
+displayed (<code>day N HH:MM</code>) stays exact no matter how long a world has been
+running.</p>
+
+<h2>The speed ladder</h2>
+<p>Speed controls how fast game time moves relative to real time. There are six
+settings:</p>
+<table>
+<tr><th>Speed</th><th>Meaning</th></tr>
+<tr><td><code>1x</code></td><td>One game second per real second</td></tr>
+<tr><td><code>4x</code> (default)</td><td>One game minute per 15 real seconds</td></tr>
+<tr><td><code>8x</code></td><td>Twice as fast as 4x</td></tr>
+<tr><td><code>16x</code></td><td>Twice as fast as 8x</td></tr>
+<tr><td><code>32x</code></td><td>The top of the "watchable" ladder — still fast enough
+to follow along, but the last stop before things get unreadable</td></tr>
+<tr><td><code>max</code></td><td>As fast as your machine can manage, uncapped — meant
+for worlds with no AI-driven villagers configured; it isn't offered once a model is
+set up, since decisions need at least a little real time to think</td></tr>
+</table>
+<p>Change speed from the command line, or step through the ladder live from the
+full-screen client with the <code>[</code> and <code>]</code> keys (which cycle
+1x → 4x → 8x → 16x → 32x; <code>max</code> is deliberately left off that quick-step
+ladder, reachable only by naming it directly):</p>
+<pre><code>promptworld speed demo 8x
+promptworld speed demo max</code></pre>
+
+<h2>Pause and resume are player verbs</h2>
+<p>Pausing is something you do on purpose — it's different from just detaching your
+view (which never stops the world). From the command line:</p>
+<pre><code>promptworld pause demo
+promptworld resume demo</code></pre>
+<p>In the full-screen client, the space bar toggles pause/resume directly. When you
+pause, the world truly freezes: any villager mid-thought at that instant gets to
+finish thinking and land its decision at the exact frozen moment, as if no time had
+passed for it — nothing new starts until you resume.</p>
+
+<h2>The world is always honest about its own pace</h2>
+<p>If your machine (or the AI model serving your villagers) can't actually keep up
+with the speed you asked for, the world doesn't try to catch up by skipping ahead —
+it slows down for real and tells you so, rather than silently jumping over events you
+would have wanted to see. There's no "fast-forward burst" to catch up on a backlog;
+what you watch is always what actually happened, at the pace it actually happened.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>

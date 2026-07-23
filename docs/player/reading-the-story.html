@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="docs/wiki/chronicle.md@fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f">
+<meta name="promptworld-docs:source" content="docs/wiki/tui-client.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/event-log.md@8be4440aae8d108884080cb6476782d2f11ad165">
+<title>Reading the story — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Reading the story</h1>
+<p class="lede">Your village keeps running whether you're watching or not. The
+chronicle is how you catch up on everything that happened while you were away.</p>
+
+<h2>The chronicle: your village's own storyteller</h2>
+<p>Because the world never pauses on its own, promptworld needs a way to hand you a
+readable summary when you come back after a day, a week, or longer. That's the
+chronicle: a cloud AI model periodically reads through everything that happened and
+writes it up as a few short story entries — a chapter or two per game day, not a
+blow-by-blow transcript. It covers things like: deaths, buildings going up, sightings
+and attacks by the "gru" (a nocturnal threat that stalks the village at night),
+conversations (with a gist of what was discussed), rumors spreading, gifts given,
+promises broken, thefts from a chest, passing musings, and the village's own
+self-governance — meetings, grievances aired, proposals voted up or down, and any
+exiles. Each entry is stamped with the in-world time it covers, so the story reads in
+order.</p>
+<p>A day or night that has nothing notable in it costs nothing and gets no filler
+entry — you only get chapters when something actually happened.</p>
+<p>The chronicle travels with your world's save data, so the moment you reattach — no
+matter how long you were gone — the recent story is already there waiting, with no
+separate step needed to fetch it. If the narrator ever has a hiccup, the unwritten
+lines simply carry over to the next chapter instead of getting lost, and if the
+village has no AI configured at all, you just don't get narrated chapters — the raw
+event feed described below still works.</p>
+
+<h2>Where to read it</h2>
+<ul>
+<li><strong>The full-screen client's Chronicle pane</strong> — the default tab, right
+there when you open <code>promptworld ui demo</code>. It shows the narrated story with
+filters by villager and by storyline thread. Press <code>r</code> to flip to the raw
+event-by-event feed instead (this is also the automatic fallback if no narrated
+entries exist yet); press it again to flip back.</li>
+<li><strong>The command line</strong> — <code>promptworld tail demo --follow</code>
+streams the raw event feed live in your terminal (drop <code>--follow</code> to just
+see recent history, which works even with the world not currently running).
+<code>promptworld attach demo</code> gives you the same kind of live raw feed alongside
+simple typed commands.</li>
+<li><strong>A plain text file</strong> — <code>chronicle.md</code>, sitting right in
+the world's save directory, regenerated automatically. You can open it in any text
+editor, no game required.</li>
+</ul>
+
+<h2>Reading the raw feed</h2>
+<p>When you're looking at the raw feed instead of the narrated chronicle, each line
+reads as a short, plain-language summary of one thing that happened — for example
+"Ash foraged at (14,9)" or a line of dialogue shown as "Ash→Rowan: ...". A handful of
+especially important moments (a death, an attack, a chest theft, a village-law
+violation) are visually called out so they don't slip by in a busy feed. In the
+full-screen client, pausing the world lets you select any entry and see its full raw
+detail underneath.</p>
+
+<h2>Nothing is ever rewritten</h2>
+<p>Under all of this sits one append-only history of every single thing that has ever
+happened in your world — nothing in it can be edited or deleted after the fact. The
+chronicle and the raw feed are both just readable windows onto that same permanent
+record, so what you're reading is always the real history, not a reconstruction.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>

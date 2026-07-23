@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="README.md@8fa82e1a4deefb4f7d3923b334ef85f25cf2c298">
+<meta name="promptworld-docs:source" content="docs/wiki/cli-promptworld.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/daemon-lifecycle.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/tui-client.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<title>Getting started — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Getting started</h1>
+<p class="lede">From "never seen this before" to a village running in your terminal —
+install, create a world, start it, and watch it live.</p>
+
+<h2>What promptworld is</h2>
+<p>promptworld is a terminal game on a procedurally generated map. You don't play a
+character — you populate a small village (8 villagers) and watch it run. Each villager
+has its own mind: some decisions come from a language model "thinking" for them, and
+simple things (walking, sleeping, eating) happen on the spot without any model call.
+The village is <strong>ambient and always-on</strong>: once you start a world, a
+background process (the "daemon") keeps simulating it around the clock, whether or not
+you're watching. You attach and detach like tuning into a channel — the world doesn't
+pause just because you looked away.</p>
+
+<h2>Before you start</h2>
+<p>You need <a href="https://go.dev">Go</a> installed to build the program. You do not
+need any AI model configured to get a world running — without one, villagers still
+walk around and handle their basic needs, just without model-driven decisions
+("reflex-only" minds). If you do want AI-driven villagers, you'll want a local model
+server (an OpenAI-compatible endpoint, e.g. <a href="https://ollama.com">Ollama</a>
+running something like <code>gemma4:12b-mlx</code>) and optionally an
+<code>ANTHROPIC_API_KEY</code> for the higher-quality cloud-narrated story feature.
+The <a href="llm-setup-basics.html">AI setup basics page</a> covers the minimum you
+need to flip that on; you can always come back to it.</p>
+
+<h2>1. Build the binary</h2>
+<pre><code>go build ./cmd/promptworld</code></pre>
+<p>Everything — running the world, watching it, and managing it — is one program:
+<code>promptworld</code>.</p>
+
+<h2>2. Create a world</h2>
+<pre><code>promptworld new demo --seed 42</code></pre>
+<p>This creates a new world named <code>demo</code>. A world is a self-contained save
+directory (by default under <code>~/.promptworld/worlds/demo</code>) holding
+everything about that run — the map, the villagers, the history, and its AI
+configuration file. The <code>--seed</code> is a starting number for the world's random
+generation; the same seed always regenerates the identical map and starting
+conditions, so it's worth writing down if you want to recreate a world later. Leave it
+off and promptworld picks one for you.</p>
+<p>Genesis also writes each villager's starting personality and Metatron's starting
+"charter" — more on both in a moment.</p>
+
+<h2>3. Start it</h2>
+<pre><code>promptworld start demo</code></pre>
+<p>This starts the world's daemon in the background (detached — it survives you closing
+the terminal) and confirms it's up before handing control back to you. From this
+moment the world is running 24/7, ticking away even if you don't attach to it again
+until tomorrow. If something goes wrong, promptworld will point you at
+<code>daemon.log</code> inside the world's save directory.</p>
+<p>You can check on any world, running or not, from anywhere:</p>
+<pre><code>promptworld ps        # every running world you have, at a glance
+promptworld status demo   # this world's tick, game time, and speed</code></pre>
+
+<h2>4. Watch it live</h2>
+<p>Two ways to watch, both non-destructive — quitting either one just detaches; the
+world keeps running underneath.</p>
+<ul>
+<li><code>promptworld attach demo</code> — a simple line-by-line feed of events as they
+happen, plus typed commands (<code>pause</code>, <code>resume</code>, <code>speed
+&lt;v&gt;</code>, <code>status</code>, <code>quit</code>).</li>
+<li><code>promptworld ui demo</code> — the full-screen visual client: a map of the
+village on one side, and a tabbed panel on the other for the chronicle (the narrated
+story so far), Metatron (your conversation with the village's angel — see the
+<a href="playing-via-metatron.html">next page</a>), and the villagers themselves (their
+needs, goals, and inventories). This is the recommended way to actually play.</li>
+</ul>
+<p>In the full-screen client, space bar toggles pause/resume, and bracket keys
+(<code>[</code> / <code>]</code>) step you through the speed ladder. The
+<a href="time-and-speed.html">time & speed page</a> explains what those numbers mean.</p>
+
+<h2>5. When you're done for now</h2>
+<p>Quitting <code>attach</code> or <code>ui</code> only detaches your view — the daemon
+keeps the village running. If you actually want the world to stop simulating (e.g.
+you're shutting down your machine), stop the daemon itself:</p>
+<pre><code>promptworld stop demo</code></pre>
+<p>This is a graceful stop — it finishes its current bookkeeping before exiting. The
+world resumes exactly where it left off next time you <code>start</code> it, even if
+it was killed abruptly instead.</p>
+
+<div class="card">
+<p><strong>Quick reference</strong></p>
+<pre><code>go build ./cmd/promptworld
+
+promptworld new demo --seed 42     # create a world
+promptworld start demo             # start the daemon (detached, runs 24/7)
+promptworld ps                     # see every world you have running
+promptworld status demo            # tick, game time, speed for one world
+promptworld attach demo            # watch live, line-mode; quit just detaches
+promptworld ui demo                # full-screen map + chronicle + Metatron + villagers
+promptworld stop demo              # graceful stop; resumes cleanly next start
+promptworld help                   # the full command list</code></pre>
+</div>
+
+<p>Next: learn how you actually influence the village — through
+<a href="playing-via-metatron.html">Metatron</a>.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>
