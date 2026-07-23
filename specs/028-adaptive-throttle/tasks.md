@@ -124,7 +124,7 @@ resume window resets; max-speed refusal regression.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T016 Run quickstart.md end-to-end in a scratch `PROMPTWORLD_HOME` with a real local model, including the
+- [x] T016 Run quickstart.md end-to-end in a scratch `PROMPTWORLD_HOME` with a real local model, including the
       SC-002 governor-on/off stale-discard comparison; record results in
       `specs/028-adaptive-throttle/quickstart-results.md` (live-observation precedent: 012/T045)
 - [ ] T017 [P] Full-suite gate `go test ./...` green + `go vet ./...`; confirm no format bump needed
