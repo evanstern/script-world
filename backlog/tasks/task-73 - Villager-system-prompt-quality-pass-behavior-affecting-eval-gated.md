@@ -1,10 +1,10 @@
 ---
 id: TASK-73
 title: Villager system-prompt quality pass (behavior-affecting; eval-gated)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 06:34'
-updated_date: '2026-07-23 21:12'
+updated_date: '2026-07-23 23:22'
 labels:
   - review-2026-07-22
   - code-quality
@@ -32,12 +32,12 @@ Spec: specs/027-villager-prompt-quality
 - [x] #2 Exemplar included or explicitly rejected with the measured reason
 - [x] #3 Before/after eval recorded on the task: rejected_malformed + rejected_cardinality rates and token counts; no regression
 - [x] #4 Prompt-cache prefix boundaries unchanged or consciously re-drawn; scripted-stub tests updated and passing
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #7 Spec phase: User Story 2 — The prompt reads as exemplary craft (Priority: P2, built first)
-- [ ] #8 Spec phase: User Story 3 — The exemplar question gets evidence (Priority: P3, variant build)
-- [ ] #9 Spec phase: User Story 1 — Villager decisions keep landing (Priority: P1) 🎯 the ship gate
-- [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 2 — The prompt reads as exemplary craft (Priority: P2, built first)
+- [x] #8 Spec phase: User Story 3 — The exemplar question gets evidence (Priority: P3, variant build)
+- [x] #9 Spec phase: User Story 1 — Villager decisions keep landing (Priority: P1) 🎯 the ship gate
+- [x] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -67,4 +67,12 @@ EXEMPLAR DECISION (AC#2): REJECTED on measurement — worked exemplar pushed mal
 Eval caveats (recorded in decision.md): window extended 6->8 game-hours for margin (identical for all variants, >=200 decision floor cleared: 789/896/982); old built from b96c028 (main had advanced via TASK-82 docs-only merge — no code delta vs merge-base); eval worlds needed local model cogito:3b + tool_mode json (default llm.json declares uninstalled gemma4:12b-mlx) — applied identically to all variants; 16x used because 32x suppresses all planner calls via the cognition horizon; three unrelated user daemons were running during all soaks (identical conditions, serial runs).
 
 Wiki re-pinned on the branch: agent-mind.md verified_against 642a75d (Principle IV). Awaiting PR merge for Done.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 2 — The prompt reads as exemplary craft (Priority: P2, built first): 2/2 · User Story 3 — The exemplar question gets evidence (Priority: P3, variant build): 1/1 · User Story 1 — Villager decisions keep landing (Priority: P1) 🎯 the ship gate: 6/6 · Polish & Cross-Cutting Concerns: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 2 — The prompt reads as exemplary craft (Priority: P2, built first): 2/2 · User Story 3 — The exemplar question gets evidence (Priority: P3, variant build): 1/1 · User Story 1 — Villager decisions keep landing (Priority: P1) 🎯 the ship gate: 6/6 · Polish & Cross-Cutting Concerns: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

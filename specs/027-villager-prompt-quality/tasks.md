@@ -73,9 +73,9 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T013 Record the before/after numbers table, exemplar decision, and implementation-tier justification on TASK-73 via the `backlog` CLI (run from the repo ROOT, not the worktree) and tick ACs #1–#4 as proven
-- [ ] T014 Re-pin the wiki: `/grounding-wiki:wiki-update` for `docs/wiki/agent-mind.md` (sources `internal/mind/prompt.go`), committed on this branch
-- [ ] T015 Run `specs/027-villager-prompt-quality/quickstart.md` top to bottom as validation; prepare the single PR from `.worktrees/task-73`
+- [X] T013 Record the before/after numbers table, exemplar decision, and implementation-tier justification on TASK-73 via the `backlog` CLI (run from the repo ROOT, not the worktree) and tick ACs #1–#4 as proven
+- [X] T014 Re-pin the wiki: `/grounding-wiki:wiki-update` for `docs/wiki/agent-mind.md` (sources `internal/mind/prompt.go`), committed on this branch
+- [X] T015 Run `specs/027-villager-prompt-quality/quickstart.md` top to bottom as validation; prepare the single PR from `.worktrees/task-73`
 
 ---
 
