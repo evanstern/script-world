@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: 556cebd790c855f0759f26cec4ef3396bdf81a80
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # TUI client
@@ -119,7 +119,13 @@ resolved once at thought-ingest from the chronicle ring in the digest voice
 trigger 0 to a cadence phrase) and the stored chain survives the ring's
 500-event eviction. Attribution: the thought/outcome payload's agent, else a
 villager job-ID parse for fragments; `turn-metatron-*` jobs go to a sentinel
-and `conversation-*` jobs are never ingested. The projection is bounded
+and `conversation-*` jobs are never ingested. `ingestOutcome` also skips the
+NON-terminal `sim.OutcomeRetried` marker (spec 025, TASK-72): the tool-loop
+consumers emit it AFTER a landed run's door already recorded the real terminal
+outcome, so folding it in would overwrite `landed` with `retried` — the marker
+stays in the event log for trail-level retry counting, it just never becomes a
+chain's outcome (the same disregard conversation outcomes get via the job-ID
+prefix guard). The projection is bounded
 (`decisionChainCap` 20 chains per agent, oldest evicted) and resets wholesale
 on reconnect like the replica. Verdicts and outcomes render ONLY through the
 sweep-tested plain-language `verdictGlossary` — raw enum strings never reach

@@ -15,7 +15,7 @@ sources:
   - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: eddbce15b916f19e364bbb11ce79f5d25da82b6e
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Testing strategy
@@ -153,7 +153,13 @@ contracts, not just the TASK-64 instruction surface. `metatron_test.go`
 landing (charge decrement, atomicity, perception memories), zero-bank
 refusal, the firewall sentinel, charter fallbacks, skill-file
 eligibility/ordering, the fixed-frame non-negotiables under an adversarial
-battery, and capability-manifest gating. `metatron_gaps_test.go` closes what
+battery, and capability-manifest gating; spec 025 (TASK-72) extended it with
+turn retry-visibility tests (a turn whose loop consumed its transport retry
+emits the non-terminal `cog.outcome` retried marker; a clean turn emits none)
+and turn token-budget plumbing tests (`metatron.New` stores and passes the
+`max_tokens.metatron_turn` budget; the default reproduces 1024). The
+tool-loop retry matrix itself lives in `internal/toolloop/retry_test.go`
+([[tool-loop]]), with the mind-side twins in `internal/mind/mind_test.go`. `metatron_gaps_test.go` closes what
 that suite left untested: `TestChargeMirrorAccrualAndCap` drives
 `metatron.charge_regenerated`/`metatron.nudged` through `Observe` → `run()` →
 `mirrorState` and proves the bank accrues and caps at `sim.MetatronChargeCap`

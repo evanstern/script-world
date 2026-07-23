@@ -12,7 +12,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Agent mind
@@ -163,9 +163,14 @@ model through `Submitter`) — with `Kind: llm.KindPlanner`, the persona system
 prefix, the situation+memory-window suffix as the loop's `Seed` turn,
 `Roster: tool.LoopRosterVillager()`, per-tool handlers from
 `md.villagerHandlers`, `MaxRounds: md.loopRounds` (`llm.json`'s
-`loop_max_rounds`, normalized), and `MaxTokens: loopMaxTokens` (512, up from
-the pre-loop 256 — a tool-era round carries a `tool_use` block alongside any
-prose, so the budget grew to avoid truncating a call mid-arguments). The model
+`loop_max_rounds`, normalized), and `MaxTokens: md.plannerTokens` (spec 025,
+TASK-72: the operator-tunable `llm.json` `max_tokens.planner` budget, threaded
+through `mind.New` like `loopRounds`; default 512, up from the pre-loop 256 —
+a tool-era round carries a `tool_use` block alongside any prose, so the budget
+grew to avoid truncating a call mid-arguments — with the rationale now living
+on the config default in [[llm-orchestrator]]'s `config.go`). `mind.New` also
+threads `consolidationTokens` (`max_tokens.consolidation`, default 1024) for
+[[nightly-consolidation]]'s Submit. The model
 may call read tools first (since spec 019 the villager roster ships two —
 `search_journal`/`read_journal`, the first production Read tools, [[agent-journal]])
 then must commit to exactly one acting tool — a world verb, `set_plan`, `muse`,
@@ -246,7 +251,15 @@ order-independent of buffer order) and ride ONE dedicated `InjectSocial` batch,
 separate from the terminal `cog.outcome`. A verdict requiring a non-empty
 reason (every `rejected_*` and `read_error`) gets one backfilled from the
 verdict name if a handler somehow left it blank, logged as the contract
-violation it would be (`verdictRequiresReason`).
+violation it would be (`verdictRequiresReason`). Since spec 025 (TASK-72)
+`runPlan` also surfaces the loop's one in-loop transport retry: when
+`res.Retried` is set ([[tool-loop]]'s one-per-run transport retry), it emits a
+NON-terminal `cog.outcome` carrying `sim.OutcomeRetried` and the first
+failure's reason via `cogOutcomeEvent` — the TASK-42 marker vocabulary, so no
+new event type — making every recovery countable from the trail; the terminal
+outcome the run earns is still owned by the landing door or the terminal
+switch below (the [[tui-client]] decision-trace projection skips the marker so
+it never overwrites the earned terminal).
 
 Single goals land via `Loop.InjectIntent` exactly as before — which validates,
 resolves coordinates deterministically at the tick boundary (`resolveGoal`),

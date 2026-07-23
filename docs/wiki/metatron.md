@@ -11,7 +11,7 @@ sources:
   - internal/metatron/miracle_batch.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Metatron
@@ -65,10 +65,13 @@ the model just picks its one act. The retired `turnReply`/`parseTurn` free-text
 JSON contract (`{say, nudge|null, miracle|null}`) is gone: a door refusal now
 becomes a `rejected_gate` fed back to the model within the loop's round cap — a
 behavior upgrade over the old single-shot refusal, since a mistyped villager name
-can be retried instead of ending the turn outright. `turnMaxTokens` is 1024 (up
-from 700): a tool-era round must carry a `tool_use` block alongside any converse
-prose in the same round, so the budget grew to keep a full charter-voiced reply
-from crowding out a same-round act. When the loop ends with no text and no landed
+can be retried instead of ending the turn outright. The per-round token budget
+is `mt.turnTokens` (spec 025, TASK-72: the operator-tunable `llm.json`
+`max_tokens.metatron_turn` knob, threaded through `metatron.New` like
+`loopRounds`; default 1024, up from the pre-loop 700 — a tool-era round must
+carry a `tool_use` block alongside any converse prose in the same round, so
+the budget grew to keep a full charter-voiced reply from crowding out a
+same-round act). When the loop ends with no text and no landed
 act (model_done with nothing, cap exhaustion, or a soft error), the same
 scattered-thoughts apology as before covers it.
 
@@ -122,7 +125,12 @@ never-grounded call is recorded even when nothing landed), via the same
 only turn (no tool calls) emits no batch at all. `nudge_dream`/`nudge_omen`/
 `work_miracle` are the turn's only handlers; `converse` is deliberately absent
 from the handler map (and from `tool.LoopRosterMetatron()`) since it is the
-final-text channel, never a callable tool.
+final-text channel, never a callable tool. Since spec 025 (TASK-72) the turn
+also surfaces the loop's one in-loop transport retry: when
+`toolloop.Result.Retried` is set, `emitRetried` (toolcalls.go) lands a
+NON-terminal `cog.outcome` carrying `sim.OutcomeRetried` and the first
+failure's reason through the same `InjectSocial` door — emitted BEFORE the
+error return, so even a twice-failed turn's retry is countable from the trail.
 
 **Charge economy** (`internal/sim/metatron.go`): `State.MetatronCharges` — genesis
 1, cap 3, +1 per absolute 6-game-hour boundary emitted by the [[executor]]

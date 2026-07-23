@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/toolloop/loop.go
   - internal/toolloop/record.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Tool-use loop
@@ -47,8 +47,31 @@ real normalization is `llm.Config.Rounds()`, upstream). `Run` guarantees
 most one acting call lands; every model tool call yields exactly one
 `CallRecord` via `j.Record` (ordinals 1-based, dense, emission-ordered); a
 read-effect tool never consumes the action; `SkipObserve` rides every internal
-`Submit`; and the governor estimator is fed the whole-`Run` wall time only on
-a completed termination (successes-only, below).
+`Submit`; the governor estimator is fed the whole-`Run` wall time only on
+a completed termination (successes-only, below); and a transport-level
+provider failure is retried EXACTLY ONCE per run (spec 025, below) before it
+terminates.
+
+**Transport retry — one per run** (spec 025, TASK-72,
+`specs/025-llm-robustness-knobs/contracts/loop-retry.md`): when a `Submit`
+fails and `terminationForSubmitErr` classifies it `provider_error` (transport;
+NOT the admission-ladder sentinels, NOT context death), the loop re-submits
+the identical transcript once — a failed `Submit` appended nothing, so the
+retry is byte-identical, and it consumes no round (`rounds` counts model
+responses). On a second transport failure, or the first after the run's retry
+is spent, the loop terminates `provider_error` with the latest error exactly
+as a single failure did pre-025. Admission refusals and ctx-done never retry
+(the governor spoke; busy-is-not-down), and a handler infrastructure failure
+is not a transport failure (the model call succeeded; handlers are
+side-effectful) — those paths are unchanged. `Result.Retried` /
+`Result.RetryReason` (the FIRST failure's text; non-empty iff `Retried`)
+report the consumed retry for the consumer to surface as a NON-terminal
+`cog.outcome` carrying `sim.OutcomeRetried` — the TASK-42 conversation
+vocabulary, so no new event type — making every recovery countable from the
+trail alone. Estimator/breaker doctrine is untouched structurally: the
+retried `Submit` rides `SkipObserve` like any round, a recovered run ends in
+the success family and feeds exactly one `ObserveCognition`, a twice-failed
+run feeds zero, and each `Submit` strikes the breaker as an independent call.
 
 **Cardinality — one landed acting call, reads exempt**: a tool is "acting"
 (`isActing`) iff its `tool.EffectClass` is `World` or `Expressive`; a `Read`
@@ -97,7 +120,8 @@ return a nil error; `TermAdmissionRefused` (the submit-side admission ladder —
 budget/queue/circuit/best-effort sentinels) / `TermProviderError` /
 `TermCtxDone` (context canceled or deadline exceeded) return the underlying
 error alongside. `terminationForSubmitErr` maps a `Submit` failure onto one of
-the latter three; a handler's infrastructure failure (`Outcome.Err != nil`)
+the latter three (a `provider_error` `Submit` failure first passes through the
+one-per-run transport retry above); a handler's infrastructure failure (`Outcome.Err != nil`)
 always terminates the loop with `TermProviderError`, recording the failing
 call and every trailing call in the same batch as `unlanded`
 (`recordInfraFailure`) — every model tool call still yields exactly one
@@ -166,4 +190,7 @@ and `data-model.md` (`specs/017-agent-tool-loop/`) are the authored contract
 this note grounds; `loop_test.go`/`equivalence_test.go`/`governor_test.go`/
 `adversarial_test.go` exercise the cardinality rule, the termination
 taxonomy, the successes-only estimator feed, and adversarial model behavior
-(over-cap calls, malformed args, an unknown tool name) respectively.
+(over-cap calls, malformed args, an unknown tool name) respectively;
+`retry_test.go` (spec 025) locks the transport-retry matrix — fail-once
+recovery, fail-twice termination, admission/ctx/handler failures never
+retried, round-cap and estimator invariance.

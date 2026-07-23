@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Daemon lifecycle
@@ -54,11 +54,15 @@ Startup sequence:
    fully outside the loop, so inference failures can never touch the simulation.
    Boot also surfaces the agent tool-use loop's config warnings the same
    warn-not-error way as the concurrency knob (`llmCfg.Local.Workers()`'s
-   `workersWarn`): `llmCfg.Rounds()` (an out-of-range `loop_max_rounds`) and both
-   tiers' `ToolModeResolved()` (an unknown `tool_mode`) each print one line and
+   `workersWarn`): `llmCfg.Rounds()` (an out-of-range `loop_max_rounds`), both
+   tiers' `ToolModeResolved()` (an unknown `tool_mode`), and — since spec 025
+   (TASK-72) — the three per-kind token budgets (`llmCfg.PlannerTokens()`/
+   `MetatronTurnTokens()`/`ConsolidationTokens()`, an out-of-range
+   `max_tokens.<key>`) each print one line and
    clamp/default rather than aborting boot (TASK-52, [[llm-orchestrator]]). The
-   normalized round cap (`loopRounds`) then threads into both loop consumers:
-   `mind.New(..., loopRounds)` and `metatron.New(..., loopRounds)`.
+   normalized round cap and effective budgets then thread into both loop
+   consumers: `mind.New(..., loopRounds, plannerTokens, consolidationTokens)`
+   and `metatron.New(..., loopRounds, metatronTurnTokens)`.
    Before the orchestrator is built, `cognition.ValidateKinds(llm.Kinds())` is a
    hard startup gate: every call kind must resolve to a registered decision class
    before a model is ever reachable ([[cognition]]). After it is built,

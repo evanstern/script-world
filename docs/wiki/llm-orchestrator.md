@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # LLM orchestrator
@@ -93,7 +93,23 @@ the Anthropic SDK path is always native and ignores it. `Config.LoopMaxRounds`
 round cap; `Config.Rounds()` normalizes it the same warn-not-error way
 `LocalConfig.Workers()` does: absent/0 → 8 (`defaultLoopMaxRounds`), 1–16
 pass through, negative clamps to 8 with a warning, and above 16
-(`maxLoopMaxRounds`) clamps to 16 with a warning.
+(`maxLoopMaxRounds`) clamps to 16 with a warning. `Config.MaxTokens`
+(`"max_tokens"`, top-level, spec 025 / TASK-72) is an optional
+`*TokenBudgets` object carrying three per-kind response budgets an operator
+may tune without a rebuild — `planner` (villager planner loop round budget,
+default 512), `metatron_turn` (console-turn round budget, default 1024),
+`consolidation` (nightly consolidation call, default 1024) — each normalized
+independently by `PlannerTokens()`/`MetatronTurnTokens()`/
+`ConsolidationTokens()` under the same warn-not-error clamp doctrine:
+absent/0 → the default silently, 1–4096 verbatim, negative → default with a
+warning, above 4096 (`maxTokenBudget`) → 4096 with a warning; never a boot
+failure. It is a POINTER so `omitempty` genuinely suppresses the object —
+`WriteDefault` stays minimal and a pre-025 config round-trips
+byte-for-byte. The daemon resolves all three at boot, prints any warnings on
+its boot channel, and threads the effective values into
+`mind.New`/`metatron.New` exactly as `loopRounds` travels; the conversation
+(128/224), meeting (72), narrator (800), and metatron digest (400) budgets
+are deliberately NOT governed by these knobs.
 
 **Whole-loop latency feed** (`ObserveCognition`, TASK-52): the tool-use loop
 issues several per-round `Submit` calls (each `SkipObserve: true`, so none

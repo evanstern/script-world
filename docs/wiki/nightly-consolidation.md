@@ -7,7 +7,7 @@ sources:
   - internal/mind/consolidate.go
   - internal/mind/validate.go
   - internal/persona/personas.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
 ---
 
 # Nightly consolidation + persona firewall
@@ -44,7 +44,9 @@ refs back into landed events, + held beliefs by ID + the social context block. O
 contract (`specs/004-nightly-consolidation/contracts/`): a single
 JSON object — `nature` (anchor echo), `gist`, `promote`/`fade` refs, `beliefs`
 (statement, confidence 0–100, provenance witnessed/told/inferred, source, subject),
-`narrative`.
+`narrative`. The call's response budget is `md.consolidationTokens` (spec 025,
+TASK-72: `llm.json` `max_tokens.consolidation`, threaded through `mind.New`;
+default 1024, the former hardcode).
 
 **The firewall validator** (`internal/mind/validate.go`), deterministic and
 mechanical — no second model call, so rejection is a testable 100% guarantee.
