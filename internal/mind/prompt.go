@@ -54,14 +54,6 @@ func systemPrompt(name, personaText string) string {
 		"a world action, a short plan (set_plan), or a passing thought (muse). " +
 		"Musing and planning are actions too: a beat spent thinking is a beat not spent doing. " +
 		"Choose the one action that best fits your situation and needs right now.\n")
-	// Part 4 — worked exemplar (spec 027 US3, research D5). One generic
-	// tool-selection example: a hypothetical situation shape, no real villager
-	// name, no literal tool-call arguments, and a world action (not muse) as its
-	// choice, so it teaches reading-the-situation-then-committing without
-	// anchoring decisions to a specific name or verb.
-	b.WriteString("\nFor example: hungry, carrying raw food, with an oven within reach — " +
-		"the fitting action is to cook, one deliberate call, rather than wandering off to gather more. " +
-		"Read your situation, then commit to the single action it calls for.\n")
 	return b.String()
 }
 
