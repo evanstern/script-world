@@ -59,6 +59,13 @@ type Intent struct {
 	// and every non-storage intent byte-identical.
 	Kind string `json:"kind,omitempty"`
 	Qty  int    `json:"qty,omitempty"`
+	// Reason (spec 019, R2) is the planner's free-text reason for this intent,
+	// copied from the agent.intent_set payload by the reducer so it survives to
+	// completion time — the executor bakes it into the memory's Why when the
+	// intent completes. "" for reflex/executor-authored intents (never
+	// fabricated). Lives on the intent, so it dies with it (cleared on
+	// completion/abandonment). omitempty keeps reflex intents byte-stable.
+	Reason string `json:"reason,omitempty"`
 }
 
 type Agent struct {
@@ -120,15 +127,34 @@ type AgentHail struct {
 	Until int64 `json:"until"`
 }
 
+// MemoryPlace situates a memory: where the agent stood when it formed (spec
+// 019, US1). Carried as a pointer (*MemoryPlace) everywhere it appears so
+// absence is nil — never a fake (0,0) origin. Desc is a deterministic
+// terrain/feature description baked at emission (describePlace); "" = coords
+// alone situate the memory.
+type MemoryPlace struct {
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	Desc string `json:"desc,omitempty"`
+}
+
 // Memory is one episodic record; salience 1..10 weights the working-memory
 // window. Subject/Tone (TASK-8) mark gossip-worthy memories about another
 // agent — the seeds rumors are born from (−1 subject = purely personal).
+//
+// Where/Why/Conv (spec 019) are the situated context, copied verbatim from the
+// emitting event's payload by the agent.memory_added reducer arm — never
+// re-derived at render or replay. All three omitempty so a pre-019 Memory
+// (fields absent) marshals byte-identically to today (FR-014, SC-007).
 type Memory struct {
-	Text     string `json:"text"`
-	Salience int    `json:"salience"`
-	Tick     int64  `json:"tick"`
-	Subject  int    `json:"subject"`
-	Tone     int    `json:"tone,omitempty"`
+	Text     string       `json:"text"`
+	Salience int          `json:"salience"`
+	Tick     int64        `json:"tick"`
+	Subject  int          `json:"subject"`
+	Tone     int          `json:"tone,omitempty"`
+	Where    *MemoryPlace `json:"where,omitempty"` // location at emission (nil = none)
+	Why      string       `json:"why,omitempty"`   // driving intent reason, verbatim ("" = none)
+	Conv     int64        `json:"conv,omitempty"`  // conversation ref (founding-talk tick; 0 = none)
 }
 
 // Structure is player-visible built stuff; the map itself never contains
@@ -649,6 +675,13 @@ type (
 		// omitted, so pre-feature logs and reflex/executor emissions marshal
 		// byte-identically to today. LAST field, omitempty.
 		Job string `json:"job,omitempty"`
+		// Reason (spec 019, R2) carries the planner's free-text reason onto the
+		// intent so it survives to completion, where the executor bakes it into
+		// the memory's Why. Set ONLY at the planner inject-landing emission site
+		// (from InjectArgs.Reason); reflex- and executor-authored intent_set
+		// events carry none. omitempty keeps pre-019 logs and reflex/executor
+		// emissions byte-identical.
+		Reason string `json:"reason,omitempty"`
 	}
 	WorkStartedPayload struct {
 		Agent int   `json:"agent"`
@@ -686,11 +719,14 @@ type (
 		Y int `json:"y"`
 	}
 	MemoryAddedPayload struct {
-		Agent    int    `json:"agent"`
-		Text     string `json:"text"`
-		Salience int    `json:"salience"`
-		Subject  int    `json:"subject"`
-		Tone     int    `json:"tone,omitempty"`
+		Agent    int          `json:"agent"`
+		Text     string       `json:"text"`
+		Salience int          `json:"salience"`
+		Subject  int          `json:"subject"`
+		Tone     int          `json:"tone,omitempty"`
+		Where    *MemoryPlace `json:"where,omitempty"` // spec 019: location at emission
+		Why      string       `json:"why,omitempty"`   // spec 019: driving intent reason, verbatim
+		Conv     int64        `json:"conv,omitempty"`  // spec 019: conversation ref (founding-talk tick)
 	}
 	ThoughtPayload struct {
 		Agent  int    `json:"agent"`

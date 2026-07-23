@@ -371,8 +371,8 @@ func talkEvents(s *State, i, j int, nextTick int64) []store.Event {
 		{Tick: nextTick, Type: "social.relation_changed",
 			Payload: mustPayload(RelationChangedPayload{
 				A: j, B: i, AffectionDelta: talkAffection, Reason: "talked"})},
-		memoryEvent(nextTick, i, salTalk, "Talked with %s.", b.Name),
-		memoryEvent(nextTick, j, salTalk, "Talked with %s.", a.Name),
+		situatedMemoryEvent(nextTick, i, salTalk, PlaceAt(s, a.X, a.Y), "", "Talked with %s.", b.Name),
+		situatedMemoryEvent(nextTick, j, salTalk, PlaceAt(s, b.X, b.Y), "", "Talked with %s.", a.Name),
 	}
 	if tell, ok := TellableFor(s, i, j); ok {
 		events = append(events, rumorTellEvent(nextTick, i, j, tell))
@@ -668,12 +668,17 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		}
 	}
 
+	// Spec 019 (US1): situate every memory this completion emits by the acting
+	// agent's tile, and carry the driving intent's reason (in.Reason; "" for
+	// reflex) into the memory's Why — baked at emission so replay reproduces the
+	// identical situated text with no lookup.
+	where := PlaceAt(s, a.X, a.Y)
 	switch in.Goal {
 	case "forage":
 		emit("agent.foraged", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
 		if a.Needs.Food < 150 {
-			events = append(events, memoryEvent(nextTick, i, salStarvingForage,
-				"Found food when I was starving."))
+			events = append(events, situatedMemoryEvent(nextTick, i, salStarvingForage,
+				where, in.Reason, "Found food when I was starving."))
 		}
 	case "chop":
 		emit("agent.chopped", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
@@ -685,18 +690,23 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// same batch, immediately after, so apply order matches: the hunt
 		// reducer decrements Spears[0] to 0, then spear_broke removes it.
 		emit("agent.hunted", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
-		events = append(events, memoryEvent(nextTick, i, salHunt, "Hunted at the den and came back with meat."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salHunt, where, in.Reason,
+			"Hunted at the den and came back with meat."))
 		if len(a.Inv.Spears) > 0 && a.Inv.Spears[0] == 1 {
 			emit("agent.spear_broke", SpearBrokePayload{Agent: i})
-			events = append(events, memoryEvent(nextTick, i, salSpearBroke,
+			// The broken spear is an incidental consequence, not the driven act —
+			// situated by place but carrying no Why (the reason belongs to the hunt
+			// memory above), which also avoids a double em-dash in this base text.
+			events = append(events, situatedMemoryEvent(nextTick, i, salSpearBroke, where, "",
 				"My spear broke on the hunt — I'll need to craft another."))
 		}
 	case "build_fire":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "fire", X: in.TargetX, Y: in.TargetY})
-		events = append(events, memoryEvent(nextTick, i, salFire, "Built a fire."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salFire, where, in.Reason, "Built a fire."))
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
-		events = append(events, memoryEvent(nextTick, i, salShelter, "Raised a shelter with my own hands."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason,
+			"Raised a shelter with my own hands."))
 	case "build_oven":
 		// T030: the flagship station. "First oven" wording (research R8) is
 		// accurate here — s.hasStructure checks the pre-mutation state, before
@@ -708,14 +718,14 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Raised the village's first oven — meals and baths, at last."
 		}
-		events = append(events, memoryEvent(nextTick, i, salOvenBuilt, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salOvenBuilt, where, in.Reason, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue
 			}
 			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
-				events = append(events, memoryAboutEvent(nextTick, w, i, toneOvenBuilt, salOvenBuilt,
-					"Watched %s raise an oven for the village.", a.Name))
+				events = append(events, situatedMemoryAboutEvent(nextTick, w, i, toneOvenBuilt, salOvenBuilt,
+					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s raise an oven for the village.", a.Name))
 			}
 		}
 	case "build_chest":
@@ -731,14 +741,14 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Built the village's first chest — a place to keep things safe."
 		}
-		events = append(events, memoryEvent(nextTick, i, salChestBuilt, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salChestBuilt, where, in.Reason, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue
 			}
 			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
-				events = append(events, memoryAboutEvent(nextTick, w, i, toneChestBuilt, salChestBuilt,
-					"Watched %s build a chest for the village.", a.Name))
+				events = append(events, situatedMemoryAboutEvent(nextTick, w, i, toneChestBuilt, salChestBuilt,
+					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s build a chest for the village.", a.Name))
 			}
 		}
 	case "quarry":
@@ -804,7 +814,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		morale := minInt(1000, a.Needs.Morale+bathMorale)
 		warmth := minInt(1000, a.Needs.Warmth+bathWarmth)
 		emit("agent.bathed", BathedPayload{Agent: i, MoraleAfter: morale, WarmthAfter: warmth})
-		events = append(events, memoryEventToned(nextTick, i, salBath, toneBath,
+		events = append(events, situatedMemoryToned(nextTick, i, salBath, toneBath, where, in.Reason,
 			"Took a hot bath at the oven — warm, clean, and content."))
 	}
 	return events

@@ -3,9 +3,11 @@ package sim
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // Episodic memory: deterministic emission heuristics (research R2) and the
@@ -43,6 +45,156 @@ func memoryEventToned(tick int64, agent, salience, tone int, format string, args
 		Tick: tick, Type: "agent.memory_added",
 		Payload: mustPayload(MemoryAddedPayload{
 			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience, Subject: -1, Tone: tone,
+		}),
+	}
+}
+
+// --- spec 019 (US1): situated episodic memories ---
+//
+// The situated constructors mirror the three above (memoryEvent /
+// memoryAboutEvent / memoryEventToned) but bake the where/why context into the
+// payload AND compose it into the memory text via the shared grammar helper
+// (situateText). The salience/subject/tone semantics are unchanged — this layer
+// situates memories, it does not re-weigh them. Unmigrated call sites keep
+// using the bare constructors and stay byte-identical.
+
+// placeScanRadius bounds describePlace's deterministic feature scan (Manhattan).
+const placeScanRadius = 2
+
+// describePlace returns a deterministic terrain/feature description for the tile
+// at (x,y) — the nearest notable feature (station or terrain) within a small
+// fixed radius, scanned in a fixed ring order so the same (state, x, y) always
+// yields the same string. "" when nothing notable is near (coords alone
+// situate the memory). Baked into the event at emission (research R3); the
+// scribe renders what the payload carries and never re-derives, so replay is
+// byte-identical with no map lookup.
+func describePlace(s *State, x, y int) string {
+	if s.m == nil {
+		return ""
+	}
+	for r := 0; r <= placeScanRadius; r++ {
+		for dy := -r; dy <= r; dy++ {
+			dx := r - abs(dy)
+			if d := featureDesc(s, x+dx, y+dy); d != "" {
+				return d
+			}
+			if dx != 0 {
+				if d := featureDesc(s, x-dx, y+dy); d != "" {
+					return d
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// featureDesc names the notable feature on one tile — a station structure
+// first (the most salient), then the terrain kind — as a noun phrase that reads
+// after "at" ("the fire", "the rock outcrop"). "" for ordinary or off-map tiles.
+func featureDesc(s *State, x, y int) string {
+	if s.m == nil || x < 0 || y < 0 || x >= s.m.W || y >= s.m.H {
+		return ""
+	}
+	for _, st := range s.Structures {
+		if st.X == x && st.Y == y {
+			switch st.Kind {
+			case "fire":
+				return "the fire"
+			case "shelter":
+				return "the shelter"
+			case "oven":
+				return "the oven"
+			case "chest":
+				return "the chest"
+			}
+		}
+	}
+	switch effectiveKind(s.m, s, x, y) {
+	case worldmap.Water:
+		return "the water"
+	case worldmap.Tree:
+		return "the woods"
+	case worldmap.Rock:
+		return "the rock outcrop"
+	case worldmap.Forage:
+		return "the forage patch"
+	}
+	return ""
+}
+
+// PlaceAt returns the situated location of a memory formed at (x,y): the coords
+// always (FR-001) plus a deterministic feature description (may be empty).
+// Exported so the mind side (convo.go) situates conversation memories from the
+// same helper the executor uses. Never nil — coords alone satisfy FR-001.
+func PlaceAt(s *State, x, y int) *MemoryPlace {
+	return &MemoryPlace{X: x, Y: y, Desc: describePlace(s, x, y)}
+}
+
+// situateText composes a situated memory text from a base template and its
+// context, in the exact grammar order pinned by contracts/memory-context.md:
+//
+//	<base>[ at <desc> (x,y) | at (x,y)][ — <why>]
+//
+// The where-clause splices before the base's trailing period (preserved when
+// there is no why); the why-clause is the intent reason verbatim, carrying its
+// own terminal punctuation. Absent parts produce no clause — never a fabricated
+// one. Implemented once here so every call site composes identically.
+func situateText(base string, where *MemoryPlace, why string) string {
+	stem := strings.TrimSuffix(base, ".")
+	hadDot := stem != base
+	var b strings.Builder
+	b.WriteString(stem)
+	if where != nil {
+		if where.Desc != "" {
+			fmt.Fprintf(&b, " at %s (%d,%d)", where.Desc, where.X, where.Y)
+		} else {
+			fmt.Fprintf(&b, " at (%d,%d)", where.X, where.Y)
+		}
+	}
+	switch {
+	case why != "":
+		b.WriteString(" — ")
+		b.WriteString(why)
+	case hadDot:
+		b.WriteByte('.')
+	}
+	return b.String()
+}
+
+// situatedMemoryEvent is memoryEvent with situated context (spec 019): the
+// where/why are baked into the payload AND composed into the text. Where is the
+// acting agent's tile; Why is the driving intent's reason ("" for reflex).
+func situatedMemoryEvent(tick int64, agent, salience int, where *MemoryPlace, why string, format string, args ...any) store.Event {
+	return store.Event{
+		Tick: tick, Type: "agent.memory_added",
+		Payload: mustPayload(MemoryAddedPayload{
+			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, why),
+			Salience: salience, Subject: -1, Where: where, Why: why,
+		}),
+	}
+}
+
+// situatedMemoryToned is memoryEventToned with situated context (spec 019).
+func situatedMemoryToned(tick int64, agent, salience, tone int, where *MemoryPlace, why string, format string, args ...any) store.Event {
+	return store.Event{
+		Tick: tick, Type: "agent.memory_added",
+		Payload: mustPayload(MemoryAddedPayload{
+			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, why),
+			Salience: salience, Subject: -1, Tone: tone, Where: where, Why: why,
+		}),
+	}
+}
+
+// situatedMemoryAboutEvent is memoryAboutEvent with situated context (spec 019):
+// a gossip-worthy memory about another agent, situated by the WITNESS's own
+// location. Witness memories carry no Why — the witness did not drive the act
+// (contracts/memory-context.md rule 2).
+func situatedMemoryAboutEvent(tick int64, agent, subject, tone, salience int, where *MemoryPlace, format string, args ...any) store.Event {
+	return store.Event{
+		Tick: tick, Type: "agent.memory_added",
+		Payload: mustPayload(MemoryAddedPayload{
+			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, ""),
+			Salience: salience, Subject: subject, Tone: tone, Where: where,
 		}),
 	}
 }

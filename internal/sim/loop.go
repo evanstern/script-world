@@ -594,6 +594,12 @@ func (l *Loop) handleCommand(cmd command) error {
 					ResX: intent.ResX, ResY: intent.ResY,
 					Kind: intent.Kind, Qty: intent.Qty,
 					Source: "planner", Job: in.JobID,
+					// Spec 019 (R2): carry the planner's reason onto the intent so
+					// it survives to completion, where the executor bakes it into the
+					// memory's Why. Recorded input (already narrated as the
+					// agent.thought above) — replay repopulates it from this event, so
+					// live and replay stay identical with no new event.
+					Reason: in.Reason,
 				})
 			}
 			// The hail (TASK-47): a talk_to landing pauses a hailable

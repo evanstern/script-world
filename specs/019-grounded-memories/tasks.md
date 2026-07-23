@@ -22,9 +22,9 @@
 
 **Purpose**: the shared memory-context data shapes every story reads/writes.
 
-- [ ] T002 Add `MemoryPlace` type and extend `MemoryAddedPayload` with `Where *MemoryPlace`, `Why string`, `Conv int64` (all omitempty) in internal/sim/agents.go per data-model.md §1–2
-- [ ] T003 Extend `Memory` with the same three fields (omitempty) in internal/sim/agents.go per data-model.md §3
-- [ ] T004 Copy `Where`/`Why`/`Conv` from payload to `Memory` in the `agent.memory_added` Apply arm in internal/sim/state.go; unit test: pre-019 payload (fields absent) reduces to a pre-019-shaped Memory in internal/sim/state_test.go (or the existing reducer test file)
+- [x] T002 Add `MemoryPlace` type and extend `MemoryAddedPayload` with `Where *MemoryPlace`, `Why string`, `Conv int64` (all omitempty) in internal/sim/agents.go per data-model.md §1–2
+- [x] T003 Extend `Memory` with the same three fields (omitempty) in internal/sim/agents.go per data-model.md §3
+- [x] T004 Copy `Where`/`Why`/`Conv` from payload to `Memory` in the `agent.memory_added` Apply arm in internal/sim/state.go; unit test: pre-019 payload (fields absent) reduces to a pre-019-shaped Memory in internal/sim/state_test.go (or the existing reducer test file)
 
 **Checkpoint**: `go build ./... && go test ./internal/sim/` green; no behavior change yet.
 
@@ -36,11 +36,11 @@
 
 **Independent test**: quickstart §1 grammar/unit tests + §3 live smoke — memories show `· at <desc> (x,y)` and `· why:` for planner-driven acts, place-only for reflex.
 
-- [ ] T005 [US1] Add `Reason string json:"reason,omitempty"` to `Intent` in internal/sim/agents.go and populate it from the `agent.intent_set` payload's existing `Reason` in that event's Apply arm in internal/sim/state.go (research R2); unit test: planner intent carries reason, reflex intent carries ""
-- [ ] T006 [P] [US1] Implement deterministic `describePlace(s *State, x, y int) string` (same-tile feature, then fixed-radius "near <feature>", else "") in internal/sim/memory.go or internal/sim/journal.go-adjacent location per research R3, with table-driven unit test in internal/sim/memory_test.go
-- [ ] T007 [US1] Add situated constructor variants (`situatedMemoryEvent`, situated `memoryAboutEvent`/`memoryEventToned` forms) and the shared where/why text-grammar helper in internal/sim/memory.go per contracts/memory-context.md grammar; unit test pins exact composed strings (with/without desc, with/without why)
-- [ ] T008 [US1] Migrate executor memory call sites (hunt, spear-broke, fire, shelter, starving-forage, oven, chest, talk at internal/sim/executor.go:671–740 and :374, plus witness memories) to the situated variants, baking `Where` (agent tile + describePlace) and `Why` (`in.Reason`) at emission
-- [ ] T009 [US1] Render situated suffixes (`· at <desc> (x,y)` / `· at (x,y)` / `· why: <reason>`) from reduced `Memory` in the soul.md memory line in internal/scribe/scribe.go per contracts/memory-context.md; scribe unit test pins new-format line AND pre-019 memory rendering byte-identical to today's format in internal/scribe/scribe_test.go
+- [x] T005 [US1] Add `Reason string json:"reason,omitempty"` to `Intent` in internal/sim/agents.go and populate it from the `agent.intent_set` payload's existing `Reason` in that event's Apply arm in internal/sim/state.go (research R2); unit test: planner intent carries reason, reflex intent carries ""
+- [x] T006 [P] [US1] Implement deterministic `describePlace(s *State, x, y int) string` (same-tile feature, then fixed-radius "near <feature>", else "") in internal/sim/memory.go or internal/sim/journal.go-adjacent location per research R3, with table-driven unit test in internal/sim/memory_test.go
+- [x] T007 [US1] Add situated constructor variants (`situatedMemoryEvent`, situated `memoryAboutEvent`/`memoryEventToned` forms) and the shared where/why text-grammar helper in internal/sim/memory.go per contracts/memory-context.md grammar; unit test pins exact composed strings (with/without desc, with/without why)
+- [x] T008 [US1] Migrate executor memory call sites (hunt, spear-broke, fire, shelter, starving-forage, oven, chest, talk at internal/sim/executor.go:671–740 and :374, plus witness memories) to the situated variants, baking `Where` (agent tile + describePlace) and `Why` (`in.Reason`) at emission
+- [x] T009 [US1] Render situated suffixes (`· at <desc> (x,y)` / `· at (x,y)` / `· why: <reason>`) from reduced `Memory` in the soul.md memory line in internal/scribe/scribe.go per contracts/memory-context.md; scribe unit test pins new-format line AND pre-019 memory rendering byte-identical to today's format in internal/scribe/scribe_test.go
 
 **Checkpoint**: US1 independently demonstrable via quickstart §3.
 
@@ -52,9 +52,9 @@
 
 **Independent test**: quickstart §4 — sqlite query by `conv` returns the full ordered dialogue.
 
-- [ ] T010 [US2] Set `Conv: cc.conv` (and `Where` from the remembering agent's position) on the gist `MemoryAddedPayload` at internal/mind/convo.go:337 per research R5
-- [ ] T011 [US2] Render the `[conv <id>]` marker on conversation memory lines in internal/scribe/scribe.go (extends T009's line format); update scribe unit test
-- [ ] T012 [US2] Integration test: run a scripted conversation through the mind test harness, then recover the full ordered transcript from the event log using only `Memory.Conv` (event type `social.conversation_turn`, payload `conv`), asserting speaker + verbatim text per contracts/memory-context.md, in internal/mind/convo_test.go (or existing convo test file)
+- [x] T010 [US2] Set `Conv: cc.conv` (and `Where` from the remembering agent's position) on the gist `MemoryAddedPayload` at internal/mind/convo.go:337 per research R5
+- [x] T011 [US2] Render the `[conv <id>]` marker on conversation memory lines in internal/scribe/scribe.go (extends T009's line format); update scribe unit test
+- [x] T012 [US2] Integration test: run a scripted conversation through the mind test harness, then recover the full ordered transcript from the event log using only `Memory.Conv` (event type `social.conversation_turn`, payload `conv`), asserting speaker + verbatim text per contracts/memory-context.md, in internal/mind/convo_test.go (or existing convo test file)
 
 **Checkpoint**: US1+US2 together close Layer 1.
 

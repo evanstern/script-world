@@ -55,6 +55,55 @@ func TestSoulRendersFromEvents(t *testing.T) {
 	t.Fatalf("soul.md never rendered the memory; content:\n%s", data)
 }
 
+// TestSoulRendersSituatedContext (spec 019 US1/US2, T009/T011): a situated
+// memory renders its place/why/conv suffixes in order, and a pre-019 memory
+// (no situated fields) renders byte-identically to today's format — no suffix.
+func TestSoulRendersSituatedContext(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+	scr, err := New(dir, 42, m, state.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.Close()
+
+	scr.Observe([]store.Event{
+		// A fully situated memory (place with desc + why).
+		{Tick: 3600, Type: "agent.memory_added", Payload: mustPayloadJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Built a fire at the rock outcrop (23,41) — keep the Gru away.", Salience: 5, Subject: -1,
+			Where: &sim.MemoryPlace{X: 23, Y: 41, Desc: "the rock outcrop"}, Why: "keep the Gru away."})},
+		// A conversation memory (place, no desc + conv ref).
+		{Tick: 3660, Type: "agent.memory_added", Payload: mustPayloadJSON(t, sim.MemoryAddedPayload{
+			Agent: 0, Text: "Talked with Birch — argued about the storm.", Salience: 4, Subject: 1,
+			Where: &sim.MemoryPlace{X: 7, Y: 12}, Conv: 3600})},
+		// A pre-019 memory (no situated fields) — must render as before.
+		{Tick: 3720, Type: "agent.memory_added", Payload: mustPayloadJSON(t, map[string]any{
+			"agent": 0, "text": "An old bare memory.", "salience": 3})},
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+		s := string(data)
+		if strings.Contains(s, "· at the rock outcrop (23,41)") &&
+			strings.Contains(s, "· why: keep the Gru away.") &&
+			strings.Contains(s, "· at (7,12)") &&
+			strings.Contains(s, "· [conv 3600]") &&
+			// The pre-019 line renders with NO situated suffix (byte-identical form).
+			strings.Contains(s, "An old bare memory.\n") &&
+			!strings.Contains(s, "An old bare memory. ·") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
+	t.Fatalf("soul.md never rendered situated context; content:\n%s", data)
+}
+
 func TestDeathFreezesSoulHeader(t *testing.T) {
 	dir := t.TempDir()
 	if err := persona.Genesis(dir); err != nil {

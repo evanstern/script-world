@@ -430,6 +430,72 @@ func TestConvoGoldenHappyPath(t *testing.T) {
 	}
 }
 
+// TestConvoMemoryRecoversTranscript (spec 019 US2, T012 / SC-002): a
+// participant's conversation memory carries the conversation ref (Memory.Conv),
+// and the complete ordered transcript — every turn's speaker + verbatim text —
+// is recoverable from the EVENT LOG ALONE via that ref, with no model call.
+func TestConvoMemoryRecoversTranscript(t *testing.T) {
+	lines := []string{"Cold morning.", "Aye, bitter.", "Fire held though.", "Barely.", "We need more wood.", "I'll fetch it."}
+	model := &scriptedModel{replies: convoScript(
+		`{"gist": "planned the firewood run", "topics": ["fire"], "tones": [1, 1], "retold": null}`)}
+	h, md := setupConvo(t, model)
+	startConvo(t, h, md)
+
+	if convs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		return e.Type == "social.conversation"
+	}); len(convs) == 0 {
+		t.Fatal("conversation never landed")
+	}
+
+	all, _ := h.st.EventsSince(0, 0)
+
+	// 1. A participant's gist memory carries the conversation ref.
+	var conv int64
+	for _, e := range all {
+		if e.Type != "agent.memory_added" {
+			continue
+		}
+		var p sim.MemoryAddedPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Conv != 0 && strings.Contains(p.Text, "Talked with") {
+			conv = p.Conv
+			break
+		}
+	}
+	if conv == 0 {
+		t.Fatal("no conversation memory carried a Conv ref")
+	}
+
+	// 2. Recover the transcript from the log alone, by the memory's Conv ref —
+	// social.conversation_turn events with that conv, ordered by seq.
+	type turn struct {
+		speaker int
+		text    string
+	}
+	var got []turn
+	for _, e := range all { // EventsSince returns rows in seq order
+		if e.Type != "social.conversation_turn" {
+			continue
+		}
+		var p sim.ConversationTurnPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Conv == conv {
+			got = append(got, turn{p.Speaker, p.Text})
+		}
+	}
+
+	// 3. The recovered transcript is the complete, ordered dialogue: round-robin
+	// speakers over the founding pair (0,1) and the verbatim scripted utterances.
+	if len(got) != 2*sim.ConvoTurnsPerSide {
+		t.Fatalf("recovered %d turns, want %d", len(got), 2*sim.ConvoTurnsPerSide)
+	}
+	for i, tn := range got {
+		wantSpeaker := i % 2 // idx = [0,1], round-robin
+		wantText := lines[i%len(lines)]
+		if tn.speaker != wantSpeaker || tn.text != wantText {
+			t.Errorf("turn %d = {%d, %q}, want {%d, %q}", i, tn.speaker, tn.text, wantSpeaker, wantText)
+		}
+	}
+}
+
 func setupConvo(t *testing.T, model Submitter) (*harness, *Mind) {
 	t.Helper()
 	h := newHarness(t, "") // its own mock is unused; we swap the mind below

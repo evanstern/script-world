@@ -218,6 +218,30 @@ func (s *Scribe) renderVillageCharter() {
 	os.WriteFile(filepath.Join(s.worldDir, "village_charter.md"), []byte(b.String()), 0o644)
 }
 
+// memorySuffix renders a memory's situated context (spec 019) as deterministic
+// soul.md suffixes, in the exact order pinned by contracts/memory-context.md:
+// place, then why, then the conversation ref. Reads ONLY the reduced Memory
+// fields — never re-derives place or joins other events. A pre-019 memory
+// (all fields absent) yields "", so its line renders byte-identically to today
+// (FR-006, FR-014, SC-007).
+func memorySuffix(m sim.Memory) string {
+	var b strings.Builder
+	if m.Where != nil {
+		if m.Where.Desc != "" {
+			fmt.Fprintf(&b, " · at %s (%d,%d)", m.Where.Desc, m.Where.X, m.Where.Y)
+		} else {
+			fmt.Fprintf(&b, " · at (%d,%d)", m.Where.X, m.Where.Y)
+		}
+	}
+	if m.Why != "" {
+		fmt.Fprintf(&b, " · why: %s", m.Why)
+	}
+	if m.Conv != 0 {
+		fmt.Fprintf(&b, " · [conv %d]", m.Conv)
+	}
+	return b.String()
+}
+
 // render writes one agent's soul.md from replica state.
 func (s *Scribe) render(idx int) {
 	if idx < 0 || idx >= len(s.replica.Agents) {
@@ -242,7 +266,7 @@ func (s *Scribe) render(idx int) {
 		b.WriteString("*No memories yet.*\n")
 	}
 	for _, m := range a.Memories {
-		fmt.Fprintf(&b, "- **%s** (%d★) %s\n", clock.Format(m.Tick), m.Salience, m.Text)
+		fmt.Fprintf(&b, "- **%s** (%d★) %s%s\n", clock.Format(m.Tick), m.Salience, m.Text, memorySuffix(m))
 	}
 
 	// Beliefs: durable convictions with confidence and provenance (TASK-9).
