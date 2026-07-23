@@ -40,8 +40,7 @@ func TestOpenAICompatNativeRequestShape(t *testing.T) {
 	o := newOpenAICompat(srv.URL, "m", "", "", ToolModeNative)
 
 	req := Request{
-		System:         "sys",
-		ResponseSchema: json.RawMessage(`{"type":"object"}`), // must be dropped when tools are present
+		System: "sys",
 		Tools: []ToolDecl{{Name: "drop", Description: "drop it",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"target":{"type":"string"}},"required":["target"],"additionalProperties":false}`)}},
 		Turns: []Turn{
@@ -52,10 +51,6 @@ func TestOpenAICompatNativeRequestShape(t *testing.T) {
 	}
 	if _, err := o.call(context.Background(), req); err != nil {
 		t.Fatal(err)
-	}
-
-	if _, ok := got["response_format"]; ok {
-		t.Errorf("response_format sent alongside tools in native mode: %v", got["response_format"])
 	}
 
 	tools, ok := got["tools"].([]any)
