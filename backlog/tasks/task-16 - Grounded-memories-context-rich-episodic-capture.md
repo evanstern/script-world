@@ -1,10 +1,10 @@
 ---
 id: TASK-16
 title: 'Grounded memories: context-rich episodic capture'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-19 15:56'
-updated_date: '2026-07-23 03:44'
+updated_date: '2026-07-23 04:26'
 labels:
   - memory
   - agent-mind
@@ -35,20 +35,20 @@ Spec: specs/019-grounded-memories
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Memory payloads carry structured context — place, cause/intent reason when present, and refs to source events (e.g. conversation id) — and soul.md renders it
-- [ ] #2 Deterministic executor memories are situated (where + why), not bare verbs like 'Built a fire.'
-- [ ] #3 Conversation memories reference their transcript so what was said is retrievable from the memory, not just a gist
-- [ ] #4 Replay from the event log reproduces identical souls; no model calls or out-of-band lookups
-- [ ] #5 Each agent has a personal markdown journal with write_journal_entry and search_journal tools exposed to the mind (read_journal / delete_from_journal optional)
-- [ ] #6 Journal is size-capped (fixed character/page budget) enforced at write time; no other usage rules imposed on the agent
-- [ ] #7 Journal mutations are event-sourced and reducer-applied — replay reproduces identical journals with no model calls
-- [ ] #8 Spec phase: Setup
-- [ ] #9 Spec phase: Foundational (blocking US1, US2, US4)
-- [ ] #10 Spec phase: User Story 1 — Situated deterministic memories (P1)
-- [ ] #11 Spec phase: User Story 2 — Conversation memories reference their transcript (P1)
-- [ ] #12 Spec phase: User Story 3 — Agent-authored journal (P2)
-- [ ] #13 Spec phase: User Story 4 — Faithful replay of memories and journals (P1, integration proof)
-- [ ] #14 Spec phase: Polish & Cross-Cutting
+- [x] #1 Memory payloads carry structured context — place, cause/intent reason when present, and refs to source events (e.g. conversation id) — and soul.md renders it
+- [x] #2 Deterministic executor memories are situated (where + why), not bare verbs like 'Built a fire.'
+- [x] #3 Conversation memories reference their transcript so what was said is retrievable from the memory, not just a gist
+- [x] #4 Replay from the event log reproduces identical souls; no model calls or out-of-band lookups
+- [x] #5 Each agent has a personal markdown journal with write_journal_entry and search_journal tools exposed to the mind (read_journal / delete_from_journal optional)
+- [x] #6 Journal is size-capped (fixed character/page budget) enforced at write time; no other usage rules imposed on the agent
+- [x] #7 Journal mutations are event-sourced and reducer-applied — replay reproduces identical journals with no model calls
+- [x] #8 Spec phase: Setup
+- [x] #9 Spec phase: Foundational (blocking US1, US2, US4)
+- [x] #10 Spec phase: User Story 1 — Situated deterministic memories (P1)
+- [x] #11 Spec phase: User Story 2 — Conversation memories reference their transcript (P1)
+- [x] #12 Spec phase: User Story 3 — Agent-authored journal (P2)
+- [x] #13 Spec phase: User Story 4 — Faithful replay of memories and journals (P1, integration proof)
+- [x] #14 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -75,4 +75,14 @@ Re-grounding 2026-07-22: line refs drifted — agent.thought emit is now loop.go
 2026-07-23: Implementation (Opus 4.8 spec-implementer) complete on task-16-grounded-memories — T002–T020, T022–T023 done across 4 commits (2c70234 Layer 1 + transcript refs, 4ea54a7 journal, 2adb42b replay proof + reconciliation, 2c1594a ticks). All touched packages green incl. extended determinism suite. Gate review: FILED-1 accepted (*Journal pointer — omitempty is a no-op on value structs; only shape satisfying FR-014), FILED-2 accepted (IntentSetPayload gains Reason emitted at planner landing; research R2's line refs were wrong). SC-001 scope gap NOT accepted: ~18 emission sites (gru, theft, near-death/witness-death, cold-night, debts, governance) left unsituated — follow-up slice T008b delegated to same implementer (situate all with Where, no fabricated Why, reconcile data-model §5 + research R2/R4). Pre-existing main breakage found during verification filed as TASK-62 (TestCatalogSweep / cog.tool_call digest drift — not this branch). Remaining: T008b, my full-suite gate, T021 live smoke, PR.
 
 2026-07-23: T008b verified (18 sites situated; bare constructors removed — SC-001 now structural; full-day sweep test). Independent full-suite gate: green except pre-existing TASK-62 red. Live smoke (T021, throwaway world, 8x, ~35 game-min): 12/12 memory events carry where; situated soul lines live; [conv 516] transcript recovered from log alone (SC-002); journal.md views render (all empty — emergent, not a defect); restart survival intact (§6). Findings: (1) soul suffixes duplicate the situated text; (2) 'Built a fire at the fire' — describePlace names the just-built structure; (3) DESIGN: zero why lines — spec 017 removed the per-action reason, so no live path produces a reasoned intent; Why pipeline was live-dead. User clarified 2026-07-23: restore via OPTIONAL bounded reason param on acting world tools + set_plan (muse untouched). All three delegated as T024 to the Opus implementer.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking US1, US2, US4): 3/3 · User Story 1 — Situated deterministic memories (P1): 6/6 · User Story 2 — Conversation memories reference their transcript (P1): 3/3 · User Story 3 — Agent-authored journal (P2): 6/6 · User Story 4 — Faithful replay of memories and journals (P1, integration proof): 2/2 · Polish & Cross-Cutting: 3/4
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking US1, US2, US4): 3/3 · User Story 1 — Situated deterministic memories (P1): 6/6 · User Story 2 — Conversation memories reference their transcript (P1): 3/3 · User Story 3 — Agent-authored journal (P2): 6/6 · User Story 4 — Faithful replay of memories and journals (P1, integration proof): 2/2 · Polish & Cross-Cutting: 4/4 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocking US1, US2, US4): 3/3 · User Story 1 — Situated deterministic memories (P1): 6/6 · User Story 2 — Conversation memories reference their transcript (P1): 3/3 · User Story 3 — Agent-authored journal (P2): 6/6 · User Story 4 — Faithful replay of memories and journals (P1, integration proof): 2/2 · Polish & Cross-Cutting: 4/4). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
