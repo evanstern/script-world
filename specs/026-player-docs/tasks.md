@@ -45,8 +45,8 @@
 **Independent Test**: quickstart V2–V5 (all-fresh clean run, exact staleness, missing/broken-ref, no-op).
 
 - [X] T011 [US3] Implement `.claude/skills/player-docs/scripts/check-freshness.mjs` per contracts/provenance-and-check.md: Node ≥ 18 ESM, zero deps; resolve repo root via `git rev-parse --show-toplevel`; expected-page-set constant (the seven slugs); line-oriented meta parsing; wiki pin from `verified_against:` frontmatter, non-wiki pin via `git log -1 --format=%H -- <path>`; verdict precedence missing > broken-ref > stale > fresh; text output lines + summary; `--check` alias, `--json` report; exit codes 0/1/2; writes nothing ever
-- [ ] T012 [US3] Run quickstart V2 (all fresh, exit 0, `git status` clean), V3 (single-pin tamper → exactly one stale, exit 1, then revert), V4 (missing + broken-ref surfaced) from repo root and from a subdirectory; fix script until all pass
-- [ ] T013 [US3] Add the CLAUDE.md pointer: one line in the PDLC/rules area naming `player-docs` (regenerates docs/player from the wiki; run after `/grounding-wiki:wiki-update`; check mode: `node .claude/skills/player-docs/scripts/check-freshness.mjs --check`)
+- [X] T012 [US3] Run quickstart V2 (all fresh, exit 0, `git status` clean), V3 (single-pin tamper → exactly one stale, exit 1, then revert), V4 (missing + broken-ref surfaced) from repo root and from a subdirectory; fix script until all pass
+- [X] T013 [US3] Add the CLAUDE.md pointer: one line in the PDLC/rules area naming `player-docs` (regenerates docs/player from the wiki; run after `/grounding-wiki:wiki-update`; check mode: `node .claude/skills/player-docs/scripts/check-freshness.mjs --check`)
 
 **Checkpoint**: V2–V4 pass; skill procedure + script agree with the contract.
 
