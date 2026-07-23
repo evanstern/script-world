@@ -11,12 +11,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"unicode/utf8"
 
 	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/toolloop"
 )
 
 // thoughtMeta is a job's identity + prediction, snapshotted at enqueue.
@@ -152,6 +154,65 @@ func truncateRaw(s string) string {
 		cut--
 	}
 	return s[:cut] + rawTruncMarker
+}
+
+// verdictRequiresReason reports whether a verdict's cog.tool_call MUST carry a
+// non-empty reason (contracts/events.md): every rejection and every read error
+// is the queryable explanation AC#5 promises. The driver already sets Reason
+// from the handler's ResultForModel for these; the emitter asserts the
+// invariant so a blank explanation never reaches the durable log silently.
+func verdictRequiresReason(v toolloop.Verdict) bool {
+	switch v {
+	case toolloop.VerdictRejectedGate, toolloop.VerdictRejectedCardinality,
+		toolloop.VerdictRejectedUnknown, toolloop.VerdictRejectedMalformed,
+		toolloop.VerdictReadError:
+		return true
+	default:
+		return false
+	}
+}
+
+// toolCallEvent converts one buffered CallRecord into its cog.tool_call event
+// via the sim-side constructor (the shared payload authority — metatron converts
+// its own CallRecord identically at T020). snapshotTick is the cognition's world
+// tick (thoughtMeta.snapshotTick). The reason invariant is enforced here: an
+// empty reason on a verdict that requires one is backfilled with the verdict
+// name (so the AC#5 query never finds a blank explanation) and logged as the
+// driver-contract violation it would be.
+func (md *Mind) toolCallEvent(r toolloop.CallRecord, snapshotTick int64) store.Event {
+	reason := r.Reason
+	if reason == "" && verdictRequiresReason(r.Verdict) {
+		reason = string(r.Verdict)
+		log.Printf("mind: cog.tool_call %s ordinal %d verdict %s missing reason; backfilled", r.JobID, r.Ordinal, r.Verdict)
+	}
+	b, _ := json.Marshal(sim.NewCogToolCallPayload(
+		r.JobID, r.Ordinal, r.Tool, r.Args,
+		string(r.Verdict), reason, r.Tier, snapshotTick,
+	))
+	return store.Event{Type: "cog.tool_call", Payload: b}
+}
+
+// emitToolCalls lands a cognition's buffered CallRecords as cog.tool_call events
+// (spec 017 FR-007, T018), one per record. Called on EVERY loop-termination path
+// so a rejected / never-grounded call is recorded even when nothing landed. The
+// records ride ONE all-or-nothing batch through the same telemetry door as
+// cog.thought / cog.outcome (emitCog → InjectSocial) — a DEDICATED batch, so it
+// neither reorders nor entangles with the grounding events the door already
+// emitted during the loop, nor the terminal cog.outcome that follows. Events go
+// out in ordinal order (the driver buffers them ordinal-dense already; sorted
+// here so the mind's emission is correct independent of buffer order). An empty
+// buffer emits nothing — no empty batch.
+func (md *Mind) emitToolCalls(records []toolloop.CallRecord, snapshotTick int64) {
+	if len(records) == 0 {
+		return
+	}
+	ordered := append([]toolloop.CallRecord(nil), records...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Ordinal < ordered[j].Ordinal })
+	events := make([]store.Event, 0, len(ordered))
+	for _, r := range ordered {
+		events = append(events, md.toolCallEvent(r, snapshotTick))
+	}
+	md.emitCog(events...)
 }
 
 // emitCog lands telemetry through the social door; a rejected batch is

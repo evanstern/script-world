@@ -20,6 +20,7 @@ import (
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/toolloop"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -52,6 +53,15 @@ type Metatron struct {
 
 	turnBusy atomic.Bool // one console turn at a time
 
+	// runLoop drives one console turn through the bounded tool-use loop (spec
+	// 017, T020). Production wires it to toolloop.Run against the concrete
+	// orchestrator; tests that stub the model install a scripted driver. It is
+	// touched only by Turn (never the absorb/digest goroutines), so installing it
+	// in New before those start is race-free. loopRounds is the hard iteration
+	// cap (llm.json loop_max_rounds, normalized), threaded from the daemon.
+	runLoop    func(ctx context.Context, j toolloop.Job) (toolloop.Result, error)
+	loopRounds int
+
 	// fileMu guards soul.md / transcript.md appends (turn worker vs absorb
 	// goroutine both write).
 	fileMu sync.Mutex
@@ -81,7 +91,13 @@ type Metatron struct {
 
 // New starts the angel from a state snapshot. The metatron/ dir and an
 // empty soul are created on first flight; existing files are kept.
-func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string) (*Metatron, error) {
+//
+// loopRounds is the tool-use loop's iteration cap (llm.json loop_max_rounds,
+// already normalized by the daemon). The variadic runLoopOverride is a test
+// seam: it installs a scripted loop BEFORE any goroutine starts, for tests that
+// stub the model rather than pass a real *llm.Orchestrator. Production omits it —
+// New wires runLoop from the concrete orchestrator.
+func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -97,6 +113,18 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 		digCarry: make(chan []string, 1),
 		events:   make(chan []store.Event, 256),
 		done:     make(chan struct{}),
+	}
+	mt.loopRounds = loopRounds
+	// The tool-use loop needs the concrete orchestrator (toolloop.Run's contract
+	// surface — Submit + ObserveCognition). Production passes it; test seams that
+	// stub the model install their own runLoop via runLoopOverride.
+	if o, ok := orch.(*llm.Orchestrator); ok {
+		mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+			return toolloop.Run(ctx, o, j)
+		}
+	}
+	if len(runLoopOverride) > 0 && runLoopOverride[0] != nil {
+		mt.runLoop = runLoopOverride[0]
 	}
 	if err := os.MkdirAll(mt.metatronDir(), 0o755); err != nil {
 		return nil, err

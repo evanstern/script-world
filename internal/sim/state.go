@@ -340,6 +340,9 @@ func (s *State) Apply(e store.Event) error {
 		"agent.intent_rejected":
 		// Cognition-horizon telemetry (TASK-32): recorded observability,
 		// no state effect.
+	case "cog.tool_call":
+		// The tool-use loop's call trace (spec 017): recorded observability,
+		// no state effect — same as the cog.* arm above.
 
 	case "agent.plan_set":
 		var p PlanSetPayload

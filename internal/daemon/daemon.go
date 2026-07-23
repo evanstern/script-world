@@ -161,13 +161,25 @@ func Run(dir string) error {
 		if workersWarn != "" {
 			fmt.Printf("daemon: %s\n", workersWarn)
 		}
+		// Agent tool-use loop knobs (TASK-52): surface any clamp/unknown-value
+		// warning the same way as the concurrency knob — warn, never fatal.
+		if _, roundsWarn := llmCfg.Rounds(); roundsWarn != "" {
+			fmt.Printf("daemon: %s\n", roundsWarn)
+		}
+		if _, tmWarn := llmCfg.Local.ToolModeResolved(); tmWarn != "" {
+			fmt.Printf("daemon: %s\n", tmWarn)
+		}
+		if _, tmWarn := llmCfg.Cloud.ToolModeResolved(); tmWarn != "" {
+			fmt.Printf("daemon: %s\n", tmWarn)
+		}
 		localDesc := fmt.Sprintf("local %s @ %s", llmCfg.Local.Model, llmCfg.Local.Endpoint)
 		if localWorkers > 1 {
 			localDesc += fmt.Sprintf(", parallel %d", localWorkers)
 		}
 		fmt.Printf("daemon: llm orchestrator on (%s, cloud %s, budget $%.0f/mo)\n",
 			localDesc, cloudDesc, llmCfg.MonthlyBudgetUSD)
-		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir))
+		loopRounds, _ := llmCfg.Rounds()
+		md, err := mind.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), persona.Load(dir), loopRounds)
 		if err != nil {
 			return err
 		}
@@ -178,7 +190,7 @@ func Run(dir string) error {
 		orch.SetRecalibrateHook(md.RecalibrateSignal)
 		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
 			sim.AgentCount, sim.PlannerCadenceTicks/60)
-		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir)
+		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir, loopRounds)
 		if err != nil {
 			return err
 		}

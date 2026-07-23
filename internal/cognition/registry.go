@@ -36,7 +36,6 @@ var fibonacci = map[int]bool{1: true, 2: true, 3: true, 5: true, 8: true, 13: tr
 // specs/007-cognition-horizon/contracts/registry.md.
 var registry = map[string]DecisionClass{
 	"planner":       {Class: "planner", Points: 3, BudgetTicks: 1200, Degrade: DegradeReflex, FutureDated: true},
-	"musing":        {Class: "musing", Points: 1, BudgetTicks: 3600, Degrade: DegradeSkip},
 	"conversation":  {Class: "conversation", Points: 13, BudgetTicks: 7200, Degrade: DegradeSkip},
 	"meeting":       {Class: "meeting", Points: 2, BudgetTicks: 3600, Degrade: DegradeTemplate},
 	"consolidation": {Class: "consolidation", Points: 5, BudgetTicks: 28800, Degrade: DegradeSkip},
@@ -49,7 +48,6 @@ var registry = map[string]DecisionClass{
 // accepted kinds is enforced at daemon start via ValidateKinds (FR-002).
 var kindToClass = map[string]string{
 	"planner":       "planner",
-	"musing":        "musing",
 	"conversation":  "conversation",
 	"meeting":       "meeting",
 	"consolidation": "consolidation",

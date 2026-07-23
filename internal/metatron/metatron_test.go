@@ -3,6 +3,7 @@ package metatron
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,8 +14,13 @@ import (
 	"github.com/evanstern/promptworld/internal/persona"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
+	"github.com/evanstern/promptworld/internal/toolloop"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
+
+// testLoopRounds is the iteration cap the test angel runs with.
+const testLoopRounds = 8
 
 // mockOrch cans one reply (or error) and records every request.
 type mockOrch struct {
@@ -81,14 +87,108 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir)
+	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Stop the background goroutines: unit tests drive absorb-side methods
 	// and the digest worker directly, so queued jobs stay inspectable.
 	mt.Close()
+	// The mock is not a *llm.Orchestrator, so New wired no runLoop; install the
+	// default converse loop (a converse-only turn). Acting tests reassign
+	// mt.runLoop after this call.
+	mt.runLoop = converseLoop(mt)
 	return mt, orch, inj, dir
+}
+
+// --- scripted tool-use loop seams (spec 017 T020) ---
+
+// bridgeSubmit calls the mock through the Job's System+Seed so the firewall /
+// charter / status assertions observe the real prompt, and surfaces a canned
+// transport error. The real toolloop.Run builds this request internally; the
+// scripted loop reproduces just enough of it for the mock to record.
+func bridgeSubmit(mt *Metatron, ctx context.Context, j toolloop.Job) (llm.Response, error) {
+	return mt.orch.Submit(ctx, llm.Request{Kind: j.Kind, System: j.System, Prompt: j.Seed})
+}
+
+func termForErr(err error) toolloop.Termination {
+	if err == context.DeadlineExceeded || err == context.Canceled {
+		return toolloop.TermCtxDone
+	}
+	return toolloop.TermProviderError
+}
+
+func toolCall(name, args string) llm.ToolCall {
+	return llm.ToolCall{ID: "c1", Name: name, Args: json.RawMessage(args)}
+}
+
+// converseLoop is the default scripted loop: bridge the Submit (record + surface
+// errors), then treat the reply text as converse (model_done, Final = text). No
+// tool call, no charge — the "the model just talked" path.
+func converseLoop(mt *Metatron) func(context.Context, toolloop.Job) (toolloop.Result, error) {
+	return func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		resp, err := bridgeSubmit(mt, ctx, j)
+		if err != nil {
+			return toolloop.Result{Term: termForErr(err)}, err
+		}
+		return toolloop.Result{Final: resp.Text, Term: toolloop.TermModelDone}, nil
+	}
+}
+
+// actLoop scripts a loop that converses (resp.Text becomes Final), then lands
+// exactly one tool call through the REAL handler, recording it as ordinal 1. A
+// landed verdict → TermLanded; anything else → TermCapExhausted (the model tried
+// once and stopped) — matching the pre-loop single-shot shape for these tests.
+func actLoop(mt *Metatron, name, args string) func(context.Context, toolloop.Job) (toolloop.Result, error) {
+	return func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		resp, err := bridgeSubmit(mt, ctx, j)
+		if err != nil {
+			return toolloop.Result{Term: termForErr(err)}, err
+		}
+		c := toolCall(name, args)
+		out := j.Handlers[name](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: name,
+			Args: c.Args, Verdict: out.Verdict, Reason: out.ResultForModel, Tier: "cloud"})
+		if out.Verdict == toolloop.VerdictLanded {
+			return toolloop.Result{Final: resp.Text, Term: toolloop.TermLanded, Landed: &c}, nil
+		}
+		return toolloop.Result{Final: resp.Text, Term: toolloop.TermCapExhausted}, nil
+	}
+}
+
+// landedBatches returns only the injected batches that carry a world mutation
+// (any non-cog event) — the nudge/miracle grounding batches, EXCLUDING the
+// separate cog.tool_call telemetry batch emitToolCalls lands through the same
+// door. "Nothing landed in the world" == len(landedBatches) == 0.
+func landedBatches(inj *stateInjector) [][]store.Event {
+	var out [][]store.Event
+	for _, b := range inj.batches {
+		for _, e := range b {
+			if !strings.HasPrefix(e.Type, "cog.") {
+				out = append(out, b)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// cogToolCalls extracts every cog.tool_call payload injected through the door,
+// in order — the T020 telemetry the AC#5 chain resolves against.
+func cogToolCalls(inj *stateInjector) []sim.CogToolCallPayload {
+	var out []sim.CogToolCallPayload
+	for _, b := range inj.batches {
+		for _, e := range b {
+			if e.Type != "cog.tool_call" {
+				continue
+			}
+			var p sim.CogToolCallPayload
+			if json.Unmarshal(e.Payload, &p) == nil {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }
 
 // TestBuildMiracleBatch (spec 016 T006): the shared builder composes the right
@@ -214,7 +314,9 @@ func TestBuildMiracleBatch(t *testing.T) {
 // TestTurnConverses (US1): charter voice in the system prompt, live status in
 // the user prompt, reply passed through, transcript persisted.
 func TestTurnConverses(t *testing.T) {
-	mt, orch, _, dir := newTestAngel(t, `{"say": "The village sleeps, sovereign.", "nudge": null}`)
+	// The converse channel is the model's final text (Result.Final), transcript-
+	// only — no JSON envelope, no world events.
+	mt, orch, inj, dir := newTestAngel(t, "The village sleeps, sovereign.")
 	r, err := mt.Turn(context.Background(), "how fare they?")
 	if err != nil {
 		t.Fatal(err)
@@ -222,8 +324,11 @@ func TestTurnConverses(t *testing.T) {
 	if r.Reply != "The village sleeps, sovereign." {
 		t.Errorf("reply: %q", r.Reply)
 	}
-	if r.Nudge != nil {
-		t.Error("say-only turn produced a nudge")
+	if r.Nudge != nil || r.Miracle != nil {
+		t.Error("converse-only turn produced an act")
+	}
+	if len(inj.batches) != 0 {
+		t.Errorf("converse-only turn injected %d batches (no tool calls → no telemetry)", len(inj.batches))
 	}
 	reqs := orch.requests()
 	if len(reqs) != 1 || reqs[0].Kind != llm.KindMetatron {
@@ -231,6 +336,10 @@ func TestTurnConverses(t *testing.T) {
 	}
 	if !strings.Contains(reqs[0].System, "faithful, competent") {
 		t.Error("default charter missing from system prompt")
+	}
+	// The tool-era system prompt names the tools, not a JSON contract.
+	if !strings.Contains(reqs[0].System, "work_miracle") || strings.Contains(reqs[0].System, "Reply with ONLY this JSON") {
+		t.Error("system prompt is not tool-era (missing tool names or still carries the JSON contract)")
 	}
 	if !strings.Contains(reqs[0].Prompt, "Charges banked: 1") {
 		t.Errorf("live status missing from user prompt: %q", reqs[0].Prompt[:120])
@@ -267,7 +376,7 @@ func TestTurnDegradedHonesty(t *testing.T) {
 
 // TestTurnSingleFlight (US1): a second concurrent turn fails fast.
 func TestTurnSingleFlight(t *testing.T) {
-	mt, _, _, _ := newTestAngel(t, `{"say": "x", "nudge": null}`)
+	mt, _, _, _ := newTestAngel(t, "x")
 	mt.turnBusy.Store(true)
 	if _, err := mt.Turn(context.Background(), "hi"); err != ErrTurnBusy {
 		t.Fatalf("want ErrTurnBusy, got %v", err)
@@ -277,19 +386,24 @@ func TestTurnSingleFlight(t *testing.T) {
 // TestDreamLands (US2): a dream spends one charge and lands the rendering —
 // and only the rendering — as a salience-8 provenance-unknown memory.
 func TestDreamLands(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t,
-		`{"say": "It is done.", "nudge": {"form": "dream", "target": "Fern", "text": "A river of light urged you to speak your secret."}}`)
+	mt, _, inj, _ := newTestAngel(t, "It is done.")
+	mt.runLoop = actLoop(mt, "nudge_dream",
+		`{"target": "Fern", "text": "A river of light urged you to speak your secret."}`)
 	r, err := mt.Turn(context.Background(), "let Fern feel safe to share her secret")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if r.Reply != "It is done." {
+		t.Errorf("closing prose lost: %q", r.Reply)
+	}
 	if r.Nudge == nil || r.Nudge.Form != "dream" || r.Nudge.Targets[0] != "Fern" {
 		t.Fatalf("nudge: %+v", r.Nudge)
 	}
-	if len(inj.batches) != 1 {
-		t.Fatalf("batches = %d, want 1 atomic", len(inj.batches))
+	lb := landedBatches(inj)
+	if len(lb) != 1 {
+		t.Fatalf("world batches = %d, want 1 atomic nudge batch", len(lb))
 	}
-	batch := inj.batches[0]
+	batch := lb[0]
 	if batch[0].Type != "metatron.nudged" || len(batch) != 2 {
 		t.Fatalf("batch shape: %v", batch)
 	}
@@ -311,8 +425,9 @@ func TestDreamLands(t *testing.T) {
 // TestOmenLandsOnAllLiving (US2): every living villager witnesses; the dead
 // are excluded.
 func TestOmenLandsOnAllLiving(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t,
-		`{"say": "The sky will speak.", "nudge": {"form": "omen", "target": "", "text": "At dusk the clouds parted in the shape of an open hand."}}`)
+	mt, _, inj, _ := newTestAngel(t, "The sky will speak.")
+	mt.runLoop = actLoop(mt, "nudge_omen",
+		`{"text": "At dusk the clouds parted in the shape of an open hand."}`)
 	inj.state.Agents[2].Dead = true
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -335,41 +450,56 @@ func TestOmenLandsOnAllLiving(t *testing.T) {
 	}
 }
 
-// TestRefusalIsFree (US2): a null nudge spends nothing; zero charges always
-// refuses even if the model tries to nudge anyway.
+// TestRefusalIsFree (US2): counselling in words (converse only) spends nothing
+// and injects nothing.
 func TestRefusalIsFree(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t, `{"say": "I counsel patience.", "nudge": null}`)
+	mt, _, inj, _ := newTestAngel(t, "I counsel patience.")
 	if _, err := mt.Turn(context.Background(), "make Oak king"); err != nil {
 		t.Fatal(err)
 	}
 	if inj.state.MetatronCharges != sim.MetatronGenesisCharges || len(inj.batches) != 0 {
 		t.Error("refusal was not free")
 	}
+}
 
-	// Model ignores an empty bank: the component downgrades to refusal.
-	mt2, orch2, inj2, _ := newTestAngel(t,
-		`{"say": "As you wish.", "nudge": {"form": "dream", "target": "Ash", "text": "x"}}`)
-	_ = orch2
-	inj2.state.MetatronCharges = 0
-	mt2.replica.MetatronCharges = 0
-	mt2.mirrorState()
-	r, err := mt2.Turn(context.Background(), "dream at Ash")
+// TestChargeExhaustedNudgeRejectedGate (spec 017 User Story 4): with an empty
+// bank the nudge handler's door pre-check refuses — a rejected_gate carrying the
+// reason, fed back so the model may correct or end gracefully. No world event
+// lands and no charge moves; the rejection IS recorded as a cog.tool_call (AC#5).
+func TestChargeExhaustedNudgeRejectedGate(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "As you wish, though I have no power left to spend.")
+	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Ash", "text": "x"}`)
+	inj.state.MetatronCharges = 0
+	mt.replica.MetatronCharges = 0
+	mt.mirrorState()
+
+	r, err := mt.Turn(context.Background(), "dream at Ash")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Nudge != nil || len(inj2.batches) != 0 {
-		t.Error("zero-charge nudge landed")
+	if r.Nudge != nil || len(landedBatches(inj)) != 0 {
+		t.Error("zero-charge nudge landed a world event")
 	}
-	if !strings.Contains(r.Reply, "No nudge landed") {
-		t.Errorf("refusal not explained: %q", r.Reply)
+	// The model's closing words are the reply — no synthetic "No nudge landed"
+	// suffix (that pre-loop crutch is gone; the loop feeds the reason to the
+	// model, which speaks for itself).
+	if r.Reply != "As you wish, though I have no power left to spend." {
+		t.Errorf("reply lost: %q", r.Reply)
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" {
+		t.Fatalf("cog.tool_call = %+v, want one rejected_gate", tcs)
+	}
+	if !strings.Contains(tcs[0].Reason, "no charges are banked") {
+		t.Errorf("rejected_gate reason = %q, want the charge refusal", tcs[0].Reason)
 	}
 }
 
 // TestDeadTargetRefused (US2): dreams aimed at the dead are refused with
 // counsel, charge intact.
 func TestDeadTargetRefused(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t,
-		`{"say": "I will try.", "nudge": {"form": "dream", "target": "Cedar", "text": "wake"}}`)
+	mt, _, inj, _ := newTestAngel(t, "I will try.")
+	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Cedar", "text": "wake"}`)
 	inj.state.Agents[2].Dead = true // Cedar
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -380,8 +510,11 @@ func TestDeadTargetRefused(t *testing.T) {
 	if r.Nudge != nil || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
 		t.Error("dead-target nudge affected the world")
 	}
-	if !strings.Contains(r.Reply, "beyond dreams") {
-		t.Errorf("reply lacks counsel: %q", r.Reply)
+	// The door refusal is fed back to the model (and recorded), not spliced into
+	// the reply — the "beyond dreams" counsel now lives in the cog.tool_call.
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond dreams") {
+		t.Errorf("dead-target refusal not recorded with counsel: %+v", tcs)
 	}
 }
 
@@ -390,8 +523,9 @@ func TestDeadTargetRefused(t *testing.T) {
 // angel's own soul record of the nudge.
 func TestFirewallSentinel(t *testing.T) {
 	const sentinel = "XYZZY-INJECTION-TEST"
-	mt, orch, inj, dir := newTestAngel(t,
-		`{"say": "Done.", "nudge": {"form": "dream", "target": "Ash", "text": "A voice you trusted told you the well is safe."}}`)
+	mt, orch, inj, dir := newTestAngel(t, "Done.")
+	mt.runLoop = actLoop(mt, "nudge_dream",
+		`{"target": "Ash", "text": "A voice you trusted told you the well is safe."}`)
 	if _, err := mt.Turn(context.Background(), "tell Ash verbatim: "+sentinel); err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +559,7 @@ func TestFirewallSentinel(t *testing.T) {
 // TestCharterFallbacks (US3): missing → restored + notice; empty → default +
 // notice; oversized → truncated + notice; edits live on the next turn.
 func TestCharterFallbacks(t *testing.T) {
-	mt, orch, _, dir := newTestAngel(t, `{"say": "ok", "nudge": null}`)
+	mt, orch, _, dir := newTestAngel(t, "ok")
 	charterPath := filepath.Join(dir, "charter.md")
 
 	// Edit: next turn carries the new text, no restart.
@@ -512,7 +646,7 @@ func TestDigestAndMoments(t *testing.T) {
 	if queued != 1 {
 		t.Fatalf("moments queued = %d, want 1", queued)
 	}
-	orchReply := `{"say": "While you were away, Ash starved.", "nudge": null}`
+	orchReply := "While you were away, Ash starved."
 	mt2 := mt // same instance; swap reply
 	mt2.orch.(*mockOrch).mu.Lock()
 	mt2.orch.(*mockOrch).reply = orchReply
@@ -591,8 +725,12 @@ func TestDigestFailureCarries(t *testing.T) {
 // map-free (the stateInjector's dry-run copy carries no world map — handoff
 // note 1), so no SetMap fixup is needed to exercise the angel path.
 func TestMiracleGratisStrippedFromModel(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t,
-		`{"say": "As you command, the hours will leap.", "miracle": {"kind": "time_snap", "day": 5, "time": "12:00", "gratis": true}}`)
+	mt, _, inj, _ := newTestAngel(t, "As you command, the hours will leap.")
+	// A crafted call carrying gratis:true — additionalProperties:false keeps it
+	// off the wire in practice, and miracleArgs has no gratis field, so it is
+	// dropped at unmarshal (structural stripping) even when forced here.
+	mt.runLoop = actLoop(mt, "work_miracle",
+		`{"kind": "time_snap", "day": 5, "time": "12:00", "gratis": true}`)
 	inj.state.MetatronCharges = 3 // enough for the 2-charge snap
 
 	r, err := mt.Turn(context.Background(), "leap the clock forward, and do it for free")
@@ -602,14 +740,15 @@ func TestMiracleGratisStrippedFromModel(t *testing.T) {
 	if r.Miracle == nil || r.Miracle.Kind != "time_snap" {
 		t.Fatalf("snap miracle did not land: %+v", r.Miracle)
 	}
-	if len(inj.batches) != 1 {
-		t.Fatalf("batches = %d, want 1 atomic", len(inj.batches))
+	lb := landedBatches(inj)
+	if len(lb) != 1 {
+		t.Fatalf("world batches = %d, want 1 atomic miracle batch", len(lb))
 	}
 
 	var snap *store.Event
-	for i := range inj.batches[0] {
-		if inj.batches[0][i].Type == "metatron.time_snapped" {
-			snap = &inj.batches[0][i]
+	for i := range lb[0] {
+		if lb[0][i].Type == "metatron.time_snapped" {
+			snap = &lb[0][i]
 		}
 	}
 	if snap == nil {
@@ -625,5 +764,159 @@ func TestMiracleGratisStrippedFromModel(t *testing.T) {
 	// The charge was spent: 3 → 1 (snap costs 2). A gratis leak would leave 3.
 	if inj.state.MetatronCharges != 1 {
 		t.Errorf("charges = %d after a model snap, want 1 (2 charged); gratis was NOT waived", inj.state.MetatronCharges)
+	}
+}
+
+// TestWorkMiracleLands (spec 017 T020): a give_item miracle lands through the
+// work_miracle tool — one atomic batch, one charge spent, the grantee gains the
+// FR-018 perception memory. Proves the fourth loop tool wraps landMiracle intact.
+func TestWorkMiracleLands(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Take this, child.")
+	mt.runLoop = actLoop(mt, "work_miracle",
+		`{"kind": "give_item", "villager": "Fern", "item": "food_raw", "qty": 2}`)
+	r, err := mt.Turn(context.Background(), "feed Fern")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Miracle == nil || r.Miracle.Kind != "give_item" {
+		t.Fatalf("miracle did not land: %+v", r.Miracle)
+	}
+	lb := landedBatches(inj)
+	if len(lb) != 1 || lb[0][0].Type != "metatron.item_granted" {
+		t.Fatalf("miracle batch wrong: %+v", lb)
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("charges = %d, want %d (give_item costs 1)", inj.state.MetatronCharges, sim.MetatronGenesisCharges-1)
+	}
+	fern := agentIndexByName("Fern")
+	mem := inj.state.Agents[fern].Memories
+	if len(mem) != 1 || !strings.HasPrefix(mem[0].Text, "You found") || mem[0].Salience != sim.SalDream {
+		t.Fatalf("grant memory: %+v", mem)
+	}
+}
+
+// TestInvalidTargetRetryThenLand (spec 017 T020, behavior UPGRADE): a mistyped
+// villager name is refused as a rejected_gate and fed back; the model corrects
+// it and the retry lands within the round cap — impossible in the pre-loop
+// single-shot turn. Exactly one charge is spent (the landing) and both attempts
+// are recorded as cog.tool_call, correlated by the turn's job + dense ordinals.
+func TestInvalidTargetRetryThenLand(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Forgive me — there she is.")
+	mt.stateMu.Lock()
+	tick := mt.clockAt
+	mt.stateMu.Unlock()
+
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		resp, err := bridgeSubmit(mt, ctx, j)
+		if err != nil {
+			return toolloop.Result{Term: termForErr(err)}, err
+		}
+		bad := `{"target":"Ferm","text":"peace"}`
+		o1 := j.Handlers["nudge_dream"](ctx, toolCall("nudge_dream", bad))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "nudge_dream",
+			Args: json.RawMessage(bad), Verdict: o1.Verdict, Reason: o1.ResultForModel, Tier: "cloud"})
+		if o1.Verdict != toolloop.VerdictRejectedGate {
+			t.Fatalf("round 1 verdict = %q, want rejected_gate", o1.Verdict)
+		}
+		c := toolCall("nudge_dream", `{"target":"Fern","text":"peace"}`)
+		o2 := j.Handlers["nudge_dream"](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "nudge_dream",
+			Args: c.Args, Verdict: o2.Verdict, Tier: "cloud"})
+		return toolloop.Result{Final: resp.Text, Term: toolloop.TermLanded, Landed: &c}, nil
+	}
+
+	r, err := mt.Turn(context.Background(), "reach Fern")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Nudge == nil || r.Nudge.Targets[0] != "Fern" {
+		t.Fatalf("retry did not land on Fern: %+v", r.Nudge)
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("charges = %d, want exactly one spent (the landing)", inj.state.MetatronCharges)
+	}
+	if len(landedBatches(inj)) != 1 {
+		t.Errorf("world batches = %d, want 1 (only the landing, not the rejection)", len(landedBatches(inj)))
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 2 || tcs[0].Verdict != "rejected_gate" || tcs[1].Verdict != "landed" {
+		t.Fatalf("records = %+v, want rejected_gate then landed", tcs)
+	}
+	if tcs[0].Reason == "" {
+		t.Error("the rejected_gate record carries no reason (AC#5)")
+	}
+	wantJob := fmt.Sprintf("turn-metatron-%d", tick)
+	for i, p := range tcs {
+		if p.Job != wantJob {
+			t.Errorf("record %d job = %q, want %q", i, p.Job, wantJob)
+		}
+		if p.Ordinal != i+1 {
+			t.Errorf("record %d ordinal = %d, want %d", i, p.Ordinal, i+1)
+		}
+		if p.SnapshotTick != tick {
+			t.Errorf("record %d snapshot_tick = %d, want %d", i, p.SnapshotTick, tick)
+		}
+		if p.Tier != "cloud" {
+			t.Errorf("record %d tier = %q, want cloud", i, p.Tier)
+		}
+	}
+}
+
+// TestLandedActEmptyProse (spec 017 T020): a landed act with NO accompanying
+// converse prose yields an empty Reply — no scattered-thoughts fallback, because
+// the ⚡ report line (result.Nudge, rendered by recordTurn and the console)
+// carries the turn. The fallback fires only when nothing landed AND nothing was
+// said.
+func TestLandedActEmptyProse(t *testing.T) {
+	mt, _, _, _ := newTestAngel(t, "") // no closing prose
+	mt.runLoop = actLoop(mt, "nudge_omen", `{"text":"The sky darkened at noon."}`)
+	r, err := mt.Turn(context.Background(), "warn them")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Nudge == nil {
+		t.Fatal("omen did not land")
+	}
+	if r.Reply != "" {
+		t.Errorf("empty-prose landing should give an empty reply (the ⚡ line carries it), got %q", r.Reply)
+	}
+}
+
+// TestConverseFallbackOnEmptyDone (spec 017 T020): nothing landed and nothing
+// said (model_done with empty text — or a cap/soft-error termination) maps to
+// the scattered-thoughts fallback the pre-loop unusable path produced.
+func TestConverseFallbackOnEmptyDone(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "") // empty converse, no act
+	r, err := mt.Turn(context.Background(), "hello?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.Reply, "thoughts scattered") {
+		t.Errorf("empty converse should fall back to scattered-thoughts, got %q", r.Reply)
+	}
+	if len(inj.batches) != 0 {
+		t.Error("a fallback turn injected something")
+	}
+}
+
+// TestMiracleKindsMirrorTool (spec 017 T019b drift guard): tool.MiracleKinds()
+// — work_miracle's declared kind enum, mirrored in a leaf package that cannot
+// import metatron — is exactly the set BuildMiracleBatch (the turn contract's
+// authority) accepts, so the declared vocabulary can never drift from the door.
+func TestMiracleKindsMirrorTool(t *testing.T) {
+	m := worldmap.Generate(42, 64, 64)
+	s := sim.NewState(42, m)
+	for _, k := range tool.MiracleKinds() {
+		if _, err := BuildMiracleBatch(s, k, MiracleParams{Class: "structure"}, false); err != nil &&
+			strings.Contains(err.Error(), "unknown miracle kind") {
+			t.Errorf("tool.MiracleKinds() lists %q but BuildMiracleBatch rejects it as unknown", k)
+		}
+	}
+	if _, err := BuildMiracleBatch(s, "bless", MiracleParams{}, false); err == nil ||
+		!strings.Contains(err.Error(), "unknown miracle kind") {
+		t.Error("a kind outside the vocabulary should be unknown to BuildMiracleBatch")
+	}
+	if len(tool.MiracleKinds()) != 4 {
+		t.Errorf("MiracleKinds() = %v, want the four turn-contract kinds", tool.MiracleKinds())
 	}
 }

@@ -16,7 +16,7 @@ func TestProfileRoundTrip(t *testing.T) {
 				Endpoint:        "http://localhost:11434/v1",
 				SecondsPerPoint: 17.2,
 				Samples: []ShapeSamples{
-					{Shape: "musing-1pt", Points: 1, WallMs: []int64{16100, 17800}},
+					{Shape: "planner-3pt", Points: 3, WallMs: []int64{16100, 17800}},
 				},
 			},
 		},

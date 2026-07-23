@@ -593,17 +593,26 @@ func Bulk(inv Inventory) int {
 	return bulk(inv)
 }
 
-// intentDurations is the per-world-tool base work duration, DERIVED from the
-// tool registry's Cost.DurationTicks at init (spec 014, R7). It replaces the
-// hand-written intentDuration switch — the registry now carries the declarative
-// duration for each world verb (values byte-identical to the old switch's
-// constants). Context-dependent overrides (a spear-carrying hunt is faster, an
-// oven cook is longer) stay in the executor's workDuration and are NOT registry
-// data — the station/inventory is only known at completion time.
+// intentDurations is the per-goal-door-world-tool base work duration, DERIVED
+// from the tool registry's Cost.DurationTicks at init (spec 014, R7). It
+// replaces the hand-written intentDuration switch — the registry now carries
+// the declarative duration for each world verb (values byte-identical to the
+// old switch's constants). Context-dependent overrides (a spear-carrying hunt
+// is faster, an oven cook is longer) stay in the executor's workDuration and
+// are NOT registry data — the station/inventory is only known at completion
+// time.
+//
+// Filtered to goal-door tools (Effect World AND PlanStep true — see
+// toolcheck.go's ValidateToolCoverage doc): intentDuration(goal) is only ever
+// called with a goal resolveGoal dispatched on. A non-goal-door World tool
+// (set_plan, spec 017 R11) never reaches it by its own name — each of its
+// plan steps names an already-covered goal-door goal instead — so it is
+// deliberately left out of this table rather than carrying a meaningless
+// zero-duration entry.
 var intentDurations = func() map[string]int64 {
 	m := make(map[string]int64)
 	for _, t := range tool.All() {
-		if t.Effect == tool.World {
+		if t.Effect == tool.World && t.PlanStep {
 			m[t.Name] = t.Cost.DurationTicks
 		}
 	}
@@ -633,6 +642,13 @@ type (
 		// omitempty keeps pre-013 and non-storage intent_set payloads byte-identical.
 		Kind string `json:"kind,omitempty"`
 		Qty  int    `json:"qty,omitempty"`
+		// Job (spec 017, TASK-32 pattern): the planner-loop job that landed
+		// this intent, set ONLY at the inject-landing emission site (from
+		// InjectArgs.JobID). Reflex-authored (decideIntent) and executor-
+		// authored (adapt/continue) intent_set events carry no job — field
+		// omitted, so pre-feature logs and reflex/executor emissions marshal
+		// byte-identically to today. LAST field, omitempty.
+		Job string `json:"job,omitempty"`
 	}
 	WorkStartedPayload struct {
 		Agent int   `json:"agent"`

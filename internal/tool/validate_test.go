@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -54,10 +55,19 @@ func TestValidateRejectsMalformed(t *testing.T) {
 			want:     "not in the registry",
 		},
 		{
-			name:     "read tool on a roster",
-			reg:      []Tool{{Name: "peek", Effect: Read}},
-			villager: []string{"peek"},
-			want:     "read tool",
+			name: "number param with inverted bounds",
+			reg:  []Tool{{Name: "drop", Effect: World, Params: []Param{{Name: "qty", Kind: Number, Min: 5, Max: 1}}}},
+			want: "Min 5 > Max 1",
+		},
+		{
+			name: "InputSchemaJSON is not valid JSON",
+			reg:  []Tool{{Name: "set_plan", Effect: World, InputSchemaJSON: json.RawMessage(`{not json`)}},
+			want: "InputSchemaJSON is not valid JSON",
+		},
+		{
+			name: "InputSchemaJSON is not a JSON object",
+			reg:  []Tool{{Name: "set_plan", Effect: World, InputSchemaJSON: json.RawMessage(`["array", "not object"]`)}},
+			want: "InputSchemaJSON must be a JSON object",
 		},
 	}
 
@@ -93,5 +103,50 @@ func TestValidateAllViolations(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "empty name") || !strings.Contains(msg, "PlanStep set on a non-world tool") {
 		t.Errorf("expected both violations, got: %s", msg)
+	}
+}
+
+// TestValidateAdmitsLegalFixtures (spec 017 R12/T002): fixtures that would
+// have failed under spec-014's rules but are now legal — a roster naming a
+// Read tool, one-sided Number bounds, and a well-formed InputSchemaJSON
+// override — all validate clean.
+func TestValidateAdmitsLegalFixtures(t *testing.T) {
+	cases := []struct {
+		name     string
+		reg      []Tool
+		villager []string
+	}{
+		{
+			name:     "Read tool on a roster is now legal",
+			reg:      []Tool{{Name: "peek", Effect: Read}},
+			villager: []string{"peek"},
+		},
+		{
+			name: "Number param with only Min set",
+			reg:  []Tool{{Name: "drop", Effect: World, Params: []Param{{Name: "qty", Kind: Number, Min: 1}}}},
+		},
+		{
+			name: "Number param with only Max set",
+			reg:  []Tool{{Name: "drop", Effect: World, Params: []Param{{Name: "qty", Kind: Number, Max: 10}}}},
+		},
+		{
+			name: "Number param with equal Min and Max",
+			reg:  []Tool{{Name: "drop", Effect: World, Params: []Param{{Name: "qty", Kind: Number, Min: 3, Max: 3}}}},
+		},
+		{
+			name: "well-formed InputSchemaJSON override",
+			reg:  []Tool{{Name: "set_plan", Effect: World, InputSchemaJSON: json.RawMessage(`{"type":"object"}`)}},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := swapRegistry(tc.reg, tc.villager, nil)
+			defer restore()
+
+			if err := Validate(); err != nil {
+				t.Errorf("expected no violation, got: %v", err)
+			}
+		})
 	}
 }

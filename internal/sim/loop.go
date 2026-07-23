@@ -185,6 +185,11 @@ var injectSocialWhitelist = map[string]bool{
 	"cog.thought":                   true,
 	"cog.outcome":                   true,
 	"cog.recalibration_recommended": true,
+	// The tool-use loop's call trace (spec 017, FR-007): one record per tool
+	// call the loop saw (landed, rejected, read, or unlanded) — recorded
+	// observability, reducer no-op, same isolation guarantees as the other
+	// cog.* types above.
+	"cog.tool_call": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at
@@ -588,7 +593,7 @@ func (l *Loop) handleCommand(cmd command) error {
 					TargetX: intent.TargetX, TargetY: intent.TargetY,
 					ResX: intent.ResX, ResY: intent.ResY,
 					Kind: intent.Kind, Qty: intent.Qty,
-					Source: "planner",
+					Source: "planner", Job: in.JobID,
 				})
 			}
 			// The hail (TASK-47): a talk_to landing pauses a hailable

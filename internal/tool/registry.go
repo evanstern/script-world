@@ -1,5 +1,7 @@
 package tool
 
+import "encoding/json"
+
 // registry is the authoritative collection of every tool, in registration
 // order. The world tools come first, in exactly today's goal-vocabulary order
 // (internal/mind/prompt.go) — that order is the byte-identity anchor for the
@@ -17,13 +19,137 @@ var itemKinds = []string{
 	"food_raw", "food_cooked", "meals", "spears",
 }
 
-// storageKindParam is the shared `kind` descriptor for the four storage verbs.
-// Their `qty` integer argument has no representable ParamKind (AgentName/Text/
-// Enum) in this layer's contract, so it is not modeled here — validateKindQty
-// (internal/mind/parse.go) still validates it. Flagged for TASK-52, which
-// consumes Params for tool-call parsing.
-func storageKindParam() []Param {
-	return []Param{{Name: "kind", Kind: Enum, Required: false, Enum: itemKinds}}
+// ItemKinds returns a copy of the storage verbs' item-kind vocabulary, in the
+// order above. Exported for set_plan's authored schema (below) and for
+// internal/mind's cross-check test pinning this list against its own
+// (deliberately unmigrated, per spec 014) validKinds set.
+func ItemKinds() []string {
+	out := make([]string, len(itemKinds))
+	copy(out, itemKinds)
+	return out
+}
+
+// PlanStepCap is the maximum number of steps set_plan's `steps` array may
+// carry. It mirrors sim.PlanStepCap and internal/mind's own planStepCap
+// constant (parse.go) — declared here, not imported, because internal/tool
+// is a leaf package (research R1) and cannot import internal/mind or
+// internal/sim. internal/mind's TestPlanStepCapMirrorsTool pins the two
+// constants equal so this literal cannot drift silently.
+const PlanStepCap = 3
+
+// setPlanSchema is set_plan's authored InputSchemaJSON override (spec 017
+// R11): the registry's scalar Param model has no ParamKind for a steps
+// array, so this tool's schema is hand-built instead of derived from Params.
+// goal's enum is legacyWorldNamesFrom(worldTools) — the SAME filter
+// (isLegacyWorldTool, derive.go) that builds VocabularyLine/WorldGoals — so
+// set_plan's step vocabulary can never drift from the legacy goal vocabulary
+// it re-expresses. It takes goals as a parameter, rather than calling
+// derive.go's legacyWorldNames() directly, because that walks the package
+// `registry` var — and registry's own literal (below) needs this schema to
+// build set_plan, which would be an initialization cycle (registry ->
+// setPlanSchema -> legacyWorldNames -> registry). Building from worldTools
+// (a plain literal with no such dependency) breaks the cycle while deriving
+// the identical set. kind's enum is itemKinds, the storage verbs' own Enum
+// descriptor.
+func setPlanSchema(goals []string) json.RawMessage {
+	step := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"goal": map[string]any{"type": "string", "enum": goals},
+			"kind": map[string]any{"type": "string", "enum": itemKinds},
+			"qty":  map[string]any{"type": "integer", "minimum": 1},
+		},
+		"required":             []string{"goal"},
+		"additionalProperties": false,
+	}
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"steps": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"maxItems": PlanStepCap,
+				"items":    step,
+			},
+		},
+		"required":             []string{"steps"},
+		"additionalProperties": false,
+	}
+	b, err := json.Marshal(schema)
+	if err != nil {
+		// schema is built from literal Go data; marshaling cannot fail.
+		panic("tool: setPlanSchema marshal: " + err.Error())
+	}
+	return b
+}
+
+// miracleKinds is the metatron turn's miracle vocabulary — the four kinds the
+// angel's work_miracle tool (spec 017 T019b) and internal/metatron's landMiracle
+// / BuildMiracleBatch (spec 016 turn contract) accept. It is declared here as
+// work_miracle's Enum descriptor rather than imported: internal/tool is a leaf
+// (research R1) and cannot see internal/metatron or internal/sim, so the
+// canonical list is MIRRORED, and internal/metatron's TestMiracleKindsMirrorTool
+// pins it equal to BuildMiracleBatch's accepted set so it cannot drift.
+var miracleKinds = []string{"move", "remove", "give_item", "time_snap"}
+
+// MiracleKinds returns a copy of work_miracle's kind vocabulary, in the order
+// above. Exported for internal/metatron's drift cross-check test.
+func MiracleKinds() []string {
+	out := make([]string, len(miracleKinds))
+	copy(out, miracleKinds)
+	return out
+}
+
+// miracleParams is work_miracle's flat parameter surface (spec 017 T019b,
+// mirroring spec 016's turn contract). `kind` is the sole required argument;
+// every other field is optional because the needed set is per-kind (move:
+// class/x/y/to_x/to_y; remove: class/x/y; give_item: villager/item/qty;
+// time_snap: day/time). The reducer dry-run enforces the per-kind requirements
+// at the door (metatron.landMiracle → BuildMiracleBatch → InjectSocial), and the
+// loop feeds a rejection back for repair, so a permissive flat schema is exactly
+// right — the door is the semantic authority, this only rejects shapes the model
+// can fix (wrong scalar type, missing kind, unknown kind).
+//
+// There is deliberately NO `gratis` parameter: the angel can NEVER waive a
+// charge (spec 016 FR-007/SC-005). Structural absence — not sanitizing a field
+// out — is the guarantee, exactly as the retired turnReply.Miracle struct had no
+// gratis field. The scalar Param model expresses this whole surface
+// (kind/class/villager/item as strings, day/qty/x/y/to_x/to_y as integers), so
+// work_miracle needs NO authored InputSchemaJSON: its schema is Params-derived
+// (InputSchema, derive.go), unlike set_plan whose steps ARRAY the scalar model
+// cannot express. This is also load-bearing for the loop driver — its
+// validateArgs routes every InputSchemaJSON tool through set_plan's structural
+// validator (toolloop/loop.go), so an authored override here would be validated
+// against set_plan's `steps` shape and every work_miracle call rejected; Params
+// keeps InputSchema derivation and validateArgs in agreement.
+func miracleParams() []Param {
+	return []Param{
+		{Name: "kind", Kind: Enum, Required: true, Enum: miracleKinds},
+		{Name: "class", Kind: Text},
+		{Name: "villager", Kind: AgentName},
+		{Name: "item", Kind: Text},
+		{Name: "qty", Kind: Number, Min: 1},
+		{Name: "day", Kind: Number},
+		{Name: "time", Kind: Text},
+		{Name: "x", Kind: Number},
+		{Name: "y", Kind: Number},
+		{Name: "to_x", Kind: Number},
+		{Name: "to_y", Kind: Number},
+	}
+}
+
+// storageParams is the shared `kind`+`qty` descriptor for the four storage
+// verbs (drop/pick_up/deposit/withdraw; build_chest takes neither). `qty` is
+// a Number param (Min 1, Max unbounded) — spec 017 R12 pays the spec-014 debt
+// this comment used to flag (qty had no representable ParamKind). Both stay
+// optional: validateKindQty (internal/mind/parse.go) remains the free-text
+// path's enforcer; these Params now also drive InputSchema (derive.go) for
+// the tool-use loop.
+func storageParams() []Param {
+	return []Param{
+		{Name: "kind", Kind: Enum, Required: false, Enum: itemKinds},
+		{Name: "qty", Kind: Number, Required: false, Min: 1},
+	}
 }
 
 // The gloss lines carried byte-exact from internal/mind/prompt.go (the prose
@@ -44,8 +170,12 @@ const (
 // switch and its constants). The registry is now the source; the sim duration
 // table (agents.go) derives from these. Context overrides (spear hunt, oven
 // cook) stay in the executor's workDuration and are not registry data (R7).
-var registry = []Tool{
-	// --- World tools (villager roster; goal-vocabulary order) ---
+//
+// worldTools, expressiveTools, and metatronTools (below) are declared
+// separately, rather than as one registry literal, so that set_plan (spec
+// 017 R11) can be built from worldTools alone and then spliced in after it —
+// see setPlanTool and the registry assembly below.
+var worldTools = []Tool{
 	{Name: "forage", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 120}, PlanStep: true, ReflexEligible: true},
 	{Name: "chop", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, ReflexEligible: true},
 	{Name: "hunt", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, ReflexEligible: true},
@@ -65,13 +195,30 @@ var registry = []Tool{
 	{Name: "craft_spear", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true},
 	{Name: "build_oven", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 900}, PlanStep: true, PromptGloss: glossBuildOven},
 	{Name: "bathe", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true},
-	{Name: "drop", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true, PromptGloss: glossDrop},
-	{Name: "pick_up", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "drop", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true, PromptGloss: glossDrop},
+	{Name: "pick_up", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
 	{Name: "build_chest", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true, PromptGloss: glossBuildChest},
-	{Name: "deposit", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
-	{Name: "withdraw", Effect: World, Gate: Resolvable, Params: storageKindParam(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "deposit", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	{Name: "withdraw", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+}
 
-	// --- Expressive tools (villager roster) ---
+// setPlanTool is the loop-only planning tool (spec 017 R11): Effect World
+// (it lands through InjectIntent's existing Plan path, unchanged), Gate
+// Resolvable, no Cost/PromptGloss — it carries no PlanStep (deliberately:
+// see legacyWorldNamesFrom's doc in derive.go) so it stays out of the legacy
+// prose surfaces and RosterVillager, appearing only in LoopRosterVillager
+// (roster.go).
+var setPlanTool = Tool{
+	Name:            "set_plan",
+	Effect:          World,
+	Gate:            Resolvable,
+	InputSchemaJSON: setPlanSchema(legacyWorldNamesFrom(worldTools)),
+}
+
+// expressiveTools are the villager roster's expressive verbs (registration
+// order = catalog table order; the villager roster's own expressive tail
+// order — say, muse, gist — is expressed separately in roster.go).
+var expressiveTools = []Tool{
 	{Name: "say", Effect: Expressive, Gate: Scene,
 		Params: []Param{{Name: "text", Kind: Text, MaxBytes: 300}},
 		Cost:   Cost{TextCapBytes: 300},
@@ -87,13 +234,15 @@ var registry = []Tool{
 		Params: []Param{{Name: "text", Kind: Text, MaxRunes: 200}},
 		Cost:   Cost{TextCapRunes: 200},
 		Events: []string{"agent.thought"}},
+}
 
-	// --- Metatron tools (metatron roster) ---
-	// converse produces a transcript reply and lands NO world events. It is the
-	// metatron's expressive speech channel, so it is Effect Expressive with an
-	// empty Events set — the one eventless expressive tool (see Validate: Events
-	// are required to be ⊆ whitelist but are not required to be non-empty, so an
-	// eventless expressive tool is legal).
+// metatronTools are the metatron roster's tools. converse produces a
+// transcript reply and lands NO world events. It is the metatron's
+// expressive speech channel, so it is Effect Expressive with an empty Events
+// set — the one eventless expressive tool (see Validate: Events are
+// required to be ⊆ whitelist but are not required to be non-empty, so an
+// eventless expressive tool is legal).
+var metatronTools = []Tool{
 	{Name: "converse", Effect: Expressive, Gate: None,
 		Params: []Param{{Name: "text", Kind: Text}}},
 	{Name: "nudge_dream", Effect: Expressive, Gate: Charge,
@@ -104,7 +253,47 @@ var registry = []Tool{
 		Params: []Param{{Name: "text", Kind: Text, MaxBytes: 400}},
 		Cost:   Cost{Charges: 1, TextCapBytes: 400},
 		Events: []string{"metatron.nudged", "agent.memory_added"}},
+	// work_miracle is the metatron's fourth loop tool (spec 017 T019b, R13
+	// amendment): a direct, charge-priced world edit landed through the SAME
+	// InjectSocial door the nudges use (metatron.landMiracle → the shared
+	// BuildMiracleBatch → Loop.InjectSocial). It is Effect EXPRESSIVE, not World,
+	// decided by the same rule that makes the nudges Expressive: it produces an
+	// immediate, bounded batch of whitelisted events through the social door —
+	// verbatim the EffectClass Expressive contract (tool.go). A World tool would
+	// instead produce an executor-grounded Intent through InjectIntent (a miracle
+	// has no intent and no work duration), and — decisively — Validate forbids a
+	// World tool from declaring Events, which work_miracle must, so that the
+	// sim-side coverage check (ValidateToolCoverage) can pin its event set ⊆ the
+	// whitelist. Being Expressive also keeps it out of every legacy villager
+	// World surface for free (isLegacyWorldTool requires Effect World), so those
+	// stay byte-stable with no exclusion flag.
+	//
+	// Gate Charge, like the nudges: the bank must hold at least one charge, and
+	// the reducer dry-run enforces the real per-kind price (2 for time_snap, 1
+	// for the rest, keyed by event type in sim.miracleCost). Cost.Charges is 1 —
+	// the gate's minimum, not the per-kind price. Its Events are the four miracle
+	// event types plus the FR-018 perception memory, all already on
+	// injectSocialWhitelist (spec 016).
+	{Name: "work_miracle", Effect: Expressive, Gate: Charge,
+		Params: miracleParams(),
+		Cost:   Cost{Charges: 1},
+		Events: []string{"metatron.time_snapped", "metatron.item_granted",
+			"metatron.entity_moved", "metatron.entity_removed", "agent.memory_added"}},
 }
+
+// registry is the authoritative collection of every tool, in registration
+// order: worldTools (exactly today's goal-vocabulary order — the byte-
+// identity anchor for the derived prompt string, SC-003/R3), then set_plan
+// (appended immediately after the world verbs so no existing tool's position
+// shifts — spec 017 T004), then expressiveTools, then metatronTools.
+var registry = func() []Tool {
+	out := make([]Tool, 0, len(worldTools)+1+len(expressiveTools)+len(metatronTools))
+	out = append(out, worldTools...)
+	out = append(out, setPlanTool)
+	out = append(out, expressiveTools...)
+	out = append(out, metatronTools...)
+	return out
+}()
 
 // byName indexes the registry for O(1) Lookup, built once at init.
 var byName = func() map[string]Tool {

@@ -227,9 +227,11 @@ func TestSlugify(t *testing.T) {
 // narrator, and chronicle.entry events land in the store and reduce into the
 // State ring (AC#1's substrate).
 func TestChronicleLandsThroughTheDoor(t *testing.T) {
-	h := newHarness(t, `{"goal": "wander", "reason": "Stretching my legs."}`)
+	// The planner muses via the muse tool (spec 017: musing is a loop choice
+	// now, not a scheduled channel), landing agent.thought(musing) events that
+	// supply notable chronicle lines exactly as the old scheduled musings did.
+	h := newHarness(t, `{"muse": "The woods feel patient today."}`)
 	h.model.mu.Lock()
-	h.model.musingReply = "The woods feel patient today."
 	h.model.narrReply = `{"entries":[{"text":"The village wandered and mused while the light lasted.","thread":"first-days","agents":["Ash"]}]}`
 	h.model.mu.Unlock()
 

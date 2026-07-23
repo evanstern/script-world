@@ -16,6 +16,66 @@ type Config struct {
 	MonthlyBudgetUSD float64     `json:"monthly_budget_usd"`
 	Local            LocalConfig `json:"local"`
 	Cloud            CloudConfig `json:"cloud"`
+	// LoopMaxRounds is the hard iteration cap for the agent tool-use loop
+	// (TASK-52): the maximum number of provider rounds a single cognition may
+	// spend before the driver terminates it. Absent or 0 means the default
+	// (8); normalized (and clamped) by Rounds(), never an error — a world
+	// never fails to boot over a tuning knob (mirrors LocalConfig.Workers()).
+	LoopMaxRounds int `json:"loop_max_rounds,omitempty"`
+}
+
+// loop iteration-cap bounds. 8 rounds covers read-then-act patterns with
+// headroom (TASK-52 R14); 16 bounds adversarial loops. Both mirror the
+// warn-not-error clamp doctrine of LocalConfig.Workers().
+const (
+	defaultLoopMaxRounds = 8
+	maxLoopMaxRounds     = 16
+)
+
+// Rounds normalizes LoopMaxRounds into an effective round cap and an optional
+// operator-facing warning, mirroring LocalConfig.Workers() (never errors;
+// out-of-range values are clamped, not rejected).
+//
+//	absent / 0 → 8, no warning (safe default)
+//	1–16       → as given, no warning
+//	< 0        → 8, warning
+//	> 16       → 16, warning
+func (c Config) Rounds() (n int, warn string) {
+	switch {
+	case c.LoopMaxRounds == 0:
+		return defaultLoopMaxRounds, ""
+	case c.LoopMaxRounds < 0:
+		return defaultLoopMaxRounds, fmt.Sprintf("llm.json loop_max_rounds %d out of range (min 1) — using %d", c.LoopMaxRounds, defaultLoopMaxRounds)
+	case c.LoopMaxRounds > maxLoopMaxRounds:
+		return maxLoopMaxRounds, fmt.Sprintf("llm.json loop_max_rounds %d out of range (max %d) — clamped to %d", c.LoopMaxRounds, maxLoopMaxRounds, maxLoopMaxRounds)
+	default:
+		return c.LoopMaxRounds, ""
+	}
+}
+
+// Tool-call strategy for a tier (TASK-52). "native" uses the provider's
+// first-class function-calling wire (Anthropic tools / OpenAI tool_calls);
+// "json" engages the schema-constrained fallback envelope (provider-wire.md
+// §3) for models whose native function calling is unreliable.
+const (
+	ToolModeNative = "native"
+	ToolModeJSON   = "json"
+)
+
+// resolveToolMode normalizes a tool_mode field, mirroring the warn-not-error
+// clamp of Workers()/Rounds(): "" (absent) is native, the two legal values
+// pass through, and any other value falls back to native with an operator
+// warning — never an error, so a world never fails to boot over the knob.
+func resolveToolMode(scope, raw string) (mode, warn string) {
+	switch raw {
+	case "", ToolModeNative:
+		return ToolModeNative, ""
+	case ToolModeJSON:
+		return ToolModeJSON, ""
+	default:
+		return ToolModeNative, fmt.Sprintf("llm.json %s.tool_mode %q unknown (want %q or %q) — using %q",
+			scope, raw, ToolModeNative, ToolModeJSON, ToolModeNative)
+	}
 }
 
 // LocalConfig is the local tier: an OpenAI-compatible chat-completions
@@ -38,6 +98,18 @@ type LocalConfig struct {
 	// sends nothing (escape hatch for backends that reject the field). Any
 	// other value is sent verbatim.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// ToolMode selects the local tier's tool-call strategy (TASK-52): absent
+	// or "" is "native" (OpenAI-compatible tool_calls); "json" engages the
+	// schema-constrained fallback envelope for backends whose native function
+	// calling is unreliable (llama.cpp grammar notes, parse.go:122). Same
+	// per-model knob shape as ReasoningEffort; normalized by ToolModeResolved().
+	ToolMode string `json:"tool_mode,omitempty"`
+}
+
+// ToolModeResolved normalizes local.tool_mode into an effective strategy and
+// an optional operator warning (see resolveToolMode).
+func (c LocalConfig) ToolModeResolved() (mode, warn string) {
+	return resolveToolMode("local", c.ToolMode)
 }
 
 // maxLocalWorkers caps local-tier concurrency. queueCap is 32; more than
@@ -92,6 +164,18 @@ type CloudConfig struct {
 	// models are chosen for quality, not latency, so there is no default
 	// reasoning posture to impose. Any other value is sent verbatim.
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// ToolMode selects the cloud tier's tool-call strategy (TASK-52), honored
+	// only when Provider is openai_compat — the Anthropic SDK path is always
+	// native and ignores this knob. Absent or "" is "native"; "json" engages
+	// the fallback envelope. Normalized by ToolModeResolved().
+	ToolMode string `json:"tool_mode,omitempty"`
+}
+
+// ToolModeResolved normalizes cloud.tool_mode into an effective strategy and
+// an optional operator warning (see resolveToolMode). Applies only to the
+// openai_compat cloud provider; the Anthropic path is always native.
+func (c CloudConfig) ToolModeResolved() (mode, warn string) {
+	return resolveToolMode("cloud", c.ToolMode)
 }
 
 // key resolves the credential: an inline local-router key wins, else the

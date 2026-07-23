@@ -1,10 +1,12 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -584,10 +586,12 @@ func TestParallelOverflowPreservesOrderAndPrio(t *testing.T) {
 	}
 }
 
-// TestMusingBestEffort (TASK-21): musings route local and succeed on a quiet
-// tier, but are refused immediately (ErrTierBusy) the moment anything is
-// waiting — they may never displace real cognition.
-func TestMusingBestEffort(t *testing.T) {
+// TestBestEffortAdmission (TASK-21): a best-effort call succeeds on a quiet
+// tier but is refused immediately (ErrTierBusy) the moment anything is waiting
+// — best-effort work may never displace real cognition. Scheduled musing was
+// the first user of this mechanism (retired in spec 017); it remains doctrine
+// for any future drop-when-busy kind, exercised here with a planner call.
+func TestBestEffortAdmission(t *testing.T) {
 	release := make(chan struct{})
 	first := true
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -614,14 +618,14 @@ func TestMusingBestEffort(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true}); !errors.Is(err, ErrTierBusy) {
 		t.Fatalf("busy tier must drop best-effort musings: got %v", err)
 	}
 	// A starved musing (fairness floor) drops BestEffort and queues like
 	// any other call — admission must not refuse it.
 	done := make(chan error, 1)
 	go func() {
-		_, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "starved musing"})
+		_, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "starved"})
 		done <- err
 	}()
 
@@ -642,7 +646,7 @@ func TestMusingBestEffort(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("starved musing never completed")
 	}
-	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	resp, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if err != nil {
 		t.Fatalf("quiet tier must serve best-effort musings: %v", err)
 	}
@@ -690,7 +694,7 @@ func TestBestEffortSlotAware(t *testing.T) {
 	// One slot busy, three free, queues empty → the musing is served (today's
 	// serial tier would have refused it the instant anything was in flight).
 	occupy(1)
-	resp, err := o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	resp, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if err != nil {
 		t.Fatalf("best-effort musing with a free slot must be served: %v", err)
 	}
@@ -701,7 +705,7 @@ func TestBestEffortSlotAware(t *testing.T) {
 	// Occupy the remaining three slots → all four busy, queues still empty.
 	occupy(slots - 1)
 	start := time.Now()
-	_, err = o.Submit(context.Background(), Request{Kind: KindMusing, Prompt: "musing", BestEffort: true})
+	_, err = o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "best-effort", BestEffort: true})
 	if !errors.Is(err, ErrTierBusy) {
 		t.Fatalf("all slots busy must drop the best-effort musing: got %v", err)
 	}
@@ -913,6 +917,100 @@ func TestMeterExactUnderConcurrency(t *testing.T) {
 	}
 }
 
+// TestSkipObserveNoEstimatorSample (TASK-52): a loop-internal call
+// (SkipObserve) feeds no per-call sample to the tier estimator and leaves the
+// estimate untouched; a normal call still feeds exactly one. Both calls reach
+// the model regardless — SkipObserve gates estimation only.
+func TestSkipObserveNoEstimatorSample(t *testing.T) {
+	var hits atomic.Int64
+	local := mockLocal(t, &hits)
+	o := newOrch(t, testConfig(local.URL, "http://unused.invalid", 100), testStore(t))
+	lt := o.tiers[TierLocal]
+
+	est0, _, samples0, _ := lt.est.Stats()
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x", SkipObserve: true}); err != nil {
+		t.Fatal(err)
+	}
+	est1, _, samples1, _ := lt.est.Stats()
+	if samples1 != samples0 {
+		t.Errorf("SkipObserve fed the estimator: samples %d -> %d", samples0, samples1)
+	}
+	if est1 != est0 {
+		t.Errorf("SkipObserve moved the estimate: %v -> %v", est0, est1)
+	}
+
+	// Regression: a normal call still feeds exactly one sample.
+	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, samples2, _ := lt.est.Stats(); samples2 != samples0+1 {
+		t.Errorf("normal call fed %d samples, want 1", samples2-samples0)
+	}
+	if hits.Load() != 2 {
+		t.Errorf("both calls must reach the model: hits=%d", hits.Load())
+	}
+}
+
+// TestObserveCognitionFeedsOnce (TASK-52): ObserveCognition reports exactly one
+// whole-loop sample to the routed tier's estimator, moving it exactly as a
+// direct estimator sample of the same per-point value would; unknown kinds are
+// a no-op.
+func TestObserveCognitionFeedsOnce(t *testing.T) {
+	o := newOrch(t, testConfig("http://unused.invalid", "http://unused.invalid", 100), testStore(t))
+	lt := o.tiers[TierLocal]
+	_, _, samples0, _ := lt.est.Stats()
+
+	const millis = 6000
+	const points = 3 // planner's registered point cost
+	ref := cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))
+	ref.Sample(float64(millis) / 1000 / float64(points))
+	want := ref.Estimate()
+
+	o.ObserveCognition(KindPlanner, millis)
+	est, _, samples, _ := lt.est.Stats()
+	if samples != samples0+1 {
+		t.Errorf("ObserveCognition fed %d samples, want 1", samples-samples0)
+	}
+	if est != want {
+		t.Errorf("estimate = %v, want %v (one whole-loop sample)", est, want)
+	}
+
+	// Unknown kind has no tier: no-op, no sample.
+	o.ObserveCognition("sorcery", 1000)
+	if _, _, samples2, _ := lt.est.Stats(); samples2 != samples {
+		t.Errorf("unknown kind fed the estimator: %d -> %d", samples, samples2)
+	}
+}
+
+// TestSkipObserveStillMeters (TASK-52): SkipObserve suppresses estimator
+// feeding only — a billable cloud call still records its cost in the meter, and
+// the call still reaches the API.
+func TestSkipObserveStillMeters(t *testing.T) {
+	var hits atomic.Int64
+	cloud := mockCloud(t, &hits)
+	o := newOrch(t, testConfig("http://unused.invalid", cloud.URL, 100), testStore(t))
+	ct := o.tiers[TierCloud]
+	_, _, csamples0, _ := ct.est.Stats()
+	_, spent0, _ := o.meter.Snapshot()
+
+	resp, err := o.Submit(context.Background(), Request{Kind: KindNarrator, Prompt: "x", SkipObserve: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.CostUSD <= 0 {
+		t.Errorf("SkipObserve call must still bill: cost=%v", resp.CostUSD)
+	}
+	if _, spent1, _ := o.meter.Snapshot(); spent1 <= spent0 {
+		t.Errorf("meter did not record the SkipObserve call: %v -> %v", spent0, spent1)
+	}
+	if _, _, csamples1, _ := ct.est.Stats(); csamples1 != csamples0 {
+		t.Errorf("SkipObserve fed the cloud estimator: %d -> %d", csamples0, csamples1)
+	}
+	if hits.Load() != 1 {
+		t.Errorf("call must reach the API: hits=%d", hits.Load())
+	}
+}
+
 func TestConfigRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "llm.json")
 	if cfg, err := LoadConfig(path); err != nil || cfg != nil {
@@ -960,6 +1058,140 @@ func TestLocalWorkersNormalization(t *testing.T) {
 	// Absent field on a struct with no Parallel set is byte-identical to 0.
 	if n, warn := (LocalConfig{}).Workers(); n != 1 || warn != "" {
 		t.Errorf("absent parallel → (%d,%q), want (1,\"\")", n, warn)
+	}
+}
+
+// TestRoundsNormalization (TASK-52): loop_max_rounds normalizes to an
+// effective cap and warns exactly on out-of-range values — absent/0 is the
+// silent default (8), the cap is 16, negatives fall back to the default, and
+// nothing errors (mirrors LocalConfig.Workers()).
+func TestRoundsNormalization(t *testing.T) {
+	cases := []struct {
+		rounds   int
+		wantN    int
+		wantWarn bool
+	}{
+		{0, 8, false},   // absent / explicit 0 → default 8, silent
+		{1, 1, false},   // floor, verbatim
+		{8, 8, false},   // default value set explicitly, verbatim
+		{16, 16, false}, // cap, verbatim, no warning
+		{-3, 8, true},   // negative → default 8 with warning
+		{17, 16, true},  // one past the cap → clamped with warning
+		{999, 16, true}, // far above cap → clamped with warning
+	}
+	for _, c := range cases {
+		n, warn := Config{LoopMaxRounds: c.rounds}.Rounds()
+		if n != c.wantN {
+			t.Errorf("Rounds(loop_max_rounds=%d) n=%d, want %d", c.rounds, n, c.wantN)
+		}
+		if (warn != "") != c.wantWarn {
+			t.Errorf("Rounds(loop_max_rounds=%d) warn=%q, wantWarn=%v", c.rounds, warn, c.wantWarn)
+		}
+	}
+	if n, warn := (Config{}).Rounds(); n != 8 || warn != "" {
+		t.Errorf("absent loop_max_rounds → (%d,%q), want (8,\"\")", n, warn)
+	}
+}
+
+// TestToolModeNormalization (TASK-52): tool_mode resolves "" and "native" to
+// native and "json" to json, all silently; any unknown value falls back to
+// native with an operator warning (never an error). Both tiers share the
+// resolver; the warning names the scope.
+func TestToolModeNormalization(t *testing.T) {
+	cases := []struct {
+		raw      string
+		wantMode string
+		wantWarn bool
+	}{
+		{"", ToolModeNative, false},       // absent → native, silent (compat)
+		{"native", ToolModeNative, false}, // explicit native, silent
+		{"json", ToolModeJSON, false},     // fallback, silent
+		{"grammar", ToolModeNative, true}, // unknown → native with warning
+		{"NATIVE", ToolModeNative, true},  // case-sensitive: unknown → native + warn
+	}
+	for _, c := range cases {
+		lm, lw := LocalConfig{ToolMode: c.raw}.ToolModeResolved()
+		if lm != c.wantMode || (lw != "") != c.wantWarn {
+			t.Errorf("local ToolModeResolved(%q) = (%q,%q), want mode %q warn=%v", c.raw, lm, lw, c.wantMode, c.wantWarn)
+		}
+		cm, cw := CloudConfig{ToolMode: c.raw}.ToolModeResolved()
+		if cm != c.wantMode || (cw != "") != c.wantWarn {
+			t.Errorf("cloud ToolModeResolved(%q) = (%q,%q), want mode %q warn=%v", c.raw, cm, cw, c.wantMode, c.wantWarn)
+		}
+	}
+	// The scope appears in the warning so an operator knows which tier to fix.
+	if _, lw := (LocalConfig{ToolMode: "x"}).ToolModeResolved(); !strings.Contains(lw, "local.tool_mode") {
+		t.Errorf("local warning missing scope: %q", lw)
+	}
+	if _, cw := (CloudConfig{ToolMode: "x"}).ToolModeResolved(); !strings.Contains(cw, "cloud.tool_mode") {
+		t.Errorf("cloud warning missing scope: %q", cw)
+	}
+}
+
+// TestNilToolsByteIdentity (TASK-52, provider-wire.md §5c): a Request that
+// leaves the new transport fields (Tools/Turns) nil produces a chat-completions
+// request body byte-for-byte identical to the pre-feature payload — the
+// regression pin protecting every untouched single-shot kind. The expected
+// body is rebuilt from the exact pre-feature payload shape (deterministic:
+// json.Marshal sorts map keys).
+func TestNilToolsByteIdentity(t *testing.T) {
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	// preFeatureBody reproduces exactly what openaiCompat.call marshaled before
+	// TASK-52 for the given request fields.
+	preFeatureBody := func(system, prompt string, maxTokens int64, reasoning string) []byte {
+		type msg struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}
+		var msgs []msg
+		if system != "" {
+			msgs = append(msgs, msg{Role: "system", Content: system})
+		}
+		msgs = append(msgs, msg{Role: "user", Content: prompt})
+		payload := map[string]any{"model": "m", "messages": msgs, "stream": false}
+		if maxTokens > 0 {
+			payload["max_tokens"] = maxTokens
+		}
+		if reasoning != "" {
+			payload["reasoning_effort"] = reasoning
+		}
+		b, _ := json.Marshal(payload)
+		return b
+	}
+
+	cases := []struct {
+		name      string
+		reasoning string
+		req       Request
+	}{
+		{"plain", "", Request{Prompt: "hello"}},
+		{"system+maxtokens", "", Request{System: "sys", Prompt: "hello", MaxTokens: 256}},
+		{"reasoning", "none", Request{Prompt: "hello"}},
+		// New fields present but empty must not perturb the wire at all.
+		{"empty-new-fields", "", Request{Prompt: "hello", Tools: nil, Turns: nil, SkipObserve: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			raw = nil
+			o := newOpenAICompat(srv.URL, "m", "", c.reasoning, "")
+			if _, err := o.call(context.Background(), c.req); err != nil {
+				t.Fatal(err)
+			}
+			want := preFeatureBody(c.req.System, c.req.Prompt, c.req.MaxTokens, c.reasoning)
+			if !bytes.Equal(bytes.TrimSpace(raw), want) {
+				t.Errorf("body drifted from pre-feature:\n got: %s\nwant: %s", raw, want)
+			}
+		})
 	}
 }
 

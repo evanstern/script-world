@@ -36,9 +36,6 @@ const (
 	// KindMetatron is the gatekeeper angel (TASK-12): console turns,
 	// nudge judgment, and digests — premium cognition, tiny volume.
 	KindMetatron Kind = "metatron"
-	// KindMusing is best-effort interiority (TASK-21): admitted only when a
-	// local worker slot is free, dropped without retry when every slot is busy.
-	KindMusing Kind = "musing"
 	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
 	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
 	KindMeeting Kind = "meeting"
@@ -60,7 +57,6 @@ var routing = map[Kind]Tier{
 	KindNarrator:      TierCloud,
 	KindDrama:         TierCloud,
 	KindMetatron:      TierCloud,
-	KindMusing:        TierLocal,
 	KindMeeting:       TierLocal,
 }
 
@@ -93,8 +89,10 @@ type Request struct {
 	// BestEffort requests drop-when-busy admission: the call is refused
 	// with ErrTierBusy when no worker slot is free — any queued work, or all
 	// N slots in flight (TASK-45). Callers that may not displace real
-	// cognition (musings) set this; their fairness floor is the caller's
-	// business, not the orchestrator's.
+	// cognition set this; their fairness floor is the caller's business, not
+	// the orchestrator's. (Scheduled musing was its first user until spec 017
+	// folded musing into the planner loop; the mechanism stays doctrine for any
+	// future drop-when-busy kind.)
 	BestEffort bool `json:"best_effort,omitempty"`
 	// ResponseSchema, when set, constrains the reply to this JSON Schema at
 	// the sampler level via the OpenAI-compat response_format {type:
@@ -104,6 +102,21 @@ type Request struct {
 	// for carrying a schema on a tier that can't use it.
 	ResponseSchema json.RawMessage `json:"response_schema,omitempty"`
 	SchemaName     string          `json:"schema_name,omitempty"`
+	// --- agent tool-use loop transport (TASK-52; all additive) ---
+	// Tools declares the tools the model may call this round. nil = no tools
+	// parameter is sent on the wire (today's behavior for every single-shot
+	// kind, byte-identical).
+	Tools []ToolDecl `json:"tools,omitempty"`
+	// Turns is the multi-turn transcript. nil = the single Prompt user message
+	// is sent (today's behavior, byte-identical); non-nil replaces Prompt as
+	// the message source. The transcript is ephemeral — never persisted, never
+	// replayed.
+	Turns []Turn `json:"turns,omitempty"`
+	// SkipObserve marks a loop-internal call: the worker feeds NO per-call
+	// sample to the tier estimator (the loop reports one whole-cognition
+	// observation via Orchestrator.ObserveCognition instead). Metering,
+	// admission, and the circuit breaker are unaffected.
+	SkipObserve bool `json:"skip_observe,omitempty"`
 }
 
 type Response struct {
@@ -114,7 +127,80 @@ type Response struct {
 	OutputTokens int64   `json:"output_tokens"`
 	CostUSD      float64 `json:"cost_usd"`
 	Millis       int64   `json:"ms"`
+	// --- agent tool-use loop transport (TASK-52; additive) ---
+	// ToolCalls holds the calls the model emitted this round, in emission
+	// order; nil for a plain-text reply. Stop is the provider's stop reason,
+	// letting the loop driver tell "model finished" from "model wants results".
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Stop      StopReason `json:"stop,omitempty"`
 }
+
+// --- tool-call transport model (TASK-52) ---
+//
+// These types are the wire-agnostic currency between the loop driver and the
+// per-tier callers: a caller translates Request{Tools,Turns} out to its
+// provider's shape and Response{ToolCalls,Stop} back. They are transport-only
+// and ephemeral — never persisted and never replayed (data-model §3).
+
+// Role labels a transcript turn.
+type Role string
+
+const (
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+)
+
+// Turn is one message in the transcript: a role and its content blocks.
+type Turn struct {
+	Role   Role    `json:"role"`
+	Blocks []Block `json:"blocks"`
+}
+
+// Block is one content block in a turn — exactly one of the three is set.
+type Block struct {
+	Text       string           `json:"text,omitempty"`
+	ToolUse    *ToolUseBlock    `json:"tool_use,omitempty"`    // assistant-side call echo
+	ToolResult *ToolResultBlock `json:"tool_result,omitempty"` // user-side outcome
+}
+
+// ToolUseBlock echoes a prior assistant tool call in the transcript.
+type ToolUseBlock struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+// ToolResultBlock carries a tool's outcome back to the model, tied to the
+// call it answers by ForID.
+type ToolResultBlock struct {
+	ForID   string `json:"for_id"`
+	Content string `json:"content"`
+	IsError bool   `json:"is_error,omitempty"`
+}
+
+// ToolDecl is one declared tool on a Request: the schema the model calls against.
+type ToolDecl struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema object
+}
+
+// ToolCall is one call parsed from a Response.
+type ToolCall struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
+}
+
+// StopReason is why the model stopped this round.
+type StopReason string
+
+const (
+	StopEndTurn   StopReason = "end_turn"   // model reached a natural stop
+	StopToolUse   StopReason = "tool_use"   // model wants tool results to continue
+	StopMaxTokens StopReason = "max_tokens" // output token budget hit
+	StopOther     StopReason = "other"      // any other/unmapped reason
+)
 
 // TierStatus and Status feed the protocol status shape and the TUI.
 type TierStatus struct {
@@ -200,13 +286,14 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 	// the boot warning is surfaced by the daemon, not here. Cloud is pinned
 	// at one worker (FR-008).
 	localSlots, _ := cfg.Local.Workers()
+	localToolMode, _ := cfg.Local.ToolModeResolved()
 	o := &Orchestrator{
 		cfg:   cfg,
 		meter: meter,
 		done:  make(chan struct{}),
 		tiers: map[Tier]*tier{
 			TierLocal: {name: TierLocal, caller: newOpenAICompat(cfg.Local.Endpoint, cfg.Local.Model, cfg.Local.APIKey,
-				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none")),
+				resolveReasoningEffort(cfg.Local.ReasoningEffort, "none"), localToolMode),
 				health: &tierHealth{}, queue: make(chan job, queueCap), prio: make(chan job, queueCap),
 				slots: localSlots,
 				est:   cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))},
@@ -247,6 +334,42 @@ func (o *Orchestrator) SecondsPerPoint(tierName Tier) float64 {
 	return cognition.SeedFor(nil, string(tierName))
 }
 
+// feedEstimate reports one completed-cognition wall time to a tier's
+// seconds-per-point estimator, normalized by the kind's registered point cost,
+// and fires the recalibrate hook (in its own goroutine) on a spike-rate breach.
+// Shared by the per-call worker path (TASK-32) and the whole-loop
+// ObserveCognition seam (TASK-52), so both feed the estimator identically.
+func (o *Orchestrator) feedEstimate(t *tier, kind Kind, millis int64) {
+	dc, ok := cognition.ClassForKind(string(kind))
+	if !ok || dc.Points <= 0 {
+		return
+	}
+	if t.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+		est, rate, _, _ := t.est.Stats()
+		o.recalMu.Lock()
+		hook := o.recalibrate
+		o.recalMu.Unlock()
+		if hook != nil {
+			go hook(t.name, est, rate)
+		}
+	}
+}
+
+// ObserveCognition reports one whole-cognition wall-time observation to the
+// tier estimator (TASK-52). It is the agent tool-use loop's replacement for
+// per-call worker feeding: the loop marks every internal Submit SkipObserve so
+// no fractional per-round samples reach the estimator, then reports the summed
+// loop duration here exactly once. Unknown kinds are ignored (no tier). Safe
+// for concurrent use — the estimator and hook lock are the same ones the
+// worker uses.
+func (o *Orchestrator) ObserveCognition(kind Kind, totalMillis int64) {
+	tierName, ok := routing[kind]
+	if !ok {
+		return
+	}
+	o.feedEstimate(o.tiers[tierName], kind, totalMillis)
+}
+
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
 // hook runs in its own goroutine and must be idempotent per breach episode
 // — the estimator already fires once per breach.
@@ -277,7 +400,7 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 	// Conversations are interactive — a turn mid-dialogue must not wait
 	// behind a backlog of planner thoughts (which tolerate staleness; the
 	// reflex grace covers them). Everything else rides the normal queue.
-	// Best-effort work (musings) is the opposite extreme: admitted only
+	// Best-effort work is the opposite extreme: admitted only
 	// when a slot is free, refused instantly otherwise. With N local
 	// workers, "free slot" means no queued work AND at least one idle
 	// worker (inflight < slots) — a non-empty queue already implies every
@@ -342,7 +465,7 @@ func (o *Orchestrator) worker(t *tier) {
 			// Worker-side hard cap: no single call may wedge the tier,
 			// regardless of the caller's context or transport behavior.
 			callCtx, cancel := context.WithTimeout(j.ctx, workerCallCap)
-			text, inTok, outTok, err := t.caller.call(callCtx, j.req)
+			cr, err := t.caller.call(callCtx, j.req)
 			cancel()
 			if err != nil {
 				// The circuit counts the model's failures, never the
@@ -356,32 +479,31 @@ func (o *Orchestrator) worker(t *tier) {
 			}
 			t.health.succeed()
 			resp := Response{
-				Text:         text,
+				Text:         cr.text,
+				ToolCalls:    cr.toolCalls,
+				Stop:         cr.stop,
 				Tier:         t.name,
-				InputTokens:  inTok,
-				OutputTokens: outTok,
+				InputTokens:  cr.inTok,
+				OutputTokens: cr.outTok,
 				Millis:       time.Since(start).Milliseconds(),
 			}
 			// Cognition-horizon sampling (TASK-32): completed calls feed the
 			// tier's seconds-per-point estimate, normalized by the kind's
 			// registered point cost. Successes only — a fast failure is not
 			// a latency observation of completed thought, and the estimator's
-			// spike rejection only guards the high side.
-			if dc, ok := cognition.ClassForKind(string(j.req.Kind)); ok && dc.Points > 0 {
-				if t.est.Sample(float64(resp.Millis) / 1000 / float64(dc.Points)) {
-					est, rate, _, _ := t.est.Stats()
-					o.recalMu.Lock()
-					hook := o.recalibrate
-					o.recalMu.Unlock()
-					if hook != nil {
-						go hook(t.name, est, rate)
-					}
-				}
+			// spike rejection only guards the high side. A loop-internal call
+			// opts out (TASK-52): the loop driver reports one whole-cognition
+			// observation via ObserveCognition instead of N per-call fractions,
+			// so per-call feeding here would skew sec/pt low and mis-arm the
+			// suppression gate. Metering, admission, and the breaker are
+			// untouched by the opt-out.
+			if !j.req.SkipObserve {
+				o.feedEstimate(t, j.req.Kind, resp.Millis)
 			}
 			if t.name == TierCloud {
 				resp.Model = o.cfg.Cloud.Model
-				resp.CostUSD = float64(inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
-					float64(outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
+				resp.CostUSD = float64(cr.inTok)*o.cfg.Cloud.InputUSDPerMTok/1e6 +
+					float64(cr.outTok)*o.cfg.Cloud.OutputUSDPerMTok/1e6
 				if merr := o.meter.Add(resp.CostUSD); merr != nil {
 					// Metering must never lose money silently: surface it.
 					j.reply <- result{err: fmt.Errorf("spend meter: %w", merr)}

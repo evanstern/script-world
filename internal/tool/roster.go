@@ -16,12 +16,15 @@ package tool
 // order (say, muse, gist).
 var villagerExpressive = []string{"say", "muse", "gist"}
 
-// RosterVillager is the villager capability set: every World tool in
-// registration order, then the villager expressive tools.
+// RosterVillager is the villager capability set: every legacy World tool
+// (Effect World AND PlanStep true, isLegacyWorldTool in derive.go) in
+// registration order, then the villager expressive tools. set_plan is
+// deliberately excluded — it is Effect World but loop-only (PlanStep false);
+// it appears only in LoopRosterVillager below.
 var RosterVillager = func() []string {
 	out := make([]string, 0, len(registry))
 	for _, t := range registry {
-		if t.Effect == World {
+		if isLegacyWorldTool(t) {
 			out = append(out, t.Name)
 		}
 	}
@@ -40,4 +43,58 @@ func OnRoster(roster []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// LoopRosterVillager returns the ordered declared-tool list the villager
+// tool-use loop presents to the model (spec 017 contracts/loop-api.md,
+// data-model.md §2): every legacy World tool in registration order, then
+// set_plan, then muse. Unlike RosterVillager (name-only membership, for the
+// door's roster check), this returns full Tool values — InputSchema
+// (derive.go) needs each tool's Params/InputSchemaJSON, not just its name.
+//
+// say/gist stay scene-gated and out of the loop roster this task (data-model
+// §2): scenes remain driver-run, not model-initiated via the loop.
+func LoopRosterVillager() []Tool {
+	out := make([]Tool, 0, len(registry))
+	for _, t := range registry {
+		if isLegacyWorldTool(t) {
+			out = append(out, t)
+		}
+	}
+	if sp, ok := Lookup("set_plan"); ok {
+		out = append(out, sp)
+	}
+	if muse, ok := Lookup("muse"); ok {
+		out = append(out, muse)
+	}
+	return out
+}
+
+// loopMetatronTools is the ordered declared-tool list the metatron tool-use
+// loop presents to the model (spec 017 T020): the two nudge forms, then
+// work_miracle (the R13 post-#38 amendment). It is NOT RosterMetatron:
+// converse is DELIBERATELY excluded. converse is the final-answer channel, not
+// a callable tool — the angel speaks by replying with text (toolloop Result
+// Final), and the loop ends naturally (model_done) when it does. Declaring
+// converse would trap a converse call as rejected_unknown (metatron installs no
+// converse handler, by design: "converse is the transcript, not a door"), so it
+// is offered only as the implicit text channel, never as a tool the model can
+// call. work_miracle rides at the end so no existing tool's declared position
+// shifts.
+var loopMetatronTools = []string{"nudge_dream", "nudge_omen", "work_miracle"}
+
+// LoopRosterMetatron returns the ordered declared-tool list the metatron
+// tool-use loop presents to the model (loopMetatronTools), resolved to full
+// Tool values — InputSchema (derive.go) needs each tool's Params, not just its
+// name. RosterMetatron stays the pre-loop, name-only DOOR roster (landNudge's
+// OnRoster check); this is the loop's DECLARED surface, which differs (converse
+// excluded, work_miracle included).
+func LoopRosterMetatron() []Tool {
+	out := make([]Tool, 0, len(loopMetatronTools))
+	for _, n := range loopMetatronTools {
+		if t, ok := Lookup(n); ok {
+			out = append(out, t)
+		}
+	}
+	return out
 }

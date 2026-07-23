@@ -17,6 +17,8 @@ import (
 
 	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/tool"
+	"github.com/evanstern/promptworld/internal/toolloop"
 	"github.com/evanstern/promptworld/internal/world"
 )
 
@@ -29,6 +31,13 @@ type refShape struct {
 	system    string
 	prompt    string
 	maxTokens int64
+	// loop marks a shape whose unit of work is a whole tool-use loop, not a
+	// single model call (spec 017, FR-011). A loop shape is measured by driving
+	// toolloop.Run with the cognition's registry roster, so the seeded
+	// seconds-per-point is in the SAME unit the live estimator observes
+	// (Orchestrator.ObserveCognition reports whole-loop wall time). The villager
+	// planner is the loop cognition on the local tier.
+	loop bool
 }
 
 func refShapes(tier llm.Tier) []refShape {
@@ -36,6 +45,15 @@ func refShapes(tier llm.Tier) []refShape {
 		"You are near the village square. You can see the well, the woodpile, and two neighbors " +
 		"talking by the fire pit. You are somewhat hungry and your firewood is low."
 	if tier == llm.TierCloud {
+		// Consolidation is a single-shot cloud kind (it did not adopt the loop —
+		// spec 017 FR-014), so it stays a plain Submit probe and its per-point
+		// timing remains a valid sample for the shared cloud estimator. Metatron
+		// IS the cloud loop cognition, but calibrating it would drive extra
+		// metered cloud calls per sample — a new cloud spend path the spec 017
+		// contract does not invite (contracts/loop-api.md scopes the calibrate
+		// change to the planner probe). Its live whole-loop observations converge
+		// the cloud estimator at run time; the tiny console-turn volume tolerates
+		// a single-shot seed until then.
 		return []refShape{{
 			name: "consolidation-5pt", kind: llm.KindConsolidation, points: 5,
 			system:    "You distill a villager's day into a short reflective summary.",
@@ -45,44 +63,42 @@ func refShapes(tier llm.Tier) []refShape {
 	}
 	return []refShape{
 		{
-			name: "musing-1pt", kind: llm.KindMusing, points: 1,
-			system:    "Reply with one plain sentence of inner thought.",
-			prompt:    situation + " What crosses your mind?",
-			maxTokens: 48,
-		},
-		{
-			name: "planner-3pt", kind: llm.KindPlanner, points: 3,
-			system:    "You decide a villager's next goal. Reply with a JSON object {\"goal\": \"...\", \"reason\": \"...\"}.",
+			// The villager planner runs the tool-use loop (spec 017): the probe
+			// declares the villager registry roster and drives toolloop.Run, so it
+			// measures the real tool-call round-trip (native tools or the json
+			// fallback envelope) end to end — the whole-loop unit the governor
+			// budgets for — instead of a bare free-text completion.
+			name: "planner-3pt", kind: llm.KindPlanner, points: 3, loop: true,
+			system:    "You decide a villager's next action by calling exactly one tool.",
 			prompt:    situation + " Recent memories: gathered wood yesterday; shared food with Rowan; slept poorly. What do you do next?",
 			maxTokens: 256,
 		},
 	}
 }
 
-// submitter is the calibrate-side seam (satisfied by *llm.Orchestrator).
-type submitter interface {
-	Submit(ctx context.Context, req llm.Request) (llm.Response, error)
-}
+// sampleWallMs measures ONE sample's wall time (ms) for a shape. Single-shot
+// shapes issue one Submit; loop shapes drive toolloop.Run and report the whole
+// loop's wall time (spec 017 FR-011). Injected so tests can measure a stub
+// server (or a scripted probe) without a real model.
+type sampleWallMs func(ctx context.Context, sh refShape) (int64, error)
 
 // calibrateTier runs the reference workload for one tier and returns its
 // profile. Returns an error only if every sample failed (unusable tier).
-func calibrateTier(orch submitter, tier llm.Tier, samples int) (cognition.TierProfile, error) {
+func calibrateTier(sample sampleWallMs, tier llm.Tier, samples int) (cognition.TierProfile, error) {
 	tp := cognition.TierProfile{}
 	perPoint := []float64{}
 	for _, sh := range refShapes(tier) {
 		ss := cognition.ShapeSamples{Shape: sh.name, Points: sh.points}
 		for i := 0; i < samples; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-			resp, err := orch.Submit(ctx, llm.Request{
-				Kind: sh.kind, System: sh.system, Prompt: sh.prompt, MaxTokens: sh.maxTokens,
-			})
+			millis, err := sample(ctx, sh)
 			cancel()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "calibrate: %s %s sample %d failed: %v\n", tier, sh.name, i+1, err)
 				continue
 			}
-			ss.WallMs = append(ss.WallMs, resp.Millis)
-			perPoint = append(perPoint, float64(resp.Millis)/1000/float64(sh.points))
+			ss.WallMs = append(ss.WallMs, millis)
+			perPoint = append(perPoint, float64(millis)/1000/float64(sh.points))
 		}
 		tp.Samples = append(tp.Samples, ss)
 	}
@@ -94,13 +110,70 @@ func calibrateTier(orch submitter, tier llm.Tier, samples int) (cognition.TierPr
 	return tp, nil
 }
 
+// orchSampler is the production sampleWallMs: single-shot shapes Submit once;
+// loop shapes drive toolloop.Run against the tier's real model with the
+// cognition's registry roster and no-op probe handlers (calibration measures
+// latency, not landings — every acting call "lands" instantly, ending the loop
+// on the first action the model takes, exactly as a live villager loop with no
+// read tools yet does). rounds is the operator's loop_max_rounds cap.
+func orchSampler(orch *llm.Orchestrator, rounds int) sampleWallMs {
+	return func(ctx context.Context, sh refShape) (int64, error) {
+		if !sh.loop {
+			resp, err := orch.Submit(ctx, llm.Request{
+				Kind: sh.kind, System: sh.system, Prompt: sh.prompt, MaxTokens: sh.maxTokens,
+			})
+			if err != nil {
+				return 0, err
+			}
+			return resp.Millis, nil
+		}
+		res, err := toolloop.Run(ctx, orch, villagerProbeJob(sh, rounds))
+		if err != nil {
+			return 0, err
+		}
+		return res.TotalMillis, nil
+	}
+}
+
+// villagerProbeJob builds the whole-loop calibration probe for the villager
+// planner: the real villager registry roster (so the model sees the production
+// tool declarations and the wire exercises native tool_calls / the json
+// fallback), and a no-op handler per tool that reports read_ok for read tools
+// and landed for acting tools — the loop measures the model round-trip and ends
+// on the first action, mutating no world (there is none in calibrate).
+func villagerProbeJob(sh refShape, rounds int) toolloop.Job {
+	roster := tool.LoopRosterVillager()
+	handlers := make(map[string]toolloop.Handler, len(roster))
+	for _, tl := range roster {
+		if tl.Effect == tool.Read {
+			handlers[tl.Name] = func(context.Context, llm.ToolCall) toolloop.Outcome {
+				return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: "ok"}
+			}
+			continue
+		}
+		handlers[tl.Name] = func(context.Context, llm.ToolCall) toolloop.Outcome {
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "done"}
+		}
+	}
+	return toolloop.Job{
+		JobID:     "calibrate-planner",
+		Kind:      sh.kind,
+		System:    sh.system,
+		Seed:      sh.prompt,
+		Roster:    roster,
+		Handlers:  handlers,
+		MaxRounds: rounds,
+		MaxTokens: sh.maxTokens,
+	}
+}
+
 // horizonSummary evaluates the registry against a fresh seconds-per-point
 // across the watchable speed ladder: the operator sees the cognition horizon
 // for their hardware before ever running a world.
 func horizonSummary(secPerPt float64) string {
 	ladder := []float64{1, 4, 8, 16, 32}
 	parts := []string{}
-	for _, class := range []string{"planner", "musing", "conversation", "meeting"} {
+	for _, class := range []string{"planner", "conversation", "meeting"} {
 		dc, ok := cognition.ClassFor(class)
 		if !ok {
 			continue
@@ -190,10 +263,16 @@ func cmdCalibrate(args []string) error {
 		prof.Tiers = map[string]cognition.TierProfile{}
 	}
 
+	// The loop cap the villager probe runs under, from the same knob the daemon
+	// uses (llm.json loop_max_rounds, normalized) so the probe's whole-loop unit
+	// matches the live cognition's.
+	rounds, _ := cfg.Rounds()
+	sample := orchSampler(orch, rounds)
+
 	failed := 0
 	for _, t := range tiers {
 		fmt.Printf("calibrating %s tier (%d samples per shape)...\n", t, *samples)
-		tp, err := calibrateTier(orch, t, *samples)
+		tp, err := calibrateTier(sample, t, *samples)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "calibrate: %v — profile for this tier not written\n", err)
 			failed++

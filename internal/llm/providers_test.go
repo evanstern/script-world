@@ -31,9 +31,9 @@ func captureServer(t *testing.T, body *map[string]any) *httptest.Server {
 func TestOpenAICompatMaxTokens(t *testing.T) {
 	var got map[string]any
 	srv := captureServer(t, &got)
-	o := newOpenAICompat(srv.URL, "m", "", "")
+	o := newOpenAICompat(srv.URL, "m", "", "", "")
 
-	if _, _, _, err := o.call(context.Background(), Request{Prompt: "x", MaxTokens: 256}); err != nil {
+	if _, err := o.call(context.Background(), Request{Prompt: "x", MaxTokens: 256}); err != nil {
 		t.Fatal(err)
 	}
 	if v, ok := got["max_tokens"]; !ok || v.(float64) != 256 {
@@ -41,7 +41,7 @@ func TestOpenAICompatMaxTokens(t *testing.T) {
 	}
 
 	got = nil
-	if _, _, _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
+	if _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := got["max_tokens"]; ok {
@@ -70,8 +70,8 @@ func TestOpenAICompatReasoningEffort(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			var got map[string]any
 			srv := captureServer(t, &got)
-			o := newOpenAICompat(srv.URL, "m", "", c.resolved)
-			if _, _, _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
+			o := newOpenAICompat(srv.URL, "m", "", c.resolved, "")
+			if _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
 				t.Fatal(err)
 			}
 			v, ok := got["reasoning_effort"]
@@ -95,10 +95,10 @@ func TestOpenAICompatReasoningEffort(t *testing.T) {
 func TestOpenAICompatResponseFormat(t *testing.T) {
 	var got map[string]any
 	srv := captureServer(t, &got)
-	o := newOpenAICompat(srv.URL, "m", "", "")
+	o := newOpenAICompat(srv.URL, "m", "", "", "")
 
 	schema := json.RawMessage(`{"type":"object","properties":{"goal":{"type":"string","enum":["forage","chop"]}},"required":["reason"]}`)
-	if _, _, _, err := o.call(context.Background(),
+	if _, err := o.call(context.Background(),
 		Request{Prompt: "x", ResponseSchema: schema, SchemaName: "plan"}); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestOpenAICompatResponseFormat(t *testing.T) {
 	}
 
 	got = nil
-	if _, _, _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
+	if _, err := o.call(context.Background(), Request{Prompt: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := got["response_format"]; ok {

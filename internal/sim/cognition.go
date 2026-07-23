@@ -1,5 +1,7 @@
 package sim
 
+import "encoding/json"
+
 // Cognition-horizon telemetry (TASK-32, specs/007-cognition-horizon).
 // These event types are recorded observability with zero state effect:
 // reducer no-ops whitelisted on the inject_social door (cog.*) or emitted by
@@ -90,6 +92,57 @@ type IntentRejectedPayload struct {
 	Goal           string `json:"goal"`
 	Reason         string `json:"reason"`
 	StalenessTicks int64  `json:"staleness_ticks"`
+}
+
+// CogToolCallPayload — cog.tool_call: one record per tool call the loop saw
+// (spec 017, FR-007) — landed, rejected, read, or unlanded. Reducer no-op
+// like every cog.* type (recorded observability, zero state effect);
+// {Job, Ordinal} is the correlation key (ordinals are 1-based, dense per
+// job, in model-emission order across every round). Field order is
+// canonical (contracts/events.md) — future additive fields go LAST,
+// omitempty, so existing cog.tool_call events keep replaying
+// byte-identically (TASK-32 pattern).
+type CogToolCallPayload struct {
+	Job     string `json:"job"`
+	Ordinal int    `json:"ordinal"`
+	Tool    string `json:"tool"`
+	// Args is the call's raw arguments, copied verbatim up to the 2 KiB cap
+	// (toolloop.capArgs; larger payloads truncate to
+	// {"_truncated":true,"prefix":"…"}); omitempty for zero-argument calls.
+	Args json.RawMessage `json:"args,omitempty"`
+	// Verdict is the toolloop.Verdict enum (data-model.md §5): landed |
+	// rejected_gate | rejected_cardinality | rejected_unknown |
+	// rejected_malformed | read_ok | read_error | unlanded.
+	Verdict string `json:"verdict"`
+	// Reason is omitempty but REQUIRED (non-empty) for every rejected_* and
+	// read_error verdict — the queryable rejection explanation (AC#5).
+	// Enforced by emitters (mind/metatron), not this type.
+	Reason string `json:"reason,omitempty"`
+	Tier   string `json:"tier"`
+	// SnapshotTick is the world tick the call's cognition snapshotted at.
+	SnapshotTick int64 `json:"snapshot_tick"`
+}
+
+// NewCogToolCallPayload assembles a cog.tool_call payload from a recorded
+// call's plain fields (spec 017 T018). It lives sim-side — next to the payload
+// it builds — with only plain/std-lib argument types (no toolloop or mind
+// import), so BOTH loop consumers reach it without a shared helper package or
+// dependency inversion: the mind (T018) and metatron (T020) each unpack their
+// own toolloop.CallRecord and call this, sharing one authority for the payload's
+// field set. verdict is the toolloop.Verdict enum stringified by the caller;
+// reason must be non-empty for every rejected_* / read_error verdict — the
+// caller enforces that (contracts/events.md), this constructor only shapes.
+func NewCogToolCallPayload(job string, ordinal int, tool string, args json.RawMessage, verdict, reason, tier string, snapshotTick int64) CogToolCallPayload {
+	return CogToolCallPayload{
+		Job:          job,
+		Ordinal:      ordinal,
+		Tool:         tool,
+		Args:         args,
+		Verdict:      verdict,
+		Reason:       reason,
+		Tier:         tier,
+		SnapshotTick: snapshotTick,
+	}
 }
 
 // RecalibrationPayload — cog.recalibration_recommended: the live estimator's

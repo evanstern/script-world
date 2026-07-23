@@ -14,7 +14,7 @@ import (
 // inject_social door; agent.intent_rejected is loop-emitted only and must
 // NOT be injectable from the mind.
 func TestCognitionTelemetryWhitelisted(t *testing.T) {
-	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended"} {
+	for _, typ := range []string{"cog.thought", "cog.outcome", "cog.recalibration_recommended", "cog.tool_call"} {
 		if !injectSocialWhitelist[typ] {
 			t.Errorf("%s not whitelisted", typ)
 		}
@@ -45,6 +45,11 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 		"agent.intent_rejected": IntentRejectedPayload{
 			Agent: 3, Goal: "talk_to", Reason: "stale", StalenessTicks: 1646,
 		},
+		"cog.tool_call": CogToolCallPayload{
+			Job: "planner-3-412800", Ordinal: 2, Tool: "set_plan",
+			Args:    json.RawMessage(`{"steps":[{"goal":"chop"}]}`),
+			Verdict: "landed", Tier: "local", SnapshotTick: 412800,
+		},
 	}
 	for typ, p := range payloads {
 		b, err := json.Marshal(p)
@@ -57,6 +62,108 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 	}
 	if string(s.Marshal()) != string(before) {
 		t.Error("telemetry event mutated state")
+	}
+}
+
+// TestCogToolCallPayloadMarshalOrder pins the canonical field order
+// (contracts/events.md): future additive fields must go last, omitempty, so
+// existing cog.tool_call events keep replaying byte-identically.
+func TestCogToolCallPayloadMarshalOrder(t *testing.T) {
+	p := CogToolCallPayload{
+		Job:          "planner-3-412800",
+		Ordinal:      2,
+		Tool:         "set_plan",
+		Args:         json.RawMessage(`{"steps":[{"goal":"chop"},{"goal":"build_fire"}]}`),
+		Verdict:      "landed",
+		Reason:       "",
+		Tier:         "local",
+		SnapshotTick: 412800,
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// reason is empty here, so omitempty drops it — the marshaled order is
+	// job, ordinal, tool, args, verdict, tier, snapshot_tick.
+	want := `{"job":"planner-3-412800","ordinal":2,"tool":"set_plan","args":{"steps":[{"goal":"chop"},{"goal":"build_fire"}]},"verdict":"landed","tier":"local","snapshot_tick":412800}`
+	if string(b) != want {
+		t.Errorf("marshal order mismatch:\n got  %s\n want %s", b, want)
+	}
+
+	// A rejected verdict carries a reason: it lands right after verdict,
+	// still before tier/snapshot_tick.
+	p.Verdict = "rejected_malformed"
+	p.Reason = "unknown param \"qty\""
+	p.Args = nil
+	b, err = json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = `{"job":"planner-3-412800","ordinal":2,"tool":"set_plan","verdict":"rejected_malformed","reason":"unknown param \"qty\"","tier":"local","snapshot_tick":412800}`
+	if string(b) != want {
+		t.Errorf("marshal order mismatch (reason+no args):\n got  %s\n want %s", b, want)
+	}
+}
+
+// TestCogToolCallInjectableAndNoOp: a cog.tool_call event lands through the
+// mind's InjectSocial door (whitelist admission) and applies as a reducer
+// no-op — recorded observability, zero state effect (spec 017 FR-007).
+func TestCogToolCallInjectableAndNoOp(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	before, _, err := h.loop.DoState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := CogToolCallPayload{
+		Job: "planner-3-412800", Ordinal: 1, Tool: "chop",
+		Verdict: "landed", Tier: "local", SnapshotTick: 10000,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.loop.InjectSocial([]store.Event{{Type: "cog.tool_call", Payload: b}}); err != nil {
+		t.Fatalf("InjectSocial rejected whitelisted cog.tool_call: %v", err)
+	}
+	after, _, err := h.loop.DoState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Error("cog.tool_call mutated state")
+	}
+	evs, err := h.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range evs {
+		if e.Type == "cog.tool_call" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("cog.tool_call was not admitted through InjectSocial")
+	}
+}
+
+// TestNewCogToolCallPayload: the sim-side constructor (spec 017 T018, option c)
+// assembles the canonical payload from plain fields, so both loop consumers
+// (mind, metatron) build cog.tool_call the same way without importing toolloop
+// here. It is a pure shaper — the reason invariant is the caller's to enforce.
+func TestNewCogToolCallPayload(t *testing.T) {
+	args := json.RawMessage(`{"steps":[{"goal":"chop"}]}`)
+	got := NewCogToolCallPayload("planner-3-412800", 2, "set_plan", args,
+		"rejected_malformed", `unknown param "qty"`, "local", 412800)
+	want := CogToolCallPayload{
+		Job: "planner-3-412800", Ordinal: 2, Tool: "set_plan", Args: args,
+		Verdict: "rejected_malformed", Reason: `unknown param "qty"`,
+		Tier: "local", SnapshotTick: 412800,
+	}
+	if got.Job != want.Job || got.Ordinal != want.Ordinal || got.Tool != want.Tool ||
+		string(got.Args) != string(want.Args) || got.Verdict != want.Verdict ||
+		got.Reason != want.Reason || got.Tier != want.Tier || got.SnapshotTick != want.SnapshotTick {
+		t.Errorf("NewCogToolCallPayload = %+v, want %+v", got, want)
 	}
 }
 
@@ -227,6 +334,122 @@ func TestLadderUnmeteredCallersKeepOldContract(t *testing.T) {
 	}
 	if _, found := h.lastOutcome(t); found {
 		t.Error("unmetered caller produced telemetry")
+	}
+}
+
+// --- T017 (spec 017): agent.intent_set gains Job on planner-loop landings ---
+
+// TestIntentSetPayloadJobByteStability pins IntentSetPayload's marshaled
+// output without Job to the pre-feature encoding (TASK-32 pattern): Job is
+// the LAST field, omitempty, so every payload that doesn't set it — every
+// payload emitted before spec 017, and every reflex/executor emission after
+// it — marshals byte-identically to today.
+func TestIntentSetPayloadJobByteStability(t *testing.T) {
+	p := IntentSetPayload{
+		Agent: 1, Goal: "chop", TargetX: 5, TargetY: 6,
+		ResX: 7, ResY: 8, Source: "planner", Kind: "wood", Qty: 2,
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"agent":1,"goal":"chop","target_x":5,"target_y":6,"res_x":7,"res_y":8,"source":"planner","kind":"wood","qty":2}`
+	if string(b) != want {
+		t.Errorf("IntentSetPayload marshal changed:\n got  %s\n want %s", b, want)
+	}
+}
+
+// TestInjectLandingCarriesJob: the planner-inject landing arm (loop.go)
+// stamps agent.intent_set with in.JobID — the correlation key a
+// cog.tool_call chain resolves against (contracts/events.md).
+func TestInjectLandingCarriesJob(t *testing.T) {
+	h := newLadderHarness(t, nil)
+	args := meteredArgs(0, "wander")
+	args.JobID = "planner-0-10000"
+	if err := h.loop.InjectIntent(args); err != nil {
+		t.Fatalf("landing rejected: %v", err)
+	}
+	if p, ok := h.lastOutcome(t); !ok || p.Outcome != OutcomeLanded {
+		t.Fatalf("outcome = %+v, want landed", p)
+	}
+	evs, err := h.st.EventsSince(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p IntentSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Job != args.JobID {
+			t.Errorf("intent_set.job = %q, want %q", p.Job, args.JobID)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("inject-landing produced no agent.intent_set")
+	}
+}
+
+// TestReflexAndPlanIntentSetOmitJob: the reflex fallback (executor.go's
+// decideIntent path) and executor-fired plan steps (plan.go) have no job to
+// carry — the field must be ABSENT from the wire payload, not present as an
+// empty string, so pre-feature logs (and every non-planner-inject emission
+// after this feature) stay byte-identical.
+func TestReflexAndPlanIntentSetOmitJob(t *testing.T) {
+	assertNoJobKey := func(t *testing.T, payload json.RawMessage) {
+		t.Helper()
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := raw["job"]; ok {
+			t.Errorf("agent.intent_set carries a job key: %s", payload)
+		}
+	}
+
+	// Reflex (executor.go's decideIntent fallback mind).
+	m := testMap(42)
+	s := NewState(42, m)
+	log := driveTicks(t, s, m, reflexGraceTicks+40, nil)
+	var reflexSeen bool
+	for _, e := range log {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		var p IntentSetPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Source == "reflex" {
+			reflexSeen = true
+			assertNoJobKey(t, e.Payload)
+		}
+	}
+	if !reflexSeen {
+		t.Fatal("reflex never fired after the grace window")
+	}
+
+	// Executor/plan-step firing (plan.go): a guarded plan step's intent_set,
+	// like TestPlanActsAtTickT's landing.
+	s2 := NewState(42, m)
+	s2.Tick = 1000
+	s2.Agents[0].Plan = []PlanStep{{Job: "planner-0-1000", Goal: "wander", Until: 3000}}
+	evs := planStepEvents(s2, m, 0, 1001)
+	var planSeen bool
+	for _, e := range evs {
+		if e.Type != "agent.intent_set" {
+			continue
+		}
+		planSeen = true
+		assertNoJobKey(t, e.Payload)
+	}
+	if !planSeen {
+		t.Fatal("plan step never fired an agent.intent_set")
 	}
 }
 

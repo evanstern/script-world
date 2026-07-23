@@ -13,6 +13,7 @@ import (
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/tool"
+	"github.com/evanstern/promptworld/internal/toolloop"
 )
 
 // nudgeTextMax is the nudge rendering cap, read from the tool registry (spec
@@ -32,7 +33,12 @@ var nudgeTextMax = func() int {
 
 const (
 	playerTextMax = 2000
-	turnMaxTokens = 700
+	// turnMaxTokens is the per-round token budget for one console turn. The
+	// pre-loop turn used 700 for a bare JSON reply; a tool-era round must carry a
+	// tool_use block (the call name + JSON arguments) ALONGSIDE any converse prose
+	// in the same round, so it is bumped to 1024 to keep a full charter-voiced
+	// reply from crowding out a same-round act (spec 017 T020).
+	turnMaxTokens = 1024
 )
 
 // ErrTurnBusy is returned while another console turn is in flight.
@@ -61,34 +67,33 @@ type Miracle struct {
 	Summary string `json:"summary"`
 }
 
-// turnReply is the model's output contract. The miracle member has NO gratis
-// field by design (contracts §1, FR-007/SC-005): any "gratis":true in model
-// output is dropped at unmarshal, so a model-driven miracle is always charged —
-// structural stripping, nothing to forget to sanitize.
-type turnReply struct {
-	Say   string `json:"say"`
-	Nudge *struct {
-		Form   string `json:"form"`
-		Target string `json:"target"`
-		Text   string `json:"text"`
-	} `json:"nudge"`
-	Miracle *struct {
-		Kind     string `json:"kind"`
-		Day      int    `json:"day"`
-		Time     string `json:"time"`
-		Villager string `json:"villager"`
-		Item     string `json:"item"`
-		Qty      int    `json:"qty"`
-		Class    string `json:"class"`
-		X        int    `json:"x"`
-		Y        int    `json:"y"`
-		ToX      int    `json:"to_x"`
-		ToY      int    `json:"to_y"`
-	} `json:"miracle"`
+// miracleArgs is the parsed work_miracle tool-call surface — the same flat field
+// set the retired turnReply.Miracle struct carried (spec 016 turn contract). It
+// has NO gratis field by design (FR-007/SC-005): the angel can NEVER work a free
+// miracle, and structural absence is the guarantee — landMiracle passes gratis
+// false unconditionally, and there is nothing to forget to sanitize.
+type miracleArgs struct {
+	Kind     string `json:"kind"`
+	Day      int    `json:"day"`
+	Time     string `json:"time"`
+	Villager string `json:"villager"`
+	Item     string `json:"item"`
+	Qty      int    `json:"qty"`
+	Class    string `json:"class"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	ToX      int    `json:"to_x"`
+	ToY      int    `json:"to_y"`
 }
 
-// Turn runs one mediated console turn. Serialized: a second concurrent call
-// fails fast with ErrTurnBusy.
+// Turn runs one mediated console turn through the bounded tool-use loop (spec
+// 017 T020). The model may reply with words (converse — the transcript-only
+// final-answer channel, Result.Final) or call exactly one acting tool
+// (nudge_dream / nudge_omen / work_miracle), which lands through its existing
+// door. The driver's cardinality enforces the "at most one mediated act per
+// turn" rule (a landed acting call ends the loop) — the spec-016 nudge-wins-over-
+// miracle precedence dissolves: the model picks its one act. Serialized: a
+// second concurrent call fails fast with ErrTurnBusy.
 func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, error) {
 	playerText = strings.TrimSpace(playerText)
 	if playerText == "" {
@@ -114,45 +119,55 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	story := append([]string(nil), mt.story...)
 	mt.stateMu.Unlock()
 
+	// One correlation id per turn, mirroring mind's "<class>-<agent>-<tick>"
+	// convention (telemetry.go newMeta): the console turn's class is "turn", its
+	// agent slot is the angel itself. Threads every cog.tool_call for the turn.
+	jobID := fmt.Sprintf("turn-metatron-%d", tick)
+
+	result := TurnResult{}
+	d := &turnDispatch{mt: mt, charges: charges, alive: alive, result: &result}
+
 	callCtx, cancel := context.WithTimeout(ctx, turnTimeout)
-	resp, err := mt.orch.Submit(callCtx, llm.Request{
+	res, err := mt.runLoop(callCtx, toolloop.Job{
+		JobID:     jobID,
 		Kind:      llm.KindMetatron,
 		System:    turnSystemPrompt(charter),
-		Prompt:    turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
+		Seed:      turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
+		Roster:    tool.LoopRosterMetatron(),
+		Handlers:  mt.turnHandlers(d),
+		MaxRounds: mt.loopRounds,
 		MaxTokens: turnMaxTokens,
+		Record:    d.record,
 	})
 	cancel()
+
+	// Land every buffered CallRecord as cog.tool_call telemetry (spec 017 FR-007,
+	// T018), on EVERY termination path — a rejected / never-grounded call is
+	// recorded even when nothing landed. A dedicated batch through the same
+	// InjectSocial door as the nudge/miracle grounding events, so it neither
+	// reorders nor entangles with them.
+	mt.emitToolCalls(d.records, tick)
+
 	if err != nil {
-		// Honest unavailability; nothing consumed, moments stay queued.
+		// Honest unavailability; nothing landed (a landing returns a nil error),
+		// nothing consumed, moments stay queued — exactly today's degraded path.
 		return TurnResult{}, err
 	}
 
-	reply, perr := parseTurn(resp.Text)
-	if perr != nil {
-		log.Printf("metatron: unusable turn output: %v", perr)
-		reply = turnReply{Say: "Forgive me — my thoughts scattered and I could not " +
-			"complete that. Nothing was done and nothing was spent. Ask again."}
+	// The reply is the model's closing/converse text (Result.Final). When the
+	// model landed an act with no accompanying prose, Final may be empty — the
+	// ⚡/✨ report lines (result.Nudge/Miracle, rendered by recordTurn and the
+	// console) carry the turn. When NOTHING landed and nothing was said, the loop
+	// ran dry (model_done with no text, cap exhaustion, or a soft error) — the
+	// old scattered-thoughts fallback maps onto exactly these terminations.
+	reply := strings.TrimSpace(res.Final)
+	if reply == "" && result.Nudge == nil && result.Miracle == nil {
+		reply = "Forgive me — my thoughts scattered and I could not complete that. " +
+			"Nothing was done and nothing was spent. Ask again."
 	}
-
-	result := TurnResult{Reply: reply.Say}
+	result.Reply = reply
 	if notice != "" {
 		result.Reply = "(" + notice + ")\n\n" + result.Reply
-	}
-
-	// At most one mediated act per turn (the existing "one mediated act" rule):
-	// a nudge takes the turn if present, otherwise a miracle may land.
-	if reply.Nudge != nil && perr == nil {
-		if nudge, why := mt.landNudge(reply, charges, alive); nudge != nil {
-			result.Nudge = nudge
-		} else if why != "" {
-			result.Reply += "\n\n(No nudge landed: " + why + ")"
-		}
-	} else if reply.Miracle != nil && perr == nil {
-		if miracle, why := mt.landMiracle(reply, charges); miracle != nil {
-			result.Miracle = miracle
-		} else if why != "" {
-			result.Reply += "\n\n(No miracle landed: " + why + ")"
-		}
 	}
 
 	// Surfaced moments are consumed only on a completed turn.
@@ -166,15 +181,20 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	return result, nil
 }
 
-// landNudge validates the model's nudge and lands it as one atomic batch.
-// Returns the landed nudge, or ("" is a silent skip) the refusal reason.
-func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) (*Nudge, string) {
-	n := reply.Nudge
+// landNudge validates a nudge and lands it as one atomic batch. form is the
+// tool that was called (nudge_dream → "dream", nudge_omen → "omen"); target is
+// the dream's villager name (ignored for omen); text is the model's rendering.
+// The validation, atomic InjectSocial batch, and soul append are UNCHANGED from
+// the pre-loop turnReply path (spec 017 T020: wrap, don't rewrite) — only the
+// input plumbing moved from a parsed JSON struct to the tool-call arguments.
+// Returns the landed nudge, or (nil, refusal reason) which the handler maps to a
+// rejected_gate the model may correct within the loop's round cap.
+func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool) (*Nudge, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
-	form := strings.ToLower(strings.TrimSpace(n.Form))
-	text := strings.TrimSpace(n.Text)
+	form = strings.ToLower(strings.TrimSpace(form))
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, "the rendering was empty"
 	}
@@ -185,14 +205,14 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 	// nudge tool on the metatron roster (nudge_dream / nudge_omen). Anything
 	// else is refused exactly like an unknown form — same reason string.
 	if !tool.OnRoster(tool.RosterMetatron, "nudge_"+form) {
-		return nil, fmt.Sprintf("unknown form %q", n.Form)
+		return nil, fmt.Sprintf("unknown form %q", form)
 	}
 	var targets []int
 	switch form {
 	case "dream":
-		idx := agentIndexByName(n.Target)
+		idx := agentIndexByName(target)
 		if idx < 0 {
-			return nil, fmt.Sprintf("no villager named %q", n.Target)
+			return nil, fmt.Sprintf("no villager named %q", target)
 		}
 		if !alive[idx] {
 			return nil, fmt.Sprintf("%s is beyond dreams now", sim.AgentNames[idx])
@@ -208,7 +228,7 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 			return nil, "no living villager remains to witness it"
 		}
 	default:
-		return nil, fmt.Sprintf("unknown form %q", n.Form)
+		return nil, fmt.Sprintf("unknown form %q", form)
 	}
 
 	prefix := "You dreamed: "
@@ -239,9 +259,12 @@ func (mt *Metatron) landNudge(reply turnReply, charges int, alive map[int]bool) 
 // R6), so the two channels cannot drift. The angel can NEVER waive a charge:
 // gratis is passed false unconditionally and does not exist on the turn contract
 // (SC-005). Returns the landed miracle, or ("" is a silent skip) an in-fiction
-// refusal reason reported in the reply suffix, exactly like landNudge.
-func (mt *Metatron) landMiracle(reply turnReply, charges int) (*Miracle, string) {
-	mm := reply.Miracle
+// refusal reason the handler maps to a rejected_gate, exactly like landNudge.
+// The validation, the atomic InjectSocial batch through the shared builder, and
+// the soul append are UNCHANGED from the pre-loop turnReply path (spec 017 T020:
+// wrap, don't rewrite) — only the input moved from a parsed JSON struct to the
+// tool-call arguments (miracleArgs).
+func (mt *Metatron) landMiracle(mm miracleArgs, charges int) (*Miracle, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
@@ -361,38 +384,6 @@ func mustJSON(v any) []byte {
 	return b
 }
 
-// parseTurn extracts the first balanced JSON object and validates the say.
-func parseTurn(text string) (turnReply, error) {
-	start := strings.IndexByte(text, '{')
-	if start < 0 {
-		return turnReply{}, errors.New("no JSON object in reply")
-	}
-	depth, end := 0, -1
-	for i := start; i < len(text) && end < 0; i++ {
-		switch text[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				end = i + 1
-			}
-		}
-	}
-	if end < 0 {
-		return turnReply{}, errors.New("unterminated JSON object")
-	}
-	var r turnReply
-	if err := json.Unmarshal([]byte(text[start:end]), &r); err != nil {
-		return turnReply{}, fmt.Errorf("bad turn JSON: %w", err)
-	}
-	r.Say = strings.TrimSpace(r.Say)
-	if r.Say == "" {
-		return turnReply{}, errors.New("empty say")
-	}
-	return r, nil
-}
-
 func turnSystemPrompt(charter string) string {
 	return fmt.Sprintf(`%s
 
@@ -416,17 +407,22 @@ direct edit to the world, spent from the same charges:
   • "give_item" — place a known item in a living villager's hands — 1 charge
   • "time_snap" — jump the world clock forward to a day and time — 2 charges
 A miracle spends its charges like a nudge and refuses in-fiction when the bank
-cannot pay (a time_snap needs two, every other miracle needs one). At most ONE
-act per turn — a nudge OR a miracle, never both. You cannot work a miracle for
-free; you cannot remove a villager.
+cannot pay (a time_snap needs two, every other miracle needs one). You cannot
+work a miracle for free; you cannot remove a villager.
 
-Reply with ONLY this JSON:
-{"say": "<your words to the player>",
- "nudge": {"form": "dream"|"omen", "target": "<villager name, dream only>", "text": "<what the villager experiences, under 400 characters>"} or null,
- "miracle": {"kind": "move"|"remove"|"give_item"|"time_snap",
-   "class": "villager"|"structure"|"pile"|"terrain", "x": 0, "y": 0, "to_x": 0, "to_y": 0,
-   "villager": "<name>", "item": "<item kind>", "qty": 0,
-   "day": 2, "time": "HH:MM"} or null}`,
+To SPEAK to the player, simply reply with your words — that reply is what the
+player reads, and speaking costs nothing. To ACT on the player's behalf, call
+exactly ONE of these tools (and only one — one mediated act per turn):
+  • nudge_dream(target, text) — a dream for ONE named villager
+  • nudge_omen(text) — an omen every living villager witnesses
+  • work_miracle(kind, …) — a direct world edit; kind is
+      "move"      with class ("villager"|"structure"|"pile"), x, y, to_x, to_y
+      "remove"    with class ("structure"|"pile"|"terrain"), x, y
+      "give_item" with villager, item, qty
+      "time_snap" with day and time ("HH:MM")
+If none are banked, or the request is unwise, do NOT call a tool — counsel the
+player in words instead (refusal is free). Never call more than one tool: the
+first act you land is the whole of this turn.`,
 		charter, strings.Join(sim.AgentNames[:], ", "))
 }
 

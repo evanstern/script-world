@@ -23,26 +23,37 @@ var wantWorldOrder = []string{
 // muse, gist (data-model.md / T007) — captured separately below.
 var wantExpressive = []string{"say", "gist", "muse"}
 var wantMetatron = []string{"converse", "nudge_dream", "nudge_omen"}
+
+// wantMetatronCatalog is the metatron tools' catalog membership (registration
+// order): the RosterMetatron three plus work_miracle (spec 017 T019b). It is a
+// superset of wantMetatron (the name-only DOOR roster) because work_miracle is a
+// registered capability that lands through landMiracle, not through landNudge's
+// OnRoster(RosterMetatron) check — so it belongs in the catalog and the LOOP
+// roster, but RosterMetatron (the pre-loop door roster) is left unchanged.
+var wantMetatronCatalog = []string{"converse", "nudge_dream", "nudge_omen", "work_miracle"}
 var wantVillagerExpressiveTail = []string{"say", "muse", "gist"}
 
 // TestCatalogCompleteness: every catalog row is present, nothing extra is
-// registered, and the world-tool order is exactly goalVocabulary order (R3).
+// registered, the legacy (free-text-vocabulary) world-tool order is exactly
+// goalVocabulary order (R3), and set_plan (spec 017) is registered as the
+// sole Effect-World, loop-only (PlanStep false) entry, immediately after the
+// legacy world tools.
 func TestCatalogCompleteness(t *testing.T) {
 	var gotWorld []string
 	gotAll := make(map[string]bool)
 	for _, tl := range All() {
 		gotAll[tl.Name] = true
-		if tl.Effect == World {
+		if isLegacyWorldTool(tl) {
 			gotWorld = append(gotWorld, tl.Name)
 		}
 	}
 
 	if !reflect.DeepEqual(gotWorld, wantWorldOrder) {
-		t.Errorf("world-tool order drifted.\n got: %v\nwant: %v", gotWorld, wantWorldOrder)
+		t.Errorf("legacy world-tool order drifted.\n got: %v\nwant: %v", gotWorld, wantWorldOrder)
 	}
 
 	wantAll := make(map[string]bool)
-	for _, n := range append(append(append([]string{}, wantWorldOrder...), wantExpressive...), wantMetatron...) {
+	for _, n := range append(append(append(append([]string{}, wantWorldOrder...), "set_plan"), wantExpressive...), wantMetatronCatalog...) {
 		wantAll[n] = true
 	}
 	for n := range gotAll {
@@ -54,6 +65,26 @@ func TestCatalogCompleteness(t *testing.T) {
 		if !gotAll[n] {
 			t.Errorf("registry is missing catalog tool %q", n)
 		}
+	}
+
+	setPlan, ok := Lookup("set_plan")
+	if !ok {
+		t.Fatal("set_plan not registered")
+	}
+	if setPlan.Effect != World {
+		t.Errorf("set_plan.Effect = %v, want World", setPlan.Effect)
+	}
+	if setPlan.PlanStep {
+		t.Error("set_plan.PlanStep = true, want false (it must stay out of the legacy vocabulary)")
+	}
+	if len(setPlan.InputSchemaJSON) == 0 {
+		t.Error("set_plan has no InputSchemaJSON override")
+	}
+	// Registration order: set_plan sits immediately after the legacy world
+	// tools, before the expressive tools, so nothing else's position shifts.
+	all := All()
+	if all[len(wantWorldOrder)].Name != "set_plan" {
+		t.Errorf("registry index %d = %q, want set_plan immediately after the %d legacy world tools", len(wantWorldOrder), all[len(wantWorldOrder)].Name, len(wantWorldOrder))
 	}
 }
 
@@ -130,6 +161,44 @@ func TestTestOnlyToolFlows(t *testing.T) {
 	}
 	if _, ok := Lookup(probe); ok {
 		t.Errorf("probe tool survived removal in Lookup")
+	}
+}
+
+// TestStorageVerbsCarryQty (spec 017 R12/T002): qty is a declared optional
+// Number param (Min 1, unbounded Max) on exactly the four storage verbs —
+// build_chest takes neither kind nor qty.
+func TestStorageVerbsCarryQty(t *testing.T) {
+	// The four storage verbs (spec 014 debt, R12) plus work_miracle's give_item
+	// (spec 017 T019b) carry an optional, Min-1, unbounded qty.
+	wantQty := map[string]bool{"drop": true, "pick_up": true, "deposit": true, "withdraw": true, "work_miracle": true}
+
+	for _, tl := range All() {
+		var qty *Param
+		for i := range tl.Params {
+			if tl.Params[i].Name == "qty" {
+				qty = &tl.Params[i]
+			}
+		}
+		if wantQty[tl.Name] {
+			if qty == nil {
+				t.Errorf("tool %q: expected a qty param, found none", tl.Name)
+				continue
+			}
+			if qty.Kind != Number {
+				t.Errorf("tool %q: qty param Kind = %v, want Number", tl.Name, qty.Kind)
+			}
+			if qty.Required {
+				t.Errorf("tool %q: qty param must be optional", tl.Name)
+			}
+			if qty.Min != 1 {
+				t.Errorf("tool %q: qty param Min = %d, want 1", tl.Name, qty.Min)
+			}
+			if qty.Max != 0 {
+				t.Errorf("tool %q: qty param Max = %d, want 0 (unbounded)", tl.Name, qty.Max)
+			}
+		} else if qty != nil {
+			t.Errorf("tool %q: unexpected qty param (only drop/pick_up/deposit/withdraw take qty)", tl.Name)
+		}
 	}
 }
 

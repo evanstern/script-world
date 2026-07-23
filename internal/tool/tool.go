@@ -14,6 +14,8 @@
 // the work. The model never asserts an outcome.
 package tool
 
+import "encoding/json"
+
 // EffectClass is how a tool's use reaches the world (data-model.md).
 type EffectClass int
 
@@ -55,6 +57,10 @@ const (
 	// Enum is a closed set of string values, listed in Param.Enum (the storage
 	// verbs' item kind).
 	Enum
+	// Number is a bounded integer value (the storage verbs' `qty`), optionally
+	// constrained by Param.Min/Max (spec 017 R12 — pays the spec-014 debt that
+	// left `qty` unmodeled).
+	Number
 )
 
 // Param is one argument a tool accepts.
@@ -65,6 +71,7 @@ type Param struct {
 	MaxBytes int      // 0 = n/a
 	MaxRunes int      // 0 = n/a
 	Enum     []string // the allowed values when Kind == Enum; nil otherwise
+	Min, Max int      // Number bounds; 0,0 = unbounded. Meaningful only when Kind == Number.
 }
 
 // GateClass names the precondition family checked against live state before
@@ -105,4 +112,9 @@ type Tool struct {
 	ReflexEligible bool     // doctrine data only; decideIntent stays hand-written (R6)
 	PromptGloss    string   // the verb's prompt documentation line(s); "" when none
 	Events         []string // expressive tools: event types this tool may land (⊆ whitelist)
+	// InputSchemaJSON is an optional authored JSON Schema override, returned
+	// verbatim by InputSchema (derive.go) instead of a Params-derived schema.
+	// Only set_plan uses it in this feature (spec 017 R11) — the registry's
+	// scalar Param model can't express a steps array.
+	InputSchemaJSON json.RawMessage
 }

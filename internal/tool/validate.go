@@ -1,6 +1,8 @@
 package tool
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -51,28 +53,38 @@ func Validate() error {
 			errs = append(errs, fmt.Errorf("tool %q: ReflexEligible set on a non-world tool", t.Name))
 		}
 
-		// Well-formed params: an Enum descriptor must list its allowed values.
+		// Well-formed params: an Enum descriptor must list its allowed values;
+		// a Number descriptor's bounds, when both set, must not be inverted.
 		for _, p := range t.Params {
 			if p.Kind == Enum && len(p.Enum) == 0 {
 				errs = append(errs, fmt.Errorf("tool %q: enum param %q has no values", t.Name, p.Name))
 			}
+			if p.Kind == Number && p.Min != 0 && p.Max != 0 && p.Min > p.Max {
+				errs = append(errs, fmt.Errorf("tool %q: number param %q has Min %d > Max %d", t.Name, p.Name, p.Min, p.Max))
+			}
+		}
+
+		// InputSchemaJSON (spec 017 R11), when present, must be a JSON object —
+		// the authored override set_plan uses in place of Params derivation.
+		if len(t.InputSchemaJSON) > 0 {
+			if !json.Valid(t.InputSchemaJSON) {
+				errs = append(errs, fmt.Errorf("tool %q: InputSchemaJSON is not valid JSON", t.Name))
+			} else if trimmed := bytes.TrimSpace(t.InputSchemaJSON); len(trimmed) == 0 || trimmed[0] != '{' {
+				errs = append(errs, fmt.Errorf("tool %q: InputSchemaJSON must be a JSON object", t.Name))
+			}
 		}
 	}
 
-	// Rosters: every name resolves to a registry entry, and no roster may name
-	// a Read tool in this layer.
+	// Rosters: every name resolves to a registry entry. Read-effect tools MAY
+	// be named (spec 017 lifts the spec-014 restriction — the tool-use loop is
+	// the Read consumer; zero production Read entries ship in this task).
 	for _, r := range []struct {
 		name  string
 		names []string
 	}{{"villager", RosterVillager}, {"metatron", RosterMetatron}} {
 		for _, n := range r.names {
-			t, ok := Lookup(n)
-			if !ok {
+			if _, ok := Lookup(n); !ok {
 				errs = append(errs, fmt.Errorf("%s roster names %q, which is not in the registry", r.name, n))
-				continue
-			}
-			if t.Effect == Read {
-				errs = append(errs, fmt.Errorf("%s roster names Read tool %q (read tools are not callable in this layer)", r.name, n))
 			}
 		}
 	}

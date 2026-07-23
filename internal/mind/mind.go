@@ -17,6 +17,8 @@ import (
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
+	"github.com/evanstern/promptworld/internal/toolloop"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -46,21 +48,10 @@ const (
 	// the window opens.
 	planDebounceTicks = 300 // 5 game-minutes
 
-	// Musings (TASK-21): best-effort interiority between planner calls.
-	// The cadence is per agent; drops (busy tier, bad reply) cost a beat
-	// of silence and nothing else — musings are never queued or retried.
-	// museTimeout matches the planner's callTimeout: admission (not the
-	// deadline) is what keeps musings from displacing real work — once a
-	// quiet tier accepts one, a slow local model may take its time.
-	museCadenceTicks = 900 // 15 game-minutes
-	museTimeout      = callTimeout
-	museMaxTokens    = 48
-	// museStarveWindow is the fairness floor: best-effort admission loses
-	// every race on a saturated tier (live finding: back-to-back planner
-	// calls at ~50s each admit zero musings), so a musing starved this
-	// long rides the normal queue like any other call. Worst-case cost:
-	// one 48-token call per window.
-	museStarveWindow = 2 * time.Minute
+	// Musing is no longer a scheduled channel (spec 017 R10): a villager muses
+	// only by choosing the muse tool inside its planner tool-use loop, so it
+	// carries the same opportunity cost as any other action. The cadence-fired
+	// best-effort musing path (its queue, stagger, and fairness floor) is gone.
 )
 
 type Mind struct {
@@ -90,14 +81,16 @@ type Mind struct {
 	planQ        chan planJob
 	planInFlight [sim.AgentCount]atomic.Bool
 
+	// runLoop drives one villager tool-use loop (spec 017, TASK-52). Production
+	// wires it to toolloop.Run against the orchestrator; tests that stub the
+	// model through the Submitter seam install a scripted driver. loopRounds is
+	// the hard iteration cap (llm.json loop_max_rounds, normalized).
+	runLoop    func(ctx context.Context, j toolloop.Job) (toolloop.Result, error)
+	loopRounds int
+
 	// Nightly consolidation (TASK-9): FIFO queue + per-agent in-flight guard.
 	consolQ        chan consolJob
 	consolInFlight [sim.AgentCount]atomic.Bool
-
-	// Musings (TASK-21): best-effort interiority, single-flight.
-	museDue    [sim.AgentCount]int64
-	museBusy   atomic.Bool  // one musing in flight at a time
-	lastMuseOK atomic.Int64 // wall unix-nano of the last landed musing
 
 	// Chronicle narrator (TASK-11): absorb-owned chapter buffer + FIFO queue
 	// to the single-flight cloud worker; narrRetry (cap 1) carries a failed
@@ -122,7 +115,11 @@ type Mind struct {
 
 // New starts the driver from a state snapshot. Cadence is staggered so eight
 // agents never think in the same game-minute.
-func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string) (*Mind, error) {
+// The variadic runLoopOverride is a test seam: it installs a scripted loop
+// driver BEFORE any goroutine starts (race-free), for tests that stub the model
+// through the Submitter interface rather than a real *llm.Orchestrator.
+// Production omits it — New wires runLoop from the concrete orchestrator.
+func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, seed uint64, stateJSON []byte, personas [sim.AgentCount]string, loopRounds int, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Mind, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -145,11 +142,20 @@ func New(orch Submitter, loop Injector, social SocialInjector, m *worldmap.Map, 
 		events:    make(chan []store.Event, 256),
 		done:      make(chan struct{}),
 	}
+	md.loopRounds = loopRounds
+	// The tool-use loop needs the concrete orchestrator (toolloop.Run's
+	// contract surface). Production passes it; test seams that stub the model
+	// through the Submitter interface install their own runLoop after New.
+	if o, ok := orch.(*llm.Orchestrator); ok {
+		md.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+			return toolloop.Run(ctx, o, j)
+		}
+	}
+	if len(runLoopOverride) > 0 && runLoopOverride[0] != nil {
+		md.runLoop = runLoopOverride[0]
+	}
 	for i := range md.nextDue {
 		md.nextDue[i] = replica.Tick + int64(i+1)*(sim.PlannerCadenceTicks/sim.AgentCount)
-		// Musing stagger sits half a slot off the planner stagger so the
-		// two cadences interleave instead of colliding.
-		md.museDue[i] = replica.Tick + museCadenceTicks/2 + int64(i)*(museCadenceTicks/sim.AgentCount)
 	}
 	go md.run()
 	go md.planWorker()
@@ -178,7 +184,6 @@ func (md *Mind) run() {
 		case batch := <-md.events:
 			md.absorb(batch)
 			md.plan()
-			md.muse()
 		case idx := <-md.rearm:
 			// A landing rejection: the agent noticed the plan failed and
 			// re-thinks at the next open debounce window.
@@ -359,116 +364,106 @@ func (md *Mind) planWorker() {
 	}
 }
 
+// loopMaxTokens is the per-round token budget for a villager tool-use loop.
+// The pre-loop planner used 256 with a bare JSON reply; a tool-era round must
+// carry a tool_use block (the call name + JSON arguments) alongside any prose,
+// so 256 truncates a structured call mid-arguments. 512 gives headroom for the
+// call plus a short accompanying line without inviting the model to ramble.
+const loopMaxTokens = 512
+
+// runPlan drives one villager cognition through the bounded tool-use loop
+// (spec 017, FR-002/FR-004). The model may look things up with read tools, then
+// commit to one acting tool — a world verb, a plan (set_plan), or a passing
+// thought (muse) — which lands through its existing door. The mind opens the
+// cognition with a cog.thought and lets the landing door (or the muse social
+// batch) own the terminal cog.outcome; it only supplies the FR-015 failure
+// outcome when nothing reached a door, and re-arms a re-plan when a landing was
+// gate-refused, mirroring the pre-loop rejection/failure paths.
 func (md *Mind) runPlan(job planJob) {
 	defer md.planInFlight[job.agent].Store(false)
 
 	md.emitCog(cogThoughtEvent(job.meta))
 	start := time.Now()
+	d := &villagerDispatch{md: md, job: job, start: start}
+	handlers := md.villagerHandlers(d)
+
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
-	resp, err := md.orch.Submit(ctx, llm.Request{
+	res, err := md.runLoop(ctx, toolloop.Job{
+		JobID:     job.meta.job,
 		Kind:      llm.KindPlanner,
 		System:    job.system,
-		Prompt:    job.prompt,
-		MaxTokens: 256,
-		// Constrain the local model to the planner reply shape (TASK-58):
-		// the goal enum + step cap are enforced at the sampler so a 3B model
-		// can't free-generate its way past parseReply. Planner-only — musing,
-		// conversation, consolidation, etc. stay unconstrained.
-		ResponseSchema: plannerSchema,
-		SchemaName:     "plan",
+		Seed:      job.prompt,
+		Roster:    tool.LoopRosterVillager(),
+		Handlers:  handlers,
+		MaxRounds: md.loopRounds,
+		MaxTokens: loopMaxTokens,
+		Record:    d.record,
 	})
 	cancel()
-	if err != nil {
-		log.Printf("mind: %s planner call failed: %v", job.name, err)
-		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable, "call: "+err.Error(),
-			time.Since(start).Milliseconds()))
-		return // reflex grace covers; next trigger retries
-	}
-	reply, err := parseReply(resp.Text)
-	if err != nil {
-		log.Printf("mind: %s reply unusable: %v", job.name, err)
-		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable, "parse: "+err.Error(), resp.Millis))
-		return
-	}
-	if len(reply.Plan) > 0 {
-		md.injectPlan(job, reply, resp.Millis)
-		return
-	}
-	target := -1
-	var guards []sim.Guard
-	if reply.Goal == "talk_to" {
-		if target = md.agentIndexByName(reply.Target); target < 0 {
-			log.Printf("mind: %s wants to talk to unknown %q", job.name, reply.Target)
-			md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable,
-				"unknown target "+reply.Target, resp.Millis))
-			return
+
+	// Land every buffered CallRecord as a cog.tool_call event (spec 017
+	// FR-007, T018), unconditional on termination path — the AC#5 scenario
+	// requires rejected / never-grounded calls recorded even when nothing
+	// landed. Emitted here, before the terminal-outcome switch: the door
+	// already emitted any grounding + cog.outcome during the loop, and the
+	// default case's terminal outcome follows the switch, so this dedicated
+	// batch reorders neither.
+	md.emitToolCalls(d.records, job.meta.snapshotTick)
+
+	// Termination -> outcome + rearm, mirroring the pre-loop paths:
+	//   - landed: the landing door (world/set_plan) or the muse social batch
+	//     already emitted the sole cog.outcome; the mind adds none and does not
+	//     rearm (matches today's landed path — the door owned the outcome).
+	//   - a door recorded rejection(s) but nothing landed: re-think, exactly as
+	//     today's rejection path rearms; the door's rejection is the record, so
+	//     the mind adds no outcome.
+	//   - nothing reached a door (plain text, reads only, unknown target, infra
+	//     error): record the terminal unusable outcome (FR-015) and let the
+	//     reflex floor cover — no rearm, as today's call/parse-failure path.
+	switch {
+	case res.Term == toolloop.TermLanded:
+		// sole outcome already emitted by the landing path.
+	case d.doorOutcome:
+		if err != nil {
+			log.Printf("mind: %s loop ended %s after a rejection: %v", job.name, res.Term, err)
 		}
-		// The assumptions this thought was formed under (FR-011): the
-		// target was alive and present in the prompt's worldview.
-		guards = append(guards,
-			sim.Guard{Type: sim.GuardTargetAlive, Target: target},
-			sim.Guard{Type: sim.GuardTargetPresent, Target: target,
-				X: job.world[target].x, Y: job.world[target].y},
-		)
-	}
-	// The loop owns the landing verdict and its telemetry from here
-	// (FR-010..FR-013): exactly one outcome per thought, emitted atomically
-	// with the verdict. The mind only reacts — a rejection re-arms a prompt
-	// re-plan (the agent noticed the plan failed), floored by the debounce.
-	if err := md.loop.InjectIntent(sim.InjectArgs{
-		Agent: job.agent, Goal: reply.Goal, TargetAgent: target, Reason: reply.Reason,
-		Kind: reply.Kind, Qty: reply.Qty,
-		Class: job.meta.class.Class, JobID: job.meta.job,
-		SnapshotTick: job.meta.snapshotTick, Generation: job.meta.generation,
-		PredictedWallMs: job.meta.predictedWallMs, ActualWallMs: resp.Millis,
-		Guards: guards,
-	}); err != nil {
-		log.Printf("mind: %s goal %q rejected: %v", job.name, reply.Goal, err)
-		select {
-		case md.rearm <- job.agent:
-		default:
+		md.rearmAgent(job.agent)
+	default:
+		if err != nil {
+			log.Printf("mind: %s loop failed (%s): %v", job.name, res.Term, err)
 		}
+		md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable, loopFailReason(res, err), res.TotalMillis))
 	}
 }
 
-// injectPlan lands a guarded conditional plan (US4): after_min becomes an
-// after_tick guard anchored at the snapshot, for_min bounds each step's
-// window; the loop's ladder and step validation apply as for any landing.
-func (md *Mind) injectPlan(job planJob, reply planReply, actualMs int64) {
-	steps := make([]sim.PlanStep, 0, len(reply.Plan))
-	for _, sr := range reply.Plan {
-		target := -1
-		if sr.Goal == "talk_to" {
-			if target = md.agentIndexByName(sr.Target); target < 0 {
-				log.Printf("mind: %s plan step targets unknown %q", job.name, sr.Target)
-				md.emitCog(md.cogOutcomeEvent(job.meta, sim.OutcomeUnusable,
-					"plan: unknown target "+sr.Target, actualMs))
-				return
-			}
-		}
-		st := sim.PlanStep{Job: job.meta.job, Goal: sr.Goal, Target: target, Kind: sr.Kind, Qty: sr.Qty}
-		start := job.meta.snapshotTick
-		if sr.AfterMin > 0 {
-			start += int64(sr.AfterMin * 60)
-			st.When = &sim.Guard{Type: sim.GuardAfterTick, Tick: start}
-		}
-		if sr.ForMin > 0 {
-			st.Until = start + int64(sr.ForMin*60)
-		}
-		steps = append(steps, st)
+// rearmAgent asks the absorb goroutine to re-plan an agent whose cognition
+// landed nothing (debounce-floored). Never blocks: a full channel means a
+// re-plan is already pending.
+func (md *Mind) rearmAgent(agent int) {
+	select {
+	case md.rearm <- agent:
+	default:
 	}
-	if err := md.loop.InjectIntent(sim.InjectArgs{
-		Agent: job.agent, TargetAgent: -1, Reason: reply.Reason,
-		Class: job.meta.class.Class, JobID: job.meta.job,
-		SnapshotTick: job.meta.snapshotTick, Generation: job.meta.generation,
-		PredictedWallMs: job.meta.predictedWallMs, ActualWallMs: actualMs,
-		Plan: steps,
-	}); err != nil {
-		log.Printf("mind: %s plan rejected: %v", job.name, err)
-		select {
-		case md.rearm <- job.agent:
-		default:
+}
+
+// loopFailReason describes a non-landed, no-door-outcome termination for the
+// recorded unusable outcome — existing failure vocabulary (OutcomeUnusable);
+// the reason string carries the detail so no failure is ever silent (FR-015).
+func loopFailReason(res toolloop.Result, err error) string {
+	switch res.Term {
+	case toolloop.TermModelDone:
+		return "loop: model produced no tool call"
+	case toolloop.TermCapExhausted:
+		return "loop: round cap reached with no acting call landed"
+	case toolloop.TermAdmissionRefused:
+		return "loop: admission refused"
+	case toolloop.TermCtxDone:
+		return "loop: context ended"
+	default:
+		if err != nil {
+			return "loop: " + err.Error()
 		}
+		return "loop: no action landed"
 	}
 }
 
@@ -487,90 +482,6 @@ func nextPhasePreservingDue(due, tick, cadence int64) int64 {
 		return due
 	}
 	return due + (tick-due)/cadence*cadence + cadence
-}
-
-// muse fires at most one best-effort interior thought per batch (TASK-21):
-// pure flavor with no goal effect, run detached so it never blocks the
-// absorb loop, and dropped — never queued — whenever the tier is busy or
-// the reply is unusable. Snapshot strings are built synchronously; only the
-// model call and injection leave this goroutine.
-func (md *Mind) muse() {
-	if md.social == nil || !md.museBusy.CompareAndSwap(false, true) {
-		return
-	}
-	tick := md.replica.Tick
-	pick := -1
-	for i := range md.replica.Agents {
-		a := &md.replica.Agents[i]
-		if a.Dead || a.Asleep || tick < md.museDue[i] || sim.AtMeeting(md.replica, i) {
-			continue
-		}
-		if pick < 0 || md.museDue[i] < md.museDue[pick] {
-			pick = i // most overdue first
-		}
-	}
-	if pick < 0 {
-		md.museBusy.Store(false)
-		return
-	}
-	// Re-arm before the call: a dropped musing is silence, not a debt.
-	// Phase-preserving (TASK-44): step forward from this agent's own due,
-	// not from tick, so a shared stall that leaves several agents overdue
-	// at once doesn't collapse their boot-staggered phases together.
-	md.museDue[pick] = nextPhasePreservingDue(md.museDue[pick], tick, museCadenceTicks)
-	// Router gate (FR-007): musings survive far higher speeds than planners
-	// (1 point vs 3), but the horizon still applies.
-	if v := md.routeVerdict("musing", llm.KindMusing); !v.Allow {
-		md.emitSuppressed("musing", pick, tick, v)
-		md.museBusy.Store(false)
-		return
-	}
-	name := md.replica.Agents[pick].Name
-	system := musingSystemPrompt(name, md.personas[pick])
-	prompt := userPrompt(md.replica, pick, md.k)
-	meta := md.newMeta("musing", pick, tick, 0, llm.KindMusing)
-	// The fairness floor stands down while a conversation runs — a scene
-	// is already the tier's most expensive tenant, and a queued musing
-	// behind it only starves planners further.
-	starved := !md.convoBusy.Load() &&
-		time.Since(time.Unix(0, md.lastMuseOK.Load())) > museStarveWindow
-	go func() {
-		defer md.museBusy.Store(false)
-		md.emitCog(cogThoughtEvent(meta))
-		start := time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), museTimeout)
-		resp, err := md.orch.Submit(ctx, llm.Request{
-			Kind: llm.KindMusing, System: system, Prompt: prompt, MaxTokens: museMaxTokens,
-			BestEffort: !starved,
-		})
-		cancel()
-		if err != nil {
-			// Best effort: busy or degraded tiers cost only silence — but
-			// recorded silence (FR-015).
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "call: "+err.Error(),
-				time.Since(start).Milliseconds()))
-			return
-		}
-		text, err := parseMusing(resp.Text)
-		if err != nil {
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "parse: "+err.Error(), resp.Millis))
-			return
-		}
-		payload, err := json.Marshal(sim.ThoughtPayload{Agent: pick, Text: text, Source: "musing"})
-		if err != nil {
-			md.emitCog(md.cogOutcomeEvent(meta, sim.OutcomeUnusable, "marshal: "+err.Error(), resp.Millis))
-			return
-		}
-		// The musing and its terminal record land atomically.
-		if err := md.social.InjectSocial([]store.Event{
-			{Type: "agent.thought", Payload: payload},
-			md.cogOutcomeEvent(meta, sim.OutcomeLanded, "", resp.Millis),
-		}); err != nil {
-			log.Printf("mind: %s musing rejected: %v", name, err)
-			return
-		}
-		md.lastMuseOK.Store(time.Now().UnixNano())
-	}()
 }
 
 func (md *Mind) agentIndexByName(name string) int {

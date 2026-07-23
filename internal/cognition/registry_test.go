@@ -21,7 +21,6 @@ func TestRegistryContractValues(t *testing.T) {
 		future bool
 	}{
 		"planner":       {3, 1200, DegradeReflex, true},
-		"musing":        {1, 3600, DegradeSkip, false},
 		"conversation":  {13, 7200, DegradeSkip, false},
 		"meeting":       {2, 3600, DegradeTemplate, false},
 		"consolidation": {5, 28800, DegradeSkip, false},
@@ -44,7 +43,7 @@ func TestRegistryContractValues(t *testing.T) {
 
 func TestClassForKind(t *testing.T) {
 	for kind, class := range map[string]string{
-		"planner": "planner", "musing": "musing", "conversation": "conversation",
+		"planner": "planner", "conversation": "conversation",
 		"meeting": "meeting", "consolidation": "consolidation",
 		"narrator": "chronicle", "drama": "chronicle", "metatron": "metatron",
 	} {
@@ -59,7 +58,7 @@ func TestClassForKind(t *testing.T) {
 }
 
 func TestValidateKindsNamesOffender(t *testing.T) {
-	if err := ValidateKinds([]string{"planner", "musing"}); err != nil {
+	if err := ValidateKinds([]string{"planner", "conversation"}); err != nil {
 		t.Fatalf("known kinds: %v", err)
 	}
 	err := ValidateKinds([]string{"planner", "oracle"})
