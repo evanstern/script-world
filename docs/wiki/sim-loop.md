@@ -4,7 +4,7 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Sim loop
@@ -78,8 +78,10 @@ world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
    villager roster (spec 014 US3 — an out-of-roster or unknown name rejects
    with the same `unknown goal` reason as before; real planner traffic is
    unaffected), then `resolveGoal` resolves coordinates deterministically,
-   recorded as `agent.intent_set (source: planner)` + `agent.thought`, or —
-   for a `Plan` — validated against `PlanStepCap` and `tool.PlanStepGoals()`,
+   recorded as `agent.intent_set (source: planner, job: InjectArgs.JobID)` +
+   `agent.thought` (since spec 017 the tool-use loop's job id threads onto the
+   landed event's `Job` field at this single emission site), or — for a
+   `Plan` — validated against `PlanStepCap` and `tool.PlanStepGoals()`,
    the registry-derived plan-step set (spec 014 FR-006; deriving it cured the
    TASK-55 drift where the old hand-maintained `planGoals` map silently
    rejected the nine spec-012 verbs — FR-012, the migration's sole behavioral
@@ -112,9 +114,10 @@ the four `metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`
 their reducer arms enforce presence/destination/charge before anything lands,
 the whitelist is only the isolation boundary — `meeting.proposal_rephrased` swaps
 an enacted norm's text and nothing else,
-and the `cog.*` telemetry triple — `cog.thought`, `cog.outcome`,
-`cog.recalibration_recommended` — is whitelisted as reducer no-ops so the
-[[cognition]] layer's observability is recorded, never silent):
+and the `cog.*` telemetry — `cog.thought`, `cog.outcome`,
+`cog.recalibration_recommended`, and (since spec 017) `cog.tool_call` (the
+tool-use loop's per-call trace, [[tool-loop]]) — is whitelisted as reducer
+no-ops so the [[cognition]] layer's observability is recorded, never silent):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
 nudge, miracle, phrasing, or telemetry effects, dry-run on a state copy before
 applying — the dry-run probe is reconstructed from bytes and so carries no
@@ -134,6 +137,10 @@ the ctx whose cancellation triggers the final snapshot. The landing ladder's
 budgets and classes come from [[cognition]] (`cognition.ClassFor`), whose router
 and estimators produce the snapshot/landing metadata the ladder judges.
 [[metatron-miracles]]'s four event types ride `InjectSocial`'s whitelist.
+[[tool-loop]] is the caller behind both doors' villager/metatron traffic since
+spec 017 — its handlers wrap `InjectIntent` (world verbs, `set_plan`) and
+`InjectSocial` (`muse`, and Metatron's nudges/`work_miracle`), and its buffered
+`CallRecord`s land as the `cog.tool_call` batch through the same social door.
 
 ## Operational notes
 

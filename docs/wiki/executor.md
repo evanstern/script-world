@@ -8,7 +8,7 @@ sources:
   - internal/sim/plan.go
   - internal/sim/terrain.go
   - internal/sim/recipes.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Executor
@@ -78,9 +78,14 @@ work happens on the agent's own tile), `build_oven` (alongside `build_fire`/
 oven). Since spec 014 (TASK-53) `intentDuration` reads `intentDurations`, a table
 built at init from the [[tool-registry]]'s per-tool `Cost.DurationTicks` (values
 hand-equal to the sim constants, pinned by
-`TestWorldToolDurationsMatchSimConstants`); goals with no registry duration — the
-instant verbs and the internal `seek` alias — complete on arrival (0), exactly as
-the old switch's default did. `workDuration` overrides the plain
+`TestWorldToolDurationsMatchSimConstants`) — since spec 017, filtered to
+GOAL-DOOR tools (`Effect World && PlanStep`, the same discriminator
+[[tool-registry]]'s coverage check uses): `set_plan` is a World tool but never
+reaches `intentDuration` by its own name (each of its plan steps names an
+already-covered goal-door goal instead), so it is deliberately absent from this
+table rather than carrying a meaningless zero-duration entry. Goals with no
+registry duration — the instant verbs and the internal `seek` alias — complete
+on arrival (0), exactly as the old switch's default did. `workDuration` overrides the plain
 `intentDuration(goal)` lookup for two
 context-dependent cases: a spear-carrying hunt takes `huntTicksSpear` (faster than
 the bare-handed default) and cooking at an oven takes `cookOvenTicks` (slower than

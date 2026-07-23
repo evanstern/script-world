@@ -9,7 +9,7 @@ sources:
   - internal/cognition/route.go
   - internal/cognition/calibration.go
   - internal/sim/cognition.go
-verified_against: 8be4440aae8d108884080cb6476782d2f11ad165
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Cognition horizon
@@ -30,17 +30,21 @@ never the reverse.
 `DecisionClass{Class, Points, BudgetTicks, Degrade, FutureDated}`. `Points` is
 the thought cost in Fibonacci points (the closed set 1/2/3/5/8/13 — ordinal,
 host-independent, a property of the prompt shape); `BudgetTicks` is the
-staleness budget in game ticks (a property of the fiction). Seven classes are
-registered (`planner` 3pt/1200t degrading to reflex, `musing` 1pt/3600t,
-`conversation` 13pt/7200t, `meeting` 2pt/3600t degrading to a template,
-`consolidation` 5pt/28800t, `chronicle` 5pt/86400t, `metatron` 5pt/86400t);
-values are doctrine — changing one is a reviewed code change, never runtime
-tuning. `kindToClass` maps every LLM call kind (as a string, keeping the
-package leaf) to a class; `ValidateKinds` enforces FR-002 at daemon start —
-an unmapped kind, a non-Fibonacci point value, or a non-positive budget is a
-fatal startup error. `Degrade` names the suppression floor: `skip` (recorded,
-not silent), `reflex`, `template`, or `faster-tier` (registry-expressible but
-treated as skip in v1).
+staleness budget in game ticks (a property of the fiction). Six classes are
+registered (`planner` 3pt/1200t degrading to reflex, `conversation`
+13pt/7200t, `meeting` 2pt/3600t degrading to a template, `consolidation`
+5pt/28800t, `chronicle` 5pt/86400t, `metatron` 5pt/86400t); values are
+doctrine — changing one is a reviewed code change, never runtime tuning.
+The `musing` class retired with spec 017: musing is no longer a scheduled
+call kind gated by its own router entry — it is a roster tool inside the
+planner's tool-use loop, so it now shares the `planner` class's 3pt/1200t
+horizon gate rather than carrying its own 1pt/3600t budget ([[agent-mind]],
+[[tool-loop]]). `kindToClass` maps every LLM call kind (as a string, keeping
+the package leaf) to a class; `ValidateKinds` enforces FR-002 at daemon start
+— an unmapped kind, a non-Fibonacci point value, or a non-positive budget is
+a fatal startup error. `Degrade` names the suppression floor: `skip`
+(recorded, not silent), `reflex`, `template`, or `faster-tier`
+(registry-expressible but treated as skip in v1).
 
 **Routing** (`route.go`): `Route(dc, ticksPerSecond, secondsPerPoint)` is pure
 arithmetic — predicted wall seconds = points × seconds-per-point; predicted
@@ -69,6 +73,27 @@ a warning the daemon downgrades to bootstrap defaults. `SeedFor` returns a
 tier's recorded seconds-per-point, or the deliberately pessimistic bootstrap
 constants (`BootstrapLocalSecPerPt` 20.0, `BootstrapCloudSecPerPt` 10.0) — an
 uncalibrated world fails toward reflex, never toward stale action.
+`TierProfile.SecondsPerPoint`'s unit is doctrine, spelled out since spec 017:
+for a single-shot kind it is one model call's wall time per point; for a loop
+cognition (the villager planner on the local tier) it is the WHOLE tool-use
+loop's wall time per point — the same unit [[llm-orchestrator]]'s live
+estimator observes via `Orchestrator.ObserveCognition` ([[tool-loop]]), so a
+seeded baseline and a live observation stay directly comparable and the
+router's suppression arithmetic stays truthful when a cognition spends N
+model calls, not one.
+
+**Tool-call telemetry** (`internal/sim/cognition.go`, spec 017 FR-007):
+`CogToolCallPayload` (`Job`, `Ordinal`, `Tool`, `Args` capped to 2 KiB,
+`Verdict` — the stringified `toolloop.Verdict` enum — `Reason`, `Tier`,
+`SnapshotTick`) is one record per tool call a cognition's loop saw: landed,
+rejected, read, or unlanded. `{Job, Ordinal}` is the correlation key
+(1-based, dense per job, model-emission order). It rides the same reducer-no-op
+`cog.*` doctrine as every other cognition event ([[event-types]]).
+`NewCogToolCallPayload` assembles the payload sim-side — deliberately with
+only plain/stdlib argument types (no `toolloop` or `mind` import) — so both
+loop consumers ([[agent-mind]]'s mind, [[metatron]]) unpack their own
+`toolloop.CallRecord` and call this one shared constructor rather than each
+inventing its own payload shape.
 
 ## Connections
 
@@ -78,7 +103,15 @@ The [[agent-mind]] consults `Route` before every enqueue (`routeVerdict` in
 are the [[reflex-policy]] and pre-authored templates. The [[llm-orchestrator]]
 owns one `Estimator` per tier, feeds it each completed call's duration
 normalized by the kind's point cost (successes only), and exposes the live
-estimate back to the mind. The [[sim-loop]] enforces the budget at landing:
+estimate back to the mind. Since spec 017 the planner's per-round calls
+inside [[tool-loop]] each opt out of that per-call feed (`Request.SkipObserve`)
+and the loop itself reports exactly one whole-cognition observation via
+`Orchestrator.ObserveCognition` when it finishes — and only on a completed
+termination (landed / model_done / cap_exhausted); the failure family
+(admission_refused / provider_error / ctx_done) feeds the estimator nothing,
+mirroring the single-shot worker's own successes-only doctrine so a governor
+observation is always a completed cognition's true cost, never a fragment of
+one or a fast failure. The [[sim-loop]] enforces the budget at landing:
 an intent whose measured staleness exceeds its class's `BudgetTicks` is
 rejected (`OutcomeRejectedStale`) at the injection door in
 `internal/sim/loop.go`. The daemon ([[daemon-lifecycle]]) runs `ValidateKinds`

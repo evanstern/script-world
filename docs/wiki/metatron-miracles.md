@@ -6,9 +6,10 @@ sources:
   - internal/sim/miracles.go
   - internal/metatron/miracle_batch.go
   - internal/metatron/turn.go
+  - internal/metatron/toolcalls.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Metatron's miracles
@@ -77,11 +78,13 @@ immediately, waiving ONLY the charge (every other validation still runs in full)
 without it, it errors if the bank can't pay and decrements it otherwise. `gratis` is
 reachable from exactly one surface: the `promptworld miracle --force` CLI/IPC door
 ([[cli-promptworld]], [[ipc-protocol]], [[ipc-server]]) — the operator's cheat door
-the angel structurally cannot reach. The angel's turn contract (`turnReply.Miracle`
-in `internal/metatron/turn.go`) is an anonymous struct with **no gratis field at
-all** — a model can emit `"gratis":true` in its JSON and it is simply dropped at
-unmarshal, nothing to sanitize or forget. `landMiracle` (the angel's landing path)
-calls the shared builder with `gratis` hardcoded `false`, so a model-driven miracle
+the angel structurally cannot reach. The angel's turn contract — since spec 017 the
+`work_miracle` tool call, parsed into `miracleArgs` (`internal/metatron/toolcalls.go`;
+the retired `turnReply.Miracle` anonymous struct carried the identical flat field
+set pre-loop) — has **no gratis field at all** — a model can emit `"gratis":true`
+in its tool-call arguments and it is simply dropped at unmarshal, nothing to
+sanitize or forget. `landMiracle` (the angel's landing path) calls the shared
+builder with `gratis` hardcoded `false`, so a model-driven miracle
 is unconditionally charged (contracts §1, FR-007/SC-005).
 
 **Shift-semantics re-base taxonomy** (`rebaseTicks` in `miracles.go`): the SINGLE
@@ -138,18 +141,26 @@ exactly as memorable as an angelic dream:
 **The two doors**: both are thin translators onto the SAME `BuildMiracleBatch` +
 `InjectSocial` path, so they cannot drift.
 
-- **The angel's turn** (`internal/metatron/turn.go`): at most one mediated act per
-  turn — a `nudge` takes the turn if the model returns one, otherwise a `miracle`
-  may land. `landMiracle` resolves `MiracleParams` from an `agentXY` snapshot
-  (`mt.agentXY`, mirrored per batch by the absorb goroutine in `mirrorState`, so the
-  turn worker never races the live replica), builds a probe `sim.State` from it, and
-  calls `BuildMiracleBatch` with `gratis=false`. A reducer rejection becomes an
-  in-fiction refusal appended to the reply (`"(No miracle landed: …)"`), exactly like
-  a refused nudge; a landed miracle appends a soul-file line and is recorded in the
+- **The angel's turn** (`internal/metatron/turn.go`, `toolcalls.go`): since spec
+  017 the turn runs through [[tool-loop]]'s bounded loop ([[metatron]]); "at most
+  one mediated act per turn" is now the driver's cardinality rule (one acting call
+  lands, every other call this cognition is rejected) rather than a hand-written
+  nudge-wins-over-miracle precedence — the model calls `work_miracle` (or a nudge
+  tool) and whichever lands first ends the turn. `handleMiracle` parses the call's
+  arguments into `miracleArgs` and calls `landMiracle`, which resolves
+  `MiracleParams` from an `agentXY` snapshot (`mt.agentXY`, mirrored per batch by
+  the absorb goroutine in `mirrorState`, so the turn worker never races the live
+  replica), builds a probe `sim.State` from it, and calls `BuildMiracleBatch` with
+  `gratis=false`. A reducer rejection becomes a `rejected_gate` outcome the loop
+  feeds back to the model within its round cap (the in-fiction wording is
+  unchanged, just no longer necessarily turn-ending), exactly like a refused
+  nudge; a landed miracle appends a soul-file line and is recorded in the
   transcript with a `✨` prefix.
-  Output contract: `turnReply.Miracle` — `{kind, day, time, villager, item, qty,
-  class, x, y, to_x, to_y}`, no gratis. `TurnResult.Miracle` (`{kind, summary}`) is
-  what the console surfaces.
+  Tool-call contract: `work_miracle(kind, day, time, villager, item, qty, class,
+  x, y, to_x, to_y)`, no gratis parameter (`internal/tool` registry's
+  `miracleParams`, [[tool-registry]]). `TurnResult.Miracle` (`{kind, summary}`) is
+  what the console surfaces; every call the loop saw — landed or rejected — also
+  lands as a `cog.tool_call` telemetry event ([[event-types]], `toolcalls.go`).
 - **The operator CLI/IPC door** (`cmd/promptworld/miracle.go` → IPC `miracle`
   command → `internal/ipc/server.go`'s `handleMiracle`): `promptworld miracle
   <world> <snap-time|give|move|remove> ... [--force]`. `handleMiracle` needs only
@@ -186,6 +197,9 @@ need; [[event-types]] catalogs the four payload shapes; [[ipc-protocol]] and
 is the `promptworld miracle` operator door; [[game-clock]]'s `TickAt`/
 `ParseTimeOfDay` resolve a time-snap target; [[world-migration]]'s `MigrateState`
 attaches the map so a migrated state is miracle-ready like a fresh genesis.
+[[tool-loop]] is the angel's door since spec 017: `work_miracle` is a declared
+loop tool ([[tool-registry]]'s `LoopRosterMetatron`) whose handler
+(`toolcalls.go`) wraps `landMiracle` exactly as described above.
 
 ## Operational notes
 

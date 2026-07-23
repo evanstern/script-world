@@ -1,16 +1,17 @@
 ---
 name: metatron
-description: The gatekeeper angel (TASK-12) — console conversation, dream/omen nudge mediation behind a structural prompt firewall, event-sourced charge economy, digests + drama moments, the one player-editable charter
+description: The gatekeeper angel (TASK-12) — console turn driven through the bounded tool-use loop (spec 017), dream/omen nudge mediation behind a structural prompt firewall, event-sourced charge economy, digests + drama moments, the one player-editable charter
 kind: component
 sources:
   - internal/metatron/metatron.go
   - internal/metatron/turn.go
+  - internal/metatron/toolcalls.go
   - internal/metatron/charter.go
   - internal/metatron/digest.go
   - internal/metatron/miracle_batch.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Metatron
@@ -25,22 +26,37 @@ prompt.
 
 ## How it works
 
-**Console turns** (`turn.go`): one player message = one `llm.KindMetatron` cloud
-call ([[llm-orchestrator]]) = at most one mediated turn, serialized single-flight.
+**Console turns** (`turn.go`): one player message = one console `Turn`, driven
+through [[tool-loop]]'s bounded loop (`toolloop.Run`, spec 017 T020) against
+`llm.KindMetatron` cloud calls ([[llm-orchestrator]]), serialized single-flight.
 The prompt stacks the charter (re-read every turn — edits are live by construction,
 with restore/empty/truncate fallbacks and in-reply notices, `charter.go`), a fixed
 frame that pins two invariants beneath ANY charter (never invent unobserved events;
 never pass the player's words to a villager), live status (clock, ⚡ bank, roster),
 queued moments, the [[chronicle]] tail (the angel reads its village's story — this
-grounds fresh reigns and upgraded worlds), its soul tail, and recent transcript.
-Output contract: strict JSON `{say, nudge|null, miracle|null}`; unusable output →
-safe apology, nothing lands, nothing spent. The fixed frame's prompt (`turnPrompt`)
-spells out the miracle vocabulary and its per-kind charge cost alongside the nudge
-rule, beneath any charter.
+grounds fresh reigns and upgraded worlds), its soul tail, and recent transcript. The
+model may reply with words (**converse** — the transcript-only final-answer channel,
+`toolloop.Result.Final`; `converse` is deliberately NOT a declared loop tool, so it
+can never be rejected as unknown) or call exactly one acting tool
+(`nudge_dream`/`nudge_omen`/`work_miracle`), which lands through its existing door;
+the driver's one-acting-call cardinality enforces "at most one mediated act per
+turn" structurally, so the pre-loop nudge-wins-over-miracle precedence dissolves —
+the model just picks its one act. The retired `turnReply`/`parseTurn` free-text
+JSON contract (`{say, nudge|null, miracle|null}`) is gone: a door refusal now
+becomes a `rejected_gate` fed back to the model within the loop's round cap — a
+behavior upgrade over the old single-shot refusal, since a mistyped villager name
+can be retried instead of ending the turn outright. `turnMaxTokens` is 1024 (up
+from 700): a tool-era round must carry a `tool_use` block alongside any converse
+prose in the same round, so the budget grew to keep a full charter-voiced reply
+from crowding out a same-round act. When the loop ends with no text and no landed
+act (model_done with nothing, cap exhaustion, or a soft error), the same
+scattered-thoughts apology as before covers it.
 
 **Nudges**: `dream` (one living villager) or `omen` (all living, recorded
 explicitly). Validation (form, living target, ≤400 chars, charges ≥ 1) downgrades
-failures to refusal-with-counsel — refusals are free. Since spec 014 (TASK-53) the
+failures to refusal-with-counsel — refusals are free, and (since spec 017) fed
+back as a `rejected_gate` the model may repair in a later round rather than a
+turn-ending refusal. Since spec 014 (TASK-53) the
 form must be a nudge tool on the [[tool-registry]]'s `RosterMetatron` — checked
 both turn-side (`landNudge`) and in the reducer dry-run, with the same
 unknown-form reason as before — and the 400-byte text cap is a registry read
@@ -51,23 +67,42 @@ spends the charge; the dry-run enforces it at the door) + one prefixed
 (`"You dreamed: "` / `"You witnessed an omen: "`) `agent.memory_added` per target at
 `SalDream` (8) — provenance-unknown memories the villager interprets in persona.
 The firewall is structural, not behavioral: no code path exists from console input
-to any villager surface (sentinel-audited in `metatron_test.go`).
+to any villager surface (sentinel-audited in `metatron_test.go`). `landNudge`'s
+validation/batch/soul-append logic is UNCHANGED from the pre-loop path (spec 017
+T020: wrap, don't rewrite) — only its input moved from a parsed `turnReply.Nudge`
+struct to the `nudge_dream`/`nudge_omen` tool call's arguments
+(`internal/metatron/toolcalls.go`'s `handleNudge`).
 
 **Miracles** (spec 016, [[metatron-miracles]]): the angel's other mediated act,
-spent from the same charge bank. At most one act per turn — a nudge takes the
-turn if the model returns one, otherwise a `miracle` may land (`move`, `remove`,
-`give_item`, `time_snap`). `turnReply.Miracle` is an anonymous struct with **no
-gratis field** — structural stripping identical in spirit to the nudge firewall:
-a model-driven miracle can never waive its charge, because there is nothing to
-unmarshal `gratis` into. `landMiracle` resolves door-neutral `MiracleParams`
-(villager name → index, day/`HH:MM` → tick via [[game-clock]]'s
-`ParseTimeOfDay`/`TickAt`) from an `agentXY` snapshot the absorb goroutine
-mirrors per batch (so the turn worker never races the live replica), then calls
-the shared `metatron.BuildMiracleBatch` — the SAME builder the IPC `miracle` door
-uses — to compose the event and its perception-memory companions, and lands it
-through `InjectSocial`. A rejection at the reducer dry-run becomes an in-fiction
-refusal in the reply suffix, exactly like a refused nudge; a landed miracle also
-appends a soul-file line.
+spent from the same charge bank, now the fourth declared loop tool: `work_miracle`
+(`kind` ∈ `move`/`remove`/`give_item`/`time_snap`). The retired
+`turnReply.Miracle` anonymous struct had **no gratis field** as its structural
+guarantee; the replacement `miracleArgs` (`toolcalls.go`, the tool-call-parsed
+mirror of the same flat surface) keeps that guarantee identically — nothing to
+unmarshal `gratis` into, so a model-driven miracle can never waive its charge.
+`landMiracle` resolves door-neutral `MiracleParams` (villager name → index,
+day/`HH:MM` → tick via [[game-clock]]'s `ParseTimeOfDay`/`TickAt`) from an
+`agentXY` snapshot the absorb goroutine mirrors per batch (so the turn worker
+never races the live replica), then calls the shared `metatron.BuildMiracleBatch`
+— the SAME builder the IPC `miracle` door uses — to compose the event and its
+perception-memory companions, and lands it through `InjectSocial`. A rejection at
+the reducer dry-run becomes a `rejected_gate` the loop feeds back (rather than an
+immediate reply-suffix refusal, though the wording is the same in-fiction
+counsel); a landed miracle also appends a soul-file line. `landMiracle`'s
+validation/batch/soul-append logic is likewise UNCHANGED from the pre-loop path —
+only the input moved from `turnReply.Miracle` to `work_miracle`'s tool-call
+arguments.
+
+**Tool-call telemetry** (`toolcalls.go`, spec 017 FR-007/T018/T020): every model
+tool call the turn's loop saw — landed, rejected, or otherwise — is buffered as a
+`toolloop.CallRecord` (the `Job.Record` sink) and lands as one `cog.tool_call`
+batch through `InjectSocial` on EVERY termination path (so a rejected or
+never-grounded call is recorded even when nothing landed), via the same
+`sim.NewCogToolCallPayload` constructor [[agent-mind]]'s mind uses — a converse-
+only turn (no tool calls) emits no batch at all. `nudge_dream`/`nudge_omen`/
+`work_miracle` are the turn's only handlers; `converse` is deliberately absent
+from the handler map (and from `tool.LoopRosterMetatron()`) since it is the
+final-text channel, never a callable tool.
 
 **Charge economy** (`internal/sim/metatron.go`): `State.MetatronCharges` — genesis
 1, cap 3, +1 per absolute 6-game-hour boundary emitted by the [[executor]]
@@ -102,8 +137,12 @@ both families; [[llm-orchestrator]] routes `KindMetatron` to the cloud tier;
 [[chronicle]] feeds the angel's grounding; [[agent-mind]] is how villagers
 interpret what lands; [[daemon-lifecycle]] wires the component behind the
 LLM-config gate; [[ipc-server]]'s `handleMiracle` is the miracle's other door,
-sharing `BuildMiracleBatch` with `landMiracle` here. Specs: `specs/005-metatron/`,
-`specs/016-metatron-miracles/`.
+sharing `BuildMiracleBatch` with `landMiracle` here. [[tool-loop]] is the console
+turn's driver since spec 017: `Turn` calls `toolloop.Run` with
+`tool.LoopRosterMetatron()` and the `nudge_dream`/`nudge_omen`/`work_miracle`
+handlers; [[tool-registry]] declares those tools (and deliberately excludes
+`converse`). Specs: `specs/005-metatron/`, `specs/016-metatron-miracles/`,
+`specs/017-agent-tool-loop/`.
 
 ## Operational notes
 

@@ -8,7 +8,7 @@ sources:
   - cmd/promptworld/calibrate.go
   - cmd/promptworld/ps.go
   - cmd/promptworld/miracle.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # promptworld CLI
@@ -110,7 +110,23 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   cloud spend is opt-in and announced up front), takes the median seconds-per-point,
   writes/merges `calibration.json` in the save directory, and prints the horizon the
   hardware buys (e.g. "planner suppressed above 16x") by evaluating the registry
-  across the watchable speed ladder. Uses an in-memory meter so it never contends
+  across the watchable speed ladder (`planner`/`conversation`/`meeting` — `musing`
+  dropped from the ladder with its retirement as a scheduled kind, spec 017). Since
+  spec 017 (FR-011) the local tier's `planner-3pt` shape is a LOOP probe, not a bare
+  completion: `villagerProbeJob` drives `toolloop.Run` with the real
+  `tool.LoopRosterVillager()` roster and a no-op handler per tool (every read
+  reports `read_ok`, every acting call reports `landed` — ending the loop on the
+  model's first action, since calibration measures round-trip latency, not
+  landings) so the seeded seconds-per-point is measured in the SAME whole-loop
+  unit `Orchestrator.ObserveCognition` later feeds live ([[llm-orchestrator]],
+  [[tool-loop]]) — a representative tool loop's wall time, not one call's. The
+  probe's round cap is `cfg.Rounds()` (the daemon's own `loop_max_rounds`), so the
+  calibration and the live cognition share one horizon. The cloud tier's
+  `consolidation-5pt` shape stays a plain single-shot `Submit` (consolidation did
+  not adopt the loop, FR-014) — Metatron IS the cloud's loop cognition, but
+  calibrating it would drive extra metered cloud calls the spec 017 contract
+  doesn't invite; its live whole-loop observations converge the cloud estimator
+  at run time instead. Uses an in-memory meter so it never contends
   with a running daemon's store; a tier whose every sample fails is not written.
 
 `parseDirFlags` accepts both `cmd <arg> --flag` and `cmd --flag <arg>` orderings

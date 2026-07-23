@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Daemon lifecycle
@@ -52,6 +52,13 @@ Startup sequence:
    orchestrator ([[llm-orchestrator]]) starts only when `llm.json` exists
    (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit — config-gated,
    fully outside the loop, so inference failures can never touch the simulation.
+   Boot also surfaces the agent tool-use loop's config warnings the same
+   warn-not-error way as the concurrency knob (`llmCfg.Local.Workers()`'s
+   `workersWarn`): `llmCfg.Rounds()` (an out-of-range `loop_max_rounds`) and both
+   tiers' `ToolModeResolved()` (an unknown `tool_mode`) each print one line and
+   clamp/default rather than aborting boot (TASK-52, [[llm-orchestrator]]). The
+   normalized round cap (`loopRounds`) then threads into both loop consumers:
+   `mind.New(..., loopRounds)` and `metatron.New(..., loopRounds)`.
    Before the orchestrator is built, `cognition.ValidateKinds(llm.Kinds())` is a
    hard startup gate: every call kind must resolve to a registered decision class
    before a model is ever reachable ([[cognition]]). After it is built,

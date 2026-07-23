@@ -7,7 +7,7 @@ sources:
   - internal/sim/agents.go
   - internal/sim/recipes.go
   - internal/sim/miracles.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Sim state & reducer
@@ -81,7 +81,10 @@ swap (the unmarshalled payload state carries none of its own).
 storage goal's `Kind`/`Qty` onto the `Intent`, spec 013 R4, and also stamps
 `Agent.LastGoal`/`LastGoalTick` — spec 015 R1, `omitempty`, written here and
 never cleared by any event, so the [[tui-client]] villagers tab can show an
-idle villager's most recent objective from any snapshot), movement, work
+idle villager's most recent objective from any snapshot; since spec 017 the
+payload's LAST field, `Job` (`omitempty`), carries the tool-use loop's job id
+when a planner-loop landing set it — reflex/executor-authored intents carry
+none, so those emissions marshal byte-identically to before), movement, work
 products (inventory + overlays + structures), eating (`agent.ate`'s `AtePayload`
 sets the absolute post-eat food need and decrements each carried food form by its
 consumed count — no reducer-side arithmetic), sleep, talk, needs (absolute
@@ -129,7 +132,8 @@ sleeping shed hails). `agent.died` also spills the dying agent's entire carried
 `Inv` onto a pile at its own tile (create-or-merge, food batches stamped
 `tick + rotWindowTicks`), emptying `Inv` — reducer-internal, no new event (spec
 013 US2, FR-006, research R7's debt-opening precedent). The cognition telemetry types — `cog.thought`, `cog.outcome`,
-`cog.recalibration_recommended`, `agent.intent_rejected` — are explicit
+`cog.recalibration_recommended`, `agent.intent_rejected`, and (since spec 017)
+`cog.tool_call` (the tool-use loop's call trace, [[tool-loop]]) — are explicit
 reducer no-ops: recorded observability with zero state effect.
 Unknown types — including `daemon.*` and `world.created` — are recorded
 history but state no-ops, so new event types never break old replay.

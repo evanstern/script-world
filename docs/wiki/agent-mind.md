@@ -1,17 +1,18 @@
 ---
 name: agent-mind
-description: The thinking layer — immutable personas + accreting souls, event-sourced memories with a deterministic top-K window, and the mind driver injecting planner goals as recorded commands
+description: The thinking layer — immutable personas + accreting souls, event-sourced memories with a deterministic top-K window, and the mind driver running each villager cognition through the bounded tool-use loop (spec 017)
 kind: component
 sources:
   - internal/mind/mind.go
   - internal/mind/prompt.go
   - internal/mind/parse.go
+  - internal/mind/handlers.go
   - internal/mind/telemetry.go
   - internal/persona/personas.go
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Agent mind
@@ -88,9 +89,11 @@ provenance, exile judgments — second-person for the exile — and the assembly
 while convening — since TASK-36 all rendered from the event-sourced meeting
 convention's clock, with a bare "Village law:" header when none exists;
 [[governance]]). The driver also runs conversations (see
-[[social-fabric]]). Villagers convened to the daily meeting are planner- and
-musing-suppressed (`sim.AtMeeting`) until close, their pending triggers left
-armed. Since TASK-32 every trigger records its arming stimulus: `arm` takes the
+[[social-fabric]]). Villagers convened to the daily meeting are planner-suppressed
+(`sim.AtMeeting`, checked in `plan()`) until close, their pending triggers left
+armed — since musing no longer has a schedule of its own (spec 017, below), this
+one gate now also covers it: a convened villager's tool-use loop simply never
+runs, so `muse` cannot fire either. Since TASK-32 every trigger records its arming stimulus: `arm` takes the
 event seq, kept in `pendingSeq` as the causality edge on the eventual telemetry.
 
 Before enqueue, each due agent passes the cognition-horizon gate
@@ -106,96 +109,113 @@ generation, trigger seq, predicted wall-ms and landing tick from
 [[cognition]]'s latency estimate) plus a snapshot of every agent's position
 (`agentSnap`) — the assumptions guards are built from. Because the planner
 class is `FutureDated`, the prompt opens with `futureDated` (prompt.go): "your
-decision will take effect around <landing clock> — plan for then". Each job is
-one call (`llm.KindPlanner`, persona system prefix, situation + memory window
-suffix, MaxTokens 256, and since TASK-58 a `ResponseSchema` — see the goal
-vocabulary below); the worker emits `cog.thought` at call start and every
-job terminates in exactly one `cog.outcome` (landed, unusable, or —
-loop-owned — rejected), riding `InjectSocial` as reducer no-ops
-(telemetry.go). Spec 012 widened the situation suffix's carried-inventory line
-(`userPrompt` in prompt.go) from wood-and-meals to the full resource/item set —
-wood, stone, water, planks, refined stone, the food triplet (raw/cooked/meals),
-and, when any are held, a spear count with the most-worn's remaining uses — so
-the planner can reason about the crafting chain and the oven's consumers
-directly. The reply's first JSON object is parsed against the goal
-vocabulary — widened by spec 012 from the original ten goals to nineteen
-(`quarry`, `collect_water`, `cook`, `refuel_fire`, `craft_planks`,
-`craft_stone`, `craft_spear`, `build_oven`, `bathe`), and by spec 013's
-storage economy to twenty-four (`drop`, `pick_up`, `build_chest`,
-`deposit`, `withdraw`), each with a one-line behavior gloss in
-`systemPrompt` so the planner knows what it's choosing before it commits to
-a goal. Since spec 014 (TASK-53) the vocabulary has ONE source: the parser's
-accept set is `worldGoals` (parse.go), derived from the [[tool-registry]]'s
-World-class villager-roster names, and the prompt's goal line + gloss block
-come from `tool.VocabularyLine()`/`tool.PromptGlossBlock()` — the old
-hand-maintained `validGoals` map and `goalVocabulary` constant are gone
-(`prompt_golden_test.go` pins the derived prompt byte-identical to the old
-one). The expressive text caps (say 300 bytes, gist 200 bytes, muse 200
-runes) are likewise registry reads now, at identical values. The five storage goals carry an extra argument surface — `kind` (an
-inventory item key) and `qty` (a per-kind cap, 0/omitted meaning "all") on
-both `planReply` and `planStepReply` — validated by `validateKindQty`
-against `validKinds`, the same canonical item-key set the sim executor reads
-counts by (`wood`, `stone`, `water`, `planks`, `refined_stone`, `food_raw`,
-`food_cooked`, `meals`, and the plural `spears`, since durability lives in a
-slice with no singular field); an empty kind is valid too (pick_up/withdraw
-default to "everything that fits", drop/deposit resolve to a no-op rather
-than a parse error). Every other goal ignores a stray kind/qty as zero-value
-noise. The contract now allows either one goal or a guarded plan of at most
-`planStepCap` (3) steps (parse.go) — `after_min` becomes a `GuardAfterTick`
-guard anchored at the snapshot tick, `for_min` bounds each step's window
-(`injectPlan`), and each step's Kind/Qty rides `sim.PlanStep` the same way.
-Since TASK-58 the same contract is also enforced at the sampler:
-`plannerReplySchema()` (parse.go) generates a JSON Schema from `worldGoals`
-(the [[tool-registry]]-derived accept set), `validKinds`, and `planStepCap`
-— never a hand-copied duplicate — and `runPlan`
-attaches it to the planner call as `llm.Request.ResponseSchema`
-([[llm-orchestrator]] turns it into an OpenAI-style structured-outputs
-`response_format` on the local tier). The schema requires `goal` and `reason`
-at the top level (a reason-only shape left ~1/3 of small-model replies
-goal-less, and llama.cpp's grammar converter silently ignores `anyOf`; a plan
-reply still parses as a plan because `parseReply` prefers a present `plan` and
-discards the top-level goal) and bounds the free-text fields (`reason` 200,
-`target` 80 chars) so prose can't overrun the token budget into truncated
-JSON. `parseReply` remains the final gate — the cloud tier ignores the schema,
-and the motivating failure (a 3B local model free-generating past the
-vocabulary: 8/8 planner replies unusable live) went to 0/30 in a constrained
-probe.
-Single goals are injected via `Loop.InjectIntent` — which validates, resolves
-coordinates deterministically at the tick boundary (`resolveGoal`), and
-records `agent.intent_set (source: planner)` + `agent.thought` — now carrying
+decision will take effect around <landing clock> — plan for then". Each job now
+drives a bounded **tool-use loop** (spec 017, `toolloop.Run`, [[tool-loop]])
+rather than one bare planner call: `runPlan` builds a `villagerDispatch` (the
+job, a wall-clock start, a buffered `CallRecord` sink, and the `doorOutcome`
+flag that tells the terminal switch below whether a door already recorded an
+outcome) and calls `md.runLoop` — production wires this to `toolloop.Run`
+against the concrete `*llm.Orchestrator` (`New`'s `runLoopOverride` variadic
+seam installs a scripted driver instead, race-free, for tests that stub the
+model through `Submitter`) — with `Kind: llm.KindPlanner`, the persona system
+prefix, the situation+memory-window suffix as the loop's `Seed` turn,
+`Roster: tool.LoopRosterVillager()`, per-tool handlers from
+`md.villagerHandlers`, `MaxRounds: md.loopRounds` (`llm.json`'s
+`loop_max_rounds`, normalized), and `MaxTokens: loopMaxTokens` (512, up from
+the pre-loop 256 — a tool-era round carries a `tool_use` block alongside any
+prose, so the budget grew to avoid truncating a call mid-arguments). The model
+may call read tools first (none ship in the villager roster this task) then
+must commit to exactly one acting tool — a world verb, `set_plan`, or `muse` —
+which lands through its existing door; the loop's cardinality rule means every
+call after the first acting one is rejected, so "one thought, one act" is
+structural now rather than parser-enforced. The retired free-text contract —
+`planReply`/`planStepReply`, the parser's `worldGoals`/`validKinds` accept
+sets, `validateKindQty`, `plannerReplySchema()`/`plannerSchema`, `parseReply`,
+and the golden-prompt fixture (`prompt_golden_test.go`) that pinned it — is
+gone: the goal vocabulary, storage kind/qty validation, and the guarded-plan
+step cap now live as tool schemas ([[tool-registry]]'s `InputSchema`,
+`set_plan`'s authored override) the loop driver itself validates before
+dispatch, not a parser the mind ran after the call returned. `systemPrompt`
+(prompt.go) no longer renders the goal line/gloss block or the JSON reply
+shape — it only frames the choice ("call exactly one acting tool... a world
+action, a short plan (set_plan), or a passing thought (muse)"); the tools
+themselves carry the vocabulary via their declared name/description/schema.
+
+**Villager tool handlers** (`internal/mind/handlers.go`): every acting tool
+wraps an existing landing door, never mutating the world directly — the loop
+REQUESTS through the door and translates its verdict into a `toolloop.Outcome`.
+`handleWorldVerb(name)` mirrors the pre-loop `InjectIntent` call for one world
+verb (the same `InjectArgs` fields, minus the free-text reason, which the tool
+era carries via `muse` instead of a per-action field); `talk_to` keeps its
+mind-side `buildTalkToGuards` (target alive + present in the job's snapshot
+worldview). `handleSetPlan` parses the tool call's `steps` argument into
+`[]sim.PlanStep` (`parsePlanSteps`) and lands them via `InjectIntent`'s `Plan`
+path, mirroring the retired `injectPlan`. `handleMuse` lands the musing text as
+an `agent.thought{source: "musing"}` through `Loop.InjectSocial`, batched
+atomically with its `cog.outcome{landed}` — the exact landing the old
+scheduled-musing worker used, now driven by the model choosing the `muse` tool
+instead of a cadence firing it. Every handler that touches a door sets
+`doorOutcome = true` on the dispatch (the door already recorded its own
+`cog.outcome`, atomically with the landing/rejection); a handler that refuses
+BEFORE touching a door (unknown `talk_to` target, unparseable plan steps)
+leaves it false, so `runPlan`'s terminal switch knows to emit its own outcome.
+
+**Tool-call telemetry** (`telemetry.go`, spec 017 FR-007/T018): every buffered
+`CallRecord` the loop's `Record` sink collected lands as a `cog.tool_call`
+event (`emitToolCalls`/`toolCallEvent`, via the shared `sim.NewCogToolCallPayload`
+constructor also used by [[metatron]]) on EVERY termination path — landed,
+rejected, capped, or errored — so a call that never grounded is still queryable
+from the log (AC#5). Events are sorted by `Ordinal` before emission (the driver
+already buffers them ordinal-dense; sorting here makes the mind's emission
+order-independent of buffer order) and ride ONE dedicated `InjectSocial` batch,
+separate from the terminal `cog.outcome`. A verdict requiring a non-empty
+reason (every `rejected_*` and `read_error`) gets one backfilled from the
+verdict name if a handler somehow left it blank, logged as the contract
+violation it would be (`verdictRequiresReason`).
+
+Single goals land via `Loop.InjectIntent` exactly as before — which validates,
+resolves coordinates deterministically at the tick boundary (`resolveGoal`),
+and records `agent.intent_set (source: planner)` + `agent.thought`, carrying
 the landing metadata (`sim.InjectArgs`: Class, JobID, SnapshotTick,
 Generation, Predicted/ActualWallMs, and since spec 013 Kind/Qty) and, for
-`talk_to`, `GuardTargetAlive` + `GuardTargetPresent` guards built from the
-job's world snapshot; the loop owns the landing verdict and its outcome
-telemetry. A
-landing rejection sends the agent index over the `rearm` channel back to the
-absorb goroutine — the agent noticed the plan failed and re-thinks at the next
-open debounce window, promptly but never hotly. Call and parse failures emit
-no intent but always a terminal `cog.outcome{unusable}`; the reflex grace (120
-ticks idle) is the floor under every gap, and remains the permanent degraded
-mode. The daemon also installs `RecalibrateSignal` as the orchestrator's drift
-hook: an estimator spike-rate breach lands as `cog.recalibration_recommended`.
+`talk_to`, `GuardTargetAlive` + `GuardTargetPresent` guards — the loop (now
+[[tool-loop]]'s `Run`, not `runPlan` itself) owns the round cardinality;
+`Loop.InjectIntent`'s landing ladder still owns the landing verdict and its
+outcome telemetry, unchanged. `runPlan`'s terminal switch, once the loop
+returns, mirrors the pre-loop paths on `res.Term`: a `TermLanded` loop leaves
+the sole `cog.outcome` to whichever door landed it (no rearm); a loop that
+ended with `d.doorOutcome` true but nothing landed (a rejection, mirroring the
+old rejection path) calls `rearmAgent` — the agent noticed the plan failed and
+re-thinks at the next open debounce window, promptly but never hotly — with no
+outcome added (the door's rejection is the record); and a loop that reached no
+door at all (plain text, reads only, an unknown `talk_to` target, an infra
+error — `TermModelDone`/`TermCapExhausted`/`TermAdmissionRefused`/`TermCtxDone`)
+emits the terminal `cog.outcome{unusable}` itself, with `loopFailReason(res,
+err)` naming which termination caused it (FR-015: no failure is silent) — the
+reflex grace (120 ticks idle) remains the floor under every gap, and the
+permanent degraded mode. The daemon also installs `RecalibrateSignal` as the
+orchestrator's drift hook: an estimator spike-rate breach lands as
+`cog.recalibration_recommended`.
 
-**Musings** (TASK-21): between planner calls each agent has a 15-game-minute
-best-effort musing cadence (staggered half a slot off the planner stagger; the
-same TASK-44 phase-preserving re-arm applies, so drops and busy stretches never
-merge the per-agent phases).
-A musing is one `llm.KindMusing` call (same situation + memory window, a
-plain-sentence system frame, MaxTokens 48) whose reply lands as a single
-`agent.thought{source: "musing"}` through `Loop.InjectSocial` — recorded
-interiority with zero goal effect. Musings pass the same [[cognition]] router
-gate as planners (1 point vs the planner's 3, so they survive far higher
-speeds) and carry the same telemetry: `cog.thought` at call start, and a
-landed musing rides one `InjectSocial` batch with its
-`cog.outcome{landed}` — the musing and its terminal record land atomically.
-Single-flight and detached from the absorb
-loop; busy tiers ([[llm-orchestrator]]'s `ErrTierBusy` on `BestEffort`
-requests) or unusable replies drop the musing — recorded silence, a
-`cog.outcome{unusable}`, never a goal. One exception, the
-fairness floor: a musing starved past `museStarveWindow` (2 wall-minutes)
-drops the `BestEffort` flag and rides the normal queue — a saturated tier
-(live finding: back-to-back ~50s planner calls admit zero best-effort work)
-costs at most one 48-token call per window instead of total silence.
+**Musing** (TASK-21, retired as a scheduled channel by spec 017 R10): a
+villager no longer has its own 15-game-minute best-effort cadence, queue,
+stagger, or fairness floor (`museCadenceTicks`/`museBusy`/`museDue`/
+`museStarveWindow`/`lastMuseOK` and the `muse()` worker are all gone, along
+with `KindMusing` itself — [[llm-orchestrator]], [[cognition]]). Musing is now
+an ordinary roster tool (`muse`, Expressive, `handleMuse` above) the model may
+choose inside its planner tool-use loop — interiority carries the SAME
+opportunity cost as any other action, since choosing to muse means not
+choosing to act, rather than riding a parallel best-effort channel that could
+never compete with real cognition for a tier slot. A musing still lands as a
+single `agent.thought{source: "musing"}` batched atomically with its
+`cog.outcome{landed}`, and it is still recorded via the loop's normal
+`cog.tool_call` trace like any other call — but there is no separate call kind,
+cadence, or admission path left to describe; it is one line in
+`villagerHandlers`, not a subsystem of its own. `parseMusing` (parse.go)
+survives, unrenamed, as the shared one-plain-line parser [[governance]]'s
+meeting rephraser also consumes — the scheduled musing it was originally named
+for is gone, but its shape (first line, quotes/whitespace stripped, rune-capped)
+is still exactly what a plain-text reply needs.
 
 ## Connections
 
@@ -203,7 +223,10 @@ costs at most one 48-token call per window instead of total silence.
 `resolveGoal` and provides the fallback; [[cognition]] owns the decision-class
 registry, the router the mind gates on, and the latency estimate behind
 predictions and future-dating; [[llm-orchestrator]] carries the calls
-(local tier); [[sim-loop]]'s `inject_intent` command is the only door into
+(local tier); [[tool-loop]] is `runPlan`'s driver (spec 017) — `md.runLoop`
+wraps `toolloop.Run`, `tool.LoopRosterVillager()` ([[tool-registry]]) is its
+declared roster, and `villagerHandlers` (handlers.go) wraps every acting tool's
+landing door; [[sim-loop]]'s `inject_intent` command is the only door into
 deterministic space and since TASK-32 the owner of landing-time validation
 (staleness ladder, generation and guard checks); [[event-types]] catalogs the
 new events; the [[tui-client]]

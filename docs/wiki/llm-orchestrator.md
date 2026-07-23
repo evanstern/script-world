@@ -8,7 +8,7 @@ sources:
   - internal/llm/meter.go
   - internal/llm/health.go
   - internal/llm/providers.go
-verified_against: de1ef19fa25b80bedee1923a43803631e9ce2844
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # LLM orchestrator
@@ -24,7 +24,10 @@ the substrate is structurally untouchable by inference.
 `planner`, `conversation`, and `meeting` (proposal rephrasing, best-effort
 flavor — [[governance]], TASK-13) go **local** (free, the only viable home for
 ~3,800+ calls/day); `consolidation`, `narrator`, `drama`, and `metatron` (the
-gatekeeper's console turns and digests, [[metatron]]) go **cloud**. The local tier
+gatekeeper's console turns and digests, [[metatron]]) go **cloud**. `KindMusing`
+retired with spec 017: musing is no longer a scheduled call kind — it is a
+roster tool a villager's planner loop may choose ([[agent-mind]], [[tool-loop]]).
+The local tier
 (`providers.go`) speaks OpenAI-compatible chat-completions over raw HTTP (Ollama at
 `http://localhost:11434/v1`, default model `gemma4:12b-mlx` — the operator's
 always-on local model); the cloud tier is provider-selectable
@@ -43,13 +46,72 @@ musing — and the compat endpoint ignores `think: false` but honors
 `reasoning_effort`. The value arrives at `newOpenAICompat` already
 resolved (`resolveReasoningEffort`); empty means the field is omitted
 from the body. Since TASK-58 `Request` also carries an optional
-`ResponseSchema` (`json.RawMessage`) + `SchemaName`: when set, the
-chat-completions body gains a `response_format` `{type: json_schema}`
-envelope (name defaulting to `"reply"`) so an OpenAI-compat backend that
-honors structured outputs (Ollama does) constrains the reply at the sampler;
-when unset the payload is unchanged, and the Anthropic path ignores both
-fields — the caller's parser stays the final gate. The planner is the one
-kind that sets it ([[agent-mind]]).
+`ResponseSchema` (`json.RawMessage`) + `SchemaName`: when set (and no
+`Tools` are declared — the two are mutually exclusive on the wire,
+provider-wire.md §2), the chat-completions body gains a `response_format`
+`{type: json_schema}` envelope (name defaulting to `"reply"`) so an
+OpenAI-compat backend that honors structured outputs (Ollama does)
+constrains the reply at the sampler. The mechanism survives spec 017, but
+its one caller retired: the planner used it to constrain a free-text goal
+reply (TASK-58); since spec 017 the planner instead declares its roster as
+native tools (below), and no request sets `ResponseSchema` in production —
+the field stays live for any future schema-constrained single-shot kind.
+
+**Agent tool-use loop transport** (`llm.go`/`providers.go`, TASK-52, spec
+017; every field below is additive — a request that sets none of them
+marshals byte-identical to before): `Request.Tools` (`[]ToolDecl{Name,
+Description, InputSchema}`) declares the tools a call may invoke this round;
+`Request.Turns` (`[]Turn{Role, Blocks}`, a `Block` one of text /
+`ToolUseBlock` / `ToolResultBlock`) is an ephemeral multi-turn transcript
+that replaces `Prompt` as the message source when non-nil (never persisted,
+never replayed); `Request.SkipObserve` marks a loop-internal per-round
+`Submit` so the worker feeds no fractional per-call sample to the tier
+estimator. `Response.ToolCalls` (`[]ToolCall{ID, Name, Args}`) carries the
+calls a reply emitted, in emission order; `Response.Stop` (`StopReason`:
+`end_turn` / `tool_use` / `max_tokens` / `other`) is the mapped provider stop
+reason [[tool-loop]]'s driver reads to tell "model finished" from "model
+wants results". Both providers translate their native wire shape: the
+Anthropic caller (`anthropicCaller.buildParams`) sends `req.Tools` as native
+`ToolUnionParam`s and `req.Turns` as `tool_use`/`tool_result` content blocks
+— `anthropicInputSchema` decodes a derived JSON Schema into the SDK's typed
+`ToolInputSchemaParam`, round-tripping any keyword the SDK's own struct
+doesn't model (e.g. `additionalProperties`) through `ExtraFields`, which the
+SDK's `UnmarshalJSON` would otherwise drop. `openaiCompat.call` picks a path
+per the tier's resolved `tool_mode` (below): `callNative` sends
+OpenAI-style `tools`/`tool_calls` (a nil-`Tools` nil-`Turns` request is
+byte-identical to the pre-feature body); `callJSON` is the FR-010 fallback
+for backends whose native function calling is unreliable — it appends a
+rendered tool catalog to the system prompt, grammar-constrains every reply
+to a flat envelope (`{"tool": <name|"none">, "args": <object>, "say":
+<text>}`) via `response_format`, and synthesizes a per-round call ID
+(`"env-<round>"`, the count of assistant turns already in the transcript)
+since the envelope carries none — a fallback-mode transcript must keep
+exactly one assistant turn per round or synthesized IDs collide.
+
+**Tool-call strategy** (`config.go`, TASK-52): `LocalConfig.ToolMode` /
+`CloudConfig.ToolMode` (`"tool_mode"` in `llm.json`, per-tier, mirroring
+`ReasoningEffort`'s shape) select `ToolModeNative` (default, absent/`""`) or
+`ToolModeJSON`; `ToolModeResolved()` normalizes an unknown value back to
+native with an operator warning (never an error, same clamp doctrine as
+`Workers()`). The cloud knob applies only to the `openai_compat` provider —
+the Anthropic SDK path is always native and ignores it. `Config.LoopMaxRounds`
+(`"loop_max_rounds"`, top-level) is the tool-use loop's hard per-cognition
+round cap; `Config.Rounds()` normalizes it the same warn-not-error way
+`LocalConfig.Workers()` does: absent/0 → 8 (`defaultLoopMaxRounds`), 1–16
+pass through, negative clamps to 8 with a warning, and above 16
+(`maxLoopMaxRounds`) clamps to 16 with a warning.
+
+**Whole-loop latency feed** (`ObserveCognition`, TASK-52): the tool-use loop
+issues several per-round `Submit` calls (each `SkipObserve: true`, so none
+individually reaches the estimator) and reports exactly one whole-cognition
+wall time via `Orchestrator.ObserveCognition(kind, totalMillis)` when it
+finishes. `ObserveCognition` resolves the kind's tier and calls the same
+`feedEstimate` helper the per-call worker path uses, so both feeding paths
+normalize by the kind's registered point cost and fire the same recalibrate
+hook identically — [[tool-loop]]'s `Run` calls this only on a completed
+termination (landed / model_done / cap_exhausted), never on the failure
+family (admission_refused / provider_error / ctx_done), mirroring the
+worker's own successes-only doctrine below.
 
 **Concurrency** (TASK-45): each tier owns `slots` worker goroutines — N identical
 copies of the same worker loop draining the same two channels. The local tier's
@@ -63,12 +125,15 @@ for admission.
 **Priority lanes**: conversations (`KindConversation`) ride a per-tier priority
 queue idle workers drain first — dialogue turns are interactive, while planner
 thoughts tolerate staleness (the reflex grace covers them). The opposite
-extreme is caller-flagged: `Request.BestEffort` calls (musings,
-`KindMusing`, local) are refused with `ErrTierBusy` when no worker slot is
-free — either local queue has work waiting, or `inflight` has reached
-`slots` — flavor yields to real cognition. The flag
-belongs to the caller so the mind can drop it as a fairness floor when a
-musing has been starved too long (TASK-21, [[agent-mind]]). A worker-side hard cap
+extreme is caller-flagged: `Request.BestEffort` calls are refused with
+`ErrTierBusy` when no worker slot is free — either local queue has work
+waiting, or `inflight` has reached `slots` — flavor yields to real cognition.
+The flag belongs to the caller, not the orchestrator (`meeting.go`'s
+best-effort proposal rephrasing is the current user); scheduled musing was
+its first caller until spec 017 folded musing into the planner's tool-use
+loop as an ordinary roster choice ([[agent-mind]], [[tool-loop]]) — the
+mechanism itself, including the caller-owned fairness-floor doctrine, is
+unchanged and stands ready for any future drop-when-busy kind. A worker-side hard cap
 (`workerCallCap`, 2 min) bounds any single provider call so a hung transport can
 never wedge a tier. **Submit** is synchronous with immediate admission control, each failure mode a
 distinct error: `ErrBudgetExhausted` (cloud ceiling reached — checked BEFORE any
@@ -137,7 +202,10 @@ and folds `StatusSnapshot` into the protocol status; [[cli-promptworld]]'s `llm`
 subcommand is the one-shot proof path; the [[tui-client]] metatron pane displays tier
 health and spend; the meter persists via [[event-log]]'s store (meta table). TASK-7
 (agent minds), TASK-9 (consolidation), TASK-11 (narrator), and TASK-12 (Metatron)
-are the intended callers.
+are the intended callers. [[tool-loop]] is the transport's other consumer (spec 017):
+it drives `Request.Tools`/`Turns`/`SkipObserve` and `Response.ToolCalls`/`Stop`
+through `Submit`, and reports whole-cognition latency via `ObserveCognition` — used
+by both [[agent-mind]]'s `runPlan` and [[metatron]]'s `Turn`.
 
 ## Operational notes
 

@@ -1,6 +1,6 @@
 ---
 name: tool-registry
-description: The single source of truth for agent capabilities (spec 014) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; boot-time coverage gate
+description: The single source of truth for agent capabilities (spec 014, extended spec 017) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; the tool-use loop's declared rosters (set_plan, work_miracle) and InputSchema derivation; boot-time coverage gate
 kind: component
 sources:
   - internal/tool/tool.go
@@ -9,7 +9,7 @@ sources:
   - internal/tool/derive.go
   - internal/tool/validate.go
   - internal/sim/toolcheck.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: 6444c2923c2db5f914d046f135750e9e19079a6a
 ---
 
 # Tool registry
@@ -26,77 +26,139 @@ curing that drift is the migration's sole permitted behavioral delta (FR-012).
 
 ## How it works
 
-**The catalog** (`registry.go`): 30 entries in the old vocabulary's registration
-order — 24 world verbs (the original ten, spec 012's nine, spec 013's five storage
-verbs), the expressive `say`/`gist`/`muse`, and Metatron's
-`converse`/`nudge_dream`/`nudge_omen`. Each `Tool` (`tool.go`) carries an
-`EffectClass` (`World` → intents, executor-grounded; `Expressive` → immediate
-whitelisted event batches; `Read` → data back into cognition, reserved for TASK-52),
-`Param`s (`AgentName`/`Text`/`Enum` kinds — storage verbs' `qty` is deliberately
-un-modeled pending a numeric ParamKind for TASK-52), a `GateClass`, and a `Cost`
-(work `DurationTicks` for world verbs, `TextCapBytes`/`TextCapRunes` for expressive
-text, nudge charges). World verbs keep their prompt gloss prose (`PromptGloss`)
-byte-exact from the old hand-written prompt block. `converse` is classified
-Expressive with empty `Events` (it lands no world events — transcript-only), so
-`Validate`'s Events rule is one-directional: Events non-empty ⇒ Expressive.
+**The catalog** (`registry.go`): the pre-spec-017 30 entries, plus two spec-017
+additions — `set_plan` (a loop-only planning tool) and `work_miracle` (Metatron's
+fourth tool) — assembled in order: `worldTools` (the 24 legacy world verbs, exactly
+the old goal-vocabulary order), `set_plan`, `expressiveTools` (`say`/`gist`/`muse`),
+`metatronTools` (`converse`/`nudge_dream`/`nudge_omen`/`work_miracle`). The three
+tool groups are declared as separate literals (`worldTools`, `expressiveTools`,
+`metatronTools`) rather than one, so `set_plan`'s schema can be built from
+`worldTools` alone and spliced in — building it from the assembled `registry` would
+be an initialization cycle. Each `Tool` (`tool.go`) carries an `EffectClass`
+(`World` → intents, executor-grounded; `Expressive` → immediate whitelisted event
+batches; `Read` → data back into cognition, consumed by [[tool-loop]]), `Param`s
+(`AgentName`/`Text`/`Enum`/`Number` kinds — `Number` (spec 017 R12) pays the
+spec-014 debt that left the storage verbs' `qty` unmodeled: bounded by optional
+`Min`/`Max`, 0/0 meaning unbounded), a `GateClass`, and a `Cost` (work
+`DurationTicks` for world verbs, `TextCapBytes`/`TextCapRunes` for expressive
+text, nudge/miracle charges). World verbs keep their prompt gloss prose
+(`PromptGloss`) byte-exact from the old hand-written prompt block. `converse` is
+classified Expressive with empty `Events` (it lands no world events —
+transcript-only), so `Validate`'s Events rule is one-directional: Events
+non-empty ⇒ Expressive.
+
+**The legacy/loop split** (`isLegacyWorldTool`, `derive.go`, spec 017 R11): a World
+tool no longer automatically belongs to the free-text goal vocabulary — the
+discriminator is `Effect == World && PlanStep`. Every pre-spec-017 World tool
+already carries `PlanStep: true` (the TASK-55 single-walk invariant), so the
+filter changes nothing for them; `set_plan` is `Effect World` (it lands through
+the same `InjectIntent` path) but carries `PlanStep: false` because it is
+loop-only vocabulary, not a legacy free-text goal — so it is excluded from
+`VocabularyLine()`, `WorldGoals()`, and `RosterVillager` for free, with no
+separate exclusion list anywhere.
+
+**`set_plan` and `work_miracle`'s schemas** (`registry.go`): `set_plan` needs an
+authored `InputSchemaJSON` override — the registry's scalar `Param` model has no
+`ParamKind` for a `steps` array — built by `setPlanSchema(legacyWorldNamesFrom(worldTools))`:
+a `steps` array (1..`PlanStepCap` (3) items) of `{goal, kind, qty}` objects, `goal`'s
+enum drawn from the SAME legacy-World-tool filter `VocabularyLine`/`WorldGoals` use,
+so the plan vocabulary can never drift from the free-text one even though the two
+can't share one function call (an initialization-cycle constraint). `work_miracle`
+needs no override: its flat parameter surface (`kind` required Enum over
+`miracleKinds` = `move`/`remove`/`give_item`/`time_snap`, plus every per-kind field
+as an optional scalar) is fully Params-derived — deliberately, because the loop
+driver's `validateArgs` routes every `InputSchemaJSON` tool through `set_plan`'s
+structural validator, so an override here would validate `work_miracle` calls
+against the wrong shape. `work_miracle` is `Effect Expressive` (not `World`): it
+lands a bounded event batch through the SAME `InjectSocial` door the nudges use
+(`metatron.landMiracle` → `BuildMiracleBatch`), has no intent and no work duration,
+and — decisively — `Validate` forbids a World tool from declaring `Events`, which
+`work_miracle` must (so the sim-side coverage check can pin its event set ⊆ the
+whitelist). There is deliberately no `gratis` parameter: the angel can never waive
+a charge (spec 016 FR-007/SC-005) — structural absence, not a sanitized field.
 
 **Derived surfaces** (`derive.go`): each consumer is one walk of the registry —
-`VocabularyLine()` (the prompt's goal list, byte-identical to the old constant),
-`PromptGlossBlock()` (the per-verb gloss prose), `WorldGoals()` (the mind parser's
-accept set, which also feeds [[agent-mind]]'s TASK-58 structured-output schema), and
-`PlanStepGoals()` (the sim door's plan-step accept set). Because all four are the
-same walk, the vocabulary can no longer drift between prompt, parser, sampler
-schema, and door — adding a verb touches the registry entry plus its sim resolver,
-not seven sites in lockstep.
+`VocabularyLine()` (the prompt's goal list, byte-identical to the old constant,
+now over the legacy-only filter), `PromptGlossBlock()` (the per-verb gloss prose),
+`WorldGoals()` (the mind parser's accept set), and `PlanStepGoals()` (the sim
+door's plan-step accept set) all walk `legacyWorldNames()`. `InputSchema(t)` (spec
+017 data-model.md §1) is the tool-use loop's new consumer: returns `t.InputSchemaJSON`
+verbatim when set, else derives a JSON Schema object from `t.Params` (`paramSchema`
+per-kind: `AgentName`/`Text` → string, +`maxLength` from `MaxRunes`/`MaxBytes`;
+`Enum` → string with an `enum`; `Number` → integer, +`minimum`/`maximum` from
+`Min`/`Max`) — deterministic output since `Params` is already registration-ordered
+and the one Go map in play (`properties`) holds only property-name keys, which
+`encoding/json` sorts lexicographically.
 
 **Rosters** (`roster.go`): capability is roster membership, expressed as data.
-`RosterVillager` = the world verbs (derived, registration order) + `say`/`muse`/
-`gist`; `RosterMetatron` = `converse`/`nudge_dream`/`nudge_omen`. `OnRoster()` is
-the door predicate: [[sim-loop]]'s intent door requires a World tool on the villager
-roster (an out-of-roster or unknown name rejects exactly like an unknown goal
-today), and [[metatron]]'s nudge form — both the turn-side validation and the
-reducer dry-run — must be on the Metatron roster. Future asymmetry (a chief who
-proposes laws) becomes a roster edit, not new plumbing.
+`RosterVillager` = the legacy world verbs (derived via `isLegacyWorldTool`,
+registration order — `set_plan` excluded) + `say`/`muse`/`gist`; `RosterMetatron`
+= `converse`/`nudge_dream`/`nudge_omen` (unchanged — `work_miracle` is not on this
+door roster). `OnRoster()` is the door predicate: [[sim-loop]]'s intent door
+requires a World tool on the villager roster, and [[metatron]]'s nudge form — both
+the turn-side validation and the reducer dry-run — must be on the Metatron roster.
+Two new roster exports serve [[tool-loop]] specifically, returning full `Tool`
+values (not just names, since `InputSchema` needs `Params`/`InputSchemaJSON`):
+`LoopRosterVillager()` = every legacy World tool, then `set_plan`, then `muse`
+(`say`/`gist` stay scene-gated and out of the loop roster this task — scenes
+remain driver-run, not model-initiated); `LoopRosterMetatron()` = `nudge_dream`,
+`nudge_omen`, `work_miracle` — deliberately NOT `RosterMetatron`, because
+`converse` is excluded: it is the angel's final-answer channel (the loop's `Result.Final`),
+not a callable tool, and declaring it would trap a `converse` call as
+`rejected_unknown` (Metatron installs no `converse` handler by design).
 
 **Validation** (`validate.go` + `internal/sim/toolcheck.go`): `tool.Validate()`
 checks the registry's internal consistency (unique non-empty names, known effect
-classes, Events ⇒ Expressive, PlanStep/ReflexEligible only on World tools, roster
-names resolve, no Read tools on rosters) and returns ALL violations;
-`sim.ValidateToolCoverage()` checks the sim side — every World tool on a roster has
-a resolver-table entry and a duration, and every Expressive tool's declared
-`Events` ⊆ the `InjectSocial` whitelist. Both run first thing in
-[[daemon-lifecycle]]'s `daemon.Run`, before the world opens: a malformed registry
-or roster aborts boot with a config error, never a tick-time failure.
+classes, Events ⇒ Expressive, PlanStep/ReflexEligible only on World tools, Number
+params' Min/Max not inverted, a set `InputSchemaJSON` is valid-JSON object shape,
+roster names resolve) and returns ALL violations. Spec 017 lifts the spec-014
+restriction barring Read tools from a roster (`tool-loop` is now the Read
+consumer; zero production Read entries ship this task, but a roster naming one is
+no longer a `Validate` error). `sim.ValidateToolCoverage()` checks the sim side —
+every GOAL-DOOR World tool (Effect World AND PlanStep true — the same
+`isLegacyWorldTool` predicate) has a resolver-table entry and a duration, and
+every Expressive tool's declared `Events` ⊆ the `InjectSocial` whitelist.
+`set_plan` is a World tool that deliberately carries `PlanStep: false`, so
+`validateCoverage` skips it — it grounds through its own door (`injectPlan`, each
+step resolving its own already-covered goal), never through `resolveGoal`/
+`goalResolvers`. Both `tool.Validate()` and `sim.ValidateToolCoverage()` run
+first thing in [[daemon-lifecycle]]'s `daemon.Run`, before the world opens: a
+malformed registry or roster aborts boot with a config error, never a tick-time
+failure.
 
 **What derives on the sim side** ([[executor]], [[reflex-policy]]): `intentDuration`
-reads a table built from the registry's `Cost.DurationTicks` at init (context
-overrides — spear-hunt, oven-cook — stay in the executor's `workDuration`, since
-the station/inventory is only known at completion time), and `resolveGoal` is a
-name-keyed resolver table (`goalResolvers`) with the old switch arms verbatim.
-The registry's duration literals are hand-carried mirrors of the sim constants
-(R7 — `tool` is a leaf package that imports nothing internal);
-`TestWorldToolDurationsMatchSimConstants` pins the two hand-equal so they can
-never silently drift.
+reads a table built from the registry's `Cost.DurationTicks` at init, filtered to
+goal-door (World && PlanStep) tools (context overrides — spear-hunt, oven-cook —
+stay in the executor's `workDuration`, since the station/inventory is only known
+at completion time), and `resolveGoal` is a name-keyed resolver table
+(`goalResolvers`) with the old switch arms verbatim. The registry's duration
+literals are hand-carried mirrors of the sim constants (R7 — `tool` is a leaf
+package that imports nothing internal); `TestWorldToolDurationsMatchSimConstants`
+pins the two hand-equal so they can never silently drift.
 
 ## Connections
 
-[[agent-mind]] derives its prompt vocabulary, gloss, parser accept set, planner
-schema enum, and expressive caps from here; [[sim-loop]]'s injection doors enforce
-roster membership at landing; [[reflex-policy]]'s `resolveGoal` table and
-[[executor]]'s duration table are the sim-side derivations the coverage gate
-cross-checks; [[metatron]]'s nudge cap and form validation read the registry;
-[[daemon-lifecycle]] runs the boot gates. The registry formalizes the doors — it
-does not relax them: the landing ladder, whitelist, and charge economy are
-unchanged enforcers. Spec: `specs/014-tool-registry/` (contracts/registry-api.md,
-contracts/tool-catalog.md). TASK-52's tool-use loop and read tools build on this
-layer.
+[[agent-mind]] derived its prompt vocabulary, gloss, and parser accept set from
+here pre-spec-017 (retired with the free-text planner reply); [[tool-loop]] is the
+new consumer: `Job.Roster` is `tool.LoopRosterVillager()`/`LoopRosterMetatron()`,
+and `InputSchema(t)` builds each declared tool's wire schema. [[sim-loop]]'s
+injection doors enforce roster membership at landing; [[reflex-policy]]'s
+`resolveGoal` table and [[executor]]'s duration table are the sim-side
+derivations the coverage gate cross-checks; [[metatron]]'s nudge cap, form
+validation, and `work_miracle` dispatch read the registry; [[daemon-lifecycle]]
+runs the boot gates. The registry formalizes the doors — it does not relax them:
+the landing ladder, whitelist, and charge economy are unchanged enforcers. Spec:
+`specs/014-tool-registry/` (contracts/registry-api.md, contracts/tool-catalog.md);
+the tool-use loop additions are spec 017 (`data-model.md` §1-2, R11-R13).
 
 ## Operational notes
 
 Migration proven behavior-identical: the full replay/determinism suite passed with
 zero test-file edits, the golden-prompt fixture (`prompt_golden_test.go`, captured
-pre-refactor) passed byte-unchanged through the derivation, and the whitelist was
-pinned diff-identical (17 entries). Live smoke on a throwaway world: boot gates
+pre-refactor — retired with spec 017 once the free-text planner reply it pinned
+was replaced by native tool declarations) passed byte-unchanged through the
+derivation, and the whitelist was pinned diff-identical (17 entries). Live smoke
+on a throwaway world: boot gates
 passed, planners landed, and a multi-step plan naming `collect_water` landed — the
 TASK-55 drift cure visible live (the old map rejected it). A test-only tool
 registered in a test build appears in every derived surface with zero other edits.
