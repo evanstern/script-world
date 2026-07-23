@@ -32,6 +32,13 @@ type stubOrch struct {
 	reqs      []llm.Request
 	observes  []int64
 	observedP []string // the serving provider each ObserveCognition carried
+	// resolve is the provider name Run's run-level pin seam (ResolveProvider)
+	// returns (spec 024 R9). Empty (the default of every pre-T022 test) leaves the
+	// run unpinned — Submit's Provider stays whatever Job.Provider carried, so the
+	// existing loop/retry tests behave exactly as before. A pin test sets it so the
+	// stub resolves a concrete provider once at run start.
+	resolve      string
+	resolveCalls int // how many times Run asked the pin seam (must be ≤1 per run)
 }
 
 func (s *stubOrch) Submit(ctx context.Context, req llm.Request) (llm.Response, error) {
@@ -50,6 +57,14 @@ func (s *stubOrch) Submit(ctx context.Context, req llm.Request) (llm.Response, e
 func (s *stubOrch) ObserveCognition(kind llm.Kind, provider string, totalMillis int64) {
 	s.observes = append(s.observes, totalMillis)
 	s.observedP = append(s.observedP, provider)
+}
+
+// ResolveProvider is the run-level pin seam: the loop calls it once at run start
+// (when Job.Provider is empty) to name the run's provider. Returns the scripted
+// resolve name; an empty name leaves the run unpinned (pre-T022 behavior).
+func (s *stubOrch) ResolveProvider(kind llm.Kind) (string, error) {
+	s.resolveCalls++
+	return s.resolve, nil
 }
 
 // --- helpers ---
@@ -649,19 +664,25 @@ func TestCapArgs(t *testing.T) {
 	}
 }
 
-// TestObserveCarriesServingProvider (spec 024 T009): the whole-loop observation
-// carries the provider that actually served the loop's rounds — captured from
-// Response.Provider — so under a chain-walk the estimator that did the work is
-// the one that is fed, not the kind's chain head by assumption. A read → act
-// loop both of whose rounds are served by "slow" observes exactly once, naming
-// "slow".
-func TestObserveCarriesServingProvider(t *testing.T) {
+// TestObserveCarriesPinnedProvider (spec 024 T009 → T022): the whole-loop
+// observation carries the run's PIN — the provider ResolveProvider named once at
+// run start — not a per-round serving name read back off the response. Under
+// run-level pinning the two coincide by construction (every round Submits with
+// Provider: pin), so feeding the pin is the exact, honest attribution. A read →
+// act loop whose kind resolves to "slow" observes exactly once, naming "slow".
+func TestObserveCarriesPinnedProvider(t *testing.T) {
 	forage := lookup(t, "forage")
-	h := drive(t, 4, []tool.Tool{readTool, forage},
-		map[string]Handler{"peek": readHandler("berries nearby"), "forage": landHandler("ok")},
+	h := &harness{orch: &stubOrch{t: t, resolve: "slow", scripts: []func(llm.Request) (llm.Response, error){
 		respFrom("slow", "", call("r1", "peek", "{}")),
 		respFrom("slow", "", call("a1", "forage", "{}")),
-	)
+	}}}
+	job := Job{
+		JobID: "planner-ada-412800", Kind: llm.KindPlanner, System: "you are ada", Seed: "what next?",
+		Roster:    []tool.Tool{readTool, forage},
+		Handlers:  map[string]Handler{"peek": readHandler("berries nearby"), "forage": landHandler("ok")},
+		MaxRounds: 4,
+	}
+	h.res, h.err = run(context.Background(), h.orch, job)
 	if h.res.Term != TermLanded {
 		t.Fatalf("term = %q, want landed", h.res.Term)
 	}
@@ -669,6 +690,12 @@ func TestObserveCarriesServingProvider(t *testing.T) {
 		t.Fatalf("observed %d times, want exactly 1", len(h.orch.observedP))
 	}
 	if h.orch.observedP[0] != "slow" {
-		t.Errorf("whole-loop observation named provider %q, want the serving provider slow", h.orch.observedP[0])
+		t.Errorf("whole-loop observation named provider %q, want the pinned provider slow", h.orch.observedP[0])
+	}
+	// The pin was stamped on every round's Submit.
+	for i, r := range h.orch.reqs {
+		if r.Provider != "slow" {
+			t.Errorf("round %d Submit.Provider = %q, want the pin slow", i+1, r.Provider)
+		}
 	}
 }
