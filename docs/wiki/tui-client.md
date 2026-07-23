@@ -8,7 +8,8 @@ sources:
   - internal/tui/layout.go
   - internal/tui/grammar.go
   - internal/tui/digest.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+  - internal/tui/decisions.go
+verified_against: 556cebd790c855f0759f26cec4ef3396bdf81a80
 ---
 
 # TUI client
@@ -104,9 +105,34 @@ cursor and `⏎` opens the selected villager's **detail view**
 tick marked `last:`; else "no objective yet" — [[sim-state-reducer]]),
 itemized inventory, beliefs/narrative when consolidation has produced them,
 and episodic memories most-recent-first, each section truncating bottom-up
-inside the pane budget. `esc` closes the detail back to the roster ahead of
-the solo-release chain; selection state survives tab switches and is clamped
-on reconnect. Full soul.md persona files stay on disk per [[agent-mind]].
+inside the pane budget. From the detail view, `d` opens the **decisions
+sub-view** (spec 020/TASK-63, `villagerDecisionsBody`): the villager's recent
+cognitions as causal chains, most-recent-first — a when/class header, the
+stimulus line, each tool call as `ordinal. tool — phrase (reason)`, and the
+terminal outcome or an explicit `in progress — no outcome yet` marker; router
+suppressions render as one `didn't think because …` entry. Chains come from
+the client-side **decision-trace projection** (decisions.go): `applyEvent`
+feeds every `cog.thought`/`cog.tool_call`/`cog.outcome` into `Model.traces`
+before the ring append, joining on the shared job ID, so the stimulus is
+resolved once at thought-ingest from the chronicle ring in the digest voice
+(a pre-connect trigger degrades to a neutral `stimulus #N` reference,
+trigger 0 to a cadence phrase) and the stored chain survives the ring's
+500-event eviction. Attribution: the thought/outcome payload's agent, else a
+villager job-ID parse for fragments; `turn-metatron-*` jobs go to a sentinel
+and `conversation-*` jobs are never ingested. The projection is bounded
+(`decisionChainCap` 20 chains per agent, oldest evicted) and resets wholesale
+on reconnect like the replica. Verdicts and outcomes render ONLY through the
+sweep-tested plain-language `verdictGlossary` — raw enum strings never reach
+the screen (an unknown value gets a safe generic phrase). `j`/`k` scroll the
+sub-view (render-time clamped), and `esc` unwinds decisions → detail →
+roster ahead of the solo-release chain; selection state survives tab
+switches and is clamped on reconnect. Full soul.md persona files stay on
+disk per [[agent-mind]]. The same glossary feeds Metatron's inline verdict
+rows: a `turn-metatron-*` `cog.tool_call` appends one `» tool — phrase`
+transcript row at ingest (`metatronVerdictRow`), which
+`classifyTranscriptLine` labels `note` and styles as cog telemetry — the
+angel's refused and landed calls are visible in the transcript where before
+only the RPC reply's `⚡` miracle lines appeared.
 
 The **chronicle** renders the narrated story from the replica's
 snapshot-carried `State.Chronicle` ring ([[chronicle]]) or the raw feed (`r`
