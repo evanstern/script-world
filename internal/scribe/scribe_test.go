@@ -281,7 +281,7 @@ func governedEvents(t *testing.T) []store.Event {
 		{Tick: 21970, Type: "meeting.proposal_rephrased", Payload: mustPayloadJSON(t,
 			sim.ProposalRephrasedPayload{ProposalID: 1, NormID: 1, Text: "Stay by the fire once the dark comes down."})},
 		{Tick: 60000, Type: "norm.violated", Payload: mustPayloadJSON(t, sim.NormViolatedPayload{NormID: 1, Violator: 4, Witnesses: []int{5}})},
-		{Tick: 108360, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, amend)},   // day 2
+		{Tick: 108360, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, amend)},  // day 2
 		{Tick: 194400, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, exile)},  // day 3 noon
 		{Tick: 280800, Type: "meeting.proposal_resolved", Payload: mustPayloadJSON(t, repeal)}, // day 4 noon
 	}

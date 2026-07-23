@@ -83,8 +83,8 @@
 
 **Independent test**: quickstart §2.
 
-- [ ] T019 [US4] Extend the replay/determinism suite with a fixture exercising situated memories (planner reason + reflex), a conversation, and journal write/delete/over-budget-rejection; assert live-vs-replay `State` equality and byte-identical soul.md + journal.md renders with zero orchestrator calls, in the existing determinism test location (internal/sim and/or the daemon-level replay test)
-- [ ] T020 [P] [US4] Add/verify a pre-019 fixture log replays unchanged and renders byte-identically to its pre-019 output (FR-014/SC-007) in the same suite
+- [x] T019 [US4] Extend the replay/determinism suite with a fixture exercising situated memories (planner reason + reflex), a conversation, and journal write/delete/over-budget-rejection; assert live-vs-replay `State` equality and byte-identical soul.md + journal.md renders with zero orchestrator calls, in the existing determinism test location (internal/sim and/or the daemon-level replay test)
+- [x] T020 [P] [US4] Add/verify a pre-019 fixture log replays unchanged and renders byte-identically to its pre-019 output (FR-014/SC-007) in the same suite
 
 **Checkpoint**: all four stories proven; SC-003/SC-007 closed.
 
@@ -93,8 +93,8 @@
 ## Phase 7: Polish & Cross-Cutting
 
 - [ ] T021 [P] Run quickstart §3–§6 live smoke on a throwaway world (local tier up); record observed situated lines, a conv transcript recovery, and any journal tool calls on the board task as evidence
-- [ ] T022 [P] `go vet ./...` + full `go test ./...` green; fix fallout
-- [ ] T023 Reconcile spec-014 tool catalog contract (specs/014-tool-registry/contracts/tool-catalog.md) with the four new registry entries if that contract enumerates tools exhaustively (check first; skip with a note if additive entries don't belong there)
+- [x] T022 [P] `go vet ./...` + full `go test ./...` green; fix fallout
+- [x] T023 Reconcile spec-014 tool catalog contract (specs/014-tool-registry/contracts/tool-catalog.md) with the four new registry entries if that contract enumerates tools exhaustively (check first; skip with a note if additive entries don't belong there)
 
 *Post-merge (not part of this PR)*: `/grounding-wiki:wiki-update` re-pins notes whose sources changed (agent-mind, executor, sim-state-reducer, event-types, tool-registry, tool-loop, social-fabric); spec-bridge:sync moves the board.
 

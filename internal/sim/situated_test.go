@@ -5,6 +5,7 @@ package sim
 // text grammar. Table-driven, model-free — the whole layer is deterministic.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/store"
@@ -44,6 +45,53 @@ func TestMemoryReducerCopiesContext(t *testing.T) {
 	m1 := got[1]
 	if m1.Where != nil || m1.Why != "" || m1.Conv != 0 {
 		t.Errorf("pre-019 memory carried fabricated context: %+v", m1)
+	}
+}
+
+// TestPre019RoundTripByteIdentical (T020 / FR-014, SC-007): a state built from
+// pre-019 events (memories with no situated context, intents with no reason,
+// agents that never journal) marshals with NONE of the spec-019 JSON keys — so
+// a pre-019 snapshot round-trips byte-identically and a mixed-era log replays
+// cleanly. Two independent replays of the same log agree byte-for-byte.
+func TestPre019RoundTripByteIdentical(t *testing.T) {
+	m := testMap(42)
+
+	// A pre-019 event log: bare memories (no where/why/conv) and a bare intent
+	// (no reason) — exactly what a log recorded before this feature carries.
+	log := []store.Event{
+		{Tick: 100, Type: "agent.intent_set", Payload: mustPayload(IntentSetPayload{Agent: 0, Goal: "forage", Source: "reflex"})},
+		{Tick: 200, Type: "agent.memory_added", Payload: mustPayload(MemoryAddedPayload{Agent: 0, Text: "Built a fire.", Salience: 5, Subject: -1})},
+		{Tick: 300, Type: "agent.memory_added", Payload: mustPayload(MemoryAddedPayload{Agent: 1, Text: "Talked with Ash.", Salience: 3, Subject: 0})},
+	}
+	replay := func() []byte {
+		s := NewState(42, m)
+		for _, e := range log {
+			if err := s.Apply(e); err != nil {
+				t.Fatalf("apply %s: %v", e.Type, err)
+			}
+		}
+		return s.Marshal()
+	}
+
+	a, b := replay(), replay()
+	if string(a) != string(b) {
+		t.Fatalf("two replays of the same pre-019 log diverged:\n%s\n---\n%s", a, b)
+	}
+	// None of the spec-019 keys may appear — the omitempty fields stay absent.
+	for _, key := range []string{`"where"`, `"why"`, `"conv"`, `"reason"`, `"journal"`} {
+		if strings.Contains(string(a), key) {
+			t.Errorf("pre-019 state carries the spec-019 key %s — round-trip is not byte-identical:\n%s", key, a)
+		}
+	}
+	// And the reduced memories are pre-019-shaped (no fabricated context).
+	s := NewState(42, m)
+	for _, e := range log {
+		_ = s.Apply(e)
+	}
+	for _, mem := range s.Agents[0].Memories {
+		if mem.Where != nil || mem.Why != "" || mem.Conv != 0 {
+			t.Errorf("pre-019 memory gained context: %+v", mem)
+		}
 	}
 }
 

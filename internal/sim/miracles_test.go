@@ -747,7 +747,7 @@ func TestRebaseTaxonomyComplete(t *testing.T) {
 		"MeetingState.OpenedTick":  shift,
 		"MeetingState.GatherStart": shift,
 		// KEEP — history / identity / counters.
-		"Agent.Generation":                keep,
+		"Agent.Generation":                 keep,
 		"Agent.LastConsolidatedNight":      keep,
 		"Agent.ConsolidatedUpTo":           keep,
 		"Agent.LastConsolidateMark":        keep,
