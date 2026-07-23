@@ -210,19 +210,19 @@ contended surfaced.
 
 **Independent Test**: quickstart §3 + §8.
 
-- [ ] T017 [P] [US6] TUI provider table per contracts/status.md: the pane rendering tier
+- [x] T017 [P] [US6] TUI provider table per contracts/status.md: the pane rendering tier
   health/spend today renders one row per provider (name, model, up/down glyph, queue,
   inflight/slots, contended marker, spend share incl. `(unattributed)` when nonzero),
   sorted by name; view tests beside the existing TUI tests
-- [ ] T018 [P] [US6] CLI surfaces in cmd/promptworld: `promptworld llm` one-shot prints
+- [x] T018 [P] [US6] CLI surfaces in cmd/promptworld: `promptworld llm` one-shot prints
   serving provider and any `Skipped` reasons; `promptworld status` JSON passes the
   per-provider table through verbatim; calibrate output names providers; update command
   help strings that say local/cloud
-- [ ] T019 [US6] End-to-end proof per quickstart §3/§8 against a live world (v2 config
+- [x] T019 [US6] End-to-end proof per quickstart §3/§8 against a live world (v2 config
   with two local providers): capture the one-shot naming each expected provider, a
   forced-fallback skip reason, and the TUI table; record evidence in task-35 board notes
 
-- [ ] T020 [US6] v2-registry calibration in cmd/promptworld/calibrate.go: replace the
+- [x] T020 [US6] v2-registry calibration in cmd/promptworld/calibrate.go: replace the
   legacy `--tier local|cloud|all` iteration with iteration over the declared providers
   (legacy configs iterate their two derived providers — unchanged UX), pinning each
   reference call via `Request.Provider` and writing one profile entry per provider name

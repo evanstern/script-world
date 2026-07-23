@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 17:16'
+updated_date: '2026-07-23 17:31'
 labels:
   - engine
   - llm
@@ -53,7 +53,7 @@ Spec: specs/024-provider-routing
 - [x] #9 Spec phase: User Story 4 — One wallet, per-provider attribution (Priority: P4)
 - [x] #10 Spec phase: User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5)
 - [x] #11 Spec phase: Polish for the engine slices (Opus tier wrap-up)
-- [ ] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
+- [x] #12 Spec phase: User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]
 - [ ] #13 Spec phase: Composition with spec 025 (post-merge reconciliation)
 <!-- AC:END -->
 
@@ -91,4 +91,8 @@ Slice 3 (Opus 4.8, T013-T016) landed: 91ed103 (flock lease pool + worker integra
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 0/4 · Composition with spec 025 (post-merge reconciliation): 0/2
 
 Composition review vs TASK-72/spec 025 (user-requested, 2026-07-23): (1) max_tokens composes by construction — 025 made budgets top-level and KIND-scoped, exactly decision-5's kind/provider split; no per-tier token limits existed in 024's assumptions and no per-provider token fields are added; v2 marshal must round-trip max_tokens+loop_max_rounds byte-for-byte (cut as T021 with the conflict-bearing rebase of config.go). (2) 025's in-loop retry exposed a mid-cognition provider-switch hazard under per-call chain-walking (retry could land on a different provider than the transcript's earlier rounds — ID-convention mixing + estimator mis-attribution); ruled: tool-use loop pins its provider at run start incl. the retry, the run-level analog of scene pinning — FR-008 extended, research R9 added, cut as T022 (Opus). Rebase waits for the in-flight Sonnet US6 slice to land.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 4/4 · Composition with spec 025 (post-merge reconciliation): 0/2
+
+Slice 4 (Sonnet, T017-T020) landed: 1bf4ccd (TUI provider table), dd4279f (one-shot names provider + skip reasons), 0bc2fbd (v2 calibrate by declared provider, --tier kept as deprecated alias). T019 LIVE PROOF against real Ollama: conversation→cogito:3b (10.3s), planner→gemma4:12b-mlx (1.8s), forced fallback on meeting chain [bogus,gemma] — 3 hard failures opened bogus's breaker (post-dispatch-failure-is-final doctrine held), 4th call skipped with 'skipped: bogus (circuit-open)' and served by gemma; status --json provider table matched the contract; throwaway world cleaned up. Gate review: accepted the two additive read-only seams (Orchestrator.ProviderConfig accessor, toolloop.Job.Provider passthrough — the latter is exactly the seam T022 run-pinning needs) and the --tier deprecated-alias choice; TUI evidence rendered from live payload accepted (no interactive terminal available). Orchestrator spot-check: vet clean, tui+cmd suites green. Remaining: slice 5 (Opus) T021 rebase across the 025 merge + T022 run-level pinning.
 <!-- SECTION:NOTES:END -->
