@@ -113,14 +113,19 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	// reply, one combined line, exactly like the charter's today.
 	charter, charterNotice := loadCharter(mt.worldDir)
 	skills, skillNotices := loadSkills(mt.worldDir)
+	grant, manifestNotices := loadManifest(mt.worldDir)
 	var notices []string
 	if charterNotice != "" {
 		notices = append(notices, charterNotice)
 	}
 	notices = append(notices, skillNotices...)
-	// The declared/derived/door roster for this turn — the full metatron loop
-	// roster in US1; US2 filters it by the world's capability manifest.
-	roster := tool.LoopRosterMetatron()
+	notices = append(notices, manifestNotices...)
+	// The ONE granted roster for this turn — the manifest-filtered metatron loop
+	// roster (work_miracle's kind enum narrowed when restricted). It feeds all
+	// three gating layers alike: Job.Roster (declaration), the derived guidance
+	// (prose), and the handler set built from it (door), so an ungranted tool or
+	// kind is structurally absent from every one of them (FR-005).
+	roster := grantedRoster(grant)
 	mt.stateMu.Lock()
 	charges := mt.charges
 	tick := mt.clockAt
@@ -138,7 +143,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	jobID := fmt.Sprintf("turn-metatron-%d", tick)
 
 	result := TurnResult{}
-	d := &turnDispatch{mt: mt, charges: charges, alive: alive, result: &result}
+	d := &turnDispatch{mt: mt, charges: charges, alive: alive, result: &result, grant: grant}
 
 	callCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	res, err := mt.runLoop(callCtx, toolloop.Job{
@@ -202,11 +207,18 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 // input plumbing moved from a parsed JSON struct to the tool-call arguments.
 // Returns the landed nudge, or (nil, refusal reason) which the handler maps to a
 // rejected_gate the model may correct within the loop's round cap.
-func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool) (*Nudge, string) {
+func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
 	form = strings.ToLower(strings.TrimSpace(form))
+	// Capability gate (spec 021 R5.3, door layer): the world must grant this
+	// nudge form. Defense-in-depth behind the handler-absence gate — a form whose
+	// handler was never installed cannot reach here, but the check keeps the door
+	// authoritative on its own rather than trusting the wiring above it.
+	if !grant.allows("nudge_" + form) {
+		return nil, "that power is not granted in this world"
+	}
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, "the rendering was empty"
@@ -277,11 +289,19 @@ func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[
 // the soul append are UNCHANGED from the pre-loop turnReply path (spec 017 T020:
 // wrap, don't rewrite) — only the input moved from a parsed JSON struct to the
 // tool-call arguments (miracleArgs).
-func (mt *Metatron) landMiracle(mm miracleArgs, charges int) (*Miracle, string) {
+func (mt *Metatron) landMiracle(mm miracleArgs, charges int, grant grantSet) (*Miracle, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
 	kind := strings.ToLower(strings.TrimSpace(mm.Kind))
+	// Capability gate (spec 021 R5.3, door layer): work_miracle must be granted
+	// and this kind offered by the world. Defense-in-depth behind handler-absence
+	// (ungranted work_miracle installs no handler) and the declared kind enum
+	// (ungranted kinds are never declared) — the door refuses in-fiction even if
+	// a prompt-injected model conjures a call for an ungranted kind.
+	if !grant.allows("work_miracle") || !grant.allowsKind(kind) {
+		return nil, "that miracle is not granted in this world"
+	}
 
 	var params MiracleParams
 	var summary string

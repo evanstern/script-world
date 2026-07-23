@@ -1161,3 +1161,301 @@ func TestPromptDeterminism(t *testing.T) {
 		t.Error("skills not composed in ascending filename order")
 	}
 }
+
+// --- spec 021 US2: capability manifest ---
+
+// writeManifest writes capabilities.json into worldDir.
+func writeManifest(t *testing.T, worldDir, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(worldDir, "capabilities.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func grantNames(g grantSet) []string { return g.grantedTools() }
+
+// TestLoadManifest (spec 021 T014): every row of the capability-manifest
+// contract's semantics table.
+func TestLoadManifest(t *testing.T) {
+	full := grantNames(fullGrant())
+
+	t.Run("no file is the full default grant with no notice", func(t *testing.T) {
+		dir := t.TempDir()
+		g, notices := loadManifest(dir)
+		if !g.manifestDefault {
+			t.Error("manifestDefault should be true with no file")
+		}
+		if len(notices) != 0 {
+			t.Errorf("no-file notice: %v", notices)
+		}
+		if !reflect.DeepEqual(grantNames(g), full) {
+			t.Errorf("no-file grant = %v, want full %v", grantNames(g), full)
+		}
+		if g.kindsRestricted {
+			t.Error("no-file grant must not restrict kinds")
+		}
+	})
+
+	t.Run("valid subset grants exactly that", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		g, notices := loadManifest(dir)
+		if len(notices) != 0 {
+			t.Errorf("clean manifest notice: %v", notices)
+		}
+		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
+			t.Errorf("subset grant = %v, want [nudge_dream]", grantNames(g))
+		}
+		if g.manifestDefault {
+			t.Error("a present manifest is not the default")
+		}
+	})
+
+	t.Run("empty tools is conversation-only", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"tools":[]}`)
+		g, notices := loadManifest(dir)
+		if len(notices) != 0 {
+			t.Errorf("empty-tools notice: %v", notices)
+		}
+		if len(grantNames(g)) != 0 {
+			t.Errorf("empty tools granted %v, want none", grantNames(g))
+		}
+	})
+
+	t.Run("omitted tools key is unconstrained", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"miracle_kinds":["move"]}`)
+		g, _ := loadManifest(dir)
+		if !reflect.DeepEqual(grantNames(g), full) {
+			t.Errorf("omitted-tools grant = %v, want full %v", grantNames(g), full)
+		}
+	})
+
+	t.Run("malformed falls back to full with a notice", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `not json`)
+		g, notices := loadManifest(dir)
+		if len(notices) != 1 || !strings.Contains(notices[0], "not valid JSON") {
+			t.Errorf("malformed notice wrong: %v", notices)
+		}
+		if !reflect.DeepEqual(grantNames(g), full) {
+			t.Errorf("malformed grant = %v, want full", grantNames(g))
+		}
+	})
+
+	t.Run("unknown tool/kind names are ignored with a notice", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"tools":["nudge_dream","fly"],"miracle_kinds":["move","teleport"]}`)
+		g, notices := loadManifest(dir)
+		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
+			t.Errorf("grant after ignoring unknown = %v, want [nudge_dream]", grantNames(g))
+		}
+		joined := strings.Join(notices, " | ")
+		if !strings.Contains(joined, "fly") || !strings.Contains(joined, "teleport") {
+			t.Errorf("unknown-name notices missing: %v", notices)
+		}
+	})
+
+	t.Run("restricted miracle kinds", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"tools":["work_miracle"],"miracle_kinds":["move","give_item"]}`)
+		g, _ := loadManifest(dir)
+		if !g.kindsRestricted {
+			t.Fatal("kinds should be restricted")
+		}
+		if !reflect.DeepEqual(g.grantedKinds(), []string{"move", "give_item"}) {
+			t.Errorf("granted kinds = %v, want [move give_item] (registry order)", g.grantedKinds())
+		}
+		if g.allowsKind("time_snap") {
+			t.Error("time_snap should not be allowed")
+		}
+		if !g.allowsKind("move") {
+			t.Error("move should be allowed")
+		}
+	})
+}
+
+// TestGatingLayers (spec 021 T017, SC-003, FR-005): a subset world declares only
+// granted tools, its derived guidance names no ungranted tool/kind, and the door
+// refuses ungranted acts; an empty-tools world declares nothing yet converses;
+// a per-read manifest edit takes effect the next turn; charges are untouched.
+func TestGatingLayers(t *testing.T) {
+	t.Run("dream-only: declaration + prose + door", func(t *testing.T) {
+		mt, orch, _, dir := newTestAngel(t, "As you wish.")
+		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		grant, _ := loadManifest(dir)
+
+		// Declaration: only nudge_dream in the granted roster.
+		roster := grantedRoster(grant)
+		if len(roster) != 1 || roster[0].Name != "nudge_dream" {
+			t.Fatalf("declared roster = %+v, want only nudge_dream", roster)
+		}
+		// Prose: guidance mentions no omen/miracle.
+		g := tool.MetatronToolGuidance(roster)
+		for _, bad := range []string{"nudge_omen", "work_miracle", "give_item", "time_snap"} {
+			if strings.Contains(g, bad) {
+				t.Errorf("dream-only guidance leaks %q", bad)
+			}
+		}
+		// Door: omen and miracle refused directly (defense-in-depth grant check).
+		alive := map[int]bool{0: true}
+		if _, why := mt.landNudge("omen", "", "an omen", 1, alive, grant); why == "" {
+			t.Error("omen should be refused in a dream-only world")
+		}
+		if _, why := mt.landMiracle(miracleArgs{Kind: "give_item"}, 1, grant); why == "" {
+			t.Error("miracle should be refused in a dream-only world")
+		}
+		// Door: handler set has no omen/miracle handler.
+		d := &turnDispatch{mt: mt, charges: 1, alive: alive, result: &TurnResult{}, grant: grant}
+		h := mt.turnHandlers(d)
+		if _, ok := h["nudge_omen"]; ok {
+			t.Error("nudge_omen handler installed in a dream-only world")
+		}
+		if _, ok := h["work_miracle"]; ok {
+			t.Error("work_miracle handler installed in a dream-only world")
+		}
+		if _, ok := h["nudge_dream"]; !ok {
+			t.Error("nudge_dream handler missing")
+		}
+		// System prompt (a converse turn) reflects the subset: no miracle prose.
+		if _, err := mt.Turn(context.Background(), "counsel me"); err != nil {
+			t.Fatal(err)
+		}
+		reqs := orch.requests()
+		if strings.Contains(reqs[len(reqs)-1].System, "work_miracle") {
+			t.Error("dream-only system prompt still names work_miracle")
+		}
+	})
+
+	t.Run("kinds-restricted: enum + guidance + door", func(t *testing.T) {
+		mt, _, _, dir := newTestAngel(t, "ok")
+		writeManifest(t, dir, `{"tools":["work_miracle"],"miracle_kinds":["give_item"]}`)
+		grant, _ := loadManifest(dir)
+		roster := grantedRoster(grant)
+		// Declared kind enum is exactly [give_item].
+		var wm tool.Tool
+		for _, tl := range roster {
+			if tl.Name == "work_miracle" {
+				wm = tl
+			}
+		}
+		schema := tool.InputSchema(wm)
+		if !strings.Contains(string(schema), "give_item") || strings.Contains(string(schema), "time_snap") {
+			t.Errorf("restricted kind enum wrong: %s", schema)
+		}
+		// Door: time_snap refused, give_item passes the grant gate.
+		if _, why := mt.landMiracle(miracleArgs{Kind: "time_snap", Day: 1, Time: "12:00"}, 3, grant); why == "" {
+			t.Error("time_snap should be refused when restricted to give_item")
+		}
+	})
+
+	t.Run("empty-tools world still converses", func(t *testing.T) {
+		mt, orch, _, dir := newTestAngel(t, "I can only counsel you now.")
+		writeManifest(t, dir, `{"tools":[]}`)
+		grant, _ := loadManifest(dir)
+		if len(grantedRoster(grant)) != 0 {
+			t.Fatal("empty-tools world declared acting tools")
+		}
+		r, err := mt.Turn(context.Background(), "are you there?")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Reply != "I can only counsel you now." {
+			t.Errorf("conversation-only reply = %q", r.Reply)
+		}
+		reqs := orch.requests()
+		if !strings.Contains(reqs[len(reqs)-1].System, "no acting tools") {
+			t.Error("conversation-only system prompt missing the no-tools notice")
+		}
+	})
+
+	t.Run("manifest edit is live on the next turn (per-read)", func(t *testing.T) {
+		dir := t.TempDir()
+		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		g1, _ := loadManifest(dir)
+		if len(grantNames(g1)) != 1 {
+			t.Fatalf("first read grant = %v", grantNames(g1))
+		}
+		writeManifest(t, dir, `{"tools":["nudge_dream","nudge_omen"]}`)
+		g2, _ := loadManifest(dir)
+		if len(grantNames(g2)) != 2 {
+			t.Errorf("edited grant not live: %v", grantNames(g2))
+		}
+	})
+
+	t.Run("grants do not touch the charge bank", func(t *testing.T) {
+		mt, _, _, dir := newTestAngel(t, "ok")
+		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		mt.stateMu.Lock()
+		before := mt.charges
+		mt.stateMu.Unlock()
+		if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+			t.Fatal(err)
+		}
+		mt.stateMu.Lock()
+		after := mt.charges
+		mt.stateMu.Unlock()
+		if before != after {
+			t.Errorf("a converse turn under a restricted manifest changed charges %d→%d", before, after)
+		}
+	})
+}
+
+// TestNoManifestByteCompat (spec 021 T018, SC-003): with no capabilities.json the
+// granted roster IS the full loop roster and the composed prompt is byte-identical
+// to the explicit full-grant prompt — existing worlds are unaffected.
+func TestNoManifestByteCompat(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	g, notices := loadManifest(dir)
+	if !g.manifestDefault || len(notices) != 0 {
+		t.Fatalf("no-manifest world: default=%v notices=%v", g.manifestDefault, notices)
+	}
+	roster := grantedRoster(g)
+	full := tool.LoopRosterMetatron()
+	var gotNames, wantNames []string
+	for _, tl := range roster {
+		gotNames = append(gotNames, tl.Name)
+	}
+	for _, tl := range full {
+		wantNames = append(wantNames, tl.Name)
+	}
+	if !reflect.DeepEqual(gotNames, wantNames) {
+		t.Errorf("no-manifest roster = %v, want full %v", gotNames, wantNames)
+	}
+	charter, _ := loadCharter(dir)
+	if turnSystemPrompt(charter, nil, roster) != turnSystemPrompt(charter, nil, full) {
+		t.Error("no-manifest composed prompt differs from the explicit full-grant prompt")
+	}
+}
+
+// TestStagePresetsAreData (spec 021 T019, SC-006): TASK-68-shaped stage presets
+// load into the expected grant sets from manifest CONTENTS alone — no code per
+// stage.
+func TestStagePresetsAreData(t *testing.T) {
+	stages := []struct {
+		name      string
+		manifest  string
+		wantTools []string
+	}{
+		{"stage-1 basics", `{"tools":["nudge_dream"]}`, []string{"nudge_dream"}},
+		{"stage-3 full", `{"tools":["nudge_dream","nudge_omen","work_miracle"]}`,
+			[]string{"nudge_dream", "nudge_omen", "work_miracle"}},
+	}
+	for _, s := range stages {
+		t.Run(s.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeManifest(t, dir, s.manifest)
+			g, notices := loadManifest(dir)
+			if len(notices) != 0 {
+				t.Errorf("preset produced notices: %v", notices)
+			}
+			if !reflect.DeepEqual(g.grantedTools(), s.wantTools) {
+				t.Errorf("preset grant = %v, want %v", g.grantedTools(), s.wantTools)
+			}
+		})
+	}
+}

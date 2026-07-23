@@ -36,6 +36,7 @@ type turnDispatch struct {
 	charges int
 	alive   map[int]bool
 	result  *TurnResult
+	grant   grantSet // this world's capability grant (spec 021 US2): gates handlers + land
 
 	records []toolloop.CallRecord
 }
@@ -50,12 +51,23 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 // the form); work_miracle wraps landMiracle. converse is absent by design — it
 // is the final-text channel, and it is not on the declared loop roster
 // (tool.LoopRosterMetatron), so the model never calls it as a tool.
+//
+// Capability gating (spec 021 US2, door layer / R5.3): a handler is installed
+// ONLY for a tool the world grants. An ungranted tool therefore has no handler
+// and the loop rejects any call to it as rejected_unknown — structural absence
+// at the door, matching the structural absence in the declaration and the prose.
 func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
-	return map[string]toolloop.Handler{
-		"nudge_dream":  mt.handleNudge(d, "dream"),
-		"nudge_omen":   mt.handleNudge(d, "omen"),
-		"work_miracle": mt.handleMiracle(d),
+	h := make(map[string]toolloop.Handler, 3)
+	if d.grant.allows("nudge_dream") {
+		h["nudge_dream"] = mt.handleNudge(d, "dream")
 	}
+	if d.grant.allows("nudge_omen") {
+		h["nudge_omen"] = mt.handleNudge(d, "omen")
+	}
+	if d.grant.allows("work_miracle") {
+		h["work_miracle"] = mt.handleMiracle(d)
+	}
+	return h
 }
 
 // handleNudge wraps landNudge for one form. Door accept → landed (the report is
@@ -69,7 +81,7 @@ func (mt *Metatron) handleNudge(d *turnDispatch, form string) toolloop.Handler {
 		// omen (landNudge ignores it).
 		target := argString(call.Args, "target")
 		text := argString(call.Args, "text")
-		if nudge, why := mt.landNudge(form, target, text, d.charges, d.alive); nudge != nil {
+		if nudge, why := mt.landNudge(form, target, text, d.charges, d.alive, d.grant); nudge != nil {
 			d.result.Nudge = nudge
 			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the " + form + " reached its mark"}
 		} else {
@@ -81,7 +93,7 @@ func (mt *Metatron) handleNudge(d *turnDispatch, form string) toolloop.Handler {
 // handleMiracle wraps landMiracle. Same accept/reject translation as handleNudge.
 func (mt *Metatron) handleMiracle(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
-		if miracle, why := mt.landMiracle(parseMiracleArgs(call.Args), d.charges); miracle != nil {
+		if miracle, why := mt.landMiracle(parseMiracleArgs(call.Args), d.charges, d.grant); miracle != nil {
 			d.result.Miracle = miracle
 			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the miracle is worked: " + miracle.Summary}
 		} else {

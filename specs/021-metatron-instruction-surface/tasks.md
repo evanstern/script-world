@@ -102,32 +102,32 @@ door; no-manifest worlds byte-compatible with today.
 **Independent Test**: quickstart §3 — subset manifests change what is declared/landable
 next turn; missing/malformed manifests fall back per contract.
 
-- [ ] T013 [US2] Implement `loadManifest(worldDir)` in internal/metatron/charter.go
+- [X] T013 [US2] Implement `loadManifest(worldDir)` in internal/metatron/charter.go
       returning the effective grant set + notice: parse `capabilities.json` per
       contracts/capability-manifest.md — missing → full grant no notice; malformed →
       full grant + notice; unknown tool/kind names → ignored + notice; `tools: []` →
       conversation-only; `miracle_kinds` omitted → all kinds (data-model.md §3)
-- [ ] T014 [P] [US2] Unit tests for loadManifest in internal/metatron/metatron_test.go
+- [X] T014 [P] [US2] Unit tests for loadManifest in internal/metatron/metatron_test.go
       covering every row of the contract's semantics table
-- [ ] T015 [US2] Build the granted roster per-read in `Turn()`
+- [X] T015 [US2] Build the granted roster per-read in `Turn()`
       (internal/metatron/turn.go): filter `tool.LoopRosterMetatron()` by grants; apply
       `tool.RestrictEnum(work_miracle, "kind", kinds)` when restricted; pass granted
       roster to `toolloop.Job.Roster` AND to `MetatronToolGuidance` (declaration + prose
       layers, research R5.1–R5.2)
-- [ ] T016 [US2] Door-layer enforcement: build `turnHandlers` (internal/metatron/
+- [X] T016 [US2] Door-layer enforcement: build `turnHandlers` (internal/metatron/
       toolcalls.go) from the granted set only, and add grant checks to
       `landNudge`/`landMiracle` (internal/metatron/turn.go) — ungranted form/kind refused
       with an in-fiction reason exactly like existing refusals (research R5.3); manifest
       notice joins the reply-notice channel
-- [ ] T017 [US2] Gating tests in internal/metatron/metatron_test.go: dream-only world ⇒
+- [X] T017 [US2] Gating tests in internal/metatron/metatron_test.go: dream-only world ⇒
       declared schemas contain only nudge_dream, guidance mentions no omen/miracle, omen
       call refused at door; kinds-restricted world ⇒ kind enum + guidance restricted,
       time_snap refused; empty-tools world ⇒ no tools declared, converse still lands;
       revoked-mid-world ⇒ next turn ungranted (per-read); charges untouched by grants
-- [ ] T018 [P] [US2] No-manifest byte-compat test: absent `capabilities.json` ⇒ declared
+- [X] T018 [P] [US2] No-manifest byte-compat test: absent `capabilities.json` ⇒ declared
       roster ≡ `tool.LoopRosterMetatron()` and composed prompt identical to the
       full-grant prompt; full `go test ./...` stays green (SC-003)
-- [ ] T019 [P] [US2] Stage-preset fixtures test (SC-006): two TASK-68-shaped manifests
+- [X] T019 [P] [US2] Stage-preset fixtures test (SC-006): two TASK-68-shaped manifests
       (stage-1 `{"tools":["nudge_dream"]}`; stage-3 full) load into the expected grant
       sets — presets are pure data, in internal/metatron/metatron_test.go
 

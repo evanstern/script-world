@@ -1,6 +1,7 @@
 package metatron
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/evanstern/promptworld/internal/persona"
+	"github.com/evanstern/promptworld/internal/tool"
 )
 
 // The charter is the game's base player-editable prompt, joined by an optional
@@ -130,6 +132,176 @@ func skillNames(worldDir string) []string {
 	out := make([]string, len(skills))
 	for i, s := range skills {
 		out[i] = s.name
+	}
+	return out
+}
+
+// grantSet is a world's effective capability grant for one turn/peek (spec 021
+// US2): which metatron loop tools are offered, and (when restricted) which
+// miracle kinds. It drives all three gating layers alike — the declared roster,
+// the derived guidance, and the door — so they cannot disagree (FR-005). Maps
+// are used for O(1) membership; nothing is ever iterated into ordered output.
+type grantSet struct {
+	tools           map[string]bool // granted metatron loop-tool names
+	kinds           map[string]bool // granted miracle kinds; meaningful only when restricted
+	kindsRestricted bool            // true ⇒ only kinds in `kinds` are offered for work_miracle
+	manifestDefault bool            // true ⇒ no capabilities.json on disk (full default grant)
+}
+
+// allows reports whether a metatron loop tool is granted this world.
+func (g grantSet) allows(name string) bool { return g.tools[name] }
+
+// allowsKind reports whether a miracle kind may land: unrestricted worlds allow
+// every kind; a restricted world allows only its declared subset.
+func (g grantSet) allowsKind(kind string) bool {
+	if !g.kindsRestricted {
+		return true
+	}
+	return g.kinds[kind]
+}
+
+// grantedTools returns the granted metatron loop-tool names in registry order
+// (LoopRosterMetatron order) — the deterministic surface Status renders.
+func (g grantSet) grantedTools() []string {
+	var out []string
+	for _, t := range tool.LoopRosterMetatron() {
+		if g.tools[t.Name] {
+			out = append(out, t.Name)
+		}
+	}
+	return out
+}
+
+// grantedKinds returns the granted miracle kinds in registry order when
+// restricted, else nil (all kinds). Deterministic — walks tool.MiracleKinds().
+func (g grantSet) grantedKinds() []string {
+	if !g.kindsRestricted {
+		return nil
+	}
+	var out []string
+	for _, k := range tool.MiracleKinds() {
+		if g.kinds[k] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// fullGrant is the default grant a world with no (or an unusable) manifest gets:
+// the entire metatron loop roster, all miracle kinds — byte-compatible with the
+// pre-021 angel (FR-007, SC-003).
+func fullGrant() grantSet {
+	tools := make(map[string]bool)
+	for _, t := range tool.LoopRosterMetatron() {
+		tools[t.Name] = true
+	}
+	return grantSet{tools: tools}
+}
+
+// manifestDoc is the parse target for capabilities.json. Absent vs empty is
+// meaningful and preserved by encoding/json: an omitted key decodes to nil, an
+// explicit [] to a non-nil empty slice.
+type manifestDoc struct {
+	Tools        []string `json:"tools"`
+	MiracleKinds []string `json:"miracle_kinds"`
+}
+
+// loadManifest reads the world's capabilities.json fresh (FR-001) and returns
+// the effective grant set plus one notice per issue, mirroring the charter's
+// permissive-fallback teaching model (spec 021 R4, contracts/capability-manifest.md):
+//   - no file → full grant, NO notice, manifestDefault true (byte-compatible today);
+//   - unreadable / malformed JSON → full grant + notice (a typo never bricks the angel);
+//   - unknown tool/kind names → ignored + notice, the valid remainder applies;
+//   - omitted "tools" key → unconstrained (all tools), symmetric with an omitted
+//     "miracle_kinds" meaning all kinds; explicit "tools": [] → conversation-only;
+//   - "miracle_kinds" omitted → all kinds; present → exactly that (valid) subset.
+//
+// Conversation is never gateable here — it is the final-text channel, not a
+// roster tool (FR-006); a world granting nothing still converses.
+func loadManifest(worldDir string) (grantSet, []string) {
+	path := filepath.Join(worldDir, "capabilities.json")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		g := fullGrant()
+		g.manifestDefault = true
+		return g, nil
+	}
+	if err != nil {
+		return fullGrant(), []string{"capabilities.json could not be read — serving with the full tool roster"}
+	}
+	var doc manifestDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return fullGrant(), []string{"capabilities.json is not valid JSON — serving with the full tool roster"}
+	}
+
+	var notices []string
+	known := make(map[string]bool)
+	var order []string
+	for _, t := range tool.LoopRosterMetatron() {
+		known[t.Name] = true
+		order = append(order, t.Name)
+	}
+
+	tools := make(map[string]bool)
+	if doc.Tools == nil {
+		for _, n := range order { // omitted key ⇒ unconstrained
+			tools[n] = true
+		}
+	} else {
+		var unknown []string
+		for _, n := range doc.Tools {
+			if known[n] {
+				tools[n] = true
+			} else {
+				unknown = append(unknown, n)
+			}
+		}
+		if len(unknown) > 0 {
+			notices = append(notices, "capabilities.json lists unknown tool(s): "+strings.Join(unknown, ", ")+" — ignored")
+		}
+	}
+
+	g := grantSet{tools: tools}
+	if doc.MiracleKinds != nil {
+		knownKind := make(map[string]bool)
+		for _, k := range tool.MiracleKinds() {
+			knownKind[k] = true
+		}
+		kinds := make(map[string]bool)
+		var unknown []string
+		for _, k := range doc.MiracleKinds {
+			if knownKind[k] {
+				kinds[k] = true
+			} else {
+				unknown = append(unknown, k)
+			}
+		}
+		if len(unknown) > 0 {
+			notices = append(notices, "capabilities.json lists unknown miracle kind(s): "+strings.Join(unknown, ", ")+" — ignored")
+		}
+		g.kinds = kinds
+		g.kindsRestricted = true
+	}
+	return g, notices
+}
+
+// grantedRoster is the effective metatron loop roster for a turn: the full loop
+// roster filtered to granted tools, with work_miracle's kind enum narrowed to
+// the granted kinds when restricted (copy-on-write via tool.RestrictEnum, the
+// registry untouched). This ONE roster feeds all three gating layers — Job.Roster
+// (declaration), MetatronToolGuidance (prose), and the handler set (door) — so an
+// ungranted tool or kind is structurally absent from every one of them (FR-005).
+func grantedRoster(g grantSet) []tool.Tool {
+	full := tool.LoopRosterMetatron()
+	out := make([]tool.Tool, 0, len(full))
+	for _, t := range full {
+		if !g.tools[t.Name] {
+			continue
+		}
+		if t.Name == "work_miracle" && g.kindsRestricted {
+			t = tool.RestrictEnum(t, "kind", g.grantedKinds())
+		}
+		out = append(out, t)
 	}
 	return out
 }
