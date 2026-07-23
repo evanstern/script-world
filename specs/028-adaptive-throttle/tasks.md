@@ -91,11 +91,11 @@ full arithmetic payloads; router verdicts at 16x admit what 32x refused.
 **Independent Test**: quickstart §3 second half — recovery events climb back after the burst; marginal steady
 load parks at a stable notch.
 
-- [ ] T012 [US3] Implement the recovery path (projection `debt × candidateTPS/currentTPS` vs
+- [x] T012 [US3] Implement the recovery path (projection `debt × candidateTPS/currentTPS` vs
       `ShedThreshold × RecoverHeadroom`, `RecoveryWindow` accrual, never-above-requested, clear-governed-at-
       requested) in `internal/cognition/governor.go`; tests: notch-by-notch climb, marginal-load parking
       (no oscillation, SC-003), window asymmetry in `internal/cognition/governor_test.go`
-- [ ] T013 [US3] End-to-end recovery test through loop + reducer: `clock.governor_recovered` sequence restores
+- [x] T013 [US3] End-to-end recovery test through loop + reducer: `clock.governor_recovered` sequence restores
       requested speed and clears `RequestedSpeed`; replay byte-identity for shed→recover→shed logs in
       `internal/sim/` test files
 
