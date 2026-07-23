@@ -3,10 +3,10 @@ id: TASK-82
 title: >-
   Player docs: HTML user documentation generated from the wiki + a
   docs-freshness skill
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 18:06'
-updated_date: '2026-07-23 18:44'
+updated_date: '2026-07-23 18:59'
 labels:
   - docs
 dependencies: []
@@ -30,17 +30,19 @@ Spec: specs/026-player-docs
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A docs folder of self-contained HTML player pages exists, covering at minimum: getting started (install→new→start→attach), playing via Metatron + charter, time/speed/pause, reading the chronicle/story, and a plain-language 'the AI behind the village' page
-- [ ] #2 Every page records the wiki notes + commit it was rendered from; a skill regenerates stale pages and offers a check mode that reports staleness without writing
-- [ ] #3 The skill is planted as a project skill and documented (name + when to run) in CLAUDE.md or the skill's own description; running it twice in a row is a no-op
+- [x] #1 A docs folder of self-contained HTML player pages exists, covering at minimum: getting started (install→new→start→attach), playing via Metatron + charter, time/speed/pause, reading the chronicle/story, and a plain-language 'the AI behind the village' page
+- [x] #2 Every page records the wiki notes + commit it was rendered from; a skill regenerates stale pages and offers a check mode that reports staleness without writing
+- [x] #3 The skill is planted as a project skill and documented (name + when to run) in CLAUDE.md or the skill's own description; running it twice in a row is a no-op
 - [x] #4 Player docs contain no facts that contradict docs/wiki at their pinned commit (spot-audit recorded on this task)
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (blocks all user stories)
-- [ ] #7 Spec phase: User Story 1 — new player gets to a running world (P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — player learns to play (P2)
-- [ ] #9 Spec phase: User Story 3 — provable freshness (P3)
-- [ ] #10 Spec phase: Polish & Validation
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (blocks all user stories)
+- [x] #7 Spec phase: User Story 1 — new player gets to a running world (P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — player learns to play (P2)
+- [x] #9 Spec phase: User Story 3 — provable freshness (P3)
+- [x] #10 Spec phase: Polish & Validation
 <!-- AC:END -->
+
+
 
 ## Implementation Plan
 
@@ -76,4 +78,12 @@ Grounding spot-audit (AC #4, quickstart V6) — 17 claims, zero contradictions:
 | llm-setup-basics | API keys never stored in llm.json, only the env-var name | docs/llm-providers.md@2583050 | CONFIRMED |
 
 Audit methodology: wiki-note claims verified against note content at HEAD (the notes' verified_against pins name the CODE commit each note was verified against, not the note file's own blob — the note text itself postdates the pin by construction); README/llm-providers pins are last-touching commits, verified literally via git show.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocks all user stories): 1/1 · User Story 1 — new player gets to a running world (P1) 🎯 MVP: 2/2 · User Story 2 — player learns to play (P2): 6/6 · User Story 3 — provable freshness (P3): 3/3 · Polish & Validation: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocks all user stories): 1/1 · User Story 1 — new player gets to a running world (P1) 🎯 MVP: 2/2 · User Story 2 — player learns to play (P2): 6/6 · User Story 3 — provable freshness (P3): 3/3 · Polish & Validation: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
