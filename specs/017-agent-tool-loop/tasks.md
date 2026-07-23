@@ -227,7 +227,7 @@ live-vs-replay byte-identity on a loop-era run.
       specs/017-agent-tool-loop/contracts/
 - [x] T027 Run quickstart.md end-to-end (both tiers, fallback, replay-verify, budget
       sanity) and record evidence on TASK-52
-- [ ] T028 Re-pin grounding wiki notes touched by this feature
+- [x] T028 Re-pin grounding wiki notes touched by this feature
       (llm-orchestrator, cognition, agent-mind, tool-registry, event-types,
       sim-state-reducer, metatron) via /grounding-wiki:wiki-update (constitution
       Principle IV; after merge-ready diff is final)

@@ -1,10 +1,10 @@
 ---
 id: TASK-52
 title: 'Agent tool-use loop: minds call tools instead of prompt stuffing'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-22 02:20'
-updated_date: '2026-07-23 01:28'
+updated_date: '2026-07-23 01:52'
 labels:
   - agent-mind
   - llm
@@ -38,19 +38,19 @@ Spec: specs/017-agent-tool-loop
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Mind LLM calls can declare tools; a loop executes model tool calls via a registry and feeds results back until a final answer, with a hard iteration/budget cap
-- [ ] #2 Mutating tool handlers emit events and are reducer-applied; replay never re-runs the tool loop and reproduces identical state
-- [ ] #3 Works on at least one local-tier and the cloud-tier provider, with an explicit documented fallback for tiers that cannot tool-call reliably
-- [ ] #4 Metering/governor accounts for multi-call cognitions (estimates + calibration remain sane)
-- [ ] #5 Tool-call trace is first-class and correlatable end-to-end: every tool call is a recorded artifact (including rejected/never-grounded calls), and downstream grounding events link back to the causing call — e.g. JobID carried into IntentSetPayload — so 'tool call → verdict → grounding chain' is queryable from the event log without adjacency inference
+- [x] #1 Mind LLM calls can declare tools; a loop executes model tool calls via a registry and feeds results back until a final answer, with a hard iteration/budget cap
+- [x] #2 Mutating tool handlers emit events and are reducer-applied; replay never re-runs the tool loop and reproduces identical state
+- [x] #3 Works on at least one local-tier and the cloud-tier provider, with an explicit documented fallback for tiers that cannot tool-call reliably
+- [x] #4 Metering/governor accounts for multi-call cognitions (estimates + calibration remain sane)
+- [x] #5 Tool-call trace is first-class and correlatable end-to-end: every tool call is a recorded artifact (including rejected/never-grounded calls), and downstream grounding events link back to the causing call — e.g. JobID carried into IntentSetPayload — so 'tool call → verdict → grounding chain' is queryable from the event log without adjacency inference
 - [x] #6 Spec phase: Setup
 - [x] #7 Spec phase: Foundational (blocking all stories)
-- [ ] #8 Spec phase: User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP
-- [ ] #9 Spec phase: User Story 2 — replay reproduces state without re-running loops (P1)
-- [ ] #10 Spec phase: User Story 3 — every tool call is a first-class correlatable artifact (P2)
-- [ ] #11 Spec phase: User Story 4 — both tiers + documented fallback (P2)
-- [ ] #12 Spec phase: User Story 5 — governor stays sane on multi-call cognitions (P3)
-- [ ] #13 Spec phase: Polish & Cross-Cutting
+- [x] #8 Spec phase: User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP
+- [x] #9 Spec phase: User Story 2 — replay reproduces state without re-running loops (P1)
+- [x] #10 Spec phase: User Story 3 — every tool call is a first-class correlatable artifact (P2)
+- [x] #11 Spec phase: User Story 4 — both tiers + documented fallback (P2)
+- [x] #12 Spec phase: User Story 5 — governor stays sane on multi-call cognitions (P3)
+- [x] #13 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -97,4 +97,12 @@ spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User
 2026-07-22 Opus 4.8 landed T025b: (1) b91830d — successes-only estimator feed (failing-test-first: refused 0ms loop moved cloud sec/pt 10→8 pre-fix, stays at bootstrap post-fix; landed/model_done/cap_exhausted feed, refusals/errors feed nothing; single-defer switch, can't double-fire; cap_exhausted correctly still feeds — N full rounds are completed model work; four failure-path tests switched to assertNotObserved); (2) 4fe8b89 — mind test harness -race cure (fixture-only: newLoopMind starts the loop paused so setup mutations/reads never race the tick goroutine; the one reflex test resumes post-setup; -race -count=3 green, SC003 -race -count=8 green). Full suite incl e2e green, -race green on toolloop+mind. Remaining: T027 quickstart live legs, T028 wiki re-pin (post-merge), then PR.
 
 2026-07-22 T027 live quickstart evidence (harvested by planning tier; scratch worlds in /tmp, all daemons stopped): [§2 native, cogito:3b] model NEVER function-calls natively — 88/88 unusable, zero tool calls, villagers on reflex only; the exact documented flip-to-json symptom (native-mode mechanics separately proven end-to-end by the e2e fake-LLM native tool_calls suite). First attempt at max speed: 2908/2908 suppressed — governor bootstrap estimates working as designed. [§3 json fallback, cogito:3b, 8x, ~8min] 84 cognitions → 104 cog.tool_call: 56 landed / 31 rejected_gate / 20 rejected_malformed; 19 distinct tools (muse 48, forage 9, set_plan 8 — all set_plan malformed w/ repairable reasons from the driver validator, small-model limitation recorded honestly); 31 job-carrying agent.intent_set; 24 muse agent.thought landings; verbatim chain sample for planner-0-300: thought→intent_set{job}→outcome{landed}→tool_call{landed,ord 1}, resolved by job alone. [§5] no replay CLI verb — committed T015 test (genesis+snapshot byte-identity vs live) is the evidence. [§6] T023/T025b committed tests. [§4 cloud] BLOCKED: no ANTHROPIC_API_KEY in session env; covered by anthropic wire fixtures + metatron scripted-loop tests. FR-010 proven live: the fallback rescued a native-unreliable model with identical artifact shape.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking all stories): 8/8 · User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP: 5/5 · User Story 2 — replay reproduces state without re-running loops (P1): 2/2 · User Story 3 — every tool call is a first-class correlatable artifact (P2): 4/4 · User Story 4 — both tiers + documented fallback (P2): 4/4 · User Story 5 — governor stays sane on multi-call cognitions (P3): 2/2 · Polish & Cross-Cutting: 5/5 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocking all stories): 8/8 · User Story 1 — a mind acts by calling a tool (P1) 🎯 MVP: 5/5 · User Story 2 — replay reproduces state without re-running loops (P1): 2/2 · User Story 3 — every tool call is a first-class correlatable artifact (P2): 4/4 · User Story 4 — both tiers + documented fallback (P2): 4/4 · User Story 5 — governor stays sane on multi-call cognitions (P3): 2/2 · Polish & Cross-Cutting: 5/5). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
