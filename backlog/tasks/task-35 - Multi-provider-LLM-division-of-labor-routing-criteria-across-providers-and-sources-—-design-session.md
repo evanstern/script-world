@@ -3,10 +3,10 @@ id: TASK-35
 title: >-
   Multi-provider LLM division of labor: routing criteria across providers and
   sources — design session
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 17:59'
+updated_date: '2026-07-23 18:14'
 labels:
   - engine
   - llm
@@ -100,3 +100,9 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · Us
 
 Slice 5 (Opus 4.8, T021-T022) landed: rebase across the 025 merge replayed clean with all composition sites verified (max_tokens/retry/budget plumbing intact), 6808a35 carries max_tokens through the shape-aware v2 marshal with byte-for-byte round-trip tests, 3128dee pins the tool-use loop's provider at run start (explicit Job.Provider honored; 025 retry inherits the pin structurally; ObserveCognition exact by construction) with 4 scenario tests. Spec-025 retry tests pass byte-identical; legacy-equivalence suite green unmodified. Note for housekeeping: gofmt under go 1.26.4 flags 5 pre-existing files on main (const-alignment skew from an older gofmt) — none touched by this branch. Done move deliberately held until PR merge + wiki re-pin per constitution IV.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 3/3 · User Story 1 — Providers are declared, routes are chains, yesterday's worlds still boot (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Division of labor: per-provider speed truth (Priority: P2): 2/2 · User Story 3 — Fallback is chain-walking; personas never switch voices (Priority: P3): 2/2 · User Story 4 — One wallet, per-provider attribution (Priority: P4): 1/1 · User Story 5 — Worlds sharing an endpoint coordinate instead of thrashing (Priority: P5): 2/2 · Polish for the engine slices (Opus tier wrap-up): 2/2 · User Story 6 — The operator can see where every call went and why (Priority: P6) [Sonnet slice]: 4/4 · Composition with spec 025 (post-merge reconciliation): 2/2). Derived Done by spec-bridge sync. Design session output: decision-5 + spec 024; shipped as PR #52 (merge d56b272); wiki re-pinned (13 notes at 056c53a); operator guide docs/llm-providers.md + README setup section; TASK-24 closed into the endpoint-lease story; follow-on TASK-82 (player docs) cut separately.
+<!-- SECTION:FINAL_SUMMARY:END -->
