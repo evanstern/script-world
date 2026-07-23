@@ -362,10 +362,13 @@ var metatronTools = []Tool{
 	//
 	// Gate Charge, like the nudges: the bank must hold at least one charge, and
 	// the reducer dry-run enforces the real per-kind price (2 for time_snap, 1
-	// for the rest, keyed by event type in sim.miracleCost). Cost.Charges is 1 —
-	// the gate's minimum, not the per-kind price. Its Events are the four miracle
-	// event types plus the FR-018 perception memory, all already on
-	// injectSocialWhitelist (spec 016).
+	// for the rest). That per-kind price now has ONE authoritative source in this
+	// package — miracleCosts / MiracleCost / MiracleCostsByEvent (spec 021 R7) —
+	// from which sim.miracleCost (enforcement) and MetatronToolGuidance (the
+	// model-facing prose) both derive, so a cost edit propagates everywhere with
+	// no second copy (SC-004). Cost.Charges is 1 — the gate's minimum, not the
+	// per-kind price. Its Events are the four miracle event types plus the FR-018
+	// perception memory, all already on injectSocialWhitelist (spec 016).
 	{Name: "work_miracle", Effect: Expressive, Gate: Charge,
 		Params: miracleParams(),
 		Cost:   Cost{Charges: 1},

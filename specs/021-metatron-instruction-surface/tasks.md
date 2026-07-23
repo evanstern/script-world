@@ -161,10 +161,10 @@ read.
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T022 Run the full quickstart validation (quickstart.md §§1–6) in the worktree:
+- [X] T022 Run the full quickstart validation (quickstart.md §§1–6) in the worktree:
       `go build ./... && go test ./...`, live smoke of hot-reload + gating + status in a
       scratch world; fix anything found
-- [ ] T023 Reconcile doc comments touched by the change (charter.go header comment now
+- [X] T023 Reconcile doc comments touched by the change (charter.go header comment now
       covers skills+manifest; roster.go/registry.go comments where cost table moved);
       note for post-merge: wiki re-pin via /grounding-wiki:wiki-update (sources:
       metatron.md, metatron-miracles.md, tool-registry.md, tool-loop.md, tui-client.md,
