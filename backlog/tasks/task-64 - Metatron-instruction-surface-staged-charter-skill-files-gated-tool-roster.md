@@ -1,10 +1,10 @@
 ---
 id: TASK-64
 title: 'Metatron instruction surface: staged charter + skill files + gated tool roster'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 03:27'
-updated_date: '2026-07-23 06:03'
+updated_date: '2026-07-23 06:06'
 labels:
   - review-2026-07-22
   - teaching-game
@@ -29,18 +29,18 @@ Spec: specs/021-metatron-instruction-surface
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Charter keeps per-read hot-reload; player edits take effect next turn with no restart
-- [ ] #2 Skill files in the world dir compose into the turn prompt beneath the fixed frame; fixed-frame invariants provably not overridable from any editable file
-- [ ] #3 Per-world capability manifest gates which tools appear in the roster sent to the model; ungranted tools are structurally absent (not declared), not prose-forbidden
-- [ ] #4 Prose tool list in turnSystemPrompt replaced by registry-derived schemas; miracle costs have one source of truth
-- [ ] #5 TUI metatron status shows instruction-file provenance (default/custom) and granted tool set
-- [ ] #6 Spec Kit spec written and linked via spec-bridge before implementation (non-trivial task)
-- [ ] #7 Spec phase: Setup
-- [ ] #8 Spec phase: Foundational (blocking prerequisites in `internal/tool` + `internal/sim`)
-- [ ] #9 Spec phase: User Story 1 — Player-authored skill files (Priority: P1) 🎯 MVP
-- [ ] #10 Spec phase: User Story 2 — World-scoped capability grants (Priority: P2)
-- [ ] #11 Spec phase: User Story 3 — Provenance + grants in the TUI (Priority: P3)
-- [ ] #12 Spec phase: Polish & Cross-Cutting
+- [x] #1 Charter keeps per-read hot-reload; player edits take effect next turn with no restart
+- [x] #2 Skill files in the world dir compose into the turn prompt beneath the fixed frame; fixed-frame invariants provably not overridable from any editable file
+- [x] #3 Per-world capability manifest gates which tools appear in the roster sent to the model; ungranted tools are structurally absent (not declared), not prose-forbidden
+- [x] #4 Prose tool list in turnSystemPrompt replaced by registry-derived schemas; miracle costs have one source of truth
+- [x] #5 TUI metatron status shows instruction-file provenance (default/custom) and granted tool set
+- [x] #6 Spec Kit spec written and linked via spec-bridge before implementation (non-trivial task)
+- [x] #7 Spec phase: Setup
+- [x] #8 Spec phase: Foundational (blocking prerequisites in `internal/tool` + `internal/sim`)
+- [x] #9 Spec phase: User Story 1 — Player-authored skill files (Priority: P1) 🎯 MVP
+- [x] #10 Spec phase: User Story 2 — World-scoped capability grants (Priority: P2)
+- [x] #11 Spec phase: User Story 3 — Provenance + grants in the TUI (Priority: P3)
+- [x] #12 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -57,4 +57,14 @@ Spec 021 linked via spec-bridge (marker + 6 phase ACs seeded, gate green), artif
 Implementation complete: Opus 4.8 spec-implementer finished T001-T023 (5 checkpoint commits, HEAD 459b984 on task-64-metatron-instruction-surface, pushed). Orchestrator gate PASSED: independent go test ./... 20/20 ok (e2e fresh 182s); leaf constraint, fixed-frame-last, three-layer gating, manifest fallbacks, TUI region confinement all verified in the diff; 3 deviations reviewed & accepted (doctrine line gated on work_miracle grant; {} manifest = full grant; kinds mirror-test retained). PR #45 opened. MERGE BLOCKED by session permissions — awaiting user merge. Post-merge remaining: wiki re-pin (6 sources), spec-bridge sync, tick ACs 1-6, worktree cleanup, Done.
 
 PR #45 MERGED by Evan (f651ab8, 2026-07-23). Proceeding post-merge: wiki re-pin, spec-bridge sync, AC ticks, worktree cleanup.
+
+ACs 1-6 proven by merged PR #45 (f651ab8): #1 per-read hot-reload for charter/skills/manifest (loadSkills/loadManifest per-turn, TestSkillHotReload-class tests); #2 skills compose beneath charter, fixed frame compile-time constant after all editable bytes (TestFixedFrameHolds adversarial battery, TestPromptDeterminism); #3 manifest gates declaration+prose+door, ungranted tools structurally absent (TestGatingLayers, TestNoManifestByteCompat); #4 prose list replaced by tool.MetatronToolGuidance, single cost source tool.MiracleCost with sim deriving (TestMiracleCostDerivedFromTool, drift tests); #5 TUI metatron header renders charter provenance + skill count + granted tools (views.go metatronView, tui_test); #6 spec 021 written+linked via spec-bridge before implementation (commit 88cfee3 predates implementation). Worktree removed, local+remote branch deleted, root ff'd.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking prerequisites in `internal/tool` + `internal/sim`): 6/6 · User Story 1 — Player-authored skill files (Priority: P1) 🎯 MVP: 5/5 · User Story 2 — World-scoped capability grants (Priority: P2): 7/7 · User Story 3 — Provenance + grants in the TUI (Priority: P3): 2/2 · Polish & Cross-Cutting: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocking prerequisites in `internal/tool` + `internal/sim`): 6/6 · User Story 1 — Player-authored skill files (Priority: P1) 🎯 MVP: 5/5 · User Story 2 — World-scoped capability grants (Priority: P2): 7/7 · User Story 3 — Provenance + grants in the TUI (Priority: P3): 2/2 · Polish & Cross-Cutting: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
