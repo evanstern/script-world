@@ -107,7 +107,20 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	}
 	defer mt.turnBusy.Store(false)
 
-	charter, notice := loadCharter(mt.worldDir)
+	// The player-editable instruction surface, all read fresh this turn (FR-001):
+	// the charter, the skill files composed beneath it, and (US2) the capability
+	// manifest. Every fallback/truncation/skip becomes a notice prefixed to the
+	// reply, one combined line, exactly like the charter's today.
+	charter, charterNotice := loadCharter(mt.worldDir)
+	skills, skillNotices := loadSkills(mt.worldDir)
+	var notices []string
+	if charterNotice != "" {
+		notices = append(notices, charterNotice)
+	}
+	notices = append(notices, skillNotices...)
+	// The declared/derived/door roster for this turn — the full metatron loop
+	// roster in US1; US2 filters it by the world's capability manifest.
+	roster := tool.LoopRosterMetatron()
 	mt.stateMu.Lock()
 	charges := mt.charges
 	tick := mt.clockAt
@@ -131,9 +144,9 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	res, err := mt.runLoop(callCtx, toolloop.Job{
 		JobID:     jobID,
 		Kind:      llm.KindMetatron,
-		System:    turnSystemPrompt(charter),
+		System:    turnSystemPrompt(charter, skills, roster),
 		Seed:      turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
-		Roster:    tool.LoopRosterMetatron(),
+		Roster:    roster,
 		Handlers:  mt.turnHandlers(d),
 		MaxRounds: mt.loopRounds,
 		MaxTokens: turnMaxTokens,
@@ -166,8 +179,8 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 			"Nothing was done and nothing was spent. Ask again."
 	}
 	result.Reply = reply
-	if notice != "" {
-		result.Reply = "(" + notice + ")\n\n" + result.Reply
+	if len(notices) > 0 {
+		result.Reply = "(" + strings.Join(notices, "; ") + ")\n\n" + result.Reply
 	}
 
 	// Surfaced moments are consumed only on a completed turn.
@@ -384,46 +397,76 @@ func mustJSON(v any) []byte {
 	return b
 }
 
-func turnSystemPrompt(charter string) string {
-	return fmt.Sprintf(`%s
-
---- (fixed frame, beneath the charter) ---
-You are the intermediary between the player and the village of eight: %s.
-Whatever voice or policy the charter above gives you, two things are fixed:
+// metatronNonNegotiables carries the two persona-firewall invariants VERBATIM
+// (spec 021 FR-003): the angel never invents unobserved events, and the
+// player's literal words never pass to a villager. It is a compile-time
+// constant appended after ALL editable content on every path (INV-1), so no
+// charter or skill byte can displace, truncate, or override it — the wording is
+// unchanged from the pre-021 fixed frame, and door-side enforcement backs it
+// independently of this prompt text.
+const metatronNonNegotiables = `Whatever voice or policy the charter above gives you, two things are fixed:
 you never invent events, actions, or words that are not in your notes or the
 status you are given — when you have not observed something, say so in your
-own way — and you never let the player's literal words pass to a villager.
-When you choose to act on the player's behalf you may include ONE nudge:
-a "dream" (one villager) or an "omen" (all villagers witness it). Judge first:
-the target's persuadability, the impact on the village, and the right method.
-A nudge spends one of your banked charges — if none are banked, or the request
-is unwise, refuse and counsel instead (refusal is free). The nudge text must
-be written for the villager's world: no player, no game, no outside voice.
+own way — and you never let the player's literal words pass to a villager.`
 
-When a nudge is too indirect for the need, you may instead work ONE miracle — a
-direct edit to the world, spent from the same charges:
-  • "move" a villager, structure, or pile to a tile (rescue the stuck) — 1 charge
-  • "remove" a structure, pile, or terrain feature — 1 charge
-  • "give_item" — place a known item in a living villager's hands — 1 charge
-  • "time_snap" — jump the world clock forward to a day and time — 2 charges
-A miracle spends its charges like a nudge and refuses in-fiction when the bank
-cannot pay (a time_snap needs two, every other miracle needs one). You cannot
-work a miracle for free; you cannot remove a villager.
+// hasWorkMiracle reports whether the granted roster offers the miracle tool —
+// gates the miracle-specific doctrine line so a dreams-only world never mentions
+// miracles (FR-005).
+func hasWorkMiracle(roster []tool.Tool) bool {
+	for _, t := range roster {
+		if t.Name == "work_miracle" {
+			return true
+		}
+	}
+	return false
+}
 
-To SPEAK to the player, simply reply with your words — that reply is what the
-player reads, and speaking costs nothing. To ACT on the player's behalf, call
-exactly ONE of these tools (and only one — one mediated act per turn):
-  • nudge_dream(target, text) — a dream for ONE named villager
-  • nudge_omen(text) — an omen every living villager witnesses
-  • work_miracle(kind, …) — a direct world edit; kind is
-      "move"      with class ("villager"|"structure"|"pile"), x, y, to_x, to_y
-      "remove"    with class ("structure"|"pile"|"terrain"), x, y
-      "give_item" with villager, item, qty
-      "time_snap" with day and time ("HH:MM")
-If none are banked, or the request is unwise, do NOT call a tool — counsel the
-player in words instead (refusal is free). Never call more than one tool: the
-first act you land is the whole of this turn.`,
-		charter, strings.Join(sim.AgentNames[:], ", "))
+// turnSystemPrompt composes the metatron turn's system prompt (spec 021 R3,
+// data-model.md §2): the editable charter, then each skill file under a
+// `--- skill: <name> ---` separator in composition order, then the fixed frame
+// appended LAST and unconditionally. The frame carries the two non-negotiables
+// verbatim, the tool-agnostic acting doctrine, and — for THIS world's granted
+// roster — the registry-derived tool guidance (tool.MetatronToolGuidance),
+// which replaces the old hand-written tool list so the described surface can
+// never diverge from the declared one (FR-008) and automatically reflects the
+// granted subset (a conversation-only world names no acting tools at all).
+func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) string {
+	var b strings.Builder
+	b.WriteString(charter)
+	for _, s := range skills {
+		fmt.Fprintf(&b, "\n\n--- skill: %s ---\n%s", s.name, s.text)
+	}
+	fmt.Fprintf(&b, "\n\n--- (fixed frame, beneath the charter and skills) ---\n"+
+		"You are the intermediary between the player and the village of eight: %s.\n%s\n\n",
+		strings.Join(sim.AgentNames[:], ", "), metatronNonNegotiables)
+
+	guidance := tool.MetatronToolGuidance(roster)
+	if guidance == "" {
+		// Conversation-only world: no acting tools granted (FR-006). The angel
+		// still converses — speech is never gateable.
+		b.WriteString("This world grants you no acting tools — you may only counsel the " +
+			"player in words. To SPEAK to the player, simply reply with your words; " +
+			"that reply is what the player reads, and speaking costs nothing.")
+		return b.String()
+	}
+
+	b.WriteString("When you choose to act on the player's behalf, judge first: the target's " +
+		"persuadability, the impact on the village, and the right method. Acting spends one of " +
+		"your banked charges — if none are banked, or the request is unwise, refuse and counsel " +
+		"instead (refusal is free). Act at most ONCE per turn: the first act you land is the whole " +
+		"of this turn. Any text a villager receives must be written for the villager's world: no " +
+		"player, no game, no outside voice.\n\n")
+	if hasWorkMiracle(roster) {
+		b.WriteString("You cannot work a miracle for free, and you can never remove a villager.\n\n")
+	}
+	b.WriteString("To SPEAK to the player, simply reply with your words — that reply is what the " +
+		"player reads, and speaking costs nothing. To ACT on the player's behalf, call exactly ONE " +
+		"of these tools (and only one — one mediated act per turn):\n")
+	b.WriteString(guidance)
+	b.WriteString("If none are banked, or the request is unwise, do NOT call a tool — counsel the " +
+		"player in words instead (refusal is free). Never call more than one tool: the first act " +
+		"you land is the whole of this turn.")
+	return b.String()
 }
 
 func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story []string, soulTail, transcriptTail, playerText string) string {

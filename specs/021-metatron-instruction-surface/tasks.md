@@ -63,16 +63,16 @@ hot-reloaded, with charter-style caps/notices; fixed frame provably last.
 **Independent Test**: quickstart §2 — add/edit/delete skill files between turns; the next
 reply tracks disk; adversarial fixtures cannot displace the fixed frame.
 
-- [ ] T008 [US1] Implement `loadSkills(worldDir)` in internal/metatron/charter.go:
+- [X] T008 [US1] Implement `loadSkills(worldDir)` in internal/metatron/charter.go:
       eligibility (regular `.md` direct children of `skills/`, no recursion, dotfiles and
       other extensions silently excluded), ascending bytewise filename sort, caps (4,000
       chars/file via persona.CharterMaxChars, max 8 files), per-issue notices (truncate /
       skip-beyond-8 / unreadable-skip) matching loadCharter's notice voice
       (contracts/instruction-surface.md rules 3–5)
-- [ ] T009 [P] [US1] Unit tests for loadSkills in internal/metatron/metatron_test.go:
+- [X] T009 [P] [US1] Unit tests for loadSkills in internal/metatron/metatron_test.go:
       ordering, eligibility filtering, at-cap vs over-cap, 9-files skip, unreadable file,
       empty/missing skills dir (no notice), notice wording
-- [ ] T010 [US1] Restructure `turnSystemPrompt` in internal/metatron/turn.go per
+- [X] T010 [US1] Restructure `turnSystemPrompt` in internal/metatron/turn.go per
       data-model.md §2: signature takes charter + skills + granted roster; assembly =
       charter → `--- skill: <name> ---` blocks in order → fixed frame appended LAST as a
       compile-time constant on every path; fixed frame = the two non-negotiables verbatim
@@ -80,11 +80,11 @@ reply tracks disk; adversarial fixtures cannot displace the fixed frame.
       tool list (turn.go:396-425); `Turn()` calls loadSkills per-read and merges skill
       notices into the reply-notice channel alongside charter notices (this phase passes
       the full `tool.LoopRosterMetatron()` as roster; gating lands in US2)
-- [ ] T011 [US1] Adversarial fixture battery test in internal/metatron/metatron_test.go:
+- [X] T011 [US1] Adversarial fixture battery test in internal/metatron/metatron_test.go:
       the 7-row table from contracts/instruction-surface.md — for each fixture assert the
       assembled prompt ends with the fixed frame verbatim and per-file truncation happened
       pre-assembly (SC-002, INV-1)
-- [ ] T012 [P] [US1] Prompt determinism test in internal/metatron/metatron_test.go: two
+- [X] T012 [P] [US1] Prompt determinism test in internal/metatron/metatron_test.go: two
       identical world dirs (incl. multiple skills) ⇒ byte-identical composed prompt;
       repeated composition ⇒ byte-identical (FR-012, INV-2)
 
