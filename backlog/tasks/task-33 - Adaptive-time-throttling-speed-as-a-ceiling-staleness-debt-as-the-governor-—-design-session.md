@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-20 20:48'
-updated_date: '2026-07-23 20:46'
+updated_date: '2026-07-23 20:55'
 labels:
   - design
 dependencies:
@@ -31,7 +31,7 @@ Spec: specs/028-adaptive-throttle
 - [x] #5 Spec phase: User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP
 - [x] #6 Spec phase: User Story 2 — The world sheds speed under debt (Priority: P2)
 - [x] #7 Spec phase: User Story 3 — Speed recovers without oscillating (Priority: P3)
-- [ ] #8 Spec phase: User Story 4 — The player sees it and stays in charge (Priority: P4)
+- [x] #8 Spec phase: User Story 4 — The player sees it and stays in charge (Priority: P4)
 - [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
@@ -61,4 +61,6 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · Us
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 0/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 0/2 · Polish & Cross-Cutting Concerns: 0/3
 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 0/2 · Polish & Cross-Cutting Concerns: 0/3
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 2/2 · Polish & Cross-Cutting Concerns: 0/3
 <!-- SECTION:NOTES:END -->
