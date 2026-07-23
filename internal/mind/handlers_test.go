@@ -26,8 +26,9 @@ import (
 // goroutines) for handler-level tests. The loop is both the Injector and the
 // SocialInjector, so every handler hits the real door.
 type loopMind struct {
-	md *Mind
-	st *store.Store
+	md   *Mind
+	st   *store.Store
+	loop *sim.Loop // the concrete loop, for tests that must resume ticking (reflex)
 }
 
 func newLoopMind(t *testing.T) *loopMind {
@@ -38,7 +39,17 @@ func newLoopMind(t *testing.T) *loopMind {
 	}
 	m := worldmap.Generate(42, 64, 64)
 	state := sim.NewState(42, m)
+	// Start PAUSED at genesis, but at max speed so a test can resume into fast
+	// ticking (T025b/FILED-2). A paused loop steps no ticks and fires no reflex,
+	// so its goroutine never touches state.Agents concurrently with the test —
+	// which is essential because these fixtures alias the loop's live state as
+	// md.replica and mutate/read it directly (kill an agent, snapshot positions
+	// in newJob). Doors (InjectIntent/InjectSocial) are pause-open and still land
+	// their events, so every handler test works unchanged. A test that needs a
+	// reflex resumes the loop AFTER its direct-state setup (see
+	// TestToolCallCorrelationChainSC003), by which point it reads only the store.
 	state.Speed = clock.Speed("max")
+	state.Paused = true
 	loop := sim.NewLoop(state, m, st, nil)
 	md := &Mind{
 		loop:    loop,
@@ -60,7 +71,7 @@ func newLoopMind(t *testing.T) *loopMind {
 		}
 		st.Close()
 	})
-	return &loopMind{md: md, st: st}
+	return &loopMind{md: md, st: st, loop: loop}
 }
 
 // newJob builds a planner planJob against the current replica for agent i,

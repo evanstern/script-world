@@ -575,7 +575,13 @@ func TestToolCallCorrelationChainSC003(t *testing.T) {
 	}
 
 	// (c) Negative control: the reflex intent_set has no job key, so it is
-	// outside the chain — unreachable from any cog.tool_call.
+	// outside the chain — unreachable from any cog.tool_call. The fixture ran
+	// PAUSED through all the direct live-state setup above (kill + newJob
+	// snapshots) so nothing raced the loop; now that the remainder reads only the
+	// store, resume the loop into fast ticking so a reflex fires (T025b/FILED-2).
+	if _, err := lm.loop.Do("resume", ""); err != nil {
+		t.Fatalf("resume loop: %v", err)
+	}
 	reflex := lm.awaitReflexIntentSet(t)
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(reflex, &raw); err != nil {
