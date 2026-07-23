@@ -724,7 +724,17 @@ func TestLLMCallAndDegradedWorld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sd.LLM == nil || sd.LLM.Local.Model != "test-local" {
+	// The per-provider status table (spec 024) replaces the fixed local/cloud
+	// fields; the legacy config derives a provider named "local".
+	var localModel string
+	if sd.LLM != nil {
+		for _, p := range sd.LLM.Providers {
+			if p.Name == "local" {
+				localModel = p.Model
+			}
+		}
+	}
+	if sd.LLM == nil || localModel != "test-local" {
 		t.Fatalf("status missing llm section: %+v", sd.LLM)
 	}
 
@@ -755,7 +765,15 @@ func TestLLMCallAndDegradedWorld(t *testing.T) {
 	if after.Clock.Tick <= before.Clock.Tick {
 		t.Fatal("simulation stalled while LLM tier was down (AC#3)")
 	}
-	if after.LLM.Local.Up {
+	localUp := false
+	if after.LLM != nil {
+		for _, p := range after.LLM.Providers {
+			if p.Name == "local" {
+				localUp = p.Up
+			}
+		}
+	}
+	if localUp {
 		t.Error("local tier should report down after repeated failures")
 	}
 

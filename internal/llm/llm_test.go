@@ -86,6 +86,18 @@ func testConfig(localURL, cloudURL string, budget float64) Config {
 	}
 }
 
+// provStatus pulls one provider's status row by name — the per-provider status
+// shape (spec 024) replaces the fixed Local/Cloud fields, so behavior tests
+// that read tier health/queue now read the named provider's row.
+func provStatus(st Status, name string) ProviderStatus {
+	for _, p := range st.Providers {
+		if p.Name == name {
+			return p
+		}
+	}
+	return ProviderStatus{}
+}
+
 func newOrch(t *testing.T, cfg Config, st *store.Store) *Orchestrator {
 	t.Helper()
 	t.Setenv("PROMPTWORLD_TEST_KEY", "test-key") // hermetic: never depend on the caller's env
@@ -222,7 +234,7 @@ func TestDegradedAndRecovery(t *testing.T) {
 			t.Fatal("call against dead endpoint should fail")
 		}
 	}
-	if o.StatusSnapshot().Local.Up {
+	if provStatus(o.StatusSnapshot(), "local").Up {
 		t.Fatal("local tier should be marked down after consecutive failures")
 	}
 
@@ -261,7 +273,7 @@ func TestDegradedAndRecovery(t *testing.T) {
 			if resp.Text != "back" {
 				t.Errorf("probe response %q", resp.Text)
 			}
-			if !o.StatusSnapshot().Local.Up {
+			if !provStatus(o.StatusSnapshot(), "local").Up {
 				t.Error("tier should be up after successful probe")
 			}
 			return
@@ -294,7 +306,7 @@ func TestQueueBackpressure(t *testing.T) {
 	// Wait until saturation is observable, then expect fast refusal.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if o.StatusSnapshot().Local.Queue >= queueCap {
+		if provStatus(o.StatusSnapshot(), "local").Queue >= queueCap {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -345,7 +357,7 @@ func TestCallerTimeoutIsNotModelFailure(t *testing.T) {
 	close(release)
 	<-longDone
 
-	if !o.StatusSnapshot().Local.Up {
+	if !provStatus(o.StatusSnapshot(), "local").Up {
 		t.Fatal("caller timeouts opened the circuit — starvation counted as model failure")
 	}
 	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "after"}); err != nil {
@@ -541,12 +553,12 @@ func TestParallelOverflowPreservesOrderAndPrio(t *testing.T) {
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if o.StatusSnapshot().Local.Queue >= overflow {
+		if provStatus(o.StatusSnapshot(), "local").Queue >= overflow {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if q := o.StatusSnapshot().Local.Queue; q < overflow {
+	if q := provStatus(o.StatusSnapshot(), "local").Queue; q < overflow {
 		t.Fatalf("overflow did not queue: queue=%d, want >=%d", q, overflow)
 	}
 	// A conversation submitted LAST must still jump the line via the prio lane.
@@ -613,7 +625,7 @@ func TestBestEffortAdmission(t *testing.T) {
 	go o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "queued"})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if o.StatusSnapshot().Local.Queue >= 1 {
+		if provStatus(o.StatusSnapshot(), "local").Queue >= 1 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -633,7 +645,7 @@ func TestBestEffortAdmission(t *testing.T) {
 	close(release)
 	deadline = time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if o.StatusSnapshot().Local.Queue == 0 {
+		if provStatus(o.StatusSnapshot(), "local").Queue == 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -724,7 +736,7 @@ func TestEstimatorSampleCountUnderConcurrency(t *testing.T) {
 	cfg.Local.Parallel = 8
 	o := newOrch(t, cfg, testStore(t))
 
-	seed := o.tiers[TierLocal].est.Estimate()
+	seed := o.providers["local"].est.Estimate()
 	const n = 40
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
@@ -758,7 +770,7 @@ func TestEstimatorSampleCountUnderConcurrency(t *testing.T) {
 	for err := range errs {
 		t.Errorf("planner call: %v", err)
 	}
-	est, _, samples, _ := o.tiers[TierLocal].est.Stats()
+	est, _, samples, _ := o.providers["local"].est.Stats()
 	if samples != n {
 		t.Errorf("estimator samples = %d, want %d (one per completed call)", samples, n)
 	}
@@ -787,7 +799,7 @@ func TestBreakerConsecutiveUnderConcurrency(t *testing.T) {
 	cfg := testConfig(srv.URL, "http://unused.invalid", 100)
 	cfg.Local.Parallel = 4
 	o := newOrch(t, cfg, testStore(t))
-	local := o.tiers[TierLocal]
+	local := o.providers["local"]
 
 	// fire submits n concurrent calls and blocks until all have replied, so
 	// the breaker's fail()/succeed() bookkeeping is fully settled after it.
@@ -916,7 +928,7 @@ func TestMeterExactUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := o.meter.Add(perAdd); err != nil {
+			if err := o.meter.Add("cloud", perAdd); err != nil {
 				t.Errorf("meter add: %v", err)
 			}
 		}()
@@ -941,7 +953,7 @@ func TestSkipObserveNoEstimatorSample(t *testing.T) {
 	var hits atomic.Int64
 	local := mockLocal(t, &hits)
 	o := newOrch(t, testConfig(local.URL, "http://unused.invalid", 100), testStore(t))
-	lt := o.tiers[TierLocal]
+	lt := o.providers["local"]
 
 	est0, _, samples0, _ := lt.est.Stats()
 	if _, err := o.Submit(context.Background(), Request{Kind: KindPlanner, Prompt: "x", SkipObserve: true}); err != nil {
@@ -973,12 +985,12 @@ func TestSkipObserveNoEstimatorSample(t *testing.T) {
 // a no-op.
 func TestObserveCognitionFeedsOnce(t *testing.T) {
 	o := newOrch(t, testConfig("http://unused.invalid", "http://unused.invalid", 100), testStore(t))
-	lt := o.tiers[TierLocal]
+	lt := o.providers["local"]
 	_, _, samples0, _ := lt.est.Stats()
 
 	const millis = 6000
 	const points = 3 // planner's registered point cost
-	ref := cognition.NewEstimator(cognition.SeedFor(nil, string(TierLocal)))
+	ref := cognition.NewEstimator(cognition.SeedFor(nil, "local"))
 	ref.Sample(float64(millis) / 1000 / float64(points))
 	want := ref.Estimate()
 
@@ -1005,7 +1017,7 @@ func TestSkipObserveStillMeters(t *testing.T) {
 	var hits atomic.Int64
 	cloud := mockCloud(t, &hits)
 	o := newOrch(t, testConfig("http://unused.invalid", cloud.URL, 100), testStore(t))
-	ct := o.tiers[TierCloud]
+	ct := o.providers["cloud"]
 	_, _, csamples0, _ := ct.est.Stats()
 	_, spent0, _ := o.meter.Snapshot()
 
@@ -1039,9 +1051,21 @@ func TestConfigRoundTrip(t *testing.T) {
 	if err != nil || cfg == nil {
 		t.Fatalf("load default: %v", err)
 	}
-	if cfg.MonthlyBudgetUSD != 100 || cfg.Cloud.Model != "claude-opus-4-8" ||
-		cfg.Cloud.APIKeyEnv != "ANTHROPIC_API_KEY" || cfg.Local.Endpoint == "" {
+	// WriteDefault now emits the v2 registry shape (spec 024 FR-017), semantically
+	// identical to today's two-tier defaults: two providers named local/cloud with
+	// today's routes.
+	cloud := cfg.Providers["cloud"]
+	local := cfg.Providers["local"]
+	if cfg.MonthlyBudgetUSD != 100 || cloud.Model != "claude-opus-4-8" ||
+		cloud.APIKeyEnv != "ANTHROPIC_API_KEY" || cloud.Transport != ProviderAnthropic ||
+		local.Endpoint == "" || local.Transport != ProviderOpenAICompat {
 		t.Errorf("default config wrong: %+v", cfg)
+	}
+	if r := cfg.Routes["planner"]; len(r.Chain) != 1 || r.Chain[0] != "local" {
+		t.Errorf("default planner route = %+v, want [local]", r)
+	}
+	if r := cfg.Routes["narrator"]; len(r.Chain) != 1 || r.Chain[0] != "cloud" {
+		t.Errorf("default narrator route = %+v, want [cloud]", r)
 	}
 }
 
@@ -1324,18 +1348,18 @@ func TestConfigProviderValidation(t *testing.T) {
 	}
 }
 
-// TestKindsCompleteAndRegistered: Kinds() exposes exactly the routing table,
-// and every kind resolves to a cognition decision class — the compile-time
+// TestKindsCompleteAndRegistered: Kinds() exposes exactly the accepted-kind
+// set, and every kind resolves to a cognition decision class — the compile-time
 // half of the daemon's FR-002 startup gate.
 func TestKindsCompleteAndRegistered(t *testing.T) {
 	ks := Kinds()
-	if len(ks) != len(routing) {
-		t.Fatalf("Kinds() returned %d, routing has %d", len(ks), len(routing))
+	if len(ks) != len(acceptedKinds) {
+		t.Fatalf("Kinds() returned %d, acceptedKinds has %d", len(ks), len(acceptedKinds))
 	}
 	names := make([]string, 0, len(ks))
 	for _, k := range ks {
-		if _, ok := routing[k]; !ok {
-			t.Errorf("Kinds() includes unrouted kind %q", k)
+		if _, ok := acceptedKinds[k]; !ok {
+			t.Errorf("Kinds() includes unaccepted kind %q", k)
 		}
 		names = append(names, string(k))
 	}
