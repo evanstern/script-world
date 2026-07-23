@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="promptworld-docs:generated-by" content="player-docs">
+<meta name="promptworld-docs:source" content="docs/wiki/metatron.md@8ada1050cc5b108790d0e48640dba0b985632e25">
+<meta name="promptworld-docs:source" content="docs/wiki/metatron-miracles.md@8ada1050cc5b108790d0e48640dba0b985632e25">
+<meta name="promptworld-docs:source" content="docs/wiki/governance.md@fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f">
+<title>Playing via Metatron — promptworld player docs</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #55606a;
+    --accent: #0b5fff;
+    --border: #d8dee4;
+    --code-bg: #f3f5f7;
+    --card-bg: #f8f9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e9ec;
+      --muted: #9aa4ae;
+      --accent: #6ea8ff;
+      --border: #333a42;
+      --code-bg: #1d2024;
+      --card-bg: #1a1d21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 70ch;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h1 { font-size: 1.9rem; margin-top: 0; }
+  h2 { font-size: 1.35rem; margin-top: 2.25rem; border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; }
+  p, ul, ol { margin: .9rem 0; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .15em .4em; border-radius: .3em;
+    font-size: .92em; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: .5em;
+    overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: .2rem 1rem;
+    color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; }
+  .card { background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: .6rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .nav-grid { display: block; padding: 0; margin: 0; list-style: none; }
+  .nav-grid li { margin: .6rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Playing via Metatron</h1>
+<p class="lede">You never touch a villager directly. Everything you do to the village
+goes through one character: Metatron, the angel who watches the world and mediates
+your influence.</p>
+
+<h2>Metatron is your only verb</h2>
+<p>Your words as a player have exactly one destination: Metatron's own prompt.
+Villagers never see what you type — they can only ever receive whatever Metatron
+decides to pass along, and only in the two shaped forms below. This is deliberate:
+Metatron is a gatekeeper, not a megaphone. You talk to it (in the console, or the
+Metatron pane of the full-screen client), it watches the village, and it decides what
+— if anything — to do about what you asked.</p>
+
+<h2>Shaping your angel: the charter</h2>
+<p>The real meta-game is prompt-engineering Metatron itself. At the root of your
+world's save directory sits <code>charter.md</code> — a plain text file, seeded when
+the world is created and never overwritten by the game, that you can edit anytime.
+It's read fresh every single turn, so an edit you make takes effect on Metatron's
+very next reply. Think of it like giving your angel a personality and standing
+instructions: sarcastic, protective, meddling, hands-off — whatever tone and
+priorities you write in there is who Metatron becomes.</p>
+<p>You can also add narrower instruction files in a <code>skills/</code> folder next
+to the charter, and control which abilities Metatron is even allowed to use via a
+<code>capabilities.json</code> file. A world with no such file grants the full set of
+abilities by default.</p>
+<p>Underneath anything you write, two rules always hold no matter what the charter
+says: Metatron will never invent an event it didn't actually observe, and it will
+never pass your literal words straight to a villager. Those two guardrails aren't
+editable — everything else about its voice and judgment is yours to shape.</p>
+
+<h2>Two ways to act: nudges and miracles</h2>
+<p>When Metatron decides to act on your behalf (rather than just answering in words),
+it has two families of moves, spent from a shared bank of "charges":</p>
+
+<h3>Nudges — a dream, or an omen</h3>
+<p>A <strong>nudge</strong> plants something in a villager's mind, not the world
+itself — it's an experience, not a command. Metatron can send a <strong>dream</strong>
+to one living villager, or an <strong>omen</strong> witnessed by every living villager
+at once. Either way, it lands as a memory the villager will interpret in their own
+persona — a dream doesn't force a villager to do anything, it just gives them
+something to react to, like anyone would react to a strange dream or a shared omen in
+the sky.</p>
+
+<h3>Miracles — direct edits to the world</h3>
+<p>A <strong>miracle</strong> is a concrete, direct change to the world itself, of
+which there are exactly four kinds:</p>
+<table>
+<tr><th>Miracle</th><th>What it does</th></tr>
+<tr><td>Snap time</td><td>Jump the world's clock forward to a specific time (forward
+only — you can't rewind)</td></tr>
+<tr><td>Give an item</td><td>Hand a chosen villager some quantity of an item</td></tr>
+<tr><td>Move something</td><td>Relocate a villager, a structure, or a pile of goods to
+a new spot</td></tr>
+<tr><td>Remove something</td><td>Delete a structure, a pile, or a patch of terrain —
+villagers themselves can never be removed by any miracle, ever</td></tr>
+</table>
+<p>Miracles are memorable too — a time snap feels to every villager like time
+lurching forward in an instant; a moved villager feels like an unseen hand lifted them
+somewhere new; a given item just appears in the recipient's hands "as if set there by
+an unseen giver."</p>
+
+<h3>The charge economy</h3>
+<p>You start with 1 charge, the bank caps at 3, and it regenerates by 1 every 6 game
+hours. Nudges and most miracles cost 1 charge; snapping time is the priciest move at 2
+charges. Run out, and Metatron will politely decline and explain why — that refusal
+costs nothing, so you can always keep talking even with an empty bank.</p>
+
+<h2>The village's own laws (not Metatron's business)</h2>
+<p>Separately from anything you do, the village governs itself: once a day the
+villagers gather at a meeting, air grievances, and vote new rules (like a curfew, or
+banishing someone) into a standing charter of their own — <code>village_charter.md</code>,
+distinct from your <code>charter.md</code>. Whether a villager actually obeys a law is
+up to their own persona; the rules aren't force fields, they're social pressure with
+real, witnessed consequences when broken. You can't vote or propose rules yourself,
+but the <a href="reading-the-story.html">chronicle</a> narrates the assemblies,
+tallies, and any exiles as they happen, so you always know what your village has
+decided for itself.</p>
+
+<footer><a href="index.html">&larr; Back to player docs index</a></footer>
+</body>
+</html>

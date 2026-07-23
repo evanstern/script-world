@@ -29,12 +29,12 @@
 
 **Independent Test**: spot-check claims per page against declared sources at recorded pins; llm page stays at "get it working" depth and links/mentions docs/llm-providers.md for operator detail.
 
-- [ ] T005 [P] [US2] Write `docs/player/playing-via-metatron.html` from docs/wiki/metatron.md, docs/wiki/metatron-miracles.md, docs/wiki/governance.md — Metatron as the player's sole verb, the charter as the one editable prompt, charges/dreams/omens/miracles in plain language; provenance metas at current pins
-- [ ] T006 [P] [US2] Write `docs/player/time-and-speed.html` from docs/wiki/game-clock.md, docs/wiki/sim-loop.md, docs/wiki/cli-promptworld.md — tick=1 game second, speed ladder incl. default 4x and max, pause/resume as player verbs, always-on world; provenance metas
-- [ ] T007 [P] [US2] Write `docs/player/reading-the-story.html` from docs/wiki/chronicle.md, docs/wiki/tui-client.md, docs/wiki/event-log.md — the chronicle as the catch-up mechanism, TUI panes, tail/attach views, where the story comes from; provenance metas
-- [ ] T008 [P] [US2] Write `docs/player/the-ai-behind-the-village.html` from docs/wiki/agent-mind.md, docs/wiki/cognition.md, docs/wiki/llm-orchestrator.md, docs/wiki/nightly-consolidation.md, docs/wiki/social-fabric.md — plain-language: villager minds, local vs cloud tiers, reflexes vs LLM decisions, sleep-time memory digestion, gossip/relationships; no engineering vocabulary unexplained; provenance metas
-- [ ] T009 [P] [US2] Write `docs/player/llm-setup-basics.html` from docs/llm-providers.md, docs/wiki/llm-orchestrator.md, README.md — minimum llm.json a non-engineer needs to get inference running; explicitly defer registry reference/migration depth to docs/llm-providers.md by mention; provenance metas
-- [ ] T010 [US2] Verify every index.html link resolves and every topic page links back to index; fix any dangling nav
+- [X] T005 [P] [US2] Write `docs/player/playing-via-metatron.html` from docs/wiki/metatron.md, docs/wiki/metatron-miracles.md, docs/wiki/governance.md — Metatron as the player's sole verb, the charter as the one editable prompt, charges/dreams/omens/miracles in plain language; provenance metas at current pins
+- [X] T006 [P] [US2] Write `docs/player/time-and-speed.html` from docs/wiki/game-clock.md, docs/wiki/sim-loop.md, docs/wiki/cli-promptworld.md — tick=1 game second, speed ladder incl. default 4x and max, pause/resume as player verbs, always-on world; provenance metas
+- [X] T007 [P] [US2] Write `docs/player/reading-the-story.html` from docs/wiki/chronicle.md, docs/wiki/tui-client.md, docs/wiki/event-log.md — the chronicle as the catch-up mechanism, TUI panes, tail/attach views, where the story comes from; provenance metas
+- [X] T008 [P] [US2] Write `docs/player/the-ai-behind-the-village.html` from docs/wiki/agent-mind.md, docs/wiki/cognition.md, docs/wiki/llm-orchestrator.md, docs/wiki/nightly-consolidation.md, docs/wiki/social-fabric.md — plain-language: villager minds, local vs cloud tiers, reflexes vs LLM decisions, sleep-time memory digestion, gossip/relationships; no engineering vocabulary unexplained; provenance metas
+- [X] T009 [P] [US2] Write `docs/player/llm-setup-basics.html` from docs/llm-providers.md, docs/wiki/llm-orchestrator.md, README.md — minimum llm.json a non-engineer needs to get inference running; explicitly defer registry reference/migration depth to docs/llm-providers.md by mention; provenance metas
+- [X] T010 [US2] Verify every index.html link resolves and every topic page links back to index; fix any dangling nav
 
 **Checkpoint**: all seven pages render standalone; page set covers FR-002 topics.
 
