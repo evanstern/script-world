@@ -403,6 +403,56 @@ func TestGovernorRecoverInterruptedRestarts(t *testing.T) {
 	}
 }
 
+// TestGovernorNeverTargetsMax (spec 028 US4-AC5, FR-004/FR-012): the governor
+// governs only the capped ladder — every Decision it ever returns, for any
+// combination of debt, effective, and requested speed and across any run of
+// samples, has a To that sits ON the capped ladder and is NEVER the uncapped
+// SpeedMax. The property makes the CappedLadder invariant load-bearing: shedding
+// or recovering can never make max speed meaningful, so the pre-028 max refusal
+// (enforced at the set_speed door) stays the whole story.
+func TestGovernorNeverTargetsMax(t *testing.T) {
+	ladder := clock.CappedLadder()
+	// A spread of readings that provokes both shed (over-threshold) and recover
+	// (deep headroom) accrual, plus a saturating floor case and a quiescent one.
+	debts := []float64{0.0, 0.05, marginalDebt, ShedThreshold, overThreshold, 100.0}
+
+	onLadder := func(sp clock.Speed) bool { return clock.LadderIndex(sp) >= 0 }
+
+	for _, eff := range ladder {
+		for _, req := range ladder {
+			for _, d := range debts {
+				g := &Governor{}
+				// Enough samples to complete any window and fire many decisions,
+				// re-anchoring effective to the decided speed so the walk descends
+				// and climbs the ladder exactly as production would.
+				cur := eff
+				for i := 0; i < 3*recoverSamples; i++ {
+					dec := g.Sample(d, 1, false, cur, req)
+					if dec.To == clock.SpeedMax {
+						t.Fatalf("governor targeted uncapped max: eff=%q req=%q debt=%v decision=%+v", eff, req, d, dec)
+					}
+					if !onLadder(dec.To) {
+						t.Fatalf("governor targeted off-ladder speed: eff=%q req=%q debt=%v decision=%+v", eff, req, d, dec)
+					}
+					if dec.Action != ActionNone {
+						cur = dec.To // the world applies the decision
+					}
+				}
+			}
+		}
+	}
+
+	// A construction-fresh governor sampled from a max-speed world (the uncapped
+	// state the refusal keeps LLM worlds out of) never manufactures a decision:
+	// max is off the capped ladder, so LadderIndex is -1 and neither path accrues.
+	g := &Governor{}
+	for i := 0; i < 3*breachSamples; i++ {
+		if dec := g.Sample(overThreshold, 3, false, clock.SpeedMax, clock.SpeedMax); dec.Action != ActionNone {
+			t.Fatalf("governor acted from an uncapped-max world: %+v", dec)
+		}
+	}
+}
+
 // TestGovernorPausedResetsRecovery (FR-013): a paused sample clears the recovery
 // window just as it clears the breach window, so a resume starts a fresh
 // recovery window — a pause never converts accrued headroom into an instant

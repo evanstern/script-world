@@ -246,6 +246,93 @@ func TestGovernorSamplerShedsAfterBreachWindow(t *testing.T) {
 	}
 }
 
+// TestGovernorSamplerReshedsAtRaisedCeiling (spec 028 US4-AC3, FR-009): after a
+// player raises the ceiling — the loop's set_speed collapsed governed state, so
+// the sampler now reads an ungoverned world sitting at the newly requested speed
+// — the sampler re-evaluates on its normal cadence and sheds again within one
+// full breach window when debt still breaches at that raised ceiling. The world
+// never runs above the new request nor above what debt allows.
+func TestGovernorSamplerReshedsAtRaisedCeiling(t *testing.T) {
+	breachSamples := int(cognition.BreachWindow / cognition.GovernorCadence)
+	pending := &fakePending{}
+	// One planner at the raised 16x ceiling, remaining 80s → 80*16/1200 ≈ 1.07 >
+	// ShedThreshold, so debt still breaches at 16x.
+	pending.set([]llm.PendingThought{{Kind: "planner", PredictedSec: 80, ElapsedSec: 0}})
+	// Ungoverned at 16x: exactly what the loop reports right after the player's
+	// raise-ceiling set_speed cleared RequestedSpeed (requested empty ⇒ ceiling
+	// defaults to the effective speed).
+	status := &fakeStatus{speed: clock.Speed16x}
+	s := newGovernorSampler(pending, status)
+
+	for i := 1; i < breachSamples; i++ {
+		s.sample()
+		if calls := status.governCalls(); len(calls) != 0 {
+			t.Fatalf("re-shed after only %d samples, before the breach window closed: %+v", i, calls)
+		}
+	}
+	s.sample() // the sample that completes the fresh breach window at 16x
+
+	calls := status.governCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one re-shed after the breach window, got %d: %+v", len(calls), calls)
+	}
+	if calls[0].to != clock.Speed8x {
+		t.Errorf("re-shed to = %q, want 8x (one notch below the raised 16x ceiling)", calls[0].to)
+	}
+	// The shed recorded the raised ceiling (16x) as the requested speed — the
+	// fakeStatus stamps requested on the first shed of an ungoverned world.
+	if status.requested != clock.Speed16x {
+		t.Errorf("recorded ceiling = %q, want the raised 16x request", status.requested)
+	}
+}
+
+// TestGovernorSamplerPausedResetsRecovery (spec 028 US4-AC4, FR-013): the pause
+// path resets BOTH accumulators at the daemon layer — the breach-window analogue
+// is proven above; this pins the recovery window. A governed world accruing
+// toward a recover, paused partway and held, issues no Govern call and discards
+// the partial accrual, so a resume requires one complete fresh recovery window
+// before a recover fires. A pause never converts accrued headroom into an instant
+// recover.
+func TestGovernorSamplerPausedResetsRecovery(t *testing.T) {
+	recoverSamples := int(cognition.RecoveryWindow / cognition.GovernorCadence)
+	pending := &fakePending{}
+	// Governed at 8x with a 32x ceiling and low debt: one planner, remaining 15s →
+	// 15*8/1200 = 0.1 debt; projected one notch up (16x) = 0.2 < ShedThreshold ×
+	// RecoverHeadroom (0.5), so recovery accrues.
+	pending.set([]llm.PendingThought{{Kind: "planner", PredictedSec: 15, ElapsedSec: 0}})
+	status := &fakeStatus{speed: clock.Speed8x, requested: clock.Speed32x}
+	s := newGovernorSampler(pending, status)
+
+	// Accrue partway (one short of a window), then pause and hold.
+	for i := 0; i < recoverSamples-1; i++ {
+		s.sample()
+	}
+	status.setPaused(true)
+	for i := 0; i < 2*recoverSamples; i++ {
+		s.sample()
+	}
+	if calls := status.governCalls(); len(calls) != 0 {
+		t.Fatalf("paused samples issued Govern calls: %+v", calls)
+	}
+
+	// Resume: the window reset by the pause means a full fresh window is needed.
+	status.setPaused(false)
+	for i := 1; i < recoverSamples; i++ {
+		s.sample()
+		if calls := status.governCalls(); len(calls) != 0 {
+			t.Fatalf("recover before a fresh post-resume window completed: %+v", calls)
+		}
+	}
+	s.sample()
+	calls := status.governCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one recover after a fresh post-resume window, got %+v", calls)
+	}
+	if calls[0].to != clock.Speed16x {
+		t.Errorf("recover to = %q, want 16x (one notch up)", calls[0].to)
+	}
+}
+
 // TestGovernorSamplerPausedNoGovern (spec 028 FR-013, T010): while paused the
 // sampler issues no Govern calls and resets the breach window, so a resume
 // requires a full fresh window — a pause never converts accrued breach into an

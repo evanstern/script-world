@@ -731,6 +731,82 @@ func TestStatusGovernorOmitempty(t *testing.T) {
 	}
 }
 
+// TestStatusTruthfulUnderPlayerOverride (spec 028 US4-AC2, FR-015 support): a
+// world governed below its ceiling reports both speeds in status; after a player
+// set_speed below the governed notch collapses governed state, the status path
+// reports the new effective speed with requested_speed empty — the wire fact the
+// TUI's "asked Nx" suffix reads, so the suffix disappears the instant the player
+// takes the wheel.
+func TestStatusTruthfulUnderPlayerOverride(t *testing.T) {
+	h := newHarness(t, clock.Speed32x)
+	c := h.dial(t)
+
+	// Govern the live loop down two notches (32x → 16x → 8x); the first shed
+	// records the player's 32x request as the ceiling.
+	if _, err := h.loop.Govern(clock.Speed16x, 1.9, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.loop.Govern(clock.Speed8x, 1.6, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Governed: status carries both the effective speed and the requested ceiling.
+	sd, err := c.Status("status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sd.Clock.Speed != "8x" || sd.Clock.RequestedSpeed != "32x" {
+		t.Fatalf("governed status = {Speed:%q Requested:%q}, want {8x 32x}", sd.Clock.Speed, sd.Clock.RequestedSpeed)
+	}
+
+	// Player drops below the governed notch: the override runs immediately and
+	// clears governed state.
+	sd, err = c.Status("set_speed", SetSpeedArgs{Speed: "4x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sd.Clock.Speed != "4x" {
+		t.Errorf("after override Speed = %q, want 4x", sd.Clock.Speed)
+	}
+	if sd.Clock.RequestedSpeed != "" {
+		t.Errorf("after override RequestedSpeed = %q, want empty (the suffix disappears)", sd.Clock.RequestedSpeed)
+	}
+}
+
+// TestSetSpeedMaxRefusedWithLLM (spec 028 US4-AC5, FR-012 regression): with an
+// LLM configured, requesting uncapped max is refused exactly as pre-028 — the
+// error points the operator at the 32x ceiling — while 32x itself is accepted.
+// The governor governs only the capped ladder and never makes max meaningful
+// (the cognition CappedLadder property pins the other half of this rule).
+func TestSetSpeedMaxRefusedWithLLM(t *testing.T) {
+	h := newHarness(t, clock.Speed32x)
+	// Any non-nil orchestrator flips the world into LLM-configured mode; the
+	// endpoints stay dead because the refusal never consults a model.
+	orch, err := llm.New(llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: "http://127.0.0.1:1", Model: "unused"},
+		Cloud:            llm.CloudConfig{Model: "claude-opus-4-8", Endpoint: "http://127.0.0.1:1", InputUSDPerMTok: 5, OutputUSDPerMTok: 25},
+	}, h.st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer orch.Close()
+	h.srv.SetLLM(orch)
+
+	c := h.dial(t)
+
+	if _, err := c.Status("set_speed", SetSpeedArgs{Speed: "max"}); err == nil {
+		t.Error("LLM world must refuse speed max")
+	} else if !strings.Contains(err.Error(), "32x") {
+		t.Errorf("max refusal should point at 32x: %v", err)
+	}
+	if sd, err := c.Status("set_speed", SetSpeedArgs{Speed: "32x"}); err != nil {
+		t.Fatalf("32x on an LLM world must be accepted: %v", err)
+	} else if sd.Clock.Speed != "32x" {
+		t.Errorf("speed = %s, want 32x", sd.Clock.Speed)
+	}
+}
+
 // TestLLMCallAndDegradedWorld covers the llm_call protocol command and AC#3:
 // a dead inference endpoint degrades LLM calls while the simulation ticks on
 // untouched.
