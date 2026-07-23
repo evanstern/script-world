@@ -35,8 +35,8 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		for i := range s.Agents {
 			a := &s.Agents[i]
 			if !a.Dead && a.Needs.Warmth < coldNightBelow {
-				events = append(events, memoryEvent(nextTick, i, salColdNight,
-					"Survived a freezing night in the open."))
+				events = append(events, situatedMemoryEvent(nextTick, i, salColdNight,
+					PlaceAt(s, a.X, a.Y), "", "Survived a freezing night in the open."))
 			}
 		}
 	}
@@ -80,8 +80,8 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 					continue
 				}
 				if abs(s.Agents[w].X-st.X)+abs(s.Agents[w].Y-st.Y) <= witnessRadius {
-					events = append(events, memoryEvent(nextTick, w, salFireOut,
-						"Watched the fire burn out."))
+					events = append(events, situatedMemoryEvent(nextTick, w, salFireOut,
+						PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "", "Watched the fire burn out."))
 				}
 			}
 		}
@@ -110,7 +110,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 				if s.Gru != nil && s.Gru.LastVictim == i && nextTick-s.Gru.LastAttack <= 3600 {
 					cause = "the gru"
 				}
-				events = append(events, memoryEvent(nextTick, i, salNearDeath, "Nearly died — %s almost took me.", cause))
+				events = append(events, situatedMemoryEvent(nextTick, i, salNearDeath, PlaceAt(s, a.X, a.Y), "", "Nearly died — %s almost took me.", cause))
 			}
 			if n.Health == 0 {
 				cause := "collapse"
@@ -127,8 +127,8 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 						continue
 					}
 					if abs(s.Agents[w].X-a.X)+abs(s.Agents[w].Y-a.Y) <= witnessRadius {
-						events = append(events, memoryAboutEvent(nextTick, w, i, -80, salWitnessDeath,
-							"Watched %s die of %s.", a.Name, cause))
+						events = append(events, situatedMemoryAboutEvent(nextTick, w, i, -80, salWitnessDeath,
+							PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s die of %s.", a.Name, cause))
 					}
 				}
 			}
@@ -285,7 +285,8 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 							A: d.Creditor, B: d.Debtor,
 							TrustDelta: brokenTrustPenalty, AffectionDelta: brokenAffectPenalty,
 							Reason: "promise broken"})},
-					memoryAboutEvent(nextTick, d.Creditor, d.Debtor, toneNeverPaid, salNeverPaid,
+					situatedMemoryAboutEvent(nextTick, d.Creditor, d.Debtor, toneNeverPaid, salNeverPaid,
+						PlaceAt(s, s.Agents[d.Creditor].X, s.Agents[d.Creditor].Y),
 						"%s never repaid the food I gave them.", s.Agents[d.Debtor].Name))
 				// A repay-debts norm in force makes the broken promise a
 				// witnessed crime too (TASK-13).
@@ -317,9 +318,9 @@ func socialEvents(s *State, nextTick int64) []store.Event {
 				Payload: mustPayload(RelationChangedPayload{
 					A: from, B: to, TrustDelta: 0, AffectionDelta: giveAffectionToRecv,
 					Reason: "shared food"})},
-			memoryAboutEvent(nextTick, to, from, toneSaved, salWasSaved,
-				"%s gave me food when I needed it.", f.Name),
-			memoryEvent(nextTick, from, salGaveHelp, "Gave food to %s.", t.Name))
+			situatedMemoryAboutEvent(nextTick, to, from, toneSaved, salWasSaved,
+				PlaceAt(s, t.X, t.Y), "%s gave me food when I needed it.", f.Name),
+			situatedMemoryEvent(nextTick, from, salGaveHelp, PlaceAt(s, f.X, f.Y), "", "Gave food to %s.", t.Name))
 	}
 
 	for i := range s.Agents {

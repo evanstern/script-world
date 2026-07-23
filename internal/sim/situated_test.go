@@ -5,11 +5,43 @@ package sim
 // text grammar. Table-driven, model-free — the whole layer is deterministic.
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/store"
 )
+
+// TestEmittedSimMemoriesAllSituated (SC-001 / T008b): every episodic memory the
+// sim emits over a driven run carries a Where — the code-level guarantee (the
+// pre-019 bare constructors are gone; every emission site now uses a situated
+// constructor that sets Where) made observable end-to-end. Reflex/witness/
+// environmental memories carry no Why, which is correct (never fabricated), but
+// they MUST carry a location.
+func TestEmittedSimMemoriesAllSituated(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+	s := NewState(seed, m)
+	log := driveTicks(t, s, m, 24*3600, nil) // a full game-day: fires, forages, talks, a cold night
+
+	seen := 0
+	for _, e := range log {
+		if e.Type != "agent.memory_added" {
+			continue
+		}
+		var p MemoryAddedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			t.Fatal(err)
+		}
+		seen++
+		if p.Where == nil {
+			t.Errorf("sim-emitted memory carries no Where (SC-001 breach): %q", p.Text)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("a full game-day produced no memories — the coverage assertion would be vacuous")
+	}
+}
 
 // TestMemoryReducerCopiesContext (T004): the agent.memory_added arm copies
 // Where/Why/Conv from payload to Memory unchanged; a pre-019 payload (fields

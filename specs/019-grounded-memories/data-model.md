@@ -78,7 +78,11 @@ type JournalEntry struct {
 }
 ```
 
-`Agent` gains `Journal Journal json:"journal,omitempty"`.
+`Agent` gains `Journal *Journal json:"journal,omitempty"` — a POINTER (the `Hail`
+precedent), not a value. `encoding/json`'s `omitempty` is a no-op on a non-pointer
+struct, so a value `Journal` would always serialize `"journal":{}`; a pointer omits when
+`nil`, so an agent that never journals stays byte-identical to a pre-019 snapshot (FR-014).
+The reducer lazily allocates on the first write; scribe/search treat `nil` as empty.
 
 **Invariants**:
 - IDs reducer-assigned (`ID = NextID; NextID++`), monotonic, never reused — stable addresses for delete/read across the journal's whole life.

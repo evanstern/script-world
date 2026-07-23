@@ -15,48 +15,19 @@ import (
 // executor's job; selection is a pure function shared by the mind's prompts
 // and the tests.
 
-// memoryEvent builds a personal agent.memory_added event (no gossip subject).
-func memoryEvent(tick int64, agent int, salience int, format string, args ...any) store.Event {
-	return store.Event{
-		Tick: tick, Type: "agent.memory_added",
-		Payload: mustPayload(MemoryAddedPayload{
-			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience, Subject: -1,
-		}),
-	}
-}
-
-// memoryAboutEvent marks a gossip-worthy memory about another agent — the
-// seed rumors are born from (TASK-8).
-func memoryAboutEvent(tick int64, agent, subject, tone, salience int, format string, args ...any) store.Event {
-	return store.Event{
-		Tick: tick, Type: "agent.memory_added",
-		Payload: mustPayload(MemoryAddedPayload{
-			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience,
-			Subject: subject, Tone: tone,
-		}),
-	}
-}
-
-// memoryEventToned is memoryEvent with an explicit tone — for a personal
-// memory (no gossip subject, Subject stays -1) that still carries a
-// positive/negative flavor, like a bath's contentment (spec 012 T032).
-func memoryEventToned(tick int64, agent, salience, tone int, format string, args ...any) store.Event {
-	return store.Event{
-		Tick: tick, Type: "agent.memory_added",
-		Payload: mustPayload(MemoryAddedPayload{
-			Agent: agent, Text: fmt.Sprintf(format, args...), Salience: salience, Subject: -1, Tone: tone,
-		}),
-	}
-}
-
 // --- spec 019 (US1): situated episodic memories ---
 //
-// The situated constructors mirror the three above (memoryEvent /
-// memoryAboutEvent / memoryEventToned) but bake the where/why context into the
-// payload AND compose it into the memory text via the shared grammar helper
-// (situateText). The salience/subject/tone semantics are unchanged — this layer
-// situates memories, it does not re-weigh them. Unmigrated call sites keep
-// using the bare constructors and stay byte-identical.
+// Every episodic memory the sim emits is situated (SC-001): these constructors
+// bake the where/why context into the agent.memory_added payload AND compose it
+// into the memory text via the shared grammar helper (situateText). The
+// salience/subject/tone semantics are unchanged — this layer situates memories,
+// it does not re-weigh them. There are three, mirroring the memory shapes:
+// personal (situatedMemoryEvent), personal-with-tone (situatedMemoryToned), and
+// gossip/witness about another agent (situatedMemoryAboutEvent, which carries no
+// Why — a witness never drove the act). Spec 019 T008b removed the pre-019 bare
+// constructors once every emission site was migrated, so no sim memory can be
+// emitted unsituated: a new memory site must pick a situated constructor and
+// therefore a Where.
 
 // placeScanRadius bounds describePlace's deterministic feature scan (Manhattan).
 const placeScanRadius = 2
