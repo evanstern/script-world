@@ -115,11 +115,11 @@ no raw enum appears; suppressions read as "didn't think because…".
 
 *(The glossary itself landed in Phase 2 — this phase is the proof + phrasing pass.)*
 
-- [ ] T016 [US3] Surface sweep test: render a chain containing every verdict and an
+- [x] T016 [US3] Surface sweep test: render a chain containing every verdict and an
       outcome of every kind through `villagerDecisionsBody` and the metatron
       transcript path, assert no raw verdict/outcome enum string appears in either
       surface's output, in `internal/tui/decisions_test.go` (SC-002 end-to-end)
-- [ ] T017 [US3] Phrasing review pass against spec US3 acceptance scenarios: verdict
+- [x] T017 [US3] Phrasing review pass against spec US3 acceptance scenarios: verdict
       phrases read as cause-first plain language ("the gate refused it because…",
       "its one action for this thought was already spent"), suppressions read
       "didn't think because…" with router reason; adjust glossary wording in

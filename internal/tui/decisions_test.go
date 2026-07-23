@@ -389,3 +389,64 @@ func TestClassifyTranscriptLineVerdictRowStylesAsTelemetry(t *testing.T) {
 		t.Error("verdict rows should style as telemetry (styleFamilyCog, faint) — distinct from moments/nudges (styleAgent, bold)")
 	}
 }
+
+// --- T016: US3 — no raw verdict/outcome enum ever reaches either surface
+// (SC-002 end to end). The glossary itself is deliberately worded (see
+// verdictGlossary's doc comment) so no phrase self-embeds its own raw key,
+// keeping this a meaningful substring sweep rather than a trivial failure. ---
+
+var allRawVerdicts = []string{
+	string(toolloop.VerdictLanded), string(toolloop.VerdictRejectedGate), string(toolloop.VerdictRejectedCardinality),
+	string(toolloop.VerdictRejectedUnknown), string(toolloop.VerdictRejectedMalformed),
+	string(toolloop.VerdictReadOK), string(toolloop.VerdictReadError), string(toolloop.VerdictUnlanded),
+}
+
+var allRawOutcomes = []string{
+	sim.OutcomeLanded, sim.OutcomeAdapted, sim.OutcomeRejectedStale, sim.OutcomeRejectedGuard,
+	sim.OutcomeSuperseded, sim.OutcomeExpired, sim.OutcomeUnavailable, sim.OutcomeUnusable,
+	sim.OutcomeSuppressed, sim.OutcomeRetried,
+}
+
+func TestNoRawVerdictOrOutcomeEnumInDecisionsSubView(t *testing.T) {
+	m := villagersModel(t)
+	m.villDetail = true
+	seq := int64(1)
+	next := func() int64 { seq++; return seq - 1 }
+
+	for i, v := range allRawVerdicts {
+		job := fmt.Sprintf("reflex-0-%d", 1000+i)
+		m.applyEvent(thoughtEvent(next(), int64(1000+i), job, "reflex", 0, 0))
+		m.applyEvent(toolCallEvent(next(), job, 1, "gather", v, "because reasons"))
+		m.applyEvent(outcomeEvent(next(), job, "reflex", 0, "landed", ""))
+	}
+	for i, o := range allRawOutcomes {
+		job := fmt.Sprintf("reflex-0-%d", 2000+i)
+		m.applyEvent(thoughtEvent(next(), int64(2000+i), job, "reflex", 0, 0))
+		m.applyEvent(outcomeEvent(next(), job, "reflex", 0, o, "because reasons"))
+	}
+
+	body := m.villagerDecisionsBody(200, 2000) // generous budget: every chain visible
+	for _, v := range allRawVerdicts {
+		if strings.Contains(body, v) {
+			t.Errorf("raw toolloop verdict %q leaked into the decisions sub-view", v)
+		}
+	}
+	for _, o := range allRawOutcomes {
+		if strings.Contains(body, o) {
+			t.Errorf("raw sim outcome %q leaked into the decisions sub-view", o)
+		}
+	}
+}
+
+func TestNoRawVerdictEnumInMetatronTranscript(t *testing.T) {
+	m := testModel(t)
+	for i, v := range allRawVerdicts {
+		m.applyEvent(toolCallEvent(int64(i+1), fmt.Sprintf("turn-metatron-%d", i), 1, "grant_item", v, "because reasons"))
+	}
+	transcript := strings.Join(m.transcript, "\n")
+	for _, v := range allRawVerdicts {
+		if strings.Contains(transcript, v) {
+			t.Errorf("raw toolloop verdict %q leaked into the metatron transcript", v)
+		}
+	}
+}
