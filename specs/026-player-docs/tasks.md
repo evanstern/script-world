@@ -18,8 +18,8 @@
 
 **Independent Test**: quickstart V1 on these two pages; every command matches README.md / cli-promptworld / daemon-lifecycle / tui-client at their pinned commits.
 
-- [ ] T003 [US1] Write `docs/player/getting-started.html` using the SKILL.md skeleton: plain-language install→build→`new`→`start`→`attach`/`ui` walkthrough projected from README.md, docs/wiki/cli-promptworld.md, docs/wiki/daemon-lifecycle.md, docs/wiki/tui-client.md; `promptworld-docs:source` meta per source at its current pin (wiki: `verified_against`; README: last-touching commit); link back to index.html
-- [ ] T004 [US1] Write `docs/player/index.html`: nav hub linking all six topic pages with one-line player-facing blurbs; `generated-by` meta only (no source tags); same inlined CSS; note it links pages that arrive in Phase 4 (relative links fine before those files exist, but all must resolve by end of Phase 4)
+- [X] T003 [US1] Write `docs/player/getting-started.html` using the SKILL.md skeleton: plain-language install→build→`new`→`start`→`attach`/`ui` walkthrough projected from README.md, docs/wiki/cli-promptworld.md, docs/wiki/daemon-lifecycle.md, docs/wiki/tui-client.md; `promptworld-docs:source` meta per source at its current pin (wiki: `verified_against`; README: last-touching commit); link back to index.html
+- [X] T004 [US1] Write `docs/player/index.html`: nav hub linking all six topic pages with one-line player-facing blurbs; `generated-by` meta only (no source tags); same inlined CSS; note it links pages that arrive in Phase 4 (relative links fine before those files exist, but all must resolve by end of Phase 4)
 
 **Checkpoint**: open index.html from disk — index + getting-started render in light and dark, offline.
 
