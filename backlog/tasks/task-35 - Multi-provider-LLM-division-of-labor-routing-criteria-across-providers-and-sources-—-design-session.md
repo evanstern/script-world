@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 02:17'
-updated_date: '2026-07-23 15:16'
+updated_date: '2026-07-23 15:26'
 labels:
   - engine
   - llm
@@ -34,12 +34,16 @@ Questions to settle in the session:
 - Operational surface: how status/TUI names where a call went and why (routing decision legibility).
 
 Related: TASK-6 (two-tier orchestrator, Done), TASK-15 (9router cloud tier, Done), TASK-24 (local endpoint contention — its concurrency-guard option may become a routing criterion here), TASK-32 (cognition horizon — latency budgets are a routing input).
+
+Session output (2026-07-23): decision-5 (provider division of labor) + the spec below, authored on branch task-35-provider-routing.
+
+Spec: specs/024-provider-routing
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A design session produces a durable design doc (decision record or spec) defining the routing criteria, provider registry shape, and fallback-chain semantics
-- [ ] #2 The design states how routing interacts with the spend meter, circuit breakers, and the TASK-24 contention scenario
+- [x] #1 A design session produces a durable design doc (decision record or spec) defining the routing criteria, provider registry shape, and fallback-chain semantics
+- [x] #2 The design states how routing interacts with the spend meter, circuit breakers, and the TASK-24 contention scenario
 - [ ] #3 Follow-on implementation tasks (or a Spec Kit spec) are cut from the design and placed on the board
 <!-- AC:END -->
 
@@ -55,4 +59,6 @@ Follow the TASK-32 design-session pattern: 1) Cut worktree .worktrees/task-35 (b
 Live evidence for this design session (2026-07-21): local server parallelizes natively (4 concurrent cogito:3b calls in 0.98s wall vs 3.8s single cold call; no multi-instance setup needed — one loaded model, N slots). Cost/quality sketch from today's measurements: cogito:3b ~1s/call warm vs gemma4:12b-mlx ~20s under load; 48-128-token structured outputs (musings, conversation turns) are 3B-viable, planner/narrator prose is not — division of labor should route cheap chatty classes to the small parallel model and keep quality classes on gemma (both loaded simultaneously fits memory). Caution from TASK-42: small models raise empty-utterance rates — routing design must pair with the retry/tolerance work. Mechanical prerequisite now split out as the parallel-tier task (N workers per tier); this session owns the routing criteria (per-class? per-provider incl. cloud/9router? cost/latency/quality axes).
 
 Re-grounding 2026-07-22: no drift — kind-to-tier table (llm.go:61) and breaker/queue machinery hold. Mechanical prereq TASK-45 (parallel local tier workers) is Done. TASK-24's endpoint-contention findings feed this session; its advisory-lock option may be subsumed by the per-endpoint concurrency guard designed here.
+
+Design session complete (2026-07-23): doctrine recorded as decision-5 (registry + deterministic ordered chains; chain order IS the quality statement; one wallet with per-provider attribution; per-provider breaker/queue/lane/workers/estimator; endpoint-capacity advisory leases subsuming TASK-24; persona scene pinning; legacy llm.json equivalence). Spec specs/024-provider-routing authored on branch task-35-provider-routing (6 prioritized stories: registry+legacy equivalence P1 MVP, division of labor P2, chain-walking fallback + scene pinning P3, one wallet P4, endpoint leases P5, status/TUI legibility P6; 18 FRs, 8 SCs; quality checklist all-pass). AC1+AC2 proven by decision-5 + spec. Next: speckit-plan / speckit-tasks on the branch, then delegated implementation (Opus 4.8 rubric tier — concurrency/scheduling in internal/llm).
 <!-- SECTION:NOTES:END -->
