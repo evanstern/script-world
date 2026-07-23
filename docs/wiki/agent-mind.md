@@ -12,7 +12,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 642a75d963f0cdbc34e772fad547c0eacedcfa7c
 ---
 
 # Agent mind
@@ -185,9 +185,19 @@ step cap now live as tool schemas ([[tool-registry]]'s `InputSchema`,
 `set_plan`'s authored override) the loop driver itself validates before
 dispatch, not a parser the mind ran after the call returned. `systemPrompt`
 (prompt.go) no longer renders the goal line/gloss block or the JSON reply
-shape — it only frames the choice ("call exactly one acting tool... a world
-action, a short plan (set_plan), or a passing thought (muse)"); the tools
-themselves carry the vocabulary via their declared name/description/schema.
+shape — it only frames the choice; the tools themselves carry the vocabulary
+via their declared name/description/schema. Since spec 027 (TASK-73) that
+frame is a crafted three-part structure — one identity statement (the only
+place the frame names the agent), the persona verbatim as its own block
+(vanishing cleanly when empty), and name-free second-person task framing
+("calling exactly one acting tool... a world action, a short plan (set_plan),
+or a passing thought (muse)") — doctrine unchanged, and still a pure function
+of (name, personaText) so it stays the cacheable per-agent prefix (the
+`cache_control` system block). The rewrite was eval-gated
+(specs/027-villager-prompt-quality/eval/): on identical seeded soaks it cut
+`rejected_malformed` from 15.34% to 11.50% and roughly halved the muse share;
+a worked tool-selection exemplar was measured and REJECTED (worse malformed
+rate, +30% tokens, cook-verb anchoring), so the frame ships exemplar-free.
 
 **Villager tool handlers** (`internal/mind/handlers.go`): every acting tool
 wraps an existing landing door, never mutating the world directly — the loop

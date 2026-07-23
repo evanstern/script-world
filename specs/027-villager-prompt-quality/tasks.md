@@ -14,7 +14,7 @@
 
 **Purpose**: eval scaffolding so every later artifact has a tracked home
 
-- [ ] T001 Create `scripts/eval-prompt-73.sh` skeleton (usage stub, arg parsing: `<variant> <git-ref>`) and `specs/027-villager-prompt-quality/eval/` with a one-line README naming the record shape (data-model.md §2)
+- [X] T001 Create `scripts/eval-prompt-73.sh` skeleton (usage stub, arg parsing: `<variant> <git-ref>`) and `specs/027-villager-prompt-quality/eval/` with a one-line README naming the record shape (data-model.md §2)
 
 ---
 
@@ -22,8 +22,8 @@
 
 **Purpose**: the frame contract, executable — written BEFORE the rewrite so C2 (name-once) is red against the old prompt and doctrine tests can't silently weaken
 
-- [ ] T002 Write contract tests C1–C5 from `specs/027-villager-prompt-quality/contracts/system-prompt.md` in `internal/mind/prompt_test.go`: purity/byte-identical renders (C1), name-exactly-once with sentinel name (C2 — MUST FAIL against the old prompt), doctrine meaning assertions incl. no free-text path (C3), persona block verbatim + clean empty-persona render (C4); C5 exemplar assertions added later in T006
-- [ ] T003 Add `TestPromptFrameReport` to `internal/mind/prompt_test.go`: renders the frame for a fixed sample agent (name + representative persona) and logs bytes / words / approx tokens (`len/4`, research D4)
+- [X] T002 Write contract tests C1–C5 from `specs/027-villager-prompt-quality/contracts/system-prompt.md` in `internal/mind/prompt_test.go`: purity/byte-identical renders (C1), name-exactly-once with sentinel name (C2 — MUST FAIL against the old prompt), doctrine meaning assertions incl. no free-text path (C3), persona block verbatim + clean empty-persona render (C4); C5 exemplar assertions added later in T006
+- [X] T003 Add `TestPromptFrameReport` to `internal/mind/prompt_test.go`: renders the frame for a fixed sample agent (name + representative persona) and logs bytes / words / approx tokens (`len/4`, research D4)
 
 **Checkpoint**: `go test ./internal/mind/` shows exactly one red test (C2 name-once); everything else green
 
@@ -35,8 +35,8 @@
 
 **Independent Test**: `go test ./internal/mind/` fully green (C1–C4); rendered frame inspectable via T003's report
 
-- [ ] T004 [US2] Rewrite `systemPrompt` in `internal/mind/prompt.go` per data-model.md §1: identity statement naming the agent once, persona as its own block (clean when empty), task framing in second person with doctrine meaning intact (FR-001/002/003/005); update the function's doc comment to match
-- [ ] T005 [US2] Run `go test ./...`; update any scripted-stub tests that pinned old wording in `internal/mind/` or `internal/toolloop/` without weakening what they test (FR-008); commit as the **`new`** variant ref (research D2)
+- [X] T004 [US2] Rewrite `systemPrompt` in `internal/mind/prompt.go` per data-model.md §1: identity statement naming the agent once, persona as its own block (clean when empty), task framing in second person with doctrine meaning intact (FR-001/002/003/005); update the function's doc comment to match
+- [X] T005 [US2] Run `go test ./...`; update any scripted-stub tests that pinned old wording in `internal/mind/` or `internal/toolloop/` without weakening what they test (FR-008); commit as the **`new`** variant ref (research D2)
 
 **Checkpoint**: US2 complete — branch commit = variant `new`, all tests green
 
@@ -48,7 +48,7 @@
 
 **Independent Test**: `go test ./internal/mind/` green including C5 assertions
 
-- [ ] T006 [US3] Author the worked exemplar per research D5 (situation-generic, no real name, no literal JSON args, not muse-featuring), append as frame part 4 in `internal/mind/prompt.go`, add contract C5 assertions to `internal/mind/prompt_test.go`, run `go test ./...`; commit as the **`new+exemplar`** variant ref
+- [X] T006 [US3] Author the worked exemplar per research D5 (situation-generic, no real name, no literal JSON args, not muse-featuring), append as frame part 4 in `internal/mind/prompt.go`, add contract C5 assertions to `internal/mind/prompt_test.go`, run `go test ./...`; commit as the **`new+exemplar`** variant ref
 
 **Checkpoint**: three refs exist — `origin/main` (old), `new`, `new+exemplar`
 
@@ -60,12 +60,12 @@
 
 **Independent Test**: `specs/027-villager-prompt-quality/eval/` holds one record per variant + a decision note whose numbers satisfy SC-001…SC-004
 
-- [ ] T007 [US1] Implement `scripts/eval-prompt-73.sh` per research D1–D3: build `promptworld` from `<git-ref>` into a temp dir; `new eval73-<variant> --seed 4242`; `start`; set speed; wait until world clock passes the 6-game-hour window; `stop`; `tail --since 0`; tally villager-planner `cog.tool_call` verdicts (join `cog.thought` class to exclude Metatron/conversation jobs) + acting-tool distribution; write `specs/027-villager-prompt-quality/eval/<variant>.md`
-- [ ] T008 [US1] Soak variant `old` (ref `origin/main`) → `specs/027-villager-prompt-quality/eval/old.md`; confirm ≥200 villager acting decisions else extend window for ALL variants (research D3)
-- [ ] T009 [US1] Soak variant `new` → `specs/027-villager-prompt-quality/eval/new.md` (serial, same machine, same window)
-- [ ] T010 [US1] Soak variant `new+exemplar` → `specs/027-villager-prompt-quality/eval/new-exemplar.md` (serial, same machine, same window)
-- [ ] T011 [P] [US1] Record per-variant token counts (bytes/words/approx from T003's report, run at each ref) into the matching `eval/<variant>.md` records (SC-004)
-- [ ] T012 [US1] Gate decision in `specs/027-villager-prompt-quality/eval/decision.md`: compare rejection rates (SC-001) and run the distribution screen (SC-003); pick the shipped variant per FR-004 (better, or equal-and-cheaper); if the exemplar loses, revert its commit so the branch tip is the shipped variant and record the measured rejection reason
+- [X] T007 [US1] Implement `scripts/eval-prompt-73.sh` per research D1–D3: build `promptworld` from `<git-ref>` into a temp dir; `new eval73-<variant> --seed 4242`; `start`; set speed; wait until world clock passes the 6-game-hour window; `stop`; `tail --since 0`; tally villager-planner `cog.tool_call` verdicts (join `cog.thought` class to exclude Metatron/conversation jobs) + acting-tool distribution; write `specs/027-villager-prompt-quality/eval/<variant>.md`
+- [X] T008 [US1] Soak variant `old` (ref `origin/main`) → `specs/027-villager-prompt-quality/eval/old.md`; confirm ≥200 villager acting decisions else extend window for ALL variants (research D3)
+- [X] T009 [US1] Soak variant `new` → `specs/027-villager-prompt-quality/eval/new.md` (serial, same machine, same window)
+- [X] T010 [US1] Soak variant `new+exemplar` → `specs/027-villager-prompt-quality/eval/new-exemplar.md` (serial, same machine, same window)
+- [X] T011 [P] [US1] Record per-variant token counts (bytes/words/approx from T003's report, run at each ref) into the matching `eval/<variant>.md` records (SC-004)
+- [X] T012 [US1] Gate decision in `specs/027-villager-prompt-quality/eval/decision.md`: compare rejection rates (SC-001) and run the distribution screen (SC-003); pick the shipped variant per FR-004 (better, or equal-and-cheaper); if the exemplar loses, revert its commit so the branch tip is the shipped variant and record the measured rejection reason
 
 **Checkpoint**: eval dir complete; branch tip = shipped variant; gate verdict written
 
