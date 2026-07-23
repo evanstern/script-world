@@ -501,3 +501,34 @@ func TestMetatronBadgeWhenTabNotVisible(t *testing.T) {
 		t.Error("selecting the metatron tab should clear the badge/flash")
 	}
 }
+
+// TestConsoleToolsSummary (spec 021 T021, SC-005): the console header's
+// granted-tool summary is quiet for a full-grant default world, "none" for a
+// conversation-only world, and the short-form set otherwise, carrying any
+// miracle-kind restriction through.
+func TestConsoleToolsSummary(t *testing.T) {
+	cases := []struct {
+		name string
+		s    metatron.Status
+		want string
+	}{
+		{"default is quiet", metatron.Status{ManifestDefault: true,
+			GrantedTools: []string{"nudge_dream", "nudge_omen", "work_miracle"}}, ""},
+		{"conversation-only", metatron.Status{ManifestDefault: false, GrantedTools: nil}, "tools: none"},
+		{"subset short form", metatron.Status{ManifestDefault: false,
+			GrantedTools: []string{"nudge_dream", "nudge_omen"}}, "tools: dream, omen"},
+		{"restricted miracle kinds", metatron.Status{ManifestDefault: false,
+			GrantedTools: []string{"nudge_dream", "work_miracle(move,give_item)"}},
+			"tools: dream, miracles(move,give_item)"},
+		{"unrestricted miracles", metatron.Status{ManifestDefault: false,
+			GrantedTools: []string{"work_miracle"}}, "tools: miracles"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := c.s
+			if got := consoleToolsSummary(&s); got != c.want {
+				t.Errorf("consoleToolsSummary = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

@@ -7,8 +7,31 @@ import (
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
+
+// TestMiracleCostDerivedFromTool (spec 021 T004 / SC-004): the reducer's cost
+// table IS tool.MiracleCostsByEvent() — a single authoritative source, not a
+// second local copy. If anyone re-introduces a hand-written literal here that
+// disagrees with the one table in internal/tool, this fails. It also pins the
+// price doctrine (time_snap 2, others 1) against the event-keyed shape the
+// reducer keys on.
+func TestMiracleCostDerivedFromTool(t *testing.T) {
+	if !reflect.DeepEqual(miracleCost, tool.MiracleCostsByEvent()) {
+		t.Errorf("sim.miracleCost = %v, want the derived tool.MiracleCostsByEvent() = %v",
+			miracleCost, tool.MiracleCostsByEvent())
+	}
+	want := map[string]int{
+		"metatron.time_snapped":   2,
+		"metatron.entity_moved":   1,
+		"metatron.entity_removed": 1,
+		"metatron.item_granted":   1,
+	}
+	if !reflect.DeepEqual(miracleCost, want) {
+		t.Errorf("sim.miracleCost = %v, want %v", miracleCost, want)
+	}
+}
 
 // Metatron miracles (spec 016 US1): the entity move/remove reducer arms.
 // validate-not-clamp, reject-whole, no charge spent on rejection, no partial

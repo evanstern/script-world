@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/tool"
 	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
@@ -57,16 +58,16 @@ type (
 	}
 )
 
-// miracleCost is the doctrine cost table (data-model.md): the time snap is the
-// expensive one (2 charges), every other miracle costs 1. Pricing is doctrine,
-// not caller input — a payload never carries its own price. Keyed lookup only;
-// never iterated into state (determinism).
-var miracleCost = map[string]int{
-	"metatron.time_snapped":   2,
-	"metatron.item_granted":   1,
-	"metatron.entity_moved":   1,
-	"metatron.entity_removed": 1,
-}
+// miracleCost is the reducer's per-event charge table — DERIVED from the single
+// authoritative source in internal/tool (spec 021 R7 / FR-009 / SC-004), not a
+// second local copy. The time snap is the expensive one (2 charges), every
+// other miracle costs 1; that doctrine now lives once in tool.miracleCosts, and
+// tool.MiracleCostsByEvent maps it into the event-keyed shape this reducer keys
+// on. A cost change in that one table propagates here with no second edit —
+// TestMiracleCostDerivedFromTool pins the derivation so a re-introduced literal
+// fails the build. Pricing is still doctrine, not caller input (a payload never
+// carries its own price); keyed lookup only, never iterated into state.
+var miracleCost = tool.MiracleCostsByEvent()
 
 // spendMiracleCharge is the shared validate/spend helper for every miracle arm.
 // It checks the bank against the event's cost and decrements it — UNLESS gratis,

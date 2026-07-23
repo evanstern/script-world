@@ -238,3 +238,49 @@ func TestRostersResolve(t *testing.T) {
 		t.Errorf("RosterMetatron = %v, want %v", RosterMetatron, wantMetatron)
 	}
 }
+
+// TestMiracleCostTable (spec 021 T003): the authoritative per-kind cost table
+// is the single source SC-004 rests on. Its kinds are exactly MiracleKinds(),
+// the time snap costs 2 and every other kind 1, and MiracleCostsByEvent covers
+// exactly the four metatron.* miracle event types with the same prices.
+func TestMiracleCostTable(t *testing.T) {
+	// Every declared kind has a cost; the cost set matches the price doctrine.
+	for _, k := range MiracleKinds() {
+		c, ok := MiracleCost(k)
+		if !ok {
+			t.Errorf("MiracleCost(%q) has no entry", k)
+			continue
+		}
+		want := 1
+		if k == "time_snap" {
+			want = 2
+		}
+		if c != want {
+			t.Errorf("MiracleCost(%q) = %d, want %d", k, c, want)
+		}
+	}
+	// No cost entry outside the kind vocabulary (no orphan price).
+	if len(miracleCosts) != len(MiracleKinds()) {
+		t.Errorf("miracleCosts has %d entries, want %d (one per kind)", len(miracleCosts), len(MiracleKinds()))
+	}
+	if _, ok := MiracleCost("bless"); ok {
+		t.Error("MiracleCost reports a price for an unknown kind")
+	}
+
+	// MiracleCostsByEvent covers exactly the four miracle event types.
+	byEvent := MiracleCostsByEvent()
+	wantEvents := map[string]int{
+		"metatron.entity_moved":   1,
+		"metatron.entity_removed": 1,
+		"metatron.item_granted":   1,
+		"metatron.time_snapped":   2,
+	}
+	if !reflect.DeepEqual(byEvent, wantEvents) {
+		t.Errorf("MiracleCostsByEvent() = %v, want %v", byEvent, wantEvents)
+	}
+	// Fresh map per call (a mutation must not bleed into the next caller).
+	byEvent["metatron.time_snapped"] = 99
+	if again := MiracleCostsByEvent(); again["metatron.time_snapped"] != 2 {
+		t.Error("MiracleCostsByEvent() is not a fresh map per call")
+	}
+}
