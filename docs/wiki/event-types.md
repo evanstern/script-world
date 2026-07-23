@@ -9,10 +9,11 @@ sources:
   - internal/sim/recipes.go
   - internal/sim/gru.go
   - internal/sim/loop.go
+  - internal/sim/landing.go
   - internal/sim/miracles.go
   - internal/sim/journal.go
   - internal/daemon/daemon.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+verified_against: 6b869e1c1b2b9f73749fdf3991ff6d7568aee290
 ---
 
 # Event types

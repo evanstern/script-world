@@ -1,10 +1,10 @@
 ---
 id: TASK-70
 title: Extract the intent-landing ladder into named rungs (sim loop refactor)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 06:34'
-updated_date: '2026-07-23 09:04'
+updated_date: '2026-07-23 13:37'
 labels:
   - review-2026-07-22
   - code-quality
@@ -28,12 +28,12 @@ Spec: specs/022-landing-ladder-rungs
 - [x] #1 Landing logic extracted from handleCommand into named rungs; the adapted/failed/hailTarget flag interplay is gone
 - [x] #2 Determinism harness proves bit-identical replay on existing seeds across the refactor
 - [x] #3 Each rung has isolated unit tests, including the hail special-cases (mutual-hailer, in-radius, moved-target)
-- [ ] #4 go test -race ./... passes; docs/wiki sim-loop note re-pinned
+- [x] #4 go test -race ./... passes; docs/wiki sim-loop note re-pinned
 - [x] #5 Spec phase: Setup
 - [x] #6 Spec phase: User Story 1 — named-rung extraction (P1) 🎯 MVP
 - [x] #7 Spec phase: User Story 2 — behavior-identity proof (P1)
 - [x] #8 Spec phase: User Story 3 — rung isolation tests (P2)
-- [ ] #9 Spec phase: Polish & Cross-Cutting
+- [x] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,4 +50,12 @@ Tier decision (constitution V rubric): Opus 4.8 via spec-implementer. Justificat
 spec-bridge sync: Setup: 2/2 · User Story 1 — named-rung extraction (P1) 🎯 MVP: 4/4 · User Story 2 — behavior-identity proof (P1): 3/3 · User Story 3 — rung isolation tests (P2): 3/3 · Polish & Cross-Cutting: 1/2
 
 Implementation merged-ready: PR #47 open (branch task-70-landing-ladder-rungs, commits a981a7b extraction + 7540186 tests, forked from 213a6fa). Gates re-verified by orchestrator: determinism/replay subset + TestLanding green (9.2s), go vet clean, full go test -race ./... green (19 pkgs, exit 0), diff surface = internal/sim/{loop.go,landing.go,landing_test.go} only. AC #4 pending merge + wiki re-pin (T014). PR merge blocked by session permissions — awaiting user merge of PR #47.
+
+spec-bridge sync: Setup: 2/2 · User Story 1 — named-rung extraction (P1) 🎯 MVP: 4/4 · User Story 2 — behavior-identity proof (P1): 3/3 · User Story 3 — rung isolation tests (P2): 3/3 · Polish & Cross-Cutting: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 2/2 · User Story 1 — named-rung extraction (P1) 🎯 MVP: 4/4 · User Story 2 — behavior-identity proof (P1): 3/3 · User Story 3 — rung isolation tests (P2): 3/3 · Polish & Cross-Cutting: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

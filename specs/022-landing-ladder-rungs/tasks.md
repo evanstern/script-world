@@ -71,7 +71,7 @@ rung table; `grep` per quickstart.md §4 shows no ladder flags left in loop.go.
 ## Phase 6: Polish & Cross-Cutting
 
 - [x] T013 Re-run quickstart.md §1–§4 end-to-end in the worktree; record results in the PR body; commit, push, open the TASK-70 PR (one task, one PR)
-- [ ] T014 After merge: `/grounding-wiki:wiki-update` to re-verify and re-pin `docs/wiki/sim-loop.md` (add landing.go to its sources) — FR-009 / board AC #4; then remove the worktree and ff-pull root
+- [x] T014 After merge: `/grounding-wiki:wiki-update` to re-verify and re-pin `docs/wiki/sim-loop.md` (add landing.go to its sources) — FR-009 / board AC #4; then remove the worktree and ff-pull root
 
 ---
 

@@ -4,7 +4,8 @@ description: The single-goroutine fixed-timestep loop — tick execution, comman
 kind: component
 sources:
   - internal/sim/loop.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+  - internal/sim/landing.go
+verified_against: 6b869e1c1b2b9f73749fdf3991ff6d7568aee290
 ---
 
 # Sim loop
@@ -62,7 +63,14 @@ unmetered caller (tests, tooling): the ladder below is skipped and no telemetry
 is emitted — the pre-TASK-32 contract.
 
 At the boundary, a metered intent climbs the **landing ladder** against the
-world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0):
+world as it is now (`staleness = state.Tick − SnapshotTick`, floored at 0).
+Since TASK-70 the ladder lives in `internal/sim/landing.go` as
+`Loop.landIntent` — the `inject_intent` case in `handleCommand` is a one-line
+dispatch to it — with each doctrine rung a named function (`rungUnavailable`,
+`rungSuperseded`, `rungStale`, `rungHailRelaxed`, `rungGuardFailed`,
+`rungAdapted`, `rungInRadiusHail`) and the guard walk (`walkGuards`) producing
+one explicit `landingDecision` (outcome, reason, hail target) instead of the
+former cross-loop flags. The extraction is behavior-identical; the rungs:
 
 1. dead/asleep agent → `rejected-unavailable`;
 2. `Generation` mismatch with `Agent.Generation` → `superseded`;
