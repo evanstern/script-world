@@ -21,6 +21,14 @@ func PersonaPath(worldDir, name string) string {
 }
 func SoulPath(worldDir, name string) string { return filepath.Join(Dir(worldDir, name), "soul.md") }
 
+// JournalPath is the agent's self-authored journal view (spec 019, US3) —
+// agents/<name>/journal.md, a regenerable render of the agent's Journal state
+// (like soul.md), seeded empty at genesis and rewritten by the scribe on every
+// journal.* event.
+func JournalPath(worldDir, name string) string {
+	return filepath.Join(Dir(worldDir, name), "journal.md")
+}
+
 // Genesis writes each agent's persona.md (read-only) and an empty soul.md.
 // Called exactly once, by `promptworld new` — the only write path to
 // persona.md in the entire system.
@@ -43,6 +51,12 @@ func Genesis(worldDir string) error {
 		}
 		soul := fmt.Sprintf("# %s — soul\n\n*Born day 1. No memories yet.*\n", name)
 		if err := os.WriteFile(SoulPath(worldDir, name), []byte(soul), 0o644); err != nil {
+			return err
+		}
+		// Spec 019 (US3): seed an empty journal.md alongside soul.md — a
+		// regenerable view the scribe rewrites on every journal.* event.
+		journal := fmt.Sprintf("# %s's journal\n\n_0/%d runes_\n\n*Empty — nothing written yet.*\n", name, sim.JournalBudgetRunes)
+		if err := os.WriteFile(JournalPath(worldDir, name), []byte(journal), 0o644); err != nil {
 			return err
 		}
 	}

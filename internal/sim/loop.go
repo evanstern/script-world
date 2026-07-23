@@ -190,6 +190,13 @@ var injectSocialWhitelist = map[string]bool{
 	// observability, reducer no-op, same isolation guarantees as the other
 	// cog.* types above.
 	"cog.tool_call": true,
+	// Agent-authored journal (spec 019, US3): the two mind-injectable journal
+	// mutations. Landed only through this door; the reducer dry-run enforces the
+	// rune budget (written) and entry existence (deleted) before either lands.
+	// sim.ValidateToolCoverage pins the two Expressive journal tools' Events ⊆
+	// this whitelist at boot.
+	"journal.entry_written": true,
+	"journal.entry_deleted": true,
 }
 
 // InjectSocial applies a batch of whitelisted social events atomically at

@@ -108,6 +108,12 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		"cog.outcome":                   true,
 		"cog.recalibration_recommended": true,
 		"cog.tool_call":                 true,
+		// Spec 019 (agent journal) deliberately widens the boundary by exactly
+		// two entries — the journal mutations, landed through the same door and
+		// declared as the two Expressive journal tools' Events (pinned ⊆ this
+		// whitelist by ValidateToolCoverage).
+		"journal.entry_written": true,
+		"journal.entry_deleted": true,
 	}
 	for typ := range want {
 		if !injectSocialWhitelist[typ] {

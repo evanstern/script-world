@@ -164,6 +164,17 @@ const (
 	glossBuildOven  = `build_oven needs 4 refined stone + 2 planks and lets you cook meals and bathe; bathe at an oven spends 1 water + 1 wood for warmth and morale.`
 	glossDrop       = `drop puts down goods where you stand, creating or adding to a ground pile there anyone can take from; pick_up takes from a pile on or next to you. Name what with "kind" (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, or spears) and how much with "qty" (omit or 0 = all of that kind); pick_up with no "kind" takes everything that fits.`
 	glossBuildChest = `build_chest needs 6 planks; chests preserve food (it never rots there, unlike a ground pile) and you keep the chest permanently once built. deposit stores goods in the nearest chest — always name a "kind" or nothing moves; withdraw takes goods back out of the nearest chest that has them ("kind" omitted or empty takes everything that fits). Taking from another villager's chest is possible too, but they will remember who took it.`
+
+	// Journal tool glosses (spec 019, US3). Deliberately capability + budget
+	// ONLY — the ONE rule the system imposes is the size budget, so the prompt
+	// imposes no cadence, format, or content guidance either (FR-010 applies to
+	// prompts too; the reviewer checks for smuggled "when/why/how to journal"
+	// guidance). The 4000/1000 numbers mirror sim.JournalBudgetRunes /
+	// JournalWriteCapRunes (internal/tool is a leaf and cannot import sim).
+	glossWriteJournal  = `write_journal_entry adds a new entry to your private journal, a personal notebook only you can read. The journal holds up to 4000 characters total; a write that would exceed that (or is over 1000 characters on its own) is rejected and leaves the journal unchanged.`
+	glossDeleteJournal = `delete_from_journal removes one journal entry by its id number, freeing the space it used.`
+	glossSearchJournal = `search_journal returns the entries in your journal whose text contains a given word or phrase, most recent first.`
+	glossReadJournal   = `read_journal returns one journal entry by its id number, or the whole journal when no id is given.`
 )
 
 // Durations carried verbatim from internal/sim/agents.go (the intentDuration
@@ -281,17 +292,46 @@ var metatronTools = []Tool{
 			"metatron.entity_moved", "metatron.entity_removed", "agent.memory_added"}},
 }
 
+// journalTools are the villager-only journal capabilities (spec 019, US3): two
+// Expressive tools that land the journal.* mutations through the InjectSocial
+// door (their Events are pinned ⊆ injectSocialWhitelist by
+// sim.ValidateToolCoverage) and two Read tools that return journal content into
+// cognition and ground nothing — the first PRODUCTION Read tools (spec 017 lifted
+// the roster restriction and specified Read dispatch, so the loop needs no
+// change). All four join LoopRosterVillager only; the metatron never sees them
+// (journals are private). Gate None: write/delete need no scene and no charge —
+// the reducer dry-run (budget / existence) is their only gate.
+var journalTools = []Tool{
+	{Name: "write_journal_entry", Effect: Expressive, Gate: None,
+		Params:      []Param{{Name: "text", Kind: Text, Required: true, MaxRunes: 1000}},
+		Cost:        Cost{TextCapRunes: 1000},
+		Events:      []string{"journal.entry_written"},
+		PromptGloss: glossWriteJournal},
+	{Name: "delete_from_journal", Effect: Expressive, Gate: None,
+		Params:      []Param{{Name: "entry", Kind: Number, Required: true}},
+		Events:      []string{"journal.entry_deleted"},
+		PromptGloss: glossDeleteJournal},
+	{Name: "search_journal", Effect: Read,
+		Params:      []Param{{Name: "query", Kind: Text, Required: true, MaxRunes: 200}},
+		PromptGloss: glossSearchJournal},
+	{Name: "read_journal", Effect: Read,
+		Params:      []Param{{Name: "entry", Kind: Number, Required: false}},
+		PromptGloss: glossReadJournal},
+}
+
 // registry is the authoritative collection of every tool, in registration
 // order: worldTools (exactly today's goal-vocabulary order — the byte-
 // identity anchor for the derived prompt string, SC-003/R3), then set_plan
 // (appended immediately after the world verbs so no existing tool's position
-// shifts — spec 017 T004), then expressiveTools, then metatronTools.
+// shifts — spec 017 T004), then expressiveTools, then metatronTools, then the
+// journal tools (spec 019, appended last so no existing tool's position shifts).
 var registry = func() []Tool {
-	out := make([]Tool, 0, len(worldTools)+1+len(expressiveTools)+len(metatronTools))
+	out := make([]Tool, 0, len(worldTools)+1+len(expressiveTools)+len(metatronTools)+len(journalTools))
 	out = append(out, worldTools...)
 	out = append(out, setPlanTool)
 	out = append(out, expressiveTools...)
 	out = append(out, metatronTools...)
+	out = append(out, journalTools...)
 	return out
 }()
 

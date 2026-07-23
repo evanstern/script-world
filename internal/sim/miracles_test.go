@@ -754,6 +754,7 @@ func TestRebaseTaxonomyComplete(t *testing.T) {
 		"Agent.LastGoalTick":               keep,
 		"Memory.Tick":                      keep,
 		"Memory.Conv":                      keep, // spec 019: conversation-ref identity (founding-talk tick), like ConvoRecord.Conv
+		"JournalEntry.Tick":                keep, // spec 019: when the entry was written (history), like Memory.Tick
 		"Belief.Tick":                      keep,
 		"KnownRumor.Tick":                  keep,
 		"Guard.Generation":                 keep,

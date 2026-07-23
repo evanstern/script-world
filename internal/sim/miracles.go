@@ -174,6 +174,7 @@ func (s *State) applyTimeSnapped(e store.Event) error {
 //   Agent.LastGoalTick, Agent.LastConsolidatedNight, Agent.ConsolidatedUpTo,
 //   Agent.LastConsolidateMark, Memory.Tick, Memory.Conv (spec 019: a
 //   conversation-ref identity, same founding-talk tick as ConvoRecord.Conv),
+//   JournalEntry.Tick (spec 019: when the entry was written, history),
 //   Belief.Tick, KnownRumor.Tick,
 //   Guard.Generation, Rumor.OriginTick, ConvoRecord.Conv (identity — the
 //   founding-talk tick doubles as the conversation id), ConvoRecord.Tick,

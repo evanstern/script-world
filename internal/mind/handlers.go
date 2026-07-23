@@ -9,15 +9,20 @@ package mind
 //
 // Doctrine (spec 017): a tool call is a REQUEST; the door decides; the executor
 // grounds. Read-effect tools are supported generically (dispatched by effect)
-// so test-fixture read tools exercise the loop's read path, but the production
-// villager roster ships none this task (TASK-16 brings the journal tools).
+// so test-fixture read tools exercise the loop's read path; spec 019 adds the
+// first PRODUCTION Read tools — search_journal / read_journal — plus the two
+// Expressive journal writes (write_journal_entry / delete_from_journal), all
+// wired by name below.
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -53,9 +58,9 @@ type villagerDispatch struct {
 }
 
 // villagerHandlers builds the handler map the tool-use loop dispatches against
-// for one villager cognition. Read-effect tools (none in production this task)
-// are wired generically so a test roster's read tool is dispatched by effect;
-// acting tools wrap their landing door.
+// for one villager cognition. The journal tools (spec 019) are wired by name;
+// any other Read-effect tool (a test roster's) is dispatched generically; acting
+// tools wrap their landing door.
 func (md *Mind) villagerHandlers(d *villagerDispatch) map[string]toolloop.Handler {
 	handlers := map[string]toolloop.Handler{}
 	for _, t := range tool.LoopRosterVillager() {
@@ -64,6 +69,14 @@ func (md *Mind) villagerHandlers(d *villagerDispatch) map[string]toolloop.Handle
 			handlers[t.Name] = d.handleSetPlan
 		case t.Name == "muse":
 			handlers[t.Name] = d.handleMuse
+		case t.Name == "write_journal_entry":
+			handlers[t.Name] = d.handleWriteJournal
+		case t.Name == "delete_from_journal":
+			handlers[t.Name] = d.handleDeleteJournal
+		case t.Name == "search_journal":
+			handlers[t.Name] = d.handleSearchJournal
+		case t.Name == "read_journal":
+			handlers[t.Name] = d.handleReadJournal
 		case t.Effect == tool.World:
 			handlers[t.Name] = d.handleWorldVerb(t.Name)
 		case t.Effect == tool.Read:
@@ -188,6 +201,140 @@ func (d *villagerDispatch) handleRead(name string) toolloop.Handler {
 	return func(_ context.Context, _ llm.ToolCall) toolloop.Outcome {
 		return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: "{}"}
 	}
+}
+
+// handleWriteJournal lands an agent-authored journal entry (spec 019, US3)
+// through the InjectSocial door, batched atomically with its landed cog.outcome
+// — the exact muse pattern. The reducer's dry-run enforces the rune budget: an
+// over-budget write is refused at the door (nothing lands), and the handler
+// feeds the budget reason back as rejected_gate so the agent can curate and
+// retry. The driver already enforced the 1000-rune write cap (text param), so
+// the handler only guards the empty case.
+func (d *villagerDispatch) handleWriteJournal(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+	text := strings.TrimSpace(argString(call.Args, "text"))
+	if text == "" {
+		return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: "journal entry text is empty"}
+	}
+	// Defensive rune cap, identical to the muse handler: the driver already
+	// rejects an over-cap write before dispatch, but the wire bound is re-applied.
+	if r := []rune(text); len(r) > sim.JournalWriteCapRunes {
+		text = string(r[:sim.JournalWriteCapRunes])
+	}
+	payload, err := json.Marshal(sim.JournalWrittenPayload{Agent: d.job.agent, Text: text})
+	if err != nil {
+		return toolloop.Outcome{Err: err}
+	}
+	return d.journalDoorResult(d.md.social.InjectSocial([]store.Event{
+		{Type: "journal.entry_written", Payload: payload},
+		d.md.cogOutcomeEvent(d.job.meta, sim.OutcomeLanded, "", time.Since(d.start).Milliseconds()),
+	}), "journal entry written")
+}
+
+// handleDeleteJournal removes an entry by id through the door. An unknown id is
+// refused by the reducer dry-run ("no journal entry #<id>"), fed back as
+// rejected_gate; a present id is removed and the freed budget is immediately
+// available.
+func (d *villagerDispatch) handleDeleteJournal(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+	id, ok := argInt(call.Args, "entry")
+	if !ok {
+		return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: "delete_from_journal needs an entry id"}
+	}
+	payload, err := json.Marshal(sim.JournalDeletedPayload{Agent: d.job.agent, Entry: id})
+	if err != nil {
+		return toolloop.Outcome{Err: err}
+	}
+	return d.journalDoorResult(d.md.social.InjectSocial([]store.Event{
+		{Type: "journal.entry_deleted", Payload: payload},
+		d.md.cogOutcomeEvent(d.job.meta, sim.OutcomeLanded, "", time.Since(d.start).Milliseconds()),
+	}), fmt.Sprintf("deleted journal entry #%d", id))
+}
+
+// journalDoorResult translates an InjectSocial result for a journal write/delete
+// into a loop Outcome. On success the batch (mutation + cog.outcome) landed, so
+// the door owns the terminal outcome (doorOutcome set, like muse). A door
+// rejection wraps the reducer's reason as "social batch rejected: <reason>":
+// errors.Unwrap peels that framing so the model sees the gate's own reason
+// verbatim (journal-tools.md). A non-wrapped error is infrastructure failure —
+// surfaced as Err so the loop terminates and runPlan records the FR-015 outcome.
+func (d *villagerDispatch) journalDoorResult(err error, successMsg string) toolloop.Outcome {
+	if err == nil {
+		d.doorOutcome = true
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: successMsg}
+	}
+	if inner := errors.Unwrap(err); inner != nil {
+		return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: inner.Error()}
+	}
+	return toolloop.Outcome{Err: err}
+}
+
+// handleSearchJournal is the Read-effect search: a case-insensitive substring
+// match over the acting agent's own journal snapshot, newest-first, capped at
+// sim.JournalSearchResultCap. Zero matches is a well-formed empty read_ok, never
+// an error. No parameter addresses another agent — the handler reads only this
+// job's journal.
+func (d *villagerDispatch) handleSearchJournal(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+	query := strings.TrimSpace(argString(call.Args, "query"))
+	matches := d.job.journal.SearchJournal(query)
+	if len(matches) == 0 {
+		return toolloop.Outcome{Verdict: toolloop.VerdictReadOK,
+			ResultForModel: "no journal entries match \"" + query + "\""}
+	}
+	return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: formatJournalEntries(matches)}
+}
+
+// handleReadJournal is the Read-effect read: the addressed entry when `entry` is
+// given (unknown id → read_error), or the whole journal (oldest-first) when it
+// is absent.
+func (d *villagerDispatch) handleReadJournal(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+	if id, ok := argInt(call.Args, "entry"); ok {
+		e, found := d.job.journal.FindJournalEntry(id)
+		if !found {
+			return toolloop.Outcome{Verdict: toolloop.VerdictReadError,
+				ResultForModel: fmt.Sprintf("no journal entry #%d", id)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: formatJournalEntries([]sim.JournalEntry{e})}
+	}
+	entries := d.job.journal.JournalEntries()
+	if len(entries) == 0 {
+		return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: "your journal is empty"}
+	}
+	return toolloop.Outcome{Verdict: toolloop.VerdictReadOK, ResultForModel: formatJournalEntries(entries)}
+}
+
+// formatJournalEntries renders journal entries for a read result: one line per
+// entry, "#<id> <clock>: <text>" (journal-tools.md handler contract).
+func formatJournalEntries(entries []sim.JournalEntry) string {
+	var b strings.Builder
+	for i, e := range entries {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "#%d %s: %s", e.ID, clock.Format(e.Tick), e.Text)
+	}
+	return b.String()
+}
+
+// argInt reads an integer-valued argument from a tool call's raw JSON object;
+// ok is false when the key is absent or not a number. Tolerates a float-encoded
+// integer (a model may emit 3.0), matching argKindQty's lenient shape.
+func argInt(raw json.RawMessage, key string) (int, bool) {
+	m := map[string]json.RawMessage{}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &m)
+	}
+	v, ok := m[key]
+	if !ok {
+		return 0, false
+	}
+	var n int
+	if json.Unmarshal(v, &n) == nil {
+		return n, true
+	}
+	var f float64
+	if json.Unmarshal(v, &f) == nil {
+		return int(f), true
+	}
+	return 0, false
 }
 
 // buildTalkToGuards reproduces runPlan's mind-side talk_to guards: the target

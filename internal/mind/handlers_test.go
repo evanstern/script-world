@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +86,7 @@ func (lm *loopMind) newJob(i int) planJob {
 		meta:  md.newMeta("planner", i, tick, 0, llm.KindPlanner),
 	}
 	job.meta.generation = md.replica.Agents[i].Generation
+	job.journal = md.replica.Agents[i].Journal.Clone()
 	for j := range md.replica.Agents {
 		b := &md.replica.Agents[j]
 		job.world[j] = agentSnap{x: b.X, y: b.Y, dead: b.Dead}
@@ -259,6 +261,113 @@ func TestHandlerMuseEmptyRejected(t *testing.T) {
 	}
 	if len(social.batches) != 0 {
 		t.Error("empty muse still landed a thought")
+	}
+}
+
+// journalHandlers builds a fresh job snapshot + handler map for agent 0 — each
+// cognition takes its own journal snapshot (Clone) the way plan() does, so a
+// write from a prior cognition is visible to the next one's search/read.
+func journalHandlers(lm *loopMind) (*villagerDispatch, map[string]toolloop.Handler) {
+	d := &villagerDispatch{md: lm.md, job: lm.newJob(0), start: time.Now()}
+	return d, lm.md.villagerHandlers(d)
+}
+
+// TestJournalToolCycle (spec 019 US3, T017): the full write→search→read→delete
+// cycle through the real door — a write lands durably; a later cognition's
+// search finds it and read returns it; delete removes it and frees the budget;
+// an unknown id read is a read_error; search after delete is an empty read_ok.
+func TestJournalToolCycle(t *testing.T) {
+	lm := newLoopMind(t)
+
+	// Write.
+	dW, hW := journalHandlers(lm)
+	out := hW["write_journal_entry"](context.Background(),
+		call("write_journal_entry", `{"text":"the fire held through the night"}`))
+	if out.Verdict != toolloop.VerdictLanded {
+		t.Fatalf("write verdict = %q (%s)", out.Verdict, out.ResultForModel)
+	}
+	if !dW.doorOutcome {
+		t.Error("a landed write must set the door-outcome flag")
+	}
+	if len(lm.events(t, "journal.entry_written")) != 1 {
+		t.Fatal("no journal.entry_written event landed")
+	}
+
+	// Search (a new snapshot reflects the prior cognition's write).
+	_, hS := journalHandlers(lm)
+	out = hS["search_journal"](context.Background(), call("search_journal", `{"query":"FIRE"}`))
+	if out.Verdict != toolloop.VerdictReadOK || !strings.Contains(out.ResultForModel, "the fire held through the night") {
+		t.Fatalf("search: verdict=%q result=%q", out.Verdict, out.ResultForModel)
+	}
+	if !strings.HasPrefix(out.ResultForModel, "#0 ") {
+		t.Errorf("search result should lead with the entry id: %q", out.ResultForModel)
+	}
+
+	// Read whole journal, one entry, and an unknown id.
+	out = hS["read_journal"](context.Background(), call("read_journal", `{}`))
+	if out.Verdict != toolloop.VerdictReadOK || !strings.Contains(out.ResultForModel, "the fire held") {
+		t.Errorf("read whole: verdict=%q result=%q", out.Verdict, out.ResultForModel)
+	}
+	out = hS["read_journal"](context.Background(), call("read_journal", `{"entry":0}`))
+	if out.Verdict != toolloop.VerdictReadOK || !strings.Contains(out.ResultForModel, "#0") {
+		t.Errorf("read entry 0: verdict=%q result=%q", out.Verdict, out.ResultForModel)
+	}
+	out = hS["read_journal"](context.Background(), call("read_journal", `{"entry":99}`))
+	if out.Verdict != toolloop.VerdictReadError {
+		t.Errorf("read unknown id: verdict = %q, want read_error", out.Verdict)
+	}
+
+	// Delete entry #0 through the door.
+	dD, hD := journalHandlers(lm)
+	out = hD["delete_from_journal"](context.Background(), call("delete_from_journal", `{"entry":0}`))
+	if out.Verdict != toolloop.VerdictLanded {
+		t.Fatalf("delete verdict = %q (%s)", out.Verdict, out.ResultForModel)
+	}
+	if !dD.doorOutcome {
+		t.Error("a landed delete must set the door-outcome flag")
+	}
+	if len(lm.events(t, "journal.entry_deleted")) != 1 {
+		t.Fatal("no journal.entry_deleted event landed")
+	}
+
+	// Search after delete: an explicit empty read_ok, never an error.
+	_, hS2 := journalHandlers(lm)
+	out = hS2["search_journal"](context.Background(), call("search_journal", `{"query":"fire"}`))
+	if out.Verdict != toolloop.VerdictReadOK || !strings.Contains(out.ResultForModel, "no journal entries match") {
+		t.Errorf("search after delete: verdict=%q result=%q", out.Verdict, out.ResultForModel)
+	}
+}
+
+// TestJournalOverBudgetRejection (spec 019 US3, T017 / SC-005): once the journal
+// is full, a further write is refused AT THE DOOR — rejected_gate carrying the
+// budget reason verbatim, the journal unchanged, and no door outcome recorded
+// (nothing landed, so the loop still records the FR-015 terminal outcome).
+func TestJournalOverBudgetRejection(t *testing.T) {
+	lm := newLoopMind(t)
+	big := strings.Repeat("x", sim.JournalWriteCapRunes) // 1000 runes/write
+	for i := 0; i < 4; i++ {                             // 4×1000 = 4000, exactly full
+		_, h := journalHandlers(lm)
+		out := h["write_journal_entry"](context.Background(),
+			call("write_journal_entry", `{"text":"`+big+`"}`))
+		if out.Verdict != toolloop.VerdictLanded {
+			t.Fatalf("legal write %d refused: %q (%s)", i, out.Verdict, out.ResultForModel)
+		}
+	}
+
+	dOver, hOver := journalHandlers(lm)
+	out := hOver["write_journal_entry"](context.Background(),
+		call("write_journal_entry", `{"text":"one more line"}`))
+	if out.Verdict != toolloop.VerdictRejectedGate {
+		t.Fatalf("over-budget write verdict = %q, want rejected_gate", out.Verdict)
+	}
+	if !strings.Contains(out.ResultForModel, "journal budget") || !strings.Contains(out.ResultForModel, "4000") {
+		t.Errorf("rejection must name the budget verbatim, got %q", out.ResultForModel)
+	}
+	if dOver.doorOutcome {
+		t.Error("a door rejection that landed nothing must not set doorOutcome")
+	}
+	if got := len(lm.events(t, "journal.entry_written")); got != 4 {
+		t.Errorf("journal.entry_written events = %d, want 4 (the over-budget write landed nothing)", got)
 	}
 }
 

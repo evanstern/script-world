@@ -274,6 +274,11 @@ type planJob struct {
 	// world is the snapshot view guards are built from once the reply names
 	// a target — the assumptions the prompt showed the model (FR-011).
 	world [sim.AgentCount]agentSnap
+	// journal is a race-free snapshot of the acting agent's journal as of the
+	// cognition's start (spec 019, US3): search_journal / read_journal handlers
+	// run in the planner worker goroutine and must not touch the absorb-owned
+	// replica. Only reads see it; writes/deletes land through the live door.
+	journal *sim.Journal
 }
 
 type agentSnap struct {
@@ -326,6 +331,7 @@ func (md *Mind) plan() {
 			meta:   md.newMeta("planner", i, tick, md.pendingSeq[i], llm.KindPlanner),
 		}
 		job.meta.generation = a.Generation
+		job.journal = a.Journal.Clone() // race-free snapshot for search/read handlers
 		for j := range md.replica.Agents {
 			b := &md.replica.Agents[j]
 			job.world[j] = agentSnap{x: b.X, y: b.Y, dead: b.Dead}

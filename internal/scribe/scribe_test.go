@@ -104,6 +104,69 @@ func TestSoulRendersSituatedContext(t *testing.T) {
 	t.Fatalf("soul.md never rendered situated context; content:\n%s", data)
 }
 
+// TestJournalRenders (spec 019 US3, T018): journal.md is seeded empty at
+// genesis, then re-rendered on journal.* events — a header with current budget
+// usage, and each entry verbatim under a "## <clock> (#id)" section; a delete
+// removes its section and updates the usage line.
+func TestJournalRenders(t *testing.T) {
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+
+	// Genesis seeded an empty journal.md.
+	if data, err := os.ReadFile(persona.JournalPath(dir, "Ash")); err != nil ||
+		!strings.Contains(string(data), "0/4000 runes") {
+		t.Fatalf("genesis should seed an empty journal.md, got err=%v content:\n%s", err, data)
+	}
+
+	scr, err := New(dir, 42, m, state.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.Close()
+
+	scr.Observe([]store.Event{
+		{Tick: 3600, Type: "journal.entry_written", Payload: mustPayloadJSON(t,
+			sim.JournalWrittenPayload{Agent: 0, Text: "Banked the fire before the cold set in."})},
+		{Tick: 7200, Type: "journal.entry_written", Payload: mustPayloadJSON(t,
+			sim.JournalWrittenPayload{Agent: 0, Text: "Owe Birch a meal."})},
+	})
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+		s := string(data)
+		if strings.Contains(s, "# Ash's journal") &&
+			strings.Contains(s, "## day 1 07:00 (#0)") &&
+			strings.Contains(s, "Banked the fire before the cold set in.") &&
+			strings.Contains(s, "## day 1 08:00 (#1)") &&
+			strings.Contains(s, "Owe Birch a meal.") &&
+			// used = len("Banked...") + len("Owe...") runes.
+			strings.Contains(s, "runes_") {
+			// Now delete entry #0 and confirm it disappears.
+			scr.Observe([]store.Event{{Tick: 7300, Type: "journal.entry_deleted",
+				Payload: mustPayloadJSON(t, sim.JournalDeletedPayload{Agent: 0, Entry: 0})}})
+			d2 := time.Now().Add(3 * time.Second)
+			for time.Now().Before(d2) {
+				after, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+				sa := string(after)
+				if !strings.Contains(sa, "Banked the fire") && strings.Contains(sa, "## day 1 08:00 (#1)") {
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			after, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+			t.Fatalf("delete not reflected in journal.md:\n%s", after)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	data, _ := os.ReadFile(persona.JournalPath(dir, "Ash"))
+	t.Fatalf("journal.md never rendered the entries; content:\n%s", data)
+}
+
 func TestDeathFreezesSoulHeader(t *testing.T) {
 	dir := t.TempDir()
 	if err := persona.Genesis(dir); err != nil {

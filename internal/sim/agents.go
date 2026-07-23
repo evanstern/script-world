@@ -117,6 +117,15 @@ type Agent struct {
 	// snapshots byte-stable (precedent: Generation, Plan, Hail).
 	LastGoal     string `json:"last_goal,omitempty"`
 	LastGoalTick int64  `json:"last_goal_tick,omitempty"`
+	// Journal (spec 019, US3) is the agent's self-authored notebook — durable
+	// world state mutated ONLY by the two journal.* reducer arms. A POINTER with
+	// omitempty (the Hail precedent) so an agent that never journals stays
+	// byte-identical to a pre-019 snapshot: a value struct would always serialize
+	// "journal":{} (encoding/json omitempty is a no-op on non-pointer structs),
+	// breaking the pre-019 round-trip the feature requires (deviation from
+	// data-model.md §5's value type, recorded for the planning tier). Written
+	// only by the reducer.
+	Journal *Journal `json:"journal,omitempty"`
 }
 
 // AgentHail is the courtesy pause a talk_to landing lays on its target: who

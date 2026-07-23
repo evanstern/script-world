@@ -66,11 +66,20 @@ func VocabularyLine() string {
 // PromptGlossBlock returns the concatenated per-verb gloss lines in
 // registration order, each terminated by a newline — byte-identical to the old
 // hand-written prose block (the lines between "Goals:" and "For a short
-// sequence" in internal/mind/prompt.go). Empty when no tool carries a gloss.
+// sequence" in internal/mind/prompt.go). Empty when no world verb carries a
+// gloss.
+//
+// Scoped to the legacy world verbs (isLegacyWorldTool): this block IS the
+// world-verb goal prose, so a non-world tool's gloss must never enter it. The
+// journal tools (spec 019) carry glosses too — but those are their model-facing
+// tool DESCRIPTIONS, delivered per-tool through the loop's ToolDecl (toolloop),
+// not this legacy prose surface. Today every glossed tool except the journal
+// tools is a world verb, so the filter is behavior-preserving for the shipped
+// prose block while keeping it pure as non-world glosses are added.
 func PromptGlossBlock() string {
 	var b strings.Builder
 	for _, t := range registry {
-		if t.PromptGloss != "" {
+		if isLegacyWorldTool(t) && t.PromptGloss != "" {
 			b.WriteString(t.PromptGloss)
 			b.WriteByte('\n')
 		}
