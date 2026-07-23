@@ -191,7 +191,7 @@ func cmdNew(args []string) error {
 	if nameForm {
 		startHint = worldName
 	}
-	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit tiers/budget; delete the file to disable LLM traffic)\nstart it with: promptworld start %s\n",
+	fmt.Printf("created world %q in %s (seed %d)\nllm config: %s (edit providers/routes/budget; delete the file to disable LLM traffic)\nstart it with: promptworld start %s\n",
 		worldName, dir, *seed, w.LLMConfigPath(), startHint)
 	return nil
 }
@@ -254,7 +254,7 @@ func cmdMigrate(args []string) error {
 func cmdLLM(args []string) error {
 	fs := flag.NewFlagSet("llm", flag.ContinueOnError)
 	system := fs.String("system", "", "system prompt")
-	maxTokens := fs.Int64("max-tokens", 0, "max output tokens (cloud tier)")
+	maxTokens := fs.Int64("max-tokens", 0, "max output tokens (matters most for priced providers)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -286,9 +286,30 @@ func cmdLLM(args []string) error {
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return err
 	}
-	fmt.Printf("[%s tier · %s · %d in / %d out tokens · $%.4f · %dms]\n%s\n",
-		resp.Tier, resp.Model, resp.InputTokens, resp.OutputTokens, resp.CostUSD, resp.Millis, resp.Text)
+	fmt.Print(formatLLMOneShot(resp))
 	return nil
+}
+
+// formatLLMOneShot renders a one-shot llm_call response for the CLI (spec
+// 024 US6/T018): the header names the serving PROVIDER (Response.Provider,
+// always set — FR-011), not the legacy tier; any candidates the chain-walk
+// passed over before landing here (Response.Skipped, contracts/status.md)
+// get their own line with each mechanical reason, so a fallback is visible
+// without reaching for `promptworld status`.
+func formatLLMOneShot(resp llm.Response) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[%s · %s · %d in / %d out tokens · $%.4f · %dms]\n",
+		resp.Provider, resp.Model, resp.InputTokens, resp.OutputTokens, resp.CostUSD, resp.Millis)
+	if len(resp.Skipped) > 0 {
+		skipped := make([]string, len(resp.Skipped))
+		for i, sk := range resp.Skipped {
+			skipped[i] = fmt.Sprintf("%s (%s)", sk.Provider, sk.Reason)
+		}
+		fmt.Fprintf(&b, "skipped: %s\n", strings.Join(skipped, ", "))
+	}
+	b.WriteString(resp.Text)
+	b.WriteByte('\n')
+	return b.String()
 }
 
 // cmdMetatron is the console one-shot (TASK-12): with a message, one
