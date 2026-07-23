@@ -37,7 +37,8 @@ network
 
 **Project Type**: single Go module, per-package white-box test suites
 
-**Performance Goals**: no material suite-time regression (full suite stays ~25 s;
+**Performance Goals**: no material suite-time regression (full suite ~3 min, e2e
+dominates — the ~25 s figure cited at planning time was stale;
 new tests are channel-gated, never sleep-gated)
 
 **Constraints**: FR-011 tests-and-docs only; FR-009 behavioral (survive

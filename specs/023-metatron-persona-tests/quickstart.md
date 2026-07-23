@@ -22,7 +22,7 @@ Expected: PASS for both packages; every new test green alongside the existing 26
 go test -race ./...
 ```
 
-Expected: PASS across the repo (~25 s, e2e dominates) — proves the new tests are
+Expected: PASS across the repo (~3 min, e2e dominates) — proves the new tests are
 hermetic and race-clean in the full run (spec SC-003).
 
 ### 3. Coverage gaps are actually closed (spot-check)

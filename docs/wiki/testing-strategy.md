@@ -15,7 +15,7 @@ sources:
   - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+verified_against: eddbce15b916f19e364bbb11ce79f5d25da82b6e
 ---
 
 # Testing strategy
@@ -197,7 +197,9 @@ validation results live in `specs/001-world-daemon/quickstart-results.md`.
 
 ## Operational notes
 
-`go test -race ./...` runs everything in ~25 s (e2e dominates). E2E timing assertions
+`go test -race ./...` runs everything in ~3 min (e2e dominates at ~187 s; measured
+2026-07-23 during TASK-74 — the note's earlier ~25 s figure predates the e2e suite's
+growth). E2E timing assertions
 use deliberately loose bounds against CI jitter; tighten only with longer windows.
 The executor behavior suites are seed-pinned: policy tuning that changes behavior
 legitimately requires re-verifying (not deleting) the survival assertions.
