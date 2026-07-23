@@ -132,7 +132,7 @@ no raw enum appears; suppressions read as "didn't think because…".
 - [x] T018 Regression sweep: full `go test ./...`, `gofmt -l .` clean, `go vet
       ./internal/tui/` clean; confirm digest catalog sweep in
       `internal/tui/digest_test.go` passes unchanged (contract R18)
-- [ ] T019 Run quickstart.md live validation (§2–§5) against a real world and record
+- [x] T019 Run quickstart.md live validation (§2–§5) against a real world and record
       outcomes (including the ring-eviction check §3) in the implementation report
 
 ## Dependencies & Execution Order
