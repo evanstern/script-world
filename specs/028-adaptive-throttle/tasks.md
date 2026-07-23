@@ -110,7 +110,7 @@ load parks at a stable notch.
 **Independent Test**: quickstart §4 — governed header text; speed commands below/above governed notch; pause/
 resume window resets; max-speed refusal regression.
 
-- [ ] T014 [P] [US4] Governed header segment (`asked 32x — 3 minds in flight, debt 140%`) in
+- [x] T014 [P] [US4] Governed header segment (`asked 32x — 3 minds in flight, debt 140%`) in
       `internal/tui/views.go` and digest lines for both governor event types in `internal/tui/digest.go`;
       render tests in `internal/tui/` test files
 - [ ] T015 [US4] Player-interaction + pause proofs: `set_speed` below governed notch runs immediately and clears
