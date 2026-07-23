@@ -4,7 +4,7 @@ title: 'Metatron instruction surface: staged charter + skill files + gated tool 
 status: In Progress
 assignee: []
 created_date: '2026-07-23 03:27'
-updated_date: '2026-07-23 05:21'
+updated_date: '2026-07-23 06:02'
 labels:
   - review-2026-07-22
   - teaching-game
@@ -53,4 +53,6 @@ Spec written: specs/021-metatron-instruction-surface/spec.md (3 user stories, FR
 Plan complete: plan.md, research.md (R1-R9 decision log), data-model.md, contracts/{instruction-surface,capability-manifest,status}.md, quickstart.md under specs/021-metatron-instruction-surface/. Key decisions: skills/ + capabilities.json at worldDir root beside charter.md; lexicographic composition, 4000 chars/file, 8 files max, charter-style notices; fixed frame compile-time constant appended LAST on every path; manifest missing=full grant (byte-compat), malformed=permissive fallback+notice; three-layer gating (declaration/prose/door); miracle cost single source moves to leaf internal/tool, sim derives (import direction already exists); Status gains Skills/GrantedTools/ManifestDefault, TUI delta confined to console header (TASK-63 collision minimized). Constitution Check PASS pre+post design. Implementation tier: Opus 4.8 — rubric: cross-package (tool/sim/metatron/ipc/tui) + doctrine-adjacent (fixed frame, injection-sound capability gating).
 
 Spec 021 linked via spec-bridge (marker + 6 phase ACs seeded, gate green), artifacts committed to main (88cfee3). Worktree .worktrees/task-64 cut from origin/main at 88cfee3, branch task-64-metatron-instruction-surface. Implementation delegated 2026-07-23 to spec-implementer on Opus 4.8 (rubric: cross-package tool/sim/metatron/ipc/tui + doctrine-adjacent fixed-frame/gating work). Orchestrator gates the implementer report before PR.
+
+Implementation complete: Opus 4.8 spec-implementer finished T001-T023 (5 checkpoint commits, HEAD 459b984 on task-64-metatron-instruction-surface, pushed). Orchestrator gate PASSED: independent go test ./... 20/20 ok (e2e fresh 182s); leaf constraint, fixed-frame-last, three-layer gating, manifest fallbacks, TUI region confinement all verified in the diff; 3 deviations reviewed & accepted (doctrine line gated on work_miracle grant; {} manifest = full grant; kinds mirror-test retained). PR #45 opened. MERGE BLOCKED by session permissions — awaiting user merge. Post-merge remaining: wiki re-pin (6 sources), spec-bridge sync, tick ACs 1-6, worktree cleanup, Done.
 <!-- SECTION:NOTES:END -->
