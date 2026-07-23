@@ -4,7 +4,7 @@ title: 'llm.json robustness knobs: in-loop cognition retry + configurable max_to
 status: In Progress
 assignee: []
 created_date: '2026-07-23 06:34'
-updated_date: '2026-07-23 16:27'
+updated_date: '2026-07-23 17:11'
 labels:
   - review-2026-07-22
   - code-quality
@@ -27,14 +27,14 @@ Spec: specs/025-llm-robustness-knobs
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One retry on TermProviderError for planner/metatron cognitions; second failure terminates exactly as today
-- [ ] #2 Estimator feeding unchanged: retries produce no extra latency observations; breaker semantics unchanged
-- [ ] #3 Retry visible in the recorded trail (CallRecord or event), never silent
-- [ ] #4 Per-kind max_tokens knobs in llm.json with warn-not-error clamping; defaults match current hardcodes
+- [x] #1 One retry on TermProviderError for planner/metatron cognitions; second failure terminates exactly as today
+- [x] #2 Estimator feeding unchanged: retries produce no extra latency observations; breaker semantics unchanged
+- [x] #3 Retry visible in the recorded trail (CallRecord or event), never silent
+- [x] #4 Per-kind max_tokens knobs in llm.json with warn-not-error clamping; defaults match current hardcodes
 - [ ] #5 go test -race ./... passes; wiki notes re-pinned (llm-orchestrator, tool-loop)
-- [ ] #6 Spec phase: Setup
-- [ ] #7 Spec phase: User Story 1 — A flaky provider call no longer wastes a whole thought (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — Operator tunes cognition token budgets in llm.json (Priority: P2)
+- [x] #6 Spec phase: Setup
+- [x] #7 Spec phase: User Story 1 — A flaky provider call no longer wastes a whole thought (Priority: P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — Operator tunes cognition token budgets in llm.json (Priority: P2)
 - [ ] #9 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
@@ -42,4 +42,6 @@ Spec: specs/025-llm-robustness-knobs
 
 <!-- SECTION:NOTES:BEGIN -->
 Spec Kit flow complete (2026-07-23): specs/025-llm-robustness-knobs — spec.md, plan.md, research.md (R1–R8), data-model.md, contracts/{llm-json,loop-retry}.md, quickstart.md, tasks.md (17 tasks). Implementation tier: Opus 4.8 via spec-implementer (constitution Principle V rubric: cross-package change touching internal/llm + internal/toolloop orchestration; estimator/breaker doctrine-adjacent — senior tier, not Sonnet). Branch: task-72-llm-robustness-knobs in .worktrees/task-72.
+
+Implementation complete on branch task-72-llm-robustness-knobs (PR #51, commit 9e62208 after rebase onto origin/main). Implemented by spec-implementer @ Opus 4.8; reviewed + independently re-verified on Fable 5 (retry tests, token-budget normalization, TestCatalogSweep, full go test -race ./... green on rebased branch). ACs 1-4 proven by tests in the PR: toolloop/retry_test.go (fail-once/fail-twice/never-retry matrix, estimator invariance = AC1+AC2), mind/metatron retry-visibility via non-terminal cog.outcome OutcomeRetried (AC3), llm config normalization table + boot smoke with clamp warning (AC4). AC5 (wiki re-pin) after merge. Notable accepted deviations: Config.MaxTokens is *TokenBudgets (value struct defeats omitempty), tui/decisions.go guard so the non-terminal retried marker never overwrites the earned terminal outcome, TestProviderErrorFromSubmit updated to fail-twice premise. tasks.md 16/17 (T017 post-merge).
 <!-- SECTION:NOTES:END -->
