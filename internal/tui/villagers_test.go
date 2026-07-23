@@ -363,6 +363,78 @@ func TestVillagerDetailShedsMemoriesFirst(t *testing.T) {
 	}
 }
 
+// --- spec 020, TASK-63: decisions sub-view key routing (contract R7) ---
+
+func TestVillagersDecisionsToggleGatedOnDetail(t *testing.T) {
+	m := villagersModel(t)
+	var mdl tea.Model = m
+	mdl = update(mdl, "d") // not in detail yet — must not open decisions
+	if mdl.(Model).villDecisions {
+		t.Fatal("'d' outside detail must not open decisions")
+	}
+	mdl = update(mdl, "enter") // open detail
+	mdl = update(mdl, "d")
+	if !mdl.(Model).villDecisions {
+		t.Fatal("'d' from detail should open decisions")
+	}
+	mdl = update(mdl, "d") // toggles back off
+	if mdl.(Model).villDecisions {
+		t.Fatal("'d' again should close decisions")
+	}
+}
+
+func TestVillagersDecisionsScrollJK(t *testing.T) {
+	m := villagersModel(t)
+	var mdl tea.Model = m
+	mdl = update(mdl, "enter")
+	mdl = update(mdl, "d")
+	mdl = update(mdl, "j")
+	if got := mdl.(Model).villDecisionsScroll; got != 1 {
+		t.Fatalf("j should scroll down, got %d", got)
+	}
+	mdl = update(mdl, "k")
+	if got := mdl.(Model).villDecisionsScroll; got != 0 {
+		t.Fatalf("k should scroll up, got %d", got)
+	}
+	mdl = update(mdl, "k") // clamp at 0, never negative
+	if got := mdl.(Model).villDecisionsScroll; got != 0 {
+		t.Fatalf("k below 0 should clamp, got %d", got)
+	}
+}
+
+// TestVillagersEscChainDecisionsThenDetailThenSolo is focus-contract.md rule
+// 3 extended one level deeper (contract R7): decisions → detail → solo, one
+// esc per level.
+func TestVillagersEscChainDecisionsThenDetailThenSolo(t *testing.T) {
+	m := villagersModel(t) // already solo
+	var mdl tea.Model = m
+	mdl = update(mdl, "enter")
+	mdl = update(mdl, "d")
+	if !mdl.(Model).villDecisions {
+		t.Fatal("setup: expected decisions open")
+	}
+	mdl = update(mdl, "esc")
+	mm := mdl.(Model)
+	if mm.villDecisions {
+		t.Fatal("first esc should close decisions")
+	}
+	if !mm.villDetail {
+		t.Fatal("first esc must not have closed detail yet")
+	}
+	mdl = update(mdl, "esc")
+	mm = mdl.(Model)
+	if mm.villDetail {
+		t.Fatal("second esc should close detail")
+	}
+	if !mm.solo {
+		t.Fatal("second esc must not have released solo yet")
+	}
+	mdl = update(mdl, "esc")
+	if mdl.(Model).solo {
+		t.Fatal("third esc should release solo")
+	}
+}
+
 func TestVillagerBeliefsNarrativeShownWhenPresentOmittedWhenAbsent(t *testing.T) {
 	present := sim.Agent{Beliefs: []sim.Belief{{Statement: "s", Confidence: 90}}, Narrative: "n"}
 	if got := villagerBeliefsSection(present); !strings.Contains(got, "s") || !strings.Contains(got, "n") {

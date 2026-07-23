@@ -129,10 +129,26 @@ type Model struct {
 	// Neither field is persisted — client-only, event-sourced from nothing.
 	villSelected int
 	villDetail   bool
+
+	// villDecisions (spec 020, TASK-63): the decisions sub-view, meaningful
+	// only while villDetail is true. villDecisionsScroll is its own scroll
+	// offset, reset on villager change, detail close, and reconnect
+	// (data-model.md "New Model (TUI) state") and defensively re-clamped
+	// again at render time (villagerDecisionsBody), the same pattern
+	// chronDetailScroll uses.
+	villDecisions       bool
+	villDecisionsScroll int
+
+	// traces (spec 020, TASK-63) is the bounded per-agent decision-trace
+	// projection (data-model.md), fed from applyEvent alongside the replica
+	// fold and chronicle ring — independent of both, so it survives the
+	// ring's 500-event eviction (SC-003) but resets wholesale on reconnect
+	// like the replica (contract R5).
+	traces decisionTraces
 }
 
 func New(w *world.World) Model {
-	return Model{w: w, gameMap: w.Map(), chronAgent: -1, dockTab: paneChronicle, chronSelected: -1}
+	return Model{w: w, gameMap: w.Map(), chronAgent: -1, dockTab: paneChronicle, chronSelected: -1, traces: newDecisionTraces()}
 }
 
 // FatalErr reports the unrecoverable error that made the TUI quit, if any —
@@ -332,8 +348,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.status
 		m.replica = msg.replica
 		m.lastSeq = msg.lastSeq
-		m.clampVillSelected()   // R5: connectedMsg swaps the replica wholesale
-		m.chronDetailScroll = 0 // data-model.md: detail pane scroll resets on reconnect
+		m.clampVillSelected()          // R5: connectedMsg swaps the replica wholesale
+		m.chronDetailScroll = 0        // data-model.md: detail pane scroll resets on reconnect
+		m.villDecisionsScroll = 0      // data-model.md: decisions scroll resets on reconnect
+		m.traces = newDecisionTraces() // spec 020 contract R5: projection resets wholesale, like the replica
 		return m, listen(m.client)
 
 	case disconnectedMsg:
@@ -807,18 +825,44 @@ func (m Model) handleVillagersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	m.clampVillSelected()
 	switch msg.String() {
 	case "esc":
-		if m.villDetail {
+		// spec 020 (TASK-63): decisions → detail → roster, one level per
+		// press, ahead of the existing detail → roster chain below
+		// (focus-contract.md rule 3).
+		switch {
+		case m.villDecisions:
+			m.villDecisions = false
+			m.villDecisionsScroll = 0
+			return m, nil, true
+		case m.villDetail:
 			m.villDetail = false
 			return m, nil, true
 		}
 		return m, nil, false
+	case "d":
+		// spec 020 (TASK-63, contract R7): toggles the decisions sub-view
+		// while the detail view is open; a no-op (falls through) from the
+		// roster, same as every other detail-only key.
+		if m.villDetail {
+			m.villDecisions = !m.villDecisions
+			m.villDecisionsScroll = 0
+			return m, nil, true
+		}
+		return m, nil, false
 	case "j":
-		if !m.villDetail {
+		switch {
+		case m.villDecisions:
+			m.villDecisionsScroll++ // clamped to content length at render time
+		case !m.villDetail:
 			m.villMoveSelection(1)
 		}
 		return m, nil, true
 	case "k":
-		if !m.villDetail {
+		switch {
+		case m.villDecisions:
+			if m.villDecisionsScroll > 0 {
+				m.villDecisionsScroll--
+			}
+		case !m.villDetail:
 			m.villMoveSelection(-1)
 		}
 		return m, nil, true
@@ -977,6 +1021,18 @@ func (m *Model) applyEvent(e store.Event) {
 		m.replica.Apply(e) // same reducer as the daemon; errors are cosmetic here
 		if e.Tick > m.replica.Tick {
 			m.replica.Tick = e.Tick
+		}
+	}
+	// Decision-trace projection (spec 020, TASK-63, research D1): ingested
+	// here, before the ring append below, so stimulus resolution
+	// (resolveStimulus) sees the ring exactly as it stood before this
+	// event — the trigger event, if any, is always an earlier seq and so
+	// already in it.
+	m.traces.ingest(e, m.agentNames(), m.events)
+	if line, ok := metatronVerdictRow(e); ok {
+		m.transcript = append(m.transcript, line)
+		if len(m.transcript) > 200 {
+			m.transcript = m.transcript[len(m.transcript)-200:]
 		}
 	}
 	m.lastSeq = e.Seq
