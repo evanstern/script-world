@@ -3,10 +3,10 @@ id: TASK-63
 title: >-
   Decision-trace view: render the cog.tool_call verdict trail (why did my agent
   do that)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 03:26'
-updated_date: '2026-07-23 05:15'
+updated_date: '2026-07-23 06:27'
 labels:
   - review-2026-07-22
   - teaching-game
@@ -33,13 +33,13 @@ Spec: specs/020-decision-trace-view
 - [ ] #2 Villager detail view has a decisions sub-view showing per-cognition chains: stimulus, thought, each tool call with verdict+reason, and the final outcome
 - [ ] #3 Metatron pane shows its own tool-call verdicts inline in the transcript
 - [ ] #4 A rejected tool call is legible to a non-engineer: verdict reason rendered in plain language, not raw enum strings
-- [ ] #5 docs/wiki re-pinned for touched sources (tui-client, tool-loop notes)
-- [ ] #6 Spec phase: Setup
-- [ ] #7 Spec phase: Foundational (blocking all user stories)
-- [ ] #8 Spec phase: User Story 1 — "Why did my villager do that?" (P1) 🎯 MVP
-- [ ] #9 Spec phase: User Story 2 — Metatron's own verdict trail (P2)
-- [ ] #10 Spec phase: User Story 3 — Legible to a non-engineer (P3)
-- [ ] #11 Spec phase: Polish & Cross-Cutting
+- [x] #5 docs/wiki re-pinned for touched sources (tui-client, tool-loop notes)
+- [x] #6 Spec phase: Setup
+- [x] #7 Spec phase: Foundational (blocking all user stories)
+- [x] #8 Spec phase: User Story 1 — "Why did my villager do that?" (P1) 🎯 MVP
+- [x] #9 Spec phase: User Story 2 — Metatron's own verdict trail (P2)
+- [x] #10 Spec phase: User Story 3 — Legible to a non-engineer (P3)
+- [x] #11 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -52,4 +52,14 @@ Full Spec Kit run complete (specs/020-decision-trace-view: spec, plan, research,
 
 <!-- SECTION:NOTES:BEGIN -->
 Model tier: Sonnet (spec-implementer default) per constitution v1.1.0 Principle V rubric — routine profile: single-package (internal/tui) view/rendering feature, tests alongside code, no concurrency/scheduling/governor logic, no doctrine-adjacent behavior change (read-only projection over persisted events). Escalation to Opus 4.8 only if a Sonnet attempt fails gates.
+
+PR #46 merged by operator (556cebd). Merged main verified green post-merge alongside TASK-64's concurrent internal/tui changes (full go test ./... ok incl. e2e; 18 decision-trace tests pass on the merged tree). Wiki re-pinned: tui-client re-verified against 556cebd, decisions.go added to sources (freshness gate: 36 notes fresh). Worktree .worktrees/task-63 removed, branch deleted.
+
+spec-bridge sync: Setup: 1/1 · Foundational (blocking all user stories): 7/7 · User Story 1 — "Why did my villager do that?" (P1) 🎯 MVP: 4/4 · User Story 2 — Metatron's own verdict trail (P2): 3/3 · User Story 3 — Legible to a non-engineer (P3): 2/2 · Polish & Cross-Cutting: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (blocking all user stories): 7/7 · User Story 1 — "Why did my villager do that?" (P1) 🎯 MVP: 4/4 · User Story 2 — Metatron's own verdict trail (P2): 3/3 · User Story 3 — Legible to a non-engineer (P3): 2/2 · Polish & Cross-Cutting: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
