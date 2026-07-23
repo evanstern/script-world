@@ -8,7 +8,7 @@ sources:
   - internal/tui/layout.go
   - internal/tui/grammar.go
   - internal/tui/digest.go
-verified_against: 94951506e8a21614b4050ed43c152a06ff59cc30
+verified_against: d38330a018bec3ddfc78733aac33d9fb65ce1862
 ---
 
 # TUI client
