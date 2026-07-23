@@ -52,8 +52,8 @@
 
 ## Phase 6: Polish & Validation
 
-- [ ] T014 Run quickstart V1 end-to-end (all pages, both themes, offline) and V5 (regeneration no-op: check exits 0 → skill stops, `git status --porcelain docs/player` empty)
-- [ ] T015 Run quickstart V6 grounding spot-audit: ≥2 claims per topic page verified against a declared source at its recorded pin via `git show <pin>:<path>`; write the audit table (page, claim, source, verdict) into the implementation report for the orchestrator to record on TASK-82
+- [X] T014 Run quickstart V1 end-to-end (all pages, both themes, offline) and V5 (regeneration no-op: check exits 0 → skill stops, `git status --porcelain docs/player` empty)
+- [X] T015 Run quickstart V6 grounding spot-audit: ≥2 claims per topic page verified against a declared source at its recorded pin via `git show <pin>:<path>`; write the audit table (page, claim, source, verdict) into the implementation report for the orchestrator to record on TASK-82
 
 ## Dependencies & Execution Order
 
