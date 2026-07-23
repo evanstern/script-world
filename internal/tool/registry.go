@@ -105,6 +105,54 @@ func MiracleKinds() []string {
 	return out
 }
 
+// miracleCosts is THE authoritative per-kind charge price for a miracle (spec
+// 021 R7 / FR-009 / SC-004): the single source from which the reducer's
+// enforcement (sim.miracleCost, derived via MiracleCostsByEvent) and every
+// model/player-facing rendering (MetatronToolGuidance) both draw, so a price
+// change here propagates everywhere with no second edit. The time snap is the
+// dear one (2 charges); every other miracle costs 1. Keyed lookups only —
+// never iterated into ordered output (determinism).
+var miracleCosts = map[string]int{
+	"move":      1,
+	"remove":    1,
+	"give_item": 1,
+	"time_snap": 2,
+}
+
+// kindToEvent maps a miracle kind to the store event type it lands as — the
+// bridge that lets sim (whose reducer keys its enforcement by the arriving
+// event's type, not the model's kind string) derive its cost table from this
+// kind-keyed one. Declared beside miracleKinds so the kind vocabulary and its
+// event mapping stay together. Keyed lookups only.
+var kindToEvent = map[string]string{
+	"move":      "metatron.entity_moved",
+	"remove":    "metatron.entity_removed",
+	"give_item": "metatron.item_granted",
+	"time_snap": "metatron.time_snapped",
+}
+
+// MiracleCost returns the charge price of a miracle kind; ok is false for an
+// unknown kind. THE authoritative price accessor (SC-004): the guidance prose
+// renders from here, so a described cost can never drift from the enforced one.
+func MiracleCost(kind string) (int, bool) {
+	c, ok := miracleCosts[kind]
+	return c, ok
+}
+
+// MiracleCostsByEvent returns a fresh map from miracle EVENT TYPE to charge
+// price — the shape sim's reducer keys on. Built by walking the ordered kind
+// vocabulary and resolving each kind's event and cost through keyed lookups
+// only, so the result carries exactly the four metatron.* miracle event types
+// and is deterministic. sim.miracleCost IS this map (spec 021 R7), replacing
+// the literal that used to be sim's own second copy of the table.
+func MiracleCostsByEvent() map[string]int {
+	out := make(map[string]int, len(miracleKinds))
+	for _, k := range miracleKinds {
+		out[kindToEvent[k]] = miracleCosts[k]
+	}
+	return out
+}
+
 // miracleParams is work_miracle's flat parameter surface (spec 017 T019b,
 // mirroring spec 016's turn contract). `kind` is the sole required argument;
 // every other field is optional because the needed set is per-kind (move:

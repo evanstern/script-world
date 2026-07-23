@@ -13,7 +13,7 @@ in `.worktrees/task-64`), one PR. [P] marks parallel-safe tasks (different files
 
 ## Phase 1: Setup
 
-- [ ] T001 Verify green baseline in the task worktree: `go build ./... && go test ./...`
+- [X] T001 Verify green baseline in the task worktree: `go build ./... && go test ./...`
       from `.worktrees/task-64` (fresh off origin/main); record the baseline commit in
       the PR description
 
@@ -23,29 +23,29 @@ in `.worktrees/task-64`), one PR. [P] marks parallel-safe tasks (different files
 
 **⚠️ CRITICAL**: US1 and US2 both consume these; complete before story phases.
 
-- [ ] T002 Add the authoritative miracle cost table to internal/tool/registry.go beside
+- [X] T002 Add the authoritative miracle cost table to internal/tool/registry.go beside
       `miracleKinds`: per-kind `miracleCosts` map, kind↔event-type mapping, exported
       `MiracleCost(kind string) (int, bool)` and `MiracleCostsByEvent() map[string]int`
       (fresh map per call; deterministic — keyed lookups only, per data-model.md §5)
-- [ ] T003 Unit tests for the cost table in internal/tool/registry_test.go: kinds ≡
+- [X] T003 Unit tests for the cost table in internal/tool/registry_test.go: kinds ≡
       `MiracleKinds()`, time_snap=2 / others=1, `MiracleCostsByEvent` covers exactly the
       four `metatron.*` miracle event types
-- [ ] T004 Derive `sim.miracleCost` from `tool.MiracleCostsByEvent()` in
+- [X] T004 Derive `sim.miracleCost` from `tool.MiracleCostsByEvent()` in
       internal/sim/miracles.go (replace the literal map; `spendMiracleCharge` unchanged);
       update the existing kinds-mirror test (internal/metatron/metatron_test.go
       TestMiracleKindsMirrorTool and any sim-side pin) from "two copies equal" to
       "derivation holds" (SC-004)
-- [ ] T005 [P] Add `RestrictEnum(t Tool, param string, allowed []string) Tool` to
+- [X] T005 [P] Add `RestrictEnum(t Tool, param string, allowed []string) Tool` to
       internal/tool/derive.go — copy-on-write (registry never mutated), preserves
       allowed-value order from the tool's own Enum order, unknown allowed names dropped;
       unit tests in internal/tool/derive_test.go incl. InputSchema of a restricted
       work_miracle declaring only the granted kinds
-- [ ] T006 Add `MetatronToolGuidance(roster []Tool) string` to internal/tool/derive.go:
+- [X] T006 Add `MetatronToolGuidance(roster []Tool) string` to internal/tool/derive.go:
       renders per granted tool its name, argument surface (from Params — same source as
       InputSchema), and charge cost (nudges from Cost.Charges; work_miracle per-kind from
       `MiracleCost`, honoring a restricted kind enum); deterministic output; roster order
       preserved (research R6)
-- [ ] T007 Drift/derivation tests for guidance in internal/tool/derive_test.go: every
+- [X] T007 Drift/derivation tests for guidance in internal/tool/derive_test.go: every
       roster tool name appears; every rendered cost equals the authoritative table; no
       non-roster tool or ungranted kind appears; byte-identical across two calls (SC-004,
       FR-008, INV-3)

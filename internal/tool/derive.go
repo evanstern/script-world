@@ -2,6 +2,7 @@ package tool
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -155,6 +156,123 @@ func InputSchema(t Tool) json.RawMessage {
 		panic("tool: InputSchema marshal: " + err.Error())
 	}
 	return b
+}
+
+// RestrictEnum returns a copy of t whose named Enum param is narrowed to the
+// intersection of its declared Enum values and allowed (spec 021 R5.1) — the
+// per-world capability manifest uses it to offer work_miracle with only the
+// granted `kind` values. It is copy-on-write: a FRESH Params slice is built and
+// the target param's Enum is replaced with a fresh slice, so the registry's
+// Tool and its shared backing arrays are never mutated (the caller may treat
+// the result as owned). Survivors keep the tool's OWN Enum order — not allowed's
+// — so the declared surface stays deterministic regardless of how the manifest
+// listed the kinds; an allowed name the tool never declared is dropped. A tool
+// with no such Enum param is returned structurally unchanged (still a fresh
+// Params copy). Feeding InputSchema the result declares only the surviving enum
+// values, which IS the structural-absence guarantee (FR-005 layer 1).
+func RestrictEnum(t Tool, param string, allowed []string) Tool {
+	keep := make(map[string]bool, len(allowed))
+	for _, a := range allowed {
+		keep[a] = true
+	}
+	params := make([]Param, len(t.Params))
+	copy(params, t.Params)
+	for i := range params {
+		if params[i].Name != param || params[i].Kind != Enum {
+			continue
+		}
+		var narrowed []string
+		for _, v := range params[i].Enum { // the tool's own declared order
+			if keep[v] {
+				narrowed = append(narrowed, v)
+			}
+		}
+		params[i].Enum = narrowed
+	}
+	t.Params = params
+	return t
+}
+
+// metatronToolDesc is the one-line human gloss rendered beside each metatron
+// acting tool's name in the derived guidance. Keyed, so a tool absent from the
+// granted roster contributes no line (spec 021 FR-005/FR-008). This map supplies
+// only the "what it does" prose; the tool NAMES, ARGUMENT surfaces, and COSTS in
+// the guidance all derive from the registry, so described ≡ declared.
+var metatronToolDesc = map[string]string{
+	"nudge_dream":  "a dream for ONE named villager",
+	"nudge_omen":   "an omen every living villager witnesses",
+	"work_miracle": "a direct world edit",
+}
+
+// miracleKindArgs is the per-kind argument hint rendered under work_miracle,
+// keyed by kind so only GRANTED kinds — the work_miracle tool's possibly-
+// restricted `kind` Enum — ever appear (FR-005). The kind vocabulary and its
+// price derive from the registry (the Enum and MiracleCost); this map only
+// supplies the human argument gloss for a kind that is offered.
+var miracleKindArgs = map[string]string{
+	"move":      `class ("villager"|"structure"|"pile"), x, y, to_x, to_y`,
+	"remove":    `class ("structure"|"pile"|"terrain"), x, y`,
+	"give_item": `villager, item, qty`,
+	"time_snap": `day and time ("HH:MM")`,
+}
+
+// MetatronToolGuidance renders the human-shaped acting-tool guidance for the
+// metatron turn prompt FROM the granted roster (spec 021 R6 / FR-008): one
+// bullet per tool, in roster order, naming the tool, its argument surface (from
+// Params — the same source InputSchema derives from), and its charge cost (from
+// the authoritative MiracleCost table for miracle kinds, Cost.Charges for the
+// nudges). Because it walks the SAME roster that feeds Job.Roster, a tool or a
+// miracle kind absent from the world's grant is absent here too — the prose can
+// never describe a capability the model was not offered, and the derived cost
+// can never drift from the enforced one. Output is deterministic: roster order
+// and each tool's own Enum/Params slices drive every list; no map is iterated
+// into the output. Empty for an empty roster (a conversation-only world).
+func MetatronToolGuidance(roster []Tool) string {
+	var b strings.Builder
+	for _, t := range roster {
+		desc := metatronToolDesc[t.Name]
+		if t.Name == "work_miracle" {
+			fmt.Fprintf(&b, "  • %s(kind, …) — %s; kind is\n", t.Name, desc)
+			for _, k := range enumValues(t, "kind") {
+				cost, _ := MiracleCost(k)
+				fmt.Fprintf(&b, "      %q with %s — %d %s\n", k, miracleKindArgs[k], cost, chargeWord(cost))
+			}
+			continue
+		}
+		cost := t.Cost.Charges
+		fmt.Fprintf(&b, "  • %s(%s) — %s (%d %s)\n", t.Name, paramNameList(t), desc, cost, chargeWord(cost))
+	}
+	return b.String()
+}
+
+// chargeWord pluralizes the charge count for the guidance prose.
+func chargeWord(n int) string {
+	if n == 1 {
+		return "charge"
+	}
+	return "charges"
+}
+
+// enumValues returns the named param's declared Enum values in the tool's own
+// order (a restricted copy keeps its narrowed order — RestrictEnum preserves
+// it), or nil when the tool has no such Enum param.
+func enumValues(t Tool, param string) []string {
+	for _, p := range t.Params {
+		if p.Name == param && p.Kind == Enum {
+			return p.Enum
+		}
+	}
+	return nil
+}
+
+// paramNameList joins a tool's declared parameter names in Params order — the
+// argument surface a guidance bullet shows (e.g. "target, text").
+func paramNameList(t Tool) string {
+	names := make([]string, 0, len(t.Params))
+	for _, p := range t.Params {
+		names = append(names, p.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // paramSchema derives one property's JSON Schema fragment from its Param
