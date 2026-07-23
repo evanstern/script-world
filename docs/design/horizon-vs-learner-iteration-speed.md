@@ -1,6 +1,7 @@
 # Cognition horizon vs learner iteration speed (classroom mode)
 
-**Status:** options + recommendation, awaiting client decision (TASK-66, AC#3)
+**Status:** DECIDED 2026-07-23 (client, TASK-66 session) — recorded as decision-6; see
+the Decision section at the end
 **Origin:** 2026-07-22 team review, new-ideas item 4; client agreed 2026-07-22 to discuss
 **Doctrine touched:** decision-4 (cognition horizon), TASK-20 (speed ladder), spec 007
 **Grounded against:** `internal/cognition/route.go`, `internal/cognition/registry.go`,
@@ -154,15 +155,43 @@ carrier for whichever is chosen.
   explanation, or a suppressed planner without a visible verdict, both read as
   "the game is broken."
 
-## Follow-up implementation tasks (to cut after the client picks — AC#4)
+## Decision (client, 2026-07-23 — decision-6)
 
-Sketch, assuming the recommendation stands:
+The recommendation was accepted with one refinement discovered during the review
+discussion. The client asked what "operator triggers one bounded thought" concretely
+means; code-grounding the answer showed the sandbox is smaller than the doc's
+option (a) implied — **most of the mediated chain already works while paused**:
 
-1. Authoring mode: operator-triggered thought at the frozen tick (doored exception
-   to pause's no-new-cognition rule, bounded like the catch-up round) + a
-   single-step affordance. Needs its own spec (touches sim loop pause semantics).
-2. Teaching-world preset: speed cap derived from the calibration profile's
-   planner-row arithmetic, stored as world-config posture; consumed by TASK-68's
-   stage presets. Interacts with TASK-40 (uncalibrated worlds must prompt
-   calibrate before a cap can be honest).
-3. Learner-facing horizon legibility: fold into TASK-41 rather than a new task.
+- `metatron_chat` has no pause gate (ipc/server.go:312) — the operator can already
+  talk to the angel in a frozen world, and the angel's landed effects (nudges,
+  miracles) inject at the frozen tick, the already-blessed doctrine path.
+- The chain breaks at exactly two links: nudges are not on the planner's
+  wake-stimulus list (`absorb`, internal/mind/mind.go:203-228), and `routeVerdict`
+  (internal/mind/telemetry.go:61-71) computes drift at the world's *set* speed,
+  suppressing a thought whose real drift while frozen is zero.
+
+Decisions:
+
+1. **Mechanisms: (a) + (b), staged per curriculum (d). (c) rejected** — widening
+   budgets loosens both the router and the stale-landing door; learners would study
+   a drift-degraded sim exactly while being taught cause→effect.
+2. **(a) is "chain-completion only"**: a landed nudge arms the nudged villager's
+   one planner round at the frozen tick (bounded by construction — the 300-tick
+   game-time debounce cannot reopen while frozen), and routing treats paused as
+   zero predicted drift. No new mode, no new verbs, no single-stepping in v1
+   (explicitly deferred). Doctrine door: decision-4's landing-triggered catch-up
+   blessing extends to landings the operator caused via Metatron.
+3. **(b) is a soft cap, warn-with-override**: teaching worlds default to the
+   calibrated planner-safe speed; exceeding it is allowed and surfaces the horizon
+   arithmetic — overriding the cap is itself a lesson about the horizon.
+
+## Follow-up implementation tasks (AC#4 — cut 2026-07-23)
+
+1. **TASK-77** — paused authoring chain-completion (nudge-wakes-villager +
+   pause-aware routing). Doctrine-adjacent change in `internal/mind` → Opus 4.8
+   rubric tier, full Spec Kit before implementation.
+2. **TASK-78** — teaching-world speed posture: calibrated soft cap with
+   horizon-arithmetic warning, per-world config consumed by TASK-68's stage
+   presets. Interacts with TASK-40 (uncalibrated worlds must prompt calibrate).
+3. Learner-facing horizon legibility: folded into **TASK-41** (note appended),
+   prerequisite for classroom mode either way.
