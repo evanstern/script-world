@@ -287,6 +287,10 @@ type job struct {
 	ctx   context.Context
 	req   Request
 	reply chan result
+	// id keys this job in the pending-thought registry (spec 028): Submit stamps
+	// it at acceptance so the worker can mark dispatch and Submit can remove the
+	// entry on any terminal path. Zero for a job that was never registered.
+	id uint64
 }
 
 type result struct {
@@ -349,6 +353,11 @@ type Orchestrator struct {
 	done      chan struct{}
 	closeOnce sync.Once
 
+	// pending is the accepted-but-unlanded job inventory feeding
+	// PendingCognition (spec 028 US1): the adaptive-throttle governor's debt
+	// signal. Additive and orthogonal to routing/metering/breaker machinery.
+	pending *pendingRegistry
+
 	// recalibrate is invoked (in its own goroutine) when a provider's estimator
 	// first breaches the spike-rate threshold — the mind turns it into a
 	// cog.recalibration_recommended telemetry event. It carries the serving
@@ -383,6 +392,7 @@ func New(cfg Config, st MeterStore) (*Orchestrator, error) {
 		done:      make(chan struct{}),
 		providers: make(map[string]*provider, len(pcs)),
 		routes:    make(map[Kind]route, len(rcs)),
+		pending:   newPendingRegistry(),
 	}
 	// Each provider owns a full instance of the per-provider machinery (FR-005),
 	// with worker slots from its clamped parallel (warn discarded here — the
@@ -686,13 +696,25 @@ func (o *Orchestrator) Submit(ctx context.Context, req Request) (Response, error
 			q = t.prio
 		}
 		j := job{ctx: ctx, req: req, reply: make(chan result, 1)}
+		// Register the job in the pending-thought inventory (spec 028) BEFORE the
+		// send, so a worker that dequeues immediately can always find the entry to
+		// stamp dispatch. If the non-blocking send fails (queue full) the job was
+		// never accepted, so we remove the entry at once — the brief add/remove is
+		// the price of guaranteeing the worker never races ahead of the record.
+		j.id = o.pending.add(t.name, req.Kind)
 		select {
 		case q <- j:
 		default:
+			o.pending.remove(j.id)
 			skipped = append(skipped, RouteSkip{Provider: t.name, Reason: SkipQueueFull})
 			continue
 		}
-		// Accepted: this candidate serves the call. Post-dispatch failure is
+		// Accepted: this candidate serves the call, and the entry stays in the
+		// registry until this Submit returns (the deferred remove below fires on
+		// every terminal path — reply, provider error, caller-abandoned ctx, or
+		// orchestrator close — so the registry drains to empty once work quiesces).
+		defer o.pending.remove(j.id)
+		// Post-dispatch failure is
 		// FINAL — a provider error here is never re-dispatched down the chain
 		// (the model may have already done partial work; re-running it would
 		// double-spend and double-act). The recorded skips ride the response.
@@ -754,6 +776,12 @@ func (o *Orchestrator) worker(t *provider) {
 		// error, meter error, success), keeping 0 ≤ inflight ≤ slots for the
 		// slot-aware best-effort admission check in Submit (TASK-45 R3).
 		t.inflight.Add(1)
+		// Stamp the dispatch moment in the pending-thought registry (spec 028) the
+		// instant this job leaves the channel: from here PendingCognition reports it
+		// as in-flight (ElapsedSec > 0) rather than queued. A no-op if the caller
+		// already abandoned it and Submit removed the entry — the registry owner is
+		// still Submit; the worker only stamps.
+		o.pending.dispatch(j.id)
 		func() {
 			defer t.inflight.Add(-1)
 			// A job whose caller already gave up (its ctx expired in the
