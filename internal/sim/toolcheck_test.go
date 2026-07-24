@@ -116,12 +116,13 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		"journal.entry_deleted": true,
 		// Spec 029 (metatron agency) widens the boundary by the injected standing-
 		// order events. order_placed / order_cancelled are the monitor_and_act /
-		// cancel_order tool Events (pinned ⊆ this whitelist by ValidateToolCoverage).
-		// order_triggered (the trigger worker's injection) joins in T004; order_
-		// expired is EXECUTOR-emitted (like charge_regenerated) and is deliberately
-		// never here — only injected types need the door.
+		// cancel_order tool Events (pinned ⊆ this whitelist by ValidateToolCoverage);
+		// order_triggered is the trigger worker's injection. order_expired is
+		// EXECUTOR-emitted (like charge_regenerated) and is deliberately never here
+		// — only injected types need the door.
 		"metatron.order_placed":    true,
 		"metatron.order_cancelled": true,
+		"metatron.order_triggered": true,
 	}
 	for typ := range want {
 		if !injectSocialWhitelist[typ] {

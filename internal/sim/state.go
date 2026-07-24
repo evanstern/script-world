@@ -72,6 +72,16 @@ type State struct {
 	// the default. Deliberately NOT omitempty: a spent-to-zero bank must
 	// round-trip as 0, never resurrect as the genesis value.
 	MetatronCharges int `json:"metatron_charges"`
+	// Metatron standing orders (spec 029, TASK-27) — event-sourced watch-and-act
+	// instructions placed via monitor_and_act, driven by the injected order
+	// lifecycle events (placed/triggered/cancelled) and the executor's expiry
+	// emission. omitempty: pre-029 snapshots (field absent) unmarshal to nil,
+	// upgrade-free (the TASK-12 precedent), and an empty order set is genuinely
+	// zero-value — unlike MetatronCharges, whose spent-to-zero must round-trip.
+	// Consumed orders are retained (pruned to the most recent 32 non-active on
+	// placement) so the status/trail can show recent history without unbounded
+	// growth.
+	MetatronOrders []MetatronOrder `json:"metatron_orders,omitempty"`
 	// Norms and votes (TASK-13) — all event-sourced. Pre-TASK-13 snapshots
 	// unmarshal to zero values: no meeting place yet, no law, no meeting.
 	MeetingPlace *Point       `json:"meeting_place,omitempty"`
@@ -1159,7 +1169,9 @@ func (s *State) Apply(e store.Event) error {
 	case "chronicle.entry":
 		return s.applyChronicle(e)
 
-	case "metatron.charge_regenerated", "metatron.nudged":
+	case "metatron.charge_regenerated", "metatron.nudged",
+		"metatron.order_placed", "metatron.order_triggered",
+		"metatron.order_cancelled", "metatron.order_expired":
 		return s.applyMetatron(e)
 
 	case "metatron.time_snapped", "metatron.item_granted",

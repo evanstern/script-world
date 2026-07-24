@@ -171,9 +171,13 @@ func (s *State) applyTimeSnapped(e store.Event) error {
 //	                      only while the gru is abroad
 //	Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
 //	Meeting.GatherStart   emergent-gathering-watch anchor; ONLY non-zero
+//	MetatronOrder.ExpiresTick  standing-order expiry deadline (spec 029); shifted
+//	                      ONLY for ACTIVE orders (a consumed order's deadline is a
+//	                      spent artifact), so the remaining lifetime survives the jump
 //
 // KEEP (history/identity — never rewritten): Agent.Generation,
 //
+//	MetatronOrder.PlacedTick (spec 029: when the order was placed, history),
 //	Agent.LastGoalTick, Agent.LastConsolidatedNight, Agent.ConsolidatedUpTo,
 //	Agent.LastConsolidateMark, Memory.Tick, Memory.Conv (spec 019: a
 //	conversation-ref identity, same founding-talk tick as ConvoRecord.Conv),
@@ -237,6 +241,14 @@ func rebaseTicks(s *State, delta int64) {
 	}
 	for i := range s.Debts {
 		shift(&s.Debts[i].Due)
+	}
+	for i := range s.MetatronOrders {
+		// A standing order's expiry is a future deadline: shift only ACTIVE orders
+		// so the remaining lifetime is preserved across the jump. PlacedTick is a
+		// historical timestamp and is left unshifted (KEEP).
+		if s.MetatronOrders[i].Status == "active" {
+			shift(&s.MetatronOrders[i].ExpiresTick)
+		}
 	}
 	if s.Gru != nil {
 		shift(&s.Gru.LastAttack)

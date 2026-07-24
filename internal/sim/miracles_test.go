@@ -754,21 +754,22 @@ func TestRebaseTaxonomyComplete(t *testing.T) {
 	classified := map[string]string{
 		"State.Tick": keep, // the clock anchor: set by applyTimeSnapped, never rebased
 		// SHIFT — future deadlines / duration anchors.
-		"Agent.LastTalk":           shift,
-		"Agent.LastGive":           shift,
-		"Agent.IdleSince":          shift,
-		"Intent.WorkStart":         shift,
-		"AgentHail.Until":          shift,
-		"PlanStep.Until":           shift, // deviation from data-model.md — see rebaseTicks NOTE
-		"Guard.Tick":               shift, // deviation from data-model.md — see rebaseTicks NOTE
-		"Structure.FuelUntil":      shift,
-		"Harvest.Regrow":           shift,
-		"DenUse.Ready":             shift,
-		"FoodBatch.SpoilAt":        shift,
-		"Debt.Due":                 shift,
-		"Gru.LastAttack":           shift,
-		"MeetingState.OpenedTick":  shift,
-		"MeetingState.GatherStart": shift,
+		"Agent.LastTalk":            shift,
+		"Agent.LastGive":            shift,
+		"Agent.IdleSince":           shift,
+		"Intent.WorkStart":          shift,
+		"AgentHail.Until":           shift,
+		"PlanStep.Until":            shift, // deviation from data-model.md — see rebaseTicks NOTE
+		"Guard.Tick":                shift, // deviation from data-model.md — see rebaseTicks NOTE
+		"Structure.FuelUntil":       shift,
+		"Harvest.Regrow":            shift,
+		"DenUse.Ready":              shift,
+		"FoodBatch.SpoilAt":         shift,
+		"Debt.Due":                  shift,
+		"Gru.LastAttack":            shift,
+		"MeetingState.OpenedTick":   shift,
+		"MeetingState.GatherStart":  shift,
+		"MetatronOrder.ExpiresTick": shift, // spec 029: a standing order's future expiry deadline
 		// KEEP — history / identity / counters.
 		"Agent.Generation":                 keep,
 		"Agent.LastConsolidatedNight":      keep,
@@ -794,6 +795,7 @@ func TestRebaseTaxonomyComplete(t *testing.T) {
 		"Norm.DayRepealed":                 keep,
 		"Norm.DayAmended":                  keep,
 		"NormViolation.Tick":               keep,
+		"MetatronOrder.PlacedTick":         keep, // spec 029: when the order was placed (history)
 	}
 
 	found := map[string]bool{}

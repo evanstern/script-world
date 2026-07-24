@@ -47,6 +47,19 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 		emit("metatron.charge_regenerated", ChargeRegeneratedPayload{})
 	}
 
+	// Metatron standing-order expiry (spec 029): a pure function of (state, tick),
+	// exactly the charge_regenerated pattern — an active order whose TTL has
+	// elapsed emits metatron.order_expired, which the reducer transitions to
+	// expired (freeing the player-cap slot). Emitted once: the same event marks
+	// the order non-active, so the next tick no longer sees it active. Replay
+	// reproduces it deterministically without the angel running — unlike a
+	// trigger, which is a live-only injection (a matched condition, never replay).
+	for i := range s.MetatronOrders {
+		if o := &s.MetatronOrders[i]; o.Status == "active" && nextTick >= o.ExpiresTick {
+			emit("metatron.order_expired", OrderIDPayload{ID: o.ID})
+		}
+	}
+
 	// The gru: nightly emergence, stalking, wounds, dawn withdrawal (gru.go).
 	events = append(events, gruStep(s, m, night, nextTick)...)
 

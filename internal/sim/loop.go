@@ -221,6 +221,7 @@ var injectSocialWhitelist = map[string]bool{
 	// only model/worker-injected types pass this door.
 	"metatron.order_placed":    true,
 	"metatron.order_cancelled": true,
+	"metatron.order_triggered": true,
 	// Governance flavor (TASK-13): the ONLY injectable governance type —
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.
