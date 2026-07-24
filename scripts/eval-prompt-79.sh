@@ -55,6 +55,10 @@ N="${N:-3}"
 GEN_TEMP="${GEN_TEMP:-0.8}"
 GEN_MAXTOK="${GEN_MAXTOK:-224}"
 JUDGE_TEMP="${JUDGE_TEMP:-0}"
+# gemma4 is thinking-default; the daemon sets reasoning_effort "none" (config.go
+# LocalConfig.ReasoningEffort default), so hidden CoT never eats the token budget.
+# Match production exactly, else max_tokens 224 is spent on thinking → empty content.
+REASONING_EFFORT="${REASONING_EFFORT:-none}"
 VARIANTS="${VARIANTS:-old new}"
 
 for bin in curl jq; do
@@ -87,16 +91,17 @@ if ! curl -sS -m 10 "$ENDPOINT/models" | jq -e --arg m "$MODEL" '.data[]?|select
   exit 1
 fi
 
-echo "eval79: model=$MODEL judge=$JUDGE_MODEL endpoint=$ENDPOINT N=$N gen_temp=$GEN_TEMP gen_maxtok=$GEN_MAXTOK judge_temp=$JUDGE_TEMP variants='$VARIANTS'"
+echo "eval79: model=$MODEL judge=$JUDGE_MODEL endpoint=$ENDPOINT N=$N gen_temp=$GEN_TEMP gen_maxtok=$GEN_MAXTOK judge_temp=$JUDGE_TEMP reasoning=$REASONING_EFFORT variants='$VARIANTS'"
 echo "eval79: ${#FIXTURES[@]} fixtures × [$VARIANTS] × $N samples"
 
 # ---- model call ----------------------------------------------------------
 # call_model MODEL PROMPT TEMP MAXTOK -> assistant message content on stdout ("" on failure)
 call_model() {
   local model="$1" prompt="$2" temp="$3" maxtok="${4:-0}" req resp content
-  req=$(jq -n --arg model "$model" --arg prompt "$prompt" --argjson temp "$temp" --argjson maxtok "$maxtok" \
+  req=$(jq -n --arg model "$model" --arg prompt "$prompt" --argjson temp "$temp" --argjson maxtok "$maxtok" --arg re "$REASONING_EFFORT" \
     '{model:$model, temperature:$temp, stream:false, messages:[{role:"user",content:$prompt}]}
-     + (if $maxtok>0 then {max_tokens:$maxtok} else {} end)')
+     + (if $maxtok>0 then {max_tokens:$maxtok} else {} end)
+     + (if $re=="" then {} else {reasoning_effort:$re} end)')
   for attempt in 1 2; do
     resp=$(curl -sS -m 120 "$ENDPOINT/chat/completions" \
       -H 'Content-Type: application/json' -d "$req" 2>/dev/null || true)
@@ -111,13 +116,22 @@ json_span() {
   printf '%s' "$1" | tr -d '\000' | sed -n '1h;1!H;${g;s/^[^{]*//;s/[^}]*$//;p;}'
 }
 
-# extract_gist CONTENT -> the .gist string ("" if unparseable)
+# extract_gist CONTENT -> the .gist string ("" if unfindable).
+# The model wraps replies in ```json fences and often emits a MALFORMED tones
+# array (echoing names: [Cedar — 1, ...]) — the daemon's tolerant parser absorbs
+# that, so strict jq on the whole object fails even though the gist is clean.
+# We only judge the gist, so: try strict jq first, then fall back to a regex that
+# pulls just the "gist" string value (handles escaped chars, stops at first
+# unescaped quote), and json-decode it.
 extract_gist() {
-  local content="$1" g
+  local content="$1" g cap
   g=$(printf '%s' "$content" | jq -r '.gist // empty' 2>/dev/null || true)
   [[ -n "$g" ]] && { printf '%s' "$g"; return 0; }
   g=$(json_span "$content" | jq -r '.gist // empty' 2>/dev/null || true)
-  printf '%s' "$g"
+  [[ -n "$g" ]] && { printf '%s' "$g"; return 0; }
+  cap=$(printf '%s' "$content" | perl -0777 -ne 'print $1 if /"gist"\s*:\s*"((?:[^"\\]|\\.)*)"/s' 2>/dev/null || true)
+  [[ -z "$cap" ]] && { printf ''; return 0; }
+  printf '"%s"' "$cap" | jq -r '. // empty' 2>/dev/null || printf '%s' "$cap"
 }
 
 # flag JSON KEY -> "1" if the boolean/string field is true, else "0"
@@ -229,8 +243,8 @@ jq -s '
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 jq -n --arg model "$MODEL" --arg judge "$JUDGE_MODEL" --arg ep "$ENDPOINT" \
   --argjson n "$N" --arg gt "$GEN_TEMP" --argjson gm "$GEN_MAXTOK" --arg jt "$JUDGE_TEMP" \
-  --arg variants "$VARIANTS" --argjson nfix "${#FIXTURES[@]}" --arg sha "$GIT_SHA" --arg ts "$(date -u +%FT%TZ)" \
-  '{model:$model, judge_model:$judge, endpoint:$ep, samples_per_fixture:$n, gen_temp:$gt, gen_maxtok:$gm, judge_temp:$jt, variants:$variants, fixtures:$nfix, git_sha:$sha, run_utc:$ts}' \
+  --arg variants "$VARIANTS" --argjson nfix "${#FIXTURES[@]}" --arg sha "$GIT_SHA" --arg ts "$(date -u +%FT%TZ)" --arg re "$REASONING_EFFORT" \
+  '{model:$model, judge_model:$judge, endpoint:$ep, samples_per_fixture:$n, gen_temp:$gt, gen_maxtok:$gm, judge_temp:$jt, reasoning_effort:$re, variants:$variants, fixtures:$nfix, git_sha:$sha, run_utc:$ts}' \
   > "$RESULTS_DIR/run-meta.json"
 
 echo "eval79: raw   -> $RAW"
