@@ -83,15 +83,18 @@ reinforcement resets; replay holds.
 
 **Independent Test**: quickstart §4 — eval numbers meet the ship bar before convo.go changes; live sample clean.
 
-- [ ] T009 [US3] Eval assets: `eval/fixtures/` (≥3 speculation, ≥3 action-discussed-not-done, ≥4 control scenes),
+- [x] T009 [US3] Eval assets: `eval/fixtures/` (≥3 speculation, ≥3 action-discussed-not-done, ≥4 control scenes),
       `eval/old.md` (current outcome prompt verbatim), `eval/new.md` (attribution variant), and
       `scripts/eval-prompt-79.sh` (modeled on `scripts/eval-prompt-73.sh`) per contracts/eval-protocol.md
-- [ ] T010 [US3] Run the eval (fixtures × variants × N≥3 on the standard local model), judge-score, write
+- [x] T010 [US3] Run the eval (fixtures × variants × N≥3 on the standard local model), judge-score, write
       `eval/decision.md` with the pre-stated tolerance and the numbers; record numbers + verdict on TASK-79
       (AC #3) — THE GATE: T011 may not start unless the bar is met (≥50% reduction, controls in tolerance)
-- [ ] T011 [US3] Ship the winning prompt in `internal/mind/convo.go` (outcome call only; output shape untouched);
-      then the live multi-scene sample inspected for zero "after investigating" shapes, recorded in
-      quickstart-results.md
+- ~~T011 [US3] Ship the winning prompt in `internal/mind/convo.go`~~ — **CLOSED won't-ship, 2026-07-24**
+      (planning-tier ruling from eval/decision.md): gate NOT met. Standard tier gemma4:12b-mlx: 0/18 defects
+      before AND after (controls 12/12) — nothing to fix; cogito:3b (the tier world-01 runs, which produced the
+      Thornspire defects): 3/18→5/18, no reduction — wording doesn't help the failing tier. convo.go intentionally
+      unchanged; the confabulation class is model-tier, not prompt. Operational follow-up filed on the board
+      (upgrade world-01 local tier). AC #3's live-sample half moves to T013 (current prompt, standard tier).
 
 **Checkpoint**: gists attribute; the laundering pump is off; numbers on the task.
 

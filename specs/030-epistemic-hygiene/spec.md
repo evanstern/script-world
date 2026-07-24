@@ -243,3 +243,14 @@ before/after numbers recorded.
   feature ships the consumer side (seam + reducer + tests) only.
 - Provenance vocabulary stays the existing three values; "hearsay" maps onto the existing "told" label rather than
   adding a fourth value.
+
+## Amendments
+
+- **2026-07-24 — US3 / FR-010 / SC-004 outcome**: the eval gate ran and was NOT met (eval/decision.md; bar
+  pre-registered). The standard local tier (gemma4:12b-mlx) produces zero fact-flattened/confabulated gists with
+  the CURRENT prompt (0/18, controls 12/12), so the attribution variant has nothing demonstrable to fix there;
+  the tier that does exhibit the Thornspire failure (cogito:3b, world-01's configured local model) is not
+  improved by the variant (3/18 → 5/18). Per the gate, the prompt does not ship and T011 is closed won't-ship.
+  US3's end-state ("gists preserve attribution, no asserted-unperformed-actions") is instead evidenced on the
+  standard tier by the eval baseline plus the T013 live sample; the failing-tier remediation is operational
+  (upgrade world-01's local model), filed on the board.

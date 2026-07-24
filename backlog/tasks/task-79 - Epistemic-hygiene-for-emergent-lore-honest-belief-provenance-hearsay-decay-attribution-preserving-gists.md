@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 03:44'
+updated_date: '2026-07-24 04:30'
 labels:
   - emergent-lore
   - epistemics
@@ -77,4 +77,23 @@ US2 core (T006-T007) reviewed and accepted (commits 798217a, 5a21238; sim suite 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 0/3 · Polish & Cross-Cutting Concerns: 0/3
 
 T008 reviewed and accepted (commit a1bdec1; scribe+mind suites re-run uncached by orchestrator, green). Hedged form follows the authoritative contract wording ('half-remembered: <statement>', no number) over research.md's variant; '(faded)' marker appended end-of-line; held-beliefs block keeps below-floor beliefs listed (data-model.md revisability exception). Orchestrator ruling: sim.PromptBeliefs ships as an unused-but-tested exclusion primitive — same seam-before-producer pattern as T007/AC #4.
+
+US3 gist-attribution eval (T009-T010, spec-bridge eval gate FR-010/SC-004) — SHIP BAR NOT MET; internal/mind/convo.go UNCHANGED, T011 not started.
+
+AUTHORITATIVE run, gemma4:12b-mlx (the standard local tier default), N=3, temp 0.8 / max_tokens 224 / reasoning_effort none (matching the daemon's outcome call), same-model judge temp 0, 10 fixtures (3 speculation / 3 action-discussed-not-done / 4 control):
+- old prompt: treatment defect 0/18 = 0.00% (flattened 0, confab 0); control faithful 12/12 = 100%.
+- new prompt (eval/new.md): treatment defect 0/16 = 0.00% (flattened 0, confab 0; 2 parse-fails on the 3-participant fixture overran 224 tokens); control faithful 12/12 = 100%.
+- Reduction: 0% -> 0% = N/A. The standard model already writes honest, attributed gists unprompted ('Rowan claims to have seen...', 'agreed to investigate ... the following day' — not 'after investigating'), so a >=50% relative reduction is undefined against a 0% baseline (pre-registered boundary condition in eval/decision.md).
+
+NON-AUTHORITATIVE corroboration, cogito:3b generation + gemma4:12b-mlx judge (the weaker class that produced the world-01 Thornspire defects; run because the standard baseline is 0% and so cannot show whether the prompt helps where the failure occurs):
+- old: treatment 3/18 = 16.67%; new: 5/18 = 27.78%. Defects rose (no reduction). Most new flags are the judge over-penalizing correctly-attributed-but-vivid gists; two are genuine small-model failures (confabulated 'Mira cut planks'; Thornspire content bleeding into a control). Within noise at n=18, but unambiguously not a >=50% reduction.
+
+VERDICT: gate not met on either model. AC #3 NOT satisfied (requires a demonstrated reduction + clean live sample). Evidence: specs/030-epistemic-hygiene/eval/decision.md + eval/results/{,gemma4-12b-mlx,cogito-3b}/.
+
+ESCALATION (design decision for the planning tier, not the implementer): the FR-010/SC-004 eval assumes the standard local model exhibits the confabulation shapes; it does not. Options in decision.md — A) do not ship US3 (recommended: the standard tier is already clean and cogito gives no signal new.md helps weak models); B) ship new.md as cheap insurance and amend the gate to record a non-demonstrable-but-accepted exception. Needs an orchestrator ruling before US3/AC#3/AC#9 can close.
+
+US3 eval gate verdict: NOT MET — prompt not shipped, convo.go unchanged (AC #3 stays unchecked pending the T013 live sample; see ruling below). Numbers (eval/decision.md, bar pre-registered before any run: ≥50% treatment-defect reduction, controls in tolerance):
+— gemma4:12b-mlx (standard local tier, authoritative; N=3, temp 0.8, reasoning_effort:none matching daemon): old 0/18 defects (0.00%), controls 12/12; new 0/16 (0.00%, 2 parse-fails on the longest fixture), controls 12/12. Reduction n/a — baseline already clean.
+— cogito:3b (corroboration — the tier world-01 actually runs): old 3/18 (16.7%), controls 9/12; new 5/18 (27.8%), controls 10/12. No reduction; most new-variant flags are judge over-penalty, two are genuine small-model failures.
+Orchestrator ruling (Option A, from artifacts): DO NOT ship — standard tier is already honest with the current prompt; the failing tier (world-01 llm.json: local=cogito:3b — verified this session) is not helped by wording. The Thornspire confabulation class is model-tier, not prompt. T011 closed won't-ship in tasks.md per decision.md; operational follow-up task filed to upgrade world-01's local tier. Tier note: T009-T010 ran on Opus 4.8 per dispatch ruling.
 <!-- SECTION:NOTES:END -->
