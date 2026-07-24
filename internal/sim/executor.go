@@ -691,6 +691,19 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	// reflex) into the memory's Why — baked at emission so replay reproduces the
 	// identical situated text with no lookup.
 	where := PlaceAt(s, a.X, a.Y)
+	// axeBrokeIfLast co-emits agent.axe_broke immediately after a chop/quarry
+	// completion when the most-worn carried axe is on its last use (pre-event
+	// Axes[0] == 1) — the spear-broke precedent (T027). The harvest reducer
+	// decrements Axes[0] to 0 first, then this companion removes it; a situated
+	// memory rides alongside carrying no Why (the reason belongs to the harvest).
+	// Judged against pre-mutation state, exactly what the reducer re-derives.
+	axeBrokeIfLast := func() {
+		if len(a.Inv.Axes) > 0 && a.Inv.Axes[0] == 1 {
+			emit("agent.axe_broke", AxeBrokePayload{Agent: i})
+			events = append(events, situatedMemoryEvent(nextTick, i, salAxeBroke, where, "",
+				"My axe broke at the work — I'll need to craft another."))
+		}
+	}
 	switch in.Goal {
 	case "forage":
 		emit("agent.foraged", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
@@ -700,6 +713,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		}
 	case "chop":
 		emit("agent.chopped", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		axeBrokeIfLast()
 	case "hunt":
 		// T027: carrying a spear (checked against pre-mutation state, exactly
 		// what the reducer will independently re-derive when it applies this
@@ -798,6 +812,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		emit("agent.wall_repaired", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		axeBrokeIfLast()
 	case "collect_water":
 		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "craft_planks", "craft_stone", "craft_spear":

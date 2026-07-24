@@ -865,6 +865,13 @@ type (
 	SpearBrokePayload struct {
 		Agent int `json:"agent"`
 	}
+	// AxeBrokePayload (spec 032 US2): the axe that spent its last harvest use,
+	// co-emitted immediately after the chop/quarry completion when the pre-event
+	// Axes[0] == 1 — the exact SpearBrokePayload clone. A companion memory rides
+	// the same batch.
+	AxeBrokePayload struct {
+		Agent int `json:"agent"`
+	}
 	// FireBurnedOutPayload: the fuel sweep's once-per-burnout signal. No state
 	// effect (lit-ness is derived from FuelUntil); chronicle/TUI material.
 	FireBurnedOutPayload struct {
