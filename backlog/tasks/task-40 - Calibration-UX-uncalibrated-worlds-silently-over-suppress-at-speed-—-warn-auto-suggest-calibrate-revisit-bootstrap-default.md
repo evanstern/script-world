@@ -3,10 +3,10 @@ id: TASK-40
 title: >-
   Calibration UX: uncalibrated worlds silently over-suppress at speed —
   warn/auto-suggest calibrate; revisit bootstrap default
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-24 13:24'
+updated_date: '2026-07-24 13:55'
 labels:
   - ux
 dependencies: []
@@ -18,16 +18,18 @@ ordinal: 2000
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 From TASK-39: BootstrapLocalSecPerPt=20.0 is ~20x slower than this rig's measured 0.94 s/pt, so every uncalibrated world silently loses conversations (above ~27x) and planners at high speed, with no signal. Options per TASK-39: lower the bootstrap, or make high-speed launch of an uncalibrated world warn loudly / auto-suggest scriptworld calibrate. Pessimism-toward-reflex is intentional doctrine (decision-4) — changing the default is a doctrine-adjacent call, review against specs/007-cognition-horizon.
+
+Spec: specs/035-calibration-ux
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Spec phase: Setup
-- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #3 Spec phase: User Story 1 - Raising speed on an uncalibrated world warns loudly (Priority: P1) 🎯 MVP
-- [ ] #4 Spec phase: User Story 2 - Boot warning states the concrete consequence (Priority: P2)
-- [ ] #5 Spec phase: User Story 3 - Calibration state visible in status (Priority: P3)
-- [ ] #6 Spec phase: User Story 4 - Calibrate discloses its sequential-measurement bias (Priority: P3)
+- [x] #1 Spec phase: Setup
+- [x] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #3 Spec phase: User Story 1 - Raising speed on an uncalibrated world warns loudly (Priority: P1) 🎯 MVP
+- [x] #4 Spec phase: User Story 2 - Boot warning states the concrete consequence (Priority: P2)
+- [x] #5 Spec phase: User Story 3 - Calibration state visible in status (Priority: P3)
+- [x] #6 Spec phase: User Story 4 - Calibrate discloses its sequential-measurement bias (Priority: P3)
 - [ ] #7 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
@@ -47,4 +49,6 @@ Drift audit 2026-07-23: verified intact — BootstrapLocalSecPerPt=20.0 at inter
 Cross-ref 2026-07-24: TASK-86 (estimator freeze under load — spike gate can't follow a >3x step, world-01 evidence) and TASK-87 (governor debt floors overdue jobs to zero) are the live-defect siblings of this task's sequential-vs-concurrent calibration bias. If TASK-86 lands (live estimator follows load), the calibration seed becomes just a starting point and this task reduces to pure UX (warn on uncalibrated + concurrency disclosure).
 
 Model-tier decision (constitution V rubric): SONNET (default tier). Justification: pure UX/visibility slice — additive omitempty wire fields, CLI rendering, boot-output composition, moving existing horizonSummary arithmetic into internal/cognition unchanged; no concurrency/scheduling/governor logic modified (the two internal/llm touches are additive bookkeeping on existing structs). Escalate to Opus 4.8 only if gates fail.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - Raising speed on an uncalibrated world warns loudly (Priority: P1) 🎯 MVP: 4/4 · User Story 2 - Boot warning states the concrete consequence (Priority: P2): 2/2 · User Story 3 - Calibration state visible in status (Priority: P3): 2/2 · User Story 4 - Calibrate discloses its sequential-measurement bias (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 1/3
 <!-- SECTION:NOTES:END -->
