@@ -799,20 +799,25 @@ func TestHandlerFirewallAudit(t *testing.T) {
 	}
 }
 
-// TestMetaToolsLandThroughLoopControl (US5, spec 029 T018/T020): pause / start /
-// adjust_speed each land through the LoopControl seam with R10's mapping, spend no
-// charge, inject no world event, and set the Clock line the console renders.
+// TestMetaToolsLandThroughLoopControl (US5, spec 029 T018/T020, amended at
+// polish for the start-with-speed finding): pause / start / adjust_speed each
+// land through the LoopControl seam with R10's mapping, spend no charge, inject
+// no world event, and set the Clock line the console renders. start pins both
+// shapes: bare start is a single Do("resume", "") as always; start WITH a speed
+// is TWO loop commands (Do("set_speed", speed) then Do("resume", "")) for the
+// one tool call, since resume ignores its own speed argument.
 func TestMetaToolsLandThroughLoopControl(t *testing.T) {
 	cases := []struct {
-		tool, args, wantDo string
-		wantSpeed          clock.Speed
+		name, tool, args string
+		want             []loopCall
 	}{
-		{"pause", `{}`, "pause", ""},
-		{"start", `{"speed":"16x"}`, "resume", "16x"},
-		{"adjust_speed", `{"speed":"8x"}`, "set_speed", "8x"},
+		{"pause", "pause", `{}`, []loopCall{{"pause", ""}}},
+		{"start-no-speed", "start", `{}`, []loopCall{{"resume", ""}}},
+		{"start-with-speed", "start", `{"speed":"16x"}`, []loopCall{{"set_speed", "16x"}, {"resume", ""}}},
+		{"adjust_speed", "adjust_speed", `{"speed":"8x"}`, []loopCall{{"set_speed", "8x"}}},
 	}
 	for _, c := range cases {
-		t.Run(c.tool, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			mt, _, inj, _ := newTestAngel(t, "As you say.")
 			stub := mt.loop.(*loopControlStub)
 			mt.runLoop = actLoop(mt, c.tool, c.args)
@@ -821,8 +826,8 @@ func TestMetaToolsLandThroughLoopControl(t *testing.T) {
 				t.Fatal(err)
 			}
 			calls := stub.recorded()
-			if len(calls) != 1 || calls[0].name != c.wantDo || calls[0].speed != c.wantSpeed {
-				t.Fatalf("LoopControl calls = %+v, want one %s(%q)", calls, c.wantDo, c.wantSpeed)
+			if !reflect.DeepEqual(calls, c.want) {
+				t.Fatalf("LoopControl calls = %+v, want %+v", calls, c.want)
 			}
 			if r.Clock == "" {
 				t.Error("a landed meta act set no Clock line")
@@ -834,6 +839,32 @@ func TestMetaToolsLandThroughLoopControl(t *testing.T) {
 				t.Errorf("a meta act injected a world event: %+v", landedBatches(inj))
 			}
 		})
+	}
+}
+
+// TestMetaToolStartSpeedFailureStopsBeforeResume (US5, spec 029 T020, polish):
+// when start carries a speed and the set_speed leg of the pair fails, the loop
+// never sees the resume leg — the handler reports rejected_gate on the first
+// failing command rather than issuing a partial pair.
+func TestMetaToolStartSpeedFailureStopsBeforeResume(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "I could not.")
+	mt.loop.(*loopControlStub).err = context.DeadlineExceeded
+	mt.runLoop = actLoop(mt, "start", `{"speed":"16x"}`)
+	r, err := mt.Turn(context.Background(), "start it fast")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Clock != "" {
+		t.Error("a failed meta act still set a Clock line")
+	}
+	stub := mt.loop.(*loopControlStub)
+	calls := stub.recorded()
+	if len(calls) != 1 || calls[0].name != "set_speed" {
+		t.Fatalf("LoopControl calls = %+v, want exactly one set_speed attempt (no resume)", calls)
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" {
+		t.Errorf("loop error not fed back as a rejected_gate: %+v", tcs)
 	}
 }
 

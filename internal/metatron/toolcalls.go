@@ -199,13 +199,21 @@ func (mt *Metatron) handlePause(d *turnDispatch) toolloop.Handler {
 	}
 }
 
-// handleStart resumes the clock (spec 029 R10): start→Do("resume", speed). The
-// loop's resume command changes only the paused state — a supplied speed is inert
-// through resume (see the implementer finding); the pace is set with adjust_speed.
+// handleStart resumes the clock (spec 029 R10, amended at polish per
+// contracts/tools.md's meta section): the loop's resume command ignores its
+// speed argument (internal/sim/loop.go's "resume" case never reads cmd.speed) —
+// a bare start is Do("resume", "") as always, but a start WITH a speed issues
+// two loop commands for the one tool call: Do("set_speed", speed) THEN
+// Do("resume", ""), so the world both paces and moves in a single act.
 func (mt *Metatron) handleStart(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
 		speed := clock.Speed(argString(call.Args, "speed"))
-		if why := mt.controlLoop(d, "resume", speed, "the world moves again"); why != "" {
+		if speed != "" {
+			if why := mt.controlLoop(d, "set_speed", speed, "the world moves again"); why != "" {
+				return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+			}
+		}
+		if why := mt.controlLoop(d, "resume", "", "the world moves again"); why != "" {
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}
 		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world moves again"}
