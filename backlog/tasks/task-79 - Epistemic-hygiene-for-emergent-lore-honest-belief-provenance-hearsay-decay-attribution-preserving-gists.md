@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 03:26'
+updated_date: '2026-07-24 03:44'
 labels:
   - emergent-lore
   - epistemics
@@ -46,7 +46,7 @@ Spec: specs/030-epistemic-hygiene
 - [x] #5 Spec phase: Setup
 - [x] #6 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #7 Spec phase: User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2)
+- [x] #8 Spec phase: User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2)
 - [ ] #9 Spec phase: User Story 3 — Gists preserve attribution (Priority: P3)
 - [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
@@ -73,4 +73,8 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · Us
 US1 checkpoint reviewed and accepted (commits 444bc69..8d86929 on task-79-epistemic-hygiene; sim+mind suites re-run uncached by orchestrator, green). AC #1 proven by T004 coercion-table tests (witnessed with secondhand-only evidence → told, no evidence → inferred; witnessed with direct-perception evidence kept) + T002 classifier tests. Deviations accepted: (a) miracle_batch.go item-grant memories stamped OriginOmen — directly-perceived divine act, same family as the enumerated dream/omen site; (b) Belief.Reinforced classified SHIFT (non-zero) in the rebase taxonomy — elapsed-time decay anchor, grandfather 0 preserved; (c) revision-time direct-refresh of Reinforced deliberately deferred to T006 per task split, direct flag already lands on the payload.
 
 US2 core (T006-T007) reviewed and accepted (commits 798217a, 5a21238; sim suite re-run uncached by orchestrator, green; full suite green per implementer). AC #2 proven: EffectiveConfidence computed-on-read with BeliefHalfLifeDays=8 / BeliefConfidenceFloor=20 (constants + rationale in doc comments and in the note above), curve pinned to the tick (day4→57 proves continuous decay), legacy Reinforced==0 grandfathered, stored state never mutates, replay byte-identity holds with coerced + reinforced events in the log. AC #4 proven: agent.belief_reinforced whitelisted through the injection door with a total reducer arm (vanished-target no-op), doc comment names the future grounded-observation/perception-of-absence producer; no in-tree producer by design. Note: implementer used continuous math.Pow(0.5, days/8) per the contract formula (not memory-recency's integer-day halving) — deterministic, never stored, cannot affect replay bytes. Mid-flight git note: an accidental 'pull --rebase' in the worktree briefly rewrote the task branch; restored via reset --hard to 5a21238 — recorded hashes remain valid; branch still forks from 6bac0d7.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 0/3 · Polish & Cross-Cutting Concerns: 0/3
+
+T008 reviewed and accepted (commit a1bdec1; scribe+mind suites re-run uncached by orchestrator, green). Hedged form follows the authoritative contract wording ('half-remembered: <statement>', no number) over research.md's variant; '(faded)' marker appended end-of-line; held-beliefs block keeps below-floor beliefs listed (data-model.md revisability exception). Orchestrator ruling: sim.PromptBeliefs ships as an unused-but-tested exclusion primitive — same seam-before-producer pattern as T007/AC #4.
 <!-- SECTION:NOTES:END -->
