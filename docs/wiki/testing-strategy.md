@@ -15,7 +15,7 @@ sources:
   - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Testing strategy
@@ -90,7 +90,16 @@ coherence contract holds (no push predates the snapshot's `last_seq`, and a repl
 built from it applies subsequent pushes cleanly — the [[tui-client]] pattern); and
 `llm_call` routes through a live [[llm-orchestrator]] while a killed inference
 endpoint leaves the loop ticking (the package's own suite covers routing, metering,
-ceiling refusal, and circuit recovery against httptest mock providers). Large-reply
+ceiling refusal, and circuit recovery against httptest mock providers). Spec 028
+(adaptive throttle) adds its own status-fold coverage here: a scripted
+`Governor` fake proves debt/jobs fold into `StatusData.Clock` exactly like the
+LLM snapshot, a no-governor world reports zero governor values, and a
+byte-shape test pins the three new fields `omitempty` (a zero status marshals
+with none of them present); a `Loop.Govern`-driven test proves status reports
+both the effective and requested speed while governed and that a player
+`set_speed` below the governed notch collapses `RequestedSpeed` back to empty;
+and a regression test pins that `set_speed max` is still refused with an LLM
+configured (FR-012) while `32x` is accepted, unchanged by the governor. Large-reply
 behavior (TASK-19) is proven against a `fakeDaemon` wire harness that speaks the
 protocol from canned replies: a >1 MiB `state` payload round-trips; a reply over
 the 64 MiB cap is substituted server-side with an actionable `reply too large`

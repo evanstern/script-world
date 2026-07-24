@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # TUI client
@@ -31,6 +31,21 @@ Connection (`connect`): dial → `FetchState` (state JSON + the `last_seq` it re
 replica starts gapless by construction. `listen` delivers one push per invocation and
 `Update` re-arms it. `applyEvent` skips seqs already folded into the snapshot, applies
 the rest to the replica, bumps its tick, and appends to the chronicle ring.
+
+**Governed speed** (`headerView` in `views.go`, spec 028 US4): the header's
+speed segment renders the EFFECTIVE speed as the world's speed, and — only
+while `StatusData.Clock.RequestedSpeed` is set and differs from `Speed` (the
+governor has shed at least one notch) — gains a plain-language suffix via
+`governedSpeedSuffix`: `"asked 32x — 3 minds in flight, debt 140%"`. An
+ungoverned world (`RequestedSpeed` empty) renders byte-identically to
+pre-028. `debtPercent` (`digest.go`) is the one shared arithmetic behind both
+this suffix and the digest lines below: the measured debt expressed as a
+whole percent of `cognition.ShedThreshold`, rounded to the nearest percent.
+The raw chronicle feed's digest grammar gains two entries for the same
+feature: `clock.governor_shed`/`clock.governor_recovered` each render as
+`"governor shed/recovered <from>→<to> debt=N% jobs=N"`, in the terse
+`clock.degraded`-line style (the `requested` payload field is omitted here —
+the from→to transition already carries the notch delta).
 
 Resilience: errors become `disconnectedMsg` → the header shows the failure and a
 2-second retry loop re-dials; a `dropped` push (subscriber overflow) tears the client
@@ -191,7 +206,10 @@ TASK-20); `q` detaches — the world keeps running.
 [[ipc-client]] is the transport; [[ipc-protocol]]'s `state` command exists for this
 replica pattern; [[sim-state-reducer]] supplies the shared `Apply`; [[chronicle]]
 fills the story pane and [[event-types]] the raw feed; [[cli-promptworld]] mounts
-it as the `ui` subcommand.
+it as the `ui` subcommand. The header's governed-speed suffix and the two
+governor digest lines read [[cognition]]'s `ShedThreshold` and the
+`clock.governor_shed`/`clock.governor_recovered` payload the [[daemon-lifecycle]]
+governor sampler emits through the loop.
 
 ## Operational notes
 

@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Daemon lifecycle
@@ -52,6 +52,14 @@ Startup sequence:
    orchestrator ([[llm-orchestrator]]) starts only when `llm.json` exists
    (`llm.LoadConfig` → `llm.New` → `srv.SetLLM`), closed on exit — config-gated,
    fully outside the loop, so inference failures can never touch the simulation.
+   Inside that same conditional branch, spec 028's adaptive-throttle governor
+   sampler is built and started: `newGovernorSampler(orch, loop)` wired to the
+   server via `srv.SetGovernor` and run in its own goroutine
+   (`go sampler.run(ctx)`), sampling aggregate staleness debt every
+   `cognition.GovernorCadence` off the loop's non-blocking status door and
+   issuing shed/recover decisions through the loop's `Govern` door — a no-LLM
+   world builds zero governor machinery (FR-003, SC-004; see [[cognition]] for
+   the debt arithmetic and controller, [[sim-loop]] for the `govern` command).
    Boot also surfaces the agent tool-use loop's config warnings the same
    warn-not-error way as the concurrency knob (`llmCfg.Local.Workers()`'s
    `workersWarn`): `llmCfg.Rounds()` (an out-of-range `loop_max_rounds`), both
@@ -97,7 +105,8 @@ without touching the world.
 [[cli-promptworld]] runs this via `daemon` and detaches it via `start`; [[sim-loop]]
 is the foreground engine; [[ipc-server]] the concurrent face; [[event-types]] defines
 the `daemon.*` bookkeeping events it emits; [[cognition]] supplies the startup kind
-gate and the calibration profile it seeds into the orchestrator.
+gate, the calibration profile it seeds into the orchestrator, and (spec 028)
+the debt arithmetic and hysteresis controller the governor sampler drives.
 
 ## Operational notes
 

@@ -41,7 +41,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 ## Inference & minds
 
 - [[llm-orchestrator]] — two-tier model traffic: routing, spend ceiling, degraded mode
-- [[cognition]] — the cognition horizon: Fibonacci-point decision registry, seconds-per-point calibration, deterministic LLM-vs-reflex routing by staleness budget
+- [[cognition]] — the cognition horizon: Fibonacci-point decision registry, seconds-per-point calibration, deterministic LLM-vs-reflex routing by staleness budget, and the adaptive-throttle debt/governor feedback controller
 - [[tool-registry]] — one registry for every agent capability: derived vocabulary/validation/durations/rosters, boot-time coverage gates
 - [[tool-loop]] — the bounded agent tool-use loop driver: submit/dispatch/feed-back, one-landed-action cardinality, shared by the villager planner and Metatron's turn
 - [[agent-mind]] — personas, souls, memory window, and the planner driver

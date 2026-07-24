@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/ipc/server.go
   - internal/ipc/socket.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # IPC server
@@ -31,7 +31,17 @@ dispatch to the optional angel through the `Angel` interface (`SetMetatron`,
 worlds without an LLM config answer with a clean "not present" error. `set_speed` enforces the speed
 policy (TASK-20): `max` is refused with an actionable error whenever the world
 has an LLM configured (`llm != nil`) — uncapped ticking is for pure-sim worlds;
-the watchable ceiling is 32x ([[game-clock]]).
+the watchable ceiling is 32x ([[game-clock]]); the spec 028 governor changes
+nothing here — it never touches uncapped speed, so this refusal is unchanged.
+
+`statusData`/`statusDataFull` fold two optional per-world snapshots into the
+`clock`/`llm` sections the same way: the orchestrator's `StatusSnapshot` when
+`SetLLM` attached one, and — since spec 028 — the daemon governor's debt
+reading through a local `Governor` interface (`GovernorStatus() (debt float64,
+jobs int)`, `SetGovernor`, kept narrow like `Angel` so `ipc` never imports
+`internal/daemon`); a nil governor (no-LLM world) leaves the clock section's
+governor fields at their `omitempty` zero, byte-identical to pre-028
+([[cognition]], [[daemon-lifecycle]]).
 
 `miracle` (spec 016, [[metatron-miracles]]) dispatches to `handleMiracle`, which
 needs only `srv.loop` — never `srv.llm` or `srv.metatron` — so it works on

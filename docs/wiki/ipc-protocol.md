@@ -5,7 +5,7 @@ kind: concept
 sources:
   - internal/ipc/protocol.go
   - specs/001-world-daemon/contracts/client-protocol.md
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # IPC protocol
@@ -52,8 +52,17 @@ monthly spend vs budget) when the orchestrator is enabled.
 `StatusData` is the shared response shape for status/pause/resume/set_speed, with four
 sections: `world` (name, seed, format_version), `clock` (tick, game_time, paused,
 speed, effective_rate, degraded, metatron_charges — the ⚡ bank, so clients need no
-state fetch), `daemon` (pid, uptime_seconds, subscribers), `log`
-(last_seq).
+state fetch — plus, since spec 028, three additive `omitempty` adaptive-throttle
+fields: `requested_speed` (the player's ceiling from sim state, empty when
+ungoverned), `governor_debt`/`governor_jobs` (the daemon governor sampler's latest
+staleness-debt reading, folded in exactly like the `llm` section — [[cognition]],
+[[daemon-lifecycle]]); all three are zero/absent for a no-LLM world or an inert
+governor, so pre-028 status bytes are unchanged), `daemon` (pid, uptime_seconds,
+subscribers), `log`
+(last_seq). `set_speed`'s existing refusal of uncapped `max` while an LLM is
+configured is retained unchanged (spec 028 FR-012) — the governor only ever
+moves `speed`/`effective_rate` along the capped ladder these fields describe,
+never `max`.
 
 Line caps (TASK-19): request lines are capped at 1 MiB, reply/push lines at
 64 MiB. The daemon never emits a line over the cap — a reply that would exceed

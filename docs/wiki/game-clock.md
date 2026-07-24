@@ -4,7 +4,7 @@ description: Game time math — 1 tick = 1 game second, epoch day 1 06:00, Speed
 kind: component
 sources:
   - internal/clock/clock.go
-verified_against: c8fe41323c1155e8fda1619e4e0ed70ff3f37645
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Game clock
@@ -48,6 +48,14 @@ Key functions:
 - `ParseTimeOfDay(s string) (hour, min int, err error)` — parses a `"HH:MM"`
   label, validating the 24-hour range; pairs with a day number and `TickAt` at
   the miracle snap doors.
+- `CappedLadder() []Speed` — the six-value ladder EXCLUDING `SpeedMax`, in
+  ascending order (1x…32x), as a fresh copy callers cannot mutate — the
+  adaptive-throttle governor's (spec 028) shed/recover notches never touch
+  uncapped speed.
+- `LadderIndex(s Speed) int` — `s`'s position on the capped ladder (0 = the
+  1x floor, 4 = the 32x ceiling), or `-1` when `s` is off the ladder
+  (`SpeedMax` or an unparsed value) — the governor's own floor/ceiling checks
+  read this rather than re-deriving ladder position.
 
 ## Connections
 
@@ -55,11 +63,14 @@ Key functions:
 the current `Speed` and pause flag; the [[executor]] and [[event-types]] use
 day/night boundary detection; [[cli-promptworld]] prints `Format` output;
 [[metatron-miracles]]'s time-snap doors use `TickAt`/`ParseTimeOfDay` to resolve
-a target tick.
+a target tick; [[cognition]]'s adaptive-throttle governor walks `CappedLadder`/
+`LadderIndex` to shed and recover notches ([[daemon-lifecycle]] samples it).
 
 ## Operational notes
 
 A game day is 86,400 ticks; at default 4x that is 6 real hours per game day. Night
 (22:00–06:00) is 8 game hours. The clock has no notion of pause or degradation — those
-are loop/state concerns; this package would be unchanged by any speed-policy rework
-that keeps the six speed values.
+are loop/state concerns. Spec 028 (adaptive throttle) added `CappedLadder`/`LadderIndex`
+as read-only ladder helpers over the existing six speed values — the clock still holds
+no governor state and computes nothing about debt; the package's earlier "unchanged by
+any speed-policy rework" claim held only up to this addition.

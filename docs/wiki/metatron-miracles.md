@@ -10,7 +10,7 @@ sources:
   - internal/tool/registry.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: 8ada1050cc5b108790d0e48640dba0b985632e25
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Metatron's miracles

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/loop.go
   - internal/sim/landing.go
-verified_against: 6b869e1c1b2b9f73749fdf3991ff6d7568aee290
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Sim loop
@@ -46,6 +46,19 @@ Auto-slow (`observeWindow`): every `degradeWindow = 5s` the loop compares achiev
 ticks/sec against the requested rate; sustained shortfall below 90% emits
 `clock.degraded` (with the measured rate), recovery to ≥95% emits `clock.recovered`.
 At max speed whatever is achieved is the contract — no degradation events.
+
+`Loop.Govern(to, debt, jobs)` (spec 028 US2/US3) is the daemon governor sampler's
+door onto the same command channel `set_speed` uses: it lands a
+`clock.governor_shed`/`clock.governor_recovered` event exactly like a player
+speed change, re-validating at the tick boundary before applying. A decision
+that no longer applies by the time it lands — the world paused, `Speed`
+already moved, `to` off the capped ladder, not exactly one notch from the
+current speed, or a recover above the standing `RequestedSpeed` ceiling — is
+dropped silently (no event, clean return); the daemon's sampler simply
+re-evaluates next cadence, so there is never a merge to resolve. `Speed`
+itself keeps meaning "the speed the loop paces at" — since spec 028 that is
+specifically the EFFECTIVE speed, with `RequestedSpeed` carrying the player's
+ceiling only while governed ([[cognition]], [[sim-state-reducer]]).
 
 `Loop.Do(name, speed)` is the thread-safe entry used by IPC sessions; it fails cleanly
 via the loop's `done` channel if the loop has stopped. `Loop.DoState()` answers the

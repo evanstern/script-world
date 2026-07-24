@@ -13,7 +13,7 @@ sources:
   - internal/sim/miracles.go
   - internal/sim/journal.go
   - internal/daemon/daemon.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Event types
@@ -40,6 +40,11 @@ situated context (`where`/`why`/`conv`), `IntentSetPayload` gains `reason`
 (carried onto the intent so the executor can bake it into a memory's `why` at
 completion), and TWO new whitelisted event types — `journal.entry_written` /
 `journal.entry_deleted` — drive the agent-authored journal ([[agent-mind]]).
+Spec 028 (adaptive throttle) likewise adds **no** format bump: `State` gains
+`RequestedSpeed` (`omitempty` — absent means ungoverned, so every pre-028
+snapshot is a valid ungoverned state), and two new reducer-applied types,
+`clock.governor_shed`/`clock.governor_recovered`, land the governor's
+speed-ladder decisions ([[cognition]]).
 
 ## How it works
 
@@ -48,7 +53,8 @@ completion), and TWO new whitelisted event types — `journal.entry_written` /
 | `world.created` | `WorldCreatedPayload{name, seed}` | CLI `new`, tick 0 | none (genesis marker) |
 | `world.migrated` | `WorldMigratedPayload{from_format, source_events, source_tick, state}` (`state` embeds the full canonical `sim.State`) | `promptworld migrate` (client-side, offline — [[world-migration]]), once, right after a fresh `world.created` | replaces `State` wholesale (after checking `state.Seed` matches — a foreign payload is a no-op); the log alone (`world.created` → `world.migrated`) reproduces the migrated world with zero snapshots |
 | `clock.paused` / `clock.resumed` | `{}` | loop command | pause flag (+ snapshot on pause) |
-| `clock.speed_set` | `SpeedSetPayload{speed}` | loop command | `Speed` updated |
+| `clock.speed_set` | `SpeedSetPayload{speed}` | loop command | `Speed` updated; since spec 028 also clears `State.RequestedSpeed` — a player command always collapses governed state (FR-009) |
+| `clock.governor_shed` / `clock.governor_recovered` (spec 028 FR-008) | `GovernorPayload{requested, from, to, debt, jobs}`, shared by both | the daemon's governor sampler via the loop's `govern` command ([[cognition]], [[daemon-lifecycle]]) | `Speed = to`; `RequestedSpeed = requested` (shed) or cleared when `to == requested` (recovered reaching the ceiling); `EffectiveRate` follows `to` unless `Degraded` — never silent, so an operator can reconstruct every governed interval from the log alone (SC-005) |
 | `clock.degraded` / `clock.recovered` | `DegradedPayload{effective_rate}` / `{}` | loop auto-slow | degradation flags |
 | `sim.day_started` / `sim.night_started` | `DayPayload{day}` | executor, 06:00/22:00 | `Night` flag only — waking is explicit |
 | `sim.forage_regrown` | `RegrownPayload{x, y}` | executor, regrow tick | harvest overlay removed |

@@ -8,13 +8,18 @@ sources:
   - internal/sim/recipes.go
   - internal/sim/miracles.go
   - internal/sim/journal.go
-verified_against: cabe1fb4fdc5fd575a58b33f4b22a184280d467d
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # Sim state & reducer
 
 `sim.State` is the whole world in one struct: clock state (tick, paused, speed,
-degraded, effective rate) plus the living world — agents with needs/intents/
+degraded, effective rate — plus, since spec 028, a `RequestedSpeed
+clock.Speed` `omitempty` sitting beside `Speed`: the player's ceiling, present
+only while the adaptive-throttle governor holds `Speed` below it; `Speed`
+itself keeps its pre-028 meaning as the loop's pacing speed, now specifically
+the EFFECTIVE speed, so the router and auto-slow observer need no change)
+plus the living world — agents with needs/intents/
 inventories (the v2 resource set, spec 012 — [[executor]])/memories (with
 `IdleSince` for the reflex grace, a `NearDeath`
 latch, a `Generation` interrupt counter and pending `Plan` steps for the
@@ -80,7 +85,15 @@ identically live, in the dry-run, and in replay. `world.migrated`'s wholesale
 `*s = p.State` replacement preserves the receiver's existing map across the
 swap (the unmarshalled payload state carries none of its own).
 
-`Apply` switches on event type: `clock.*` maintain pause/speed/degradation;
+`Apply` switches on event type: `clock.*` maintain pause/speed/degradation —
+since spec 028, `clock.speed_set` additionally clears `RequestedSpeed` (a
+player command always collapses governed state, FR-009), and two new arms,
+`clock.governor_shed`/`clock.governor_recovered`, apply the daemon governor's
+ceiling-preserving notch decisions: both set `Speed = to` and follow
+`EffectiveRate` from it unless `Degraded`; shed additionally sets
+`RequestedSpeed = requested`, recovered sets it only when `to != requested`
+(clearing it once the climb reaches the ceiling) — see [[cognition]] for the
+governor's decision logic and [[event-types]] for the payload shape;
 `sim.night_started`/`sim.day_started` flip `Night` (waking is an explicit
 `agent.woke`, never implicit); `sim.forage_regrown` clears a harvest overlay; the
 `agent.*` family ([[event-types]]) drives intents (`agent.intent_set` carries a

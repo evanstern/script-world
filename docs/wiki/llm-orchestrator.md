@@ -9,7 +9,8 @@ sources:
   - internal/llm/health.go
   - internal/llm/providers.go
   - internal/llm/lease.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+  - internal/llm/pending.go
+verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
 ---
 
 # LLM orchestrator
@@ -186,6 +187,26 @@ is one truth shared by providers on that endpoint) and surfaces per provider in
 status. Undeclared capacity = zero lease syscalls, exactly pre-024 behavior; a
 missing home dir disables leases with a warning (warn-not-error).
 
+**Pending-thought registry** (`pending.go`, spec 028 US1): a mutex-guarded
+`pendingRegistry` inventories every accepted-but-unfinished job — the adaptive
+throttle governor's debt signal. `Submit` `add`s an entry (keyed by a
+monotonic id carried on the internal `job`) the instant a candidate accepts,
+BEFORE the non-blocking channel send, so a worker that dequeues immediately
+can always find it to stamp; the worker's `dispatch` stamps wall time at
+dequeue (zero while still queued); a deferred `remove` on every terminal path
+of `Submit` (reply, provider error, caller-abandoned ctx) drains the entry, so
+the registry empties to zero once all work quiesces — a leaked entry would be
+a bug. `Orchestrator.PendingCognition()` snapshots the registry (copy under
+the lock, arithmetic outside it) into `[]PendingThought{Kind, Provider,
+PredictedSec, ElapsedSec}`: `PredictedSec` is the job's class point cost ×
+its provider's CURRENT live seconds-per-point estimate (recomputed at read
+time, so it tracks the freshest estimator state including spike rejection),
+`ElapsedSec` is wall time since dispatch (0 while queued). The daemon's
+governor sampler ([[cognition]], [[daemon-lifecycle]]) is the sole consumer,
+polling this every `GovernorCadence` to derive aggregate staleness debt; the
+registry itself is orthogonal to routing/metering/breaker machinery and adds
+no new call-admission behavior.
+
 **Status** (`StatusSnapshot`, spec 024 US6): `Status{Providers []ProviderStatus,
 Month, Spent, Budget}`, sorted by name — one shape for legacy and v2 worlds (legacy
 shows rows `local`/`cloud`). `ProviderStatus{Name, Model, Endpoint, Up, Queue,
@@ -219,6 +240,8 @@ table). TASK-7 (agent minds), TASK-9 (consolidation), TASK-11 (narrator), and TA
 `ResolveProvider`, and reports whole-cognition latency via `ObserveCognition` — used
 by both [[agent-mind]]'s `runPlan` and [[metatron]]'s `Turn`. [[social-fabric]]'s
 conversation scenes pin per scene through the same `Request.Provider` field.
+[[daemon-lifecycle]]'s governor sampler polls `PendingCognition` every
+`GovernorCadence` and feeds it to [[cognition]]'s `Debt`/`Governor`.
 
 ## Operational notes
 
