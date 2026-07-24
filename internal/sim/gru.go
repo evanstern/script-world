@@ -105,7 +105,7 @@ func gruStep(s *State, m *worldmap.Map, night bool, nextTick int64) []store.Even
 		if abs(a.X-g.X)+abs(a.Y-g.Y) <= gruSightRadius {
 			emit("gru.sighted", GruSightedPayload{Agent: i, X: g.X, Y: g.Y})
 			events = append(events, situatedMemoryEvent(nextTick, i, salGruSighted,
-				PlaceAt(s, a.X, a.Y), "", "Saw the gru prowling in the dark."))
+				PlaceAt(s, a.X, a.Y), "", OriginAction, "Saw the gru prowling in the dark."))
 		}
 	}
 
@@ -131,7 +131,7 @@ func gruStep(s *State, m *worldmap.Map, night bool, nextTick int64) []store.Even
 			Agent: target, Health: maxInt(gruWoundFloor, a.Needs.Health-gruWound),
 		})
 		events = append(events, situatedMemoryEvent(nextTick, target, salGruAttack,
-			PlaceAt(s, a.X, a.Y), "", "The gru came out of the dark and tore into me."))
+			PlaceAt(s, a.X, a.Y), "", OriginAction, "The gru came out of the dark and tore into me."))
 		for w := range s.Agents {
 			wa := &s.Agents[w]
 			if w == target || wa.Dead || wa.Asleep {
@@ -139,7 +139,7 @@ func gruStep(s *State, m *worldmap.Map, night bool, nextTick int64) []store.Even
 			}
 			if abs(wa.X-a.X)+abs(wa.Y-a.Y) <= witnessRadius {
 				events = append(events, situatedMemoryAboutEvent(nextTick, w, target, toneGruAttack, salGruWitness,
-					PlaceAt(s, wa.X, wa.Y), "Saw the gru attack %s in the dark.", a.Name))
+					PlaceAt(s, wa.X, wa.Y), OriginWitness, "Saw the gru attack %s in the dark.", a.Name))
 			}
 		}
 		return events

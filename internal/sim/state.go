@@ -384,9 +384,11 @@ func (s *State) Apply(e store.Event) error {
 		// is copied unchanged onto the reduced Memory — baked at emission, never
 		// re-derived, so live and replay agree. Absent fields stay absent
 		// (nil/""/0): a pre-019 payload produces a pre-019-shaped Memory (FR-007).
+		// Spec 030: Origin rides the same way (copied, never derived); a pre-030
+		// payload (field absent) reduces to Origin "" — secondhand by default.
 		a.Memories = append(a.Memories, Memory{
 			Text: p.Text, Salience: p.Salience, Tick: e.Tick, Subject: p.Subject, Tone: p.Tone,
-			Where: p.Where, Why: p.Why, Conv: p.Conv,
+			Where: p.Where, Why: p.Why, Conv: p.Conv, Origin: p.Origin,
 		})
 		// Cognition horizon (TASK-32): a high-salience stimulus bumps the
 		// agent's generation — in-flight thoughts snapshotted under the old

@@ -155,15 +155,22 @@ type MemoryPlace struct {
 // emitting event's payload by the agent.memory_added reducer arm — never
 // re-derived at render or replay. All three omitempty so a pre-019 Memory
 // (fields absent) marshals byte-identically to today (FR-014, SC-007).
+//
+// Origin (spec 030) is the emission-stamped provenance class — the model-free
+// signal the belief validator reads to decide whether a memory is direct
+// perception (see DirectPerception). Closed vocabulary (OriginAction..
+// OriginDigest); absent (pre-030, "") classifies as secondhand, the
+// conservative direction. omitempty keeps every pre-030 Memory byte-identical.
 type Memory struct {
 	Text     string       `json:"text"`
 	Salience int          `json:"salience"`
 	Tick     int64        `json:"tick"`
 	Subject  int          `json:"subject"`
 	Tone     int          `json:"tone,omitempty"`
-	Where    *MemoryPlace `json:"where,omitempty"` // location at emission (nil = none)
-	Why      string       `json:"why,omitempty"`   // driving intent reason, verbatim ("" = none)
-	Conv     int64        `json:"conv,omitempty"`  // conversation ref (founding-talk tick; 0 = none)
+	Where    *MemoryPlace `json:"where,omitempty"`  // location at emission (nil = none)
+	Why      string       `json:"why,omitempty"`    // driving intent reason, verbatim ("" = none)
+	Conv     int64        `json:"conv,omitempty"`   // conversation ref (founding-talk tick; 0 = none)
+	Origin   string       `json:"origin,omitempty"` // spec 030: provenance class stamped at emission
 }
 
 // Structure is player-visible built stuff; the map itself never contains
@@ -733,9 +740,10 @@ type (
 		Salience int          `json:"salience"`
 		Subject  int          `json:"subject"`
 		Tone     int          `json:"tone,omitempty"`
-		Where    *MemoryPlace `json:"where,omitempty"` // spec 019: location at emission
-		Why      string       `json:"why,omitempty"`   // spec 019: driving intent reason, verbatim
-		Conv     int64        `json:"conv,omitempty"`  // spec 019: conversation ref (founding-talk tick)
+		Where    *MemoryPlace `json:"where,omitempty"`  // spec 019: location at emission
+		Why      string       `json:"why,omitempty"`    // spec 019: driving intent reason, verbatim
+		Conv     int64        `json:"conv,omitempty"`   // spec 019: conversation ref (founding-talk tick)
+		Origin   string       `json:"origin,omitempty"` // spec 030: provenance class stamped at emission
 	}
 	ThoughtPayload struct {
 		Agent  int    `json:"agent"`

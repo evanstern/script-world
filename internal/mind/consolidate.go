@@ -209,7 +209,7 @@ func (md *Mind) runConsolidation(job consolJob) {
 			Agent: job.agent, MemTick: m.Tick, TextHash: sim.MemoryHash(m.Text)})
 	}
 	add("agent.memory_added", sim.MemoryAddedPayload{
-		Agent: job.agent, Text: out.Gist, Salience: sim.SalDayGist, Subject: -1})
+		Agent: job.agent, Text: out.Gist, Salience: sim.SalDayGist, Subject: -1, Origin: sim.OriginDigest})
 	for _, b := range out.Beliefs {
 		add("agent.belief_revised", sim.BeliefRevisedPayload{
 			Agent: job.agent, BeliefID: b.ID, Statement: b.Statement,
