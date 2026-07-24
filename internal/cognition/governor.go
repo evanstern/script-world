@@ -41,22 +41,40 @@ type PendingDebtInput struct {
 	ElapsedSec   float64 // 0 while queued; wall-clock since dispatch while in flight
 }
 
-// Debt is the deterministic budget-fraction sum over a pending set (FR-001,
-// FR-002, research R5). Per thought the remaining work is
-// max(0, PredictedSec − ElapsedSec) seconds, which at ticksPerSecond game ticks
-// per real second is expected to drift remaining × ticksPerSecond ticks before
-// the reply lands; dividing by the class's staleness budget expresses that
-// drift as a dimensionless fraction of the budget:
+// Debt is the deterministic budget-fraction sum over a pending set (spec 033
+// FR-001/FR-002, revising spec 028; contracts/debt-formula.md). Per thought the
+// staleness seconds are piecewise: a thought still within its prediction counts
+// its remaining work (PredictedSec − ElapsedSec), which drains toward zero as it
+// progresses; a thought that has overrun its prediction counts its full accrued
+// drift (ElapsedSec), which grows the longer it languishes. At ticksPerSecond
+// game ticks per real second those seconds drift seconds × ticksPerSecond ticks
+// before the reply lands, and dividing by the class's staleness budget expresses
+// that drift as a dimensionless fraction of the budget:
 //
-//	fraction(job) = max(0, PredictedSec − ElapsedSec) × ticksPerSecond / BudgetTicks(class)
+//	seconds(job)  = PredictedSec − ElapsedSec   if ElapsedSec < PredictedSec  // remaining work, drains
+//	              = ElapsedSec                   if ElapsedSec ≥ PredictedSec  // accrued drift, grows
+//	fraction(job) = seconds(job) × ticksPerSecond / BudgetTicks(class)
 //	debt          = Σ fraction(job)
 //
-// The unit is budget-fractions: 1.0 means one thought is predicted to consume
-// exactly its whole staleness budget. jobs counts only inputs that contribute a
-// positive fraction (overdue thoughts, floored to zero, do not count). Pure
-// arithmetic: no wall-clock reads, no randomness. Unknown kinds are skipped —
-// they cannot reach a model (FR-002, spec 007). ticksPerSecond ≤ 0 (uncapped
-// max speed, which the orchestrator refuses upstream) yields debt 0.
+// An overdue thought's elapsed time IS its grounded debt — the measured minimum
+// staleness its reply will land with. Where spec 028 floored the overrun to zero
+// ("an overdue thought invents no debt it cannot ground") the debt signal
+// inverted under overload: the worse the drowning, the sooner every in-flight
+// thought went overdue and vanished from the sum, so maximum drift registered
+// minimum debt and the governor never shed (spec 033, world-01). The overrun is
+// a measurement, not an invention. At the boundary (ElapsedSec == PredictedSec)
+// the contribution deliberately JUMPS from the drained remaining work (~0) to
+// the full accrued drift: the overrun proves the prediction wrong, so the honest
+// floor switches from "almost done" to "already this stale" — the jump is
+// doctrine, not an artifact (contracts/debt-formula.md).
+//
+// The unit is budget-fractions: 1.0 means one thought's drift equals its whole
+// staleness budget. jobs counts only inputs that contribute a positive fraction;
+// overdue thoughts now contribute, so they count (correcting the same blindness
+// in the visible jobs figure). Pure arithmetic: no wall-clock reads, no
+// randomness. Unknown kinds are skipped — they cannot reach a model (FR-002,
+// spec 007). ticksPerSecond ≤ 0 (uncapped max speed, which the orchestrator
+// refuses upstream) yields debt 0.
 func Debt(pending []PendingDebtInput, ticksPerSecond float64) (debt float64, jobs int) {
 	if ticksPerSecond <= 0 {
 		return 0, 0
@@ -66,11 +84,11 @@ func Debt(pending []PendingDebtInput, ticksPerSecond float64) (debt float64, job
 		if !ok {
 			continue // unregistered kinds cannot reach a model (FR-002)
 		}
-		remaining := p.PredictedSec - p.ElapsedSec
-		if remaining <= 0 {
-			continue // an overdue thought invents no debt it cannot ground
+		seconds := p.PredictedSec - p.ElapsedSec // remaining work while within prediction
+		if p.ElapsedSec >= p.PredictedSec {
+			seconds = p.ElapsedSec // overrun: count the full accrued drift, not zero
 		}
-		fraction := remaining * ticksPerSecond / float64(dc.BudgetTicks)
+		fraction := seconds * ticksPerSecond / float64(dc.BudgetTicks)
 		if fraction > 0 {
 			debt += fraction
 			jobs++

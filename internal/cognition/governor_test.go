@@ -65,11 +65,11 @@ func TestDebtTable(t *testing.T) {
 			wantJobs: 1,
 		},
 		{
-			name:     "overdue thought floored to zero",
+			name:     "overdue thought counts its accrued drift",
 			pending:  []PendingDebtInput{{Kind: "planner", PredictedSec: 10, ElapsedSec: 15}},
 			tps:      4,
-			wantDebt: 0,
-			wantJobs: 0,
+			wantDebt: 15 * 4 / plannerBudget, // spec 033: full elapsed, not floored to zero
+			wantJobs: 1,
 		},
 		{
 			name: "mixed classes sum from real budgets",
@@ -82,14 +82,14 @@ func TestDebtTable(t *testing.T) {
 			wantJobs: 2,
 		},
 		{
-			name: "overdue neighbor does not count but valid does",
+			name: "overdue neighbor counts its accrued drift alongside a queued thought",
 			pending: []PendingDebtInput{
-				{Kind: "planner", PredictedSec: 5, ElapsedSec: 9},        // overdue, skipped
+				{Kind: "planner", PredictedSec: 5, ElapsedSec: 9},        // overdue → accrued drift 9
 				{Kind: "conversation", PredictedSec: 200, ElapsedSec: 0}, // remaining 200
 			},
 			tps:      4,
-			wantDebt: 200 * 4 / convBudget,
-			wantJobs: 1,
+			wantDebt: 9*4/plannerBudget + 200*4/convBudget, // spec 033: the overdue thought now contributes
+			wantJobs: 2,
 		},
 		{
 			name: "unknown kind skipped",

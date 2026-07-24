@@ -88,19 +88,21 @@ func (f *fakeStatus) setPaused(p bool) {
 	f.mu.Unlock()
 }
 
-// TestGovernorSamplerDebt (US1-AC1): the sampler folds pending thoughts and the
-// effective speed into aggregate debt matching the hand-computed budget-fraction
-// sum, counting only thoughts with positive remaining drift.
+// TestGovernorSamplerDebt (US1-AC1; spec 033): the sampler folds pending
+// thoughts and the effective speed into aggregate debt matching the
+// hand-computed budget-fraction sum — a within-prediction thought counts its
+// remaining work, a queued one its full prediction, and an overdue one its
+// accrued drift (spec 033: the overrun counts, it is not floored to zero).
 func TestGovernorSamplerDebt(t *testing.T) {
 	pending := &fakePending{}
 	// Effective 16x → 16 ticks/s. Budgets (internal/cognition registry):
 	// planner 1200 ticks, conversation 7200 ticks.
 	pending.set([]llm.PendingThought{
-		// in flight: remaining 20s → 20*16/1200 = 0.26666…
+		// in flight, within prediction: remaining 20s → 20*16/1200 = 0.26666…
 		{Kind: "planner", PredictedSec: 30, ElapsedSec: 10},
 		// queued: remaining 100s → 100*16/7200 = 0.22222…
 		{Kind: "conversation", PredictedSec: 100, ElapsedSec: 0},
-		// overdue: remaining < 0 → floored to zero, does not contribute or count.
+		// overdue: elapsed ≥ predicted → accrued drift 10s → 10*16/1200 = 0.13333…
 		{Kind: "planner", PredictedSec: 5, ElapsedSec: 10},
 	})
 	s := newGovernorSampler(pending, &fakeStatus{speed: clock.Speed16x})
@@ -108,12 +110,12 @@ func TestGovernorSamplerDebt(t *testing.T) {
 	s.sample()
 	got := s.Snapshot()
 
-	wantDebt := 20.0*16/1200 + 100.0*16/7200 // = 0.488888…
+	wantDebt := 20.0*16/1200 + 100.0*16/7200 + 10.0*16/1200 // = 0.62222…
 	if math.Abs(got.Debt-wantDebt) > 1e-9 {
 		t.Errorf("debt = %v, want %v", got.Debt, wantDebt)
 	}
-	if got.Jobs != 2 {
-		t.Errorf("jobs = %d, want 2 (the overdue thought is not counted)", got.Jobs)
+	if got.Jobs != 3 {
+		t.Errorf("jobs = %d, want 3 (the overdue thought now counts its accrued drift)", got.Jobs)
 	}
 }
 
