@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-24 13:55'
+updated_date: '2026-07-24 13:57'
 labels:
   - ux
 dependencies: []
@@ -51,4 +51,6 @@ Cross-ref 2026-07-24: TASK-86 (estimator freeze under load — spike gate can't 
 Model-tier decision (constitution V rubric): SONNET (default tier). Justification: pure UX/visibility slice — additive omitempty wire fields, CLI rendering, boot-output composition, moving existing horizonSummary arithmetic into internal/cognition unchanged; no concurrency/scheduling/governor logic modified (the two internal/llm touches are additive bookkeeping on existing structs). Escalate to Opus 4.8 only if gates fail.
 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 4/4 · User Story 1 - Raising speed on an uncalibrated world warns loudly (Priority: P1) 🎯 MVP: 4/4 · User Story 2 - Boot warning states the concrete consequence (Priority: P2): 2/2 · User Story 3 - Calibration state visible in status (Priority: P3): 2/2 · User Story 4 - Calibrate discloses its sequential-measurement bias (Priority: P3): 1/1 · Polish & Cross-Cutting Concerns: 1/3
+
+PR opened: https://github.com/evanstern/promptworld/pull/61 (branch task-40-calibration-ux, rebased on 9f38b9a). Full suite green incl. e2e; quickstart-results.md recorded. Remaining after merge: T016 wiki re-pin, T017 player-docs freshness, spec-bridge sync to Done, worktree cleanup.
 <!-- SECTION:NOTES:END -->
