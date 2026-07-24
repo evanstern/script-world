@@ -50,6 +50,20 @@ high speeds suppress more classes (fail toward reflex, never toward stale action
   enters the 20-sample rolling window as a spike.
 - Drift signal: spike rate > 30% over the window → emit
   `cog.recalibration_recommended` once per breach episode.
+- Breach-adoption (spec 031): the breach signal has an actor. On the sample that
+  first drives the spike rate over the threshold across a full window, the
+  estimator adopts the **median** of the retained window values (spike and
+  non-spike alike) as its new estimate, zeroes the ring, and re-arms — so a
+  sustained step change larger than the spike factor (load-induced slowdown) is
+  followed instead of frozen at the seed, while isolated one-shot spikes (which
+  never breach) are still rejected. The median is robust to a mixed window and
+  needs no new tuning constant; a mean was rejected as spike-sensitive, a max as
+  overshooting. The adoption is deterministic (pure over the retained samples,
+  no wall-clock, no randomness) and process-lifetime only — it never writes the
+  calibration profile. Its arithmetic (prior estimate → adopted median) rides
+  additive fields on the same `cog.recalibration_recommended` event; the wire
+  shape is owned by `specs/031-estimator-breach-adoption/contracts/adoption-event.md`.
+  The tuning constants below remain doctrine and are unchanged by adoption.
 - Never persisted: restarts re-seed from the profile. The recorded baseline moves
   only when a human re-runs `calibrate` (auditability; decision-4's no-self-tuning).
 
