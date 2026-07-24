@@ -495,8 +495,8 @@ const (
 	buildShelterTicks = 1200
 	huntTicks         = 900
 
-	// Yields and costs.
-	chopWood        = 2
+	// Yields and costs. chopWood (spec 012's flat 2) is deleted by spec 032 T014
+	// — chop yield is now chopYieldBare/chopYieldAxe (agents.go spec-032 block).
 	fireWoodCost    = 2
 	shelterWoodCost = 5
 
@@ -563,7 +563,8 @@ const (
 	// v2 gather rescale (wired T013 quarry/water, T017 forage/hunt). The legacy
 	// forageYield/huntYield constants are gone (T017): agent.foraged now yields
 	// forageYieldV2 FoodRaw, agent.hunted huntYieldBare (spear boost is T027).
-	quarryYield       = 2
+	// quarryYield (spec 012's flat 2) is deleted by spec 032 T014 — quarry yield
+	// is now quarryYieldBare/quarryYieldAxe (agents.go spec-032 block).
 	quarryTicks       = 400
 	collectWaterYield = 1
 	collectWaterTicks = 60

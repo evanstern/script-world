@@ -128,8 +128,11 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 	// Every spec-012 event type is still exercised; only the ordering and the
 	// batch sizes changed to fit under the cap.
 
-	// --- agent.quarried x3 (US1) — 6 stone for the refining chain -----------
-	for i := 0; i < 3; i++ {
+	// --- agent.quarried x5 (US1) — 5 stone for the refining chain -----------
+	// Spec 032 T014 dropped the bare quarry yield from 2 to 1, so five bare
+	// quarries now gather the five stone the refining chain below needs (this
+	// agent carries no axe). The bulk peak stays under the cap (5 stone < 24).
+	for i := 0; i < 5; i++ {
 		stand, res, ok := nearestAdjacentTo(m, live, a.X, a.Y, func(x, y int) bool {
 			return m.InBounds(x, y) && effectiveKind(m, live, x, y) == worldmap.Rock
 		})
@@ -139,8 +142,8 @@ func TestReplayByteIdentityWholeFeature(t *testing.T) {
 		log = append(log, setIntent("quarry", stand.X, stand.Y, res.X, res.Y))
 		log = append(log, stepUntil(live.Tick+stepBudget, isType("agent.quarried"))...)
 	}
-	if a.Inv.Stone != 3*quarryYield {
-		t.Fatalf("Stone after 3 quarries = %d, want %d", a.Inv.Stone, 3*quarryYield)
+	if a.Inv.Stone != 5*quarryYieldBare {
+		t.Fatalf("Stone after 5 quarries = %d, want %d", a.Inv.Stone, 5*quarryYieldBare)
 	}
 
 	// --- agent.crafted{refined_stone} x5 (US3) — 4 for the oven, 1 for a spear -

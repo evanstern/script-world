@@ -72,8 +72,8 @@ func TestQuarryHappyPath(t *testing.T) {
 	if !quarried {
 		t.Fatal("no agent.quarried event emitted")
 	}
-	if a.Inv.Stone != quarryYield {
-		t.Errorf("Inv.Stone = %d, want %d", a.Inv.Stone, quarryYield)
+	if a.Inv.Stone != quarryYieldBare {
+		t.Errorf("Inv.Stone = %d, want %d", a.Inv.Stone, quarryYieldBare)
 	}
 	if a.Intent != nil {
 		t.Error("intent should be cleared after quarrying")
@@ -145,8 +145,8 @@ func TestContestedQuarry(t *testing.T) {
 	if a1.Inv.Stone != 0 {
 		t.Errorf("agent 1 Inv.Stone = %d, want 0 (lost the race)", a1.Inv.Stone)
 	}
-	if a0.Inv.Stone != quarryYield {
-		t.Errorf("agent 0 Inv.Stone = %d, want %d (won the race)", a0.Inv.Stone, quarryYield)
+	if a0.Inv.Stone != quarryYieldBare {
+		t.Errorf("agent 0 Inv.Stone = %d, want %d (won the race)", a0.Inv.Stone, quarryYieldBare)
 	}
 	if len(s.Quarried) != 1 {
 		t.Errorf("Quarried overlay has %d entries, want exactly 1 (no double-append)", len(s.Quarried))

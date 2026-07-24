@@ -567,8 +567,21 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// US1-AS2 (T010): yield truncates to free bulk; the tree still clears.
-		a.Inv.Wood += minInt(chopWood, freeBulk(a.Inv))
+		// T014 (spec 032 US2): yield is chopYieldBare (1) bare-handed, chopYieldAxe
+		// (3) with a carried axe — re-derived from the SAME pre-mutation state the
+		// emitter checked (spear-hunt precedent), and the axe spends Axes[0]'s use.
+		// Free-bulk truncation (US1-AS2) applies on top: the spear/axe spend frees
+		// no bulk mid-event (decrementing a use leaves len(Axes) unchanged), and a
+		// broken axe's removal rides its own companion agent.axe_broke — so free
+		// space is read once, before the wood is added, with the axe still counted.
+		yield := chopYieldBare
+		if len(a.Inv.Axes) > 0 {
+			yield = chopYieldAxe
+		}
+		a.Inv.Wood += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes[0]--
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Cleared = append(s.Cleared, Point{X: p.X, Y: p.Y})
@@ -677,8 +690,17 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// US1-AS2 (T010): yield truncates to free bulk; the outcrop still depletes.
-		a.Inv.Stone += minInt(quarryYield, freeBulk(a.Inv))
+		// T014 (spec 032 US2): quarryYieldBare (1) bare / quarryYieldAxe (3) with a
+		// carried axe, same axe-spend and pre-mutation derivation as chop above.
+		// Free-bulk truncation still applies; the outcrop depletes regardless.
+		yield := quarryYieldBare
+		if len(a.Inv.Axes) > 0 {
+			yield = quarryYieldAxe
+		}
+		a.Inv.Stone += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes[0]--
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
@@ -715,10 +737,17 @@ func (s *State) Apply(e store.Event) error {
 			return fmt.Errorf("apply %s: no recipe for crafted kind %q", e.Type, p.Kind)
 		}
 		addItems(&a.Inv, r.Inputs, -1)
-		if p.Kind == "spear" {
+		switch p.Kind {
+		case "spear":
 			a.Inv.Spears = append(a.Inv.Spears, spearDurability)
 			sort.Ints(a.Inv.Spears)
-		} else {
+		case "axe":
+			// T014 (spec 032 US2): like a spear, an axe's durability lives in a
+			// slice, not a plain int field — a fresh axe (axeDurability uses) is
+			// appended and kept sorted ascending so harvests spend the most-worn first.
+			a.Inv.Axes = append(a.Inv.Axes, axeDurability)
+			sort.Ints(a.Inv.Axes)
+		default:
 			addItems(&a.Inv, r.Outputs, 1)
 		}
 		a.Intent = nil
@@ -803,6 +832,22 @@ func (s *State) Apply(e store.Event) error {
 		}
 		if len(a.Inv.Spears) > 0 {
 			a.Inv.Spears = a.Inv.Spears[1:]
+		}
+	case "agent.axe_broke":
+		// T014 (spec 032 US2): the batch's preceding agent.chopped/quarried already
+		// decremented Axes[0] to zero (spent its last use) — this event removes the
+		// now-empty entry (spear_broke clone). The companion memory rides alongside
+		// as its own agent.memory_added event, not part of this payload.
+		var p AxeBrokePayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes = a.Inv.Axes[1:]
 		}
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event

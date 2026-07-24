@@ -59,7 +59,13 @@ func TestGatherTuningMirror(t *testing.T) {
 		got  int
 		want int
 	}{
-		{"quarryYield", quarryYield, 2},
+		// Spec 032 T014 rebalanced the flat chop/quarry yield of 2 into bare/axe
+		// pairs (chopWood/quarryYield deleted).
+		{"chopYieldBare", chopYieldBare, 1},
+		{"chopYieldAxe", chopYieldAxe, 3},
+		{"quarryYieldBare", quarryYieldBare, 1},
+		{"quarryYieldAxe", quarryYieldAxe, 3},
+		{"axeDurability", axeDurability, 10},
 		{"quarryTicks", quarryTicks, 400},
 		{"collectWaterYield", collectWaterYield, 1},
 		{"collectWaterTicks", collectWaterTicks, 60},
