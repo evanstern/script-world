@@ -102,6 +102,14 @@ type MemoryFadedPayload struct {
 	TextHash string `json:"text_hash"`
 }
 
+// MemoryRef is a memory's durable identity — the (tick, content-hash) pair that
+// promote/fade references already resolve to. Spec 030 cites belief evidence
+// with it so replay reads recorded identities and never re-resolves ordinals.
+type MemoryRef struct {
+	Tick int64  `json:"tick"`
+	Hash string `json:"hash"`
+}
+
 type BeliefRevisedPayload struct {
 	Agent      int    `json:"agent"`
 	BeliefID   int    `json:"belief_id"` // 0 = new belief
@@ -118,15 +126,19 @@ type NarrativeSetPayload struct {
 }
 
 type ConsolidatedPayload struct {
-	Agent    int     `json:"agent"`
-	Night    int64   `json:"night"`
-	UpTo     int64   `json:"up_to"` // buffer high-water mark; meaningful on accept
-	Outcome  string  `json:"outcome"`
-	Reason   string  `json:"reason,omitempty"`
-	Promoted int     `json:"promoted,omitempty"`
-	Faded    int     `json:"faded,omitempty"`
-	Beliefs  int     `json:"beliefs,omitempty"`
-	CostUSD  float64 `json:"cost_usd,omitempty"`
+	Agent    int    `json:"agent"`
+	Night    int64  `json:"night"`
+	UpTo     int64  `json:"up_to"` // buffer high-water mark; meaningful on accept
+	Outcome  string `json:"outcome"`
+	Reason   string `json:"reason,omitempty"`
+	Promoted int    `json:"promoted,omitempty"`
+	Faded    int    `json:"faded,omitempty"`
+	Beliefs  int    `json:"beliefs,omitempty"`
+	// Coerced (spec 030) counts beliefs whose provenance the validator downgraded
+	// from "witnessed" for lack of direct-perception evidence — non-fatal
+	// telemetry, never a rejection. omitempty keeps pre-030 markers byte-stable.
+	Coerced int     `json:"coerced,omitempty"`
+	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
 // applyConsolidation is the reducer arm for the five consolidation event

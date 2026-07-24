@@ -187,6 +187,11 @@ func (md *Mind) runConsolidation(job consolJob) {
 		return
 	}
 
+	// Provenance enforcement (spec 030, deterministic, post-validation): resolve
+	// each belief's evidence and coerce "witnessed" claims that lack direct
+	// perception. Never rejects — the coercion count rides the marker telemetry.
+	coerced := enforceProvenance(out.Beliefs, job.buffer)
+
 	// Accepted: build the whole night as one atomic batch.
 	var batch []store.Event
 	add := func(typ string, payload any) {
@@ -229,7 +234,7 @@ func (md *Mind) runConsolidation(job consolJob) {
 		Agent: job.agent, Night: job.night, UpTo: job.upTo,
 		Outcome:  sim.ConsolidationAccepted,
 		Promoted: len(out.Promote), Faded: len(out.Fade), Beliefs: len(out.Beliefs),
-		CostUSD: resp.CostUSD})
+		Coerced: coerced, CostUSD: resp.CostUSD})
 
 	if err := md.social.InjectSocial(batch); err != nil {
 		log.Printf("mind: consolidation %s night %d injection rejected: %v", job.name, job.night, err)
