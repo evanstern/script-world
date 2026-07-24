@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 04:32'
+updated_date: '2026-07-24 05:37'
 labels:
   - emergent-lore
   - epistemics
@@ -41,7 +41,7 @@ Spec: specs/030-epistemic-hygiene
 <!-- AC:BEGIN -->
 - [x] #1 Belief revision sourced from talk/rumor content can never record provenance 'witnessed'; witnessed requires a direct-perception source (test proving both directions)
 - [x] #2 Never-reinforced beliefs decay in confidence deterministically over game-days; decay constants + rationale recorded on the task; replay/determinism suite passes
-- [ ] #3 Gist prompt preserves attribution: before/after eval on scripted fixtures + live sample shows no fact-flattened confabulation of the 'after investigating' shape; eval numbers recorded on the task
+- [x] #3 Gist prompt preserves attribution: before/after eval on scripted fixtures + live sample shows no fact-flattened confabulation of the 'after investigating' shape; eval numbers recorded on the task
 - [x] #4 A reinforcement seam exists for future grounded observations to refresh belief confidence (documented, even if no producer yet)
 - [x] #5 Spec phase: Setup
 - [x] #6 Spec phase: Foundational (Blocking Prerequisites)
@@ -98,4 +98,8 @@ US3 eval gate verdict: NOT MET — prompt not shipped, convo.go unchanged (AC #3
 Orchestrator ruling (Option A, from artifacts): DO NOT ship — standard tier is already honest with the current prompt; the failing tier (world-01 llm.json: local=cogito:3b — verified this session) is not helped by wording. The Thornspire confabulation class is model-tier, not prompt. T011 closed won't-ship in tasks.md per decision.md; operational follow-up task filed to upgrade world-01's local tier. Tier note: T009-T010 ran on Opus 4.8 per dispatch ruling.
 
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 0/3
+
+Polish dispatch: T012-T013 → Sonnet (routine validation/gate slice, no doctrine logic — default tier per rubric). Branch must merge origin/main (moved substantially: PRs #56/#57, spec 029/031/033) before the full-suite gate; merge not rebase, board notes cite branch hashes. T013 additionally runs quickstart §4's live multi-scene gist sample with the CURRENT prompt on the standard tier — if clean, it completes AC #3's live-sample half per the US3 ruling.
+
+AC #3 checked on the ruling's evidence, with the prompt UNCHANGED: before/after eval numbers recorded (gemma4 0/18 both variants, controls 12/12; decision.md), and the T013 live multi-scene sample shows 0/7 fact-flattened or 'after investigating'-shaped confabulations on the standard tier (quickstart-results.md §4). The gist prompt as-is preserves attribution on the standard local tier; the failing tier's remediation is TASK-89 (world-01 cogito:3b upgrade). T012-T013 accepted: clean merge of main (efcca2b), suite green post-merge, live validation SC-001 13/13, decay readings match, SC-005 myth-survives observed live (d8568a3).
 <!-- SECTION:NOTES:END -->
