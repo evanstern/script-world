@@ -1,0 +1,14 @@
+{
+  "model": "gemma4:12b-mlx",
+  "judge_model": "gemma4:12b-mlx",
+  "endpoint": "http://localhost:11434/v1",
+  "samples_per_fixture": 3,
+  "gen_temp": "0.8",
+  "gen_maxtok": 224,
+  "judge_temp": "0",
+  "reasoning_effort": "none",
+  "variants": "old new",
+  "fixtures": 10,
+  "git_sha": "33ef00492bb3065d86f96cb245203ccd7de500ee",
+  "run_utc": "2026-07-24T04:17:34Z"
+}
