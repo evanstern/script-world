@@ -3,9 +3,10 @@ id: TASK-79
 title: >-
   Epistemic hygiene for emergent lore: honest belief provenance, hearsay decay,
   attribution-preserving gists
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
+updated_date: '2026-07-24 02:21'
 labels:
   - emergent-lore
   - epistemics
@@ -32,6 +33,8 @@ Scope (hygiene, NOT suppression — invention must survive, as myth rather than 
 Non-goals: preventing invention of places/phenomena; grounding conversation content against world state (that is the perception-of-absence task); rumor-mechanics changes.
 
 Item 3 is prompt-behavior-affecting → eval-gated per TASK-73 precedent, not vibes-gated. Items 1-2 touch belief/reducer state → replay determinism must hold.
+
+Spec: specs/030-epistemic-hygiene
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -41,3 +44,9 @@ Item 3 is prompt-behavior-affecting → eval-gated per TASK-73 precedent, not vi
 - [ ] #3 Gist prompt preserves attribution: before/after eval on scripted fixtures + live sample shows no fact-flattened confabulation of the 'after investigating' shape; eval numbers recorded on the task
 - [ ] #4 A reinforcement seam exists for future grounded observations to refresh belief confidence (documented, even if no producer yet)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1) Ground: wiki notes covering beliefs/provenance (spec 019 grounded-memories), conversation gists, rumor flow, salience decay precedent. 2) speckit-specify spec 030-epistemic-hygiene (3 mechanisms: provenance honesty, confidence decay + reinforcement seam, attribution-preserving gists; eval-gated per TASK-73 precedent). 3) Clarify genuinely-open design points with user if artifacts do not answer. 4) speckit-plan + speckit-tasks. 5) spec-bridge:link, sync. 6) Implement via spec-implementer agents per constitution V tier rubric; eval for item 3. 7) PR, wiki re-pin, Done via sync.
+<!-- SECTION:PLAN:END -->
