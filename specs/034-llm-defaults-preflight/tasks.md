@@ -15,7 +15,7 @@ plumbing. Implementation tier per constitution Principle V is noted per phase.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create worktree `.worktrees/task-84` with branch `task-84-llm-defaults-preflight` from fresh `origin/main` (root stays on main)
+- [x] T001 Create worktree `.worktrees/task-84` with branch `task-84-llm-defaults-preflight` from fresh `origin/main` (root stays on main)
 
 ---
 
