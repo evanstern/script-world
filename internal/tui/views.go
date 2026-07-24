@@ -381,6 +381,10 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 	// Piles (spec 013 US2): ground piles are dynamic overlay state, same
 	// treatment as Quarried/Structures — never part of the static gm.At tile.
 	piles := map[[2]int]bool{}
+	// Paths (spec 032 US3): a walkable tile improvement rendered at terrain
+	// level (agents/structures/piles win over it), so it lives in its own set,
+	// not the structures map.
+	paths := map[[2]int]bool{}
 	if m.replica != nil {
 		for _, st := range m.replica.Structures {
 			switch st.Kind {
@@ -399,6 +403,13 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 				structures[[2]int{st.X, st.Y}] = styleOven.Render("▣")
 			case "chest":
 				structures[[2]int{st.X, st.Y}] = styleChest.Render("☐")
+			case "path":
+				// Spec 032 US3: a path is a walkable tile improvement, so it
+				// renders at TERRAIN level (below agents/structures/piles) rather
+				// than in the structures map — an agent or a dropped pile on a
+				// path tile still shows. Collected into its own set, keyed in the
+				// terrain switch of tile().
+				paths[[2]int{st.X, st.Y}] = true
 			case "wall_plank", "wall_stone":
 				// Spec 032 US1: walls block movement (structures win over terrain
 				// in tile()), so they always show. A damaged wall (HP below the
@@ -468,6 +479,11 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		var s string
 		var st lipgloss.Style
 		switch {
+		case paths[[2]int{x, y}]:
+			// Spec 032 US3: a paved path — "·" in a warm tan, distinct from
+			// plain grass's dim "·" so a laid path reads at a glance. Terrain
+			// level: agents/structures/piles above already won by here.
+			s, st = "·", stylePath
 		case quarried[[2]int{x, y}]:
 			// Depleted outcrop (effective-kind path, worldmap.Depleted):
 			// passable dug-out ground, distinct from both intact rock and
@@ -555,7 +571,7 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		}
 	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest ▤▩wall · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest ▤▩wall ·path · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H, pilesInfo, chestsInfo))
 	return grid, legend
 }
@@ -766,7 +782,10 @@ var (
 	// (HP < max) renders faint (240), the cold-fire dim precedent.
 	styleWall        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("250"))
 	styleWallDamaged = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
-	styleGru         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	// Path (spec 032 US3): "·" in warm tan (137) — the paved-route glyph, set
+	// apart from plain grass's dim "·" without colliding with any structure glyph.
+	stylePath = lipgloss.NewStyle().Foreground(lipgloss.Color("137"))
+	styleGru  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView is the narrow-fallback map pane: today's vw/vh formula,

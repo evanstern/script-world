@@ -222,6 +222,33 @@ func TestMapRendersWallGlyphs(t *testing.T) {
 	}
 }
 
+// TestMapRendersPathGlyph covers spec 032 T019 (US3): a path renders at terrain
+// level ("·" in the path style), the agent glyph wins on a shared tile, and the
+// legend documents the path key.
+func TestMapRendersPathGlyph(t *testing.T) {
+	m := testModel(t)
+	cx, cy := m.gameMap.W/2, m.gameMap.H/2
+	m.replica.Agents = []sim.Agent{{Name: "Ash", X: cx, Y: cy}}
+	m.replica.Structures = []sim.Structure{
+		{Kind: "path", X: cx + 1, Y: cy}, // off the agent's tile
+		{Kind: "path", X: cx, Y: cy},     // under the agent — agent glyph must win
+	}
+	view := m.mapView()
+	lines := strings.Split(view, "\n")
+	gridOnly := strings.Join(lines[:len(lines)-1], "\n")
+	legend := lines[len(lines)-1]
+
+	if !strings.Contains(gridOnly, stylePath.Render("·")) {
+		t.Error("path glyph · (path style) missing from map grid")
+	}
+	if !strings.Contains(gridOnly, styleAgent.Render("A")) {
+		t.Error("the agent glyph must win over the path on a shared tile")
+	}
+	if !strings.Contains(legend, "·path") {
+		t.Errorf("legend key should document the path glyph, got: %s", legend)
+	}
+}
+
 // TestDescribeChestEmptyStore covers the empty-chest and out-of-range-owner
 // edges of T026's inspection line: an empty Store reads "empty" rather than
 // a blank/zero-padded contents string, and an owner index outside the
