@@ -146,10 +146,18 @@ func NewCogToolCallPayload(job string, ordinal int, tool string, args json.RawMe
 }
 
 // RecalibrationPayload — cog.recalibration_recommended: the live estimator's
-// spike rate breached the drift threshold (once per breach episode).
+// spike rate breached the drift threshold (once per breach episode). Post-spec
+// 031 the same episode also ADOPTS: PriorSPerPt/AdoptedSPerPt are additive,
+// omitempty fields carrying the adoption arithmetic (prior estimate → window
+// median installed). EstimateSPerPt keeps its meaning — "the estimator's
+// current estimate at emission" — which post-adoption equals AdoptedSPerPt.
+// Pre-031 events lack the two new fields and replay identically (the reducer is
+// a no-op either way); see specs/031-.../contracts/adoption-event.md.
 type RecalibrationPayload struct {
 	Tier           string  `json:"tier"`
 	EstimateSPerPt float64 `json:"estimate_s_per_pt"`
 	SpikeRate      float64 `json:"spike_rate"`
 	Window         int     `json:"window"`
+	PriorSPerPt    float64 `json:"prior_s_per_pt,omitempty"`
+	AdoptedSPerPt  float64 `json:"adopted_s_per_pt,omitempty"`
 }
