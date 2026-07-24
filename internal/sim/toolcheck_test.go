@@ -177,6 +177,8 @@ func TestWorldToolDurationsMatchSimConstants(t *testing.T) {
 		"repair":           repairTicks,
 		// Spec 032 US2 (axe) — 240-tick hand-craft, reusing craftSpearTicks.
 		"craft_axe": craftSpearTicks,
+		// Spec 032 US3 (path).
+		"build_path": buildPathTicks,
 	}
 
 	seen := make(map[string]bool, len(want))

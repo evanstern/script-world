@@ -319,10 +319,24 @@ func buildGoalResolvers() map[string]goalResolver {
 			}
 			return nil, "", fmt.Errorf("no build site reachable")
 		},
-		"craft_planks":     craft,
-		"craft_stone":      craft,
-		"craft_spear":      craft,
-		"craft_axe":        craft, // spec 032 US2: same shared hand-craft closure
+		"craft_planks": craft,
+		"craft_stone":  craft,
+		"craft_spear":  craft,
+		"craft_axe":    craft, // spec 032 US2: same shared hand-craft closure
+		"build_path": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
+			// Spec 032 US3 (research R3): a path is built ON the tile the agent
+			// stands on (stand-on-target, the build_fire pattern) — paths are
+			// walkable, so there is no entombment risk, unlike walls. The generic
+			// build completion + reducer arm handle the rest.
+			r, _ := recipeFor("build_path")
+			if !hasItems(a.Inv, r.Inputs) {
+				return nil, "", fmt.Errorf("%s lacks stone for a path (%d < %d)", a.Name, a.Inv.Stone, pathStoneCost)
+			}
+			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+				return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+			}
+			return nil, "", fmt.Errorf("no build site reachable")
+		},
 		"build_wall_plank": wallBuild,
 		"build_wall_stone": wallBuild,
 		"demolish": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {

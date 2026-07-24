@@ -310,6 +310,8 @@ var worldToolsBase = []Tool{
 	{Name: "repair", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossRepair},
 	// Spec 032 US2 (axe): a hand-craft, anywhere, planner-only.
 	{Name: "craft_axe", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossCraftAxe},
+	// Spec 032 US3 (path): a buildable tile improvement, planner-only.
+	{Name: "build_path", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossBuildPath},
 }
 
 // setPlanTool is the loop-only planning tool (spec 017 R11): Effect World

@@ -71,6 +71,10 @@ var recipes = []Recipe{
 	// builder never entombs itself.
 	{Goal: "build_wall_plank", Inputs: []Item{{"planks", wallPlankCost}}, Structure: "wall_plank", Duration: buildWallTicks, Site: SiteOnSite},
 	{Goal: "build_wall_stone", Inputs: []Item{{"refined_stone", wallStoneCost}}, Structure: "wall_stone", Duration: buildWallTicks, Site: SiteOnSite},
+	// Path (spec 032 US3): a walkable tile improvement, built ON the tile the
+	// agent stands on (stand-on-target, unlike walls) — 1 raw stone, no HP. The
+	// generic agent.built arm spends the stone and appends the path structure.
+	{Goal: "build_path", Inputs: []Item{{"stone", pathStoneCost}}, Structure: "path", Duration: buildPathTicks, Site: SiteOnSite},
 
 	// Station actions. cook_fire is fuel-free (the fire's own fuel); cook_oven
 	// and bathe each burn 1 wood from the worker's inventory.

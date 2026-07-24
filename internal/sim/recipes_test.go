@@ -23,6 +23,8 @@ func TestRecipeTableMirror(t *testing.T) {
 		// Spec 032 (walls) — contracts/recipes.md literals.
 		"build_wall_plank": {Goal: "build_wall_plank", Inputs: []Item{{"planks", 2}}, Structure: "wall_plank", Duration: 600, Site: SiteOnSite},
 		"build_wall_stone": {Goal: "build_wall_stone", Inputs: []Item{{"refined_stone", 2}}, Structure: "wall_stone", Duration: 600, Site: SiteOnSite},
+		// Spec 032 (path) — contracts/recipes.md literals.
+		"build_path": {Goal: "build_path", Inputs: []Item{{"stone", 1}}, Structure: "path", Duration: 240, Site: SiteOnSite},
 		"cook_fire":     {Goal: "cook_fire", Inputs: []Item{{"food_raw", 8}}, Outputs: []Item{{"food_cooked", 8}}, Duration: 240, Site: SiteStation},
 		"cook_oven":     {Goal: "cook_oven", Inputs: []Item{{"wood", 1}, {"food_raw", 8}}, Outputs: []Item{{"meals", 8}}, Duration: 360, Site: SiteStation},
 		"bathe":         {Goal: "bathe", Inputs: []Item{{"water", 1}, {"wood", 1}}, Duration: 240, Site: SiteStation},
