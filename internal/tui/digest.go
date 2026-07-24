@@ -341,6 +341,30 @@ var digestRegistry = map[string]digestFunc{
 		}
 		return join([]seg{nameOf(names, p.Agent), txt(" built a "), emph(p.Kind), txt(" at "), coord(p.X, p.Y)}), true
 	},
+	// agent.wall_chipped / agent.wall_destroyed / agent.wall_repaired (spec 032
+	// US1) share the {agent, x, y} WallWorkPayload shape — one per
+	// demolish/repair work cycle at the wall's own tile.
+	"agent.wall_chipped": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.WallWorkPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{nameOf(names, p.Agent), txt(" chipped away at the wall at "), coord(p.X, p.Y)}), true
+	},
+	"agent.wall_destroyed": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.WallWorkPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{nameOf(names, p.Agent), txt(" tore down the wall at "), coord(p.X, p.Y)}), true
+	},
+	"agent.wall_repaired": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.WallWorkPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{nameOf(names, p.Agent), txt(" repaired the wall at "), coord(p.X, p.Y)}), true
+	},
 	"agent.dropped": func(e store.Event, names []string) ([]seg, bool) {
 		p, ok := decode[sim.DroppedPayload](e)
 		if !ok {
@@ -411,6 +435,16 @@ var digestRegistry = map[string]digestFunc{
 			return nil, false
 		}
 		return join([]seg{nameOf(names, p.Agent), txt("'s spear broke")}), true
+	},
+	// agent.axe_broke (spec 032 US2): the SpearBrokePayload clone, co-emitted
+	// alongside a chop/quarry completion when the pre-event carried axe spent
+	// its last use — voice mirrors agent.spear_broke's.
+	"agent.axe_broke": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.AxeBrokePayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{nameOf(names, p.Agent), txt("'s axe broke")}), true
 	},
 	"agent.ate": func(e store.Event, names []string) ([]seg, bool) {
 		p, ok := decode[sim.AtePayload](e)
@@ -520,6 +554,19 @@ var digestRegistry = map[string]digestFunc{
 			return nil, false
 		}
 		return join([]seg{nameOf(names, p.Agent), txt(" now believes: "), speech(p.Statement)}), true
+	},
+	// agent.belief_reinforced (spec 030 US2, FR-008): re-anchors a held belief's
+	// decay clock. Whitelisted through the injection door for the future
+	// grounded-observation channel — no in-tree producer yet. The real payload
+	// (internal/sim/consolidate.go) carries only {agent, belief_id}, never the
+	// statement text, so this digest references the belief by id — the same
+	// memory_promoted/memory_faded precedent above.
+	"agent.belief_reinforced": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.BeliefReinforcedPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{nameOf(names, p.Agent), txt("'s belief (#"), emphN(p.BeliefID), txt(") reinforced")}), true
 	},
 	"agent.narrative_set": func(e store.Event, names []string) ([]seg, bool) {
 		p, ok := decode[sim.NarrativeSetPayload](e)

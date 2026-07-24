@@ -1,10 +1,10 @@
 ---
 id: TASK-88
 title: 'Walls, axes, and paths: build-system additions (spec 032)'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-24 04:07'
-updated_date: '2026-07-24 05:02'
+updated_date: '2026-07-24 13:17'
 labels: []
 dependencies: []
 ordinal: 75000
@@ -25,7 +25,7 @@ Spec: specs/032-walls-axes-paths
 - [x] #3 Spec phase: User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP
 - [x] #4 Spec phase: User Story 2 - Axes make harvesting worthwhile (Priority: P2)
 - [x] #5 Spec phase: User Story 3 - Paths speed travel (Priority: P3)
-- [ ] #6 Spec phase: Polish & Cross-Cutting
+- [x] #6 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,4 +42,12 @@ Model tier: Opus 4.8 (spec-implementer via Agent model param). Rubric justificat
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP: 8/8 · User Story 2 - Axes make harvesting worthwhile (Priority: P2): 6/6 · User Story 3 - Paths speed travel (Priority: P3): 4/4 · Polish & Cross-Cutting: 2/3
 
 Implementation complete on branch task-88-walls-axes-paths (rebased onto origin/main, full suite green): T001-T022 done, 21 commits, HEAD verified by orchestrator (build/vet/full go test green post-rebase). PR #58 open: https://github.com/evanstern/promptworld/pull/58. Remaining: T023 wiki re-pin + player-docs after merge.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP: 8/8 · User Story 2 - Axes make harvesting worthwhile (Priority: P2): 6/6 · User Story 3 - Paths speed travel (Priority: P3): 4/4 · Polish & Cross-Cutting: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP: 8/8 · User Story 2 - Axes make harvesting worthwhile (Priority: P2): 6/6 · User Story 3 - Paths speed travel (Priority: P3): 4/4 · Polish & Cross-Cutting: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

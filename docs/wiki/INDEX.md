@@ -16,7 +16,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[sim-loop]] — single-goroutine fixed-timestep loop; command intents; auto-slow
 - [[sim-state-reducer]] — State + Apply: the single mutation path, live and replay
 - [[deterministic-rng]] — per-decision PCG from (seed, purpose, tick, index); no RNG state
-- [[executor]] — agent bodies: needs, intents, death, terrain overlays
+- [[executor]] — agent bodies: needs, intents, death, terrain overlays, walls/axes/paths
 - [[gru]] — the nocturnal predator: wounds not kills, light/shelter safety, rumor fuel
 - [[reflex-policy]] — survival decision ladder + deterministic BFS pathfinding
 - [[event-types]] — the event taxonomy and payload shapes
@@ -52,7 +52,7 @@ that note (re-pin with `/grounding-wiki:wiki-update`).
 - [[metatron]] — the gatekeeper angel: console + system-authored turns, omen/vision influence, standing-order agency, clock-control meta tools, charges, the editable charter
 - [[metatron-miracles]] — charge-priced world edits: time snap, item grant, entity move/remove, gratis doctrine, shift-semantics re-base
 - [[metatron-orders]] — the standing-orders subsystem: event-sourced watches compiled to free structural predicates, live matching, system-authored triggered turns, fuzzy confirm, daytime-omen deferral
-- [[governance]] — norms and votes: the daily noon meeting, relationship-driven law, the village charter
+- [[governance]] — norms and votes: the daily meeting under an event-sourced convention, relationship-driven law, the village charter
 
 ## Lifecycle & quality
 
