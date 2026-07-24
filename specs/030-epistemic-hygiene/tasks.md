@@ -60,11 +60,11 @@ coercion counter visible on the night's marker.
 **Independent Test**: quickstart §3 — curve table to the tick; floor crossing changes rendering/prompt surfacing;
 reinforcement resets; replay holds.
 
-- [ ] T006 [US2] Decay arithmetic: `Belief.Reinforced` field, `EffectiveConfidence`, doctrine constants
+- [x] T006 [US2] Decay arithmetic: `Belief.Reinforced` field, `EffectiveConfidence`, doctrine constants
       (`BeliefHalfLifeDays` 8, `BeliefConfidenceFloor` 20) in `internal/sim/consolidate.go`; revision refreshes
       the stamp iff `direct` (US2-AC3); curve table tests (formation, half-life boundary, floor crossing, legacy
       grandfather `Reinforced == 0`, post-reinforcement reset)
-- [ ] T007 [US2] Reinforcement seam: `agent.belief_reinforced` event type whitelisted through the injection door
+- [x] T007 [US2] Reinforcement seam: `agent.belief_reinforced` event type whitelisted through the injection door
       (`internal/sim/loop.go` whitelist + total reducer arm in `internal/sim/consolidate.go`); tests emitting it
       through the door incl. vanished-target no-op; replay suite extended with a reinforcement event (SC-003
       second half); seam documented in the events contract (already) + doc comment naming the future producer
