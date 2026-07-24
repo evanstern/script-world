@@ -708,7 +708,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	axeBrokeIfLast := func() {
 		if len(a.Inv.Axes) > 0 && a.Inv.Axes[0] == 1 {
 			emit("agent.axe_broke", AxeBrokePayload{Agent: i})
-			events = append(events, situatedMemoryEvent(nextTick, i, salAxeBroke, where, "",
+			events = append(events, situatedMemoryEvent(nextTick, i, salAxeBroke, where, "", OriginAction,
 				"My axe broke at the work — I'll need to craft another."))
 		}
 	}
@@ -799,7 +799,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// at Res, so the memory is situated by the builder's own stand tile.
 		r, _ := recipeFor(in.Goal)
 		emit("agent.built", BuiltPayload{Agent: i, Kind: r.Structure, X: in.ResX, Y: in.ResY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason, "Built a wall."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason, OriginAction, "Built a wall."))
 	case "build_path":
 		// Spec 032 US3: the generic reducer arm spends the stone and appends the
 		// path structure (no HP — isWall is false for "path"). Built on the Target
