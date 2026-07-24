@@ -4,7 +4,7 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 04:23'
+updated_date: '2026-07-24 04:40'
 labels: []
 dependencies:
   - TASK-53
@@ -83,4 +83,6 @@ Model-tier record: Batch C (T016-T022) → spec-implementer on Opus 4.8 — rubr
 
 Batch C (T016-T022) gated PASS: 3 commits (f05c36a US4 deferral, 14c7980 US5 meta tools + LoopControl, 6ca10f8 US6 fuzzy confirm). Orchestrator re-verified: fresh tests on metatron/tool/daemon + race on metatron, all green. Findings adjudicated: (1) start's speed arg inert at the loop's resume command — planning ruling: honor supplied speed as set_speed THEN resume; contract amended; fix lands in Batch D. (2) deferred-omen 400-rune action cap edge accepted + documented in spec assumptions. (3) metatron_watch estimator normalization accepted per the digest bare-Submit precedent (mildly pessimistic = sheds first under pressure, which is the honest degradation).
 Model-tier record: Batch D (T023-T025 + start-speed fix) → spec-implementer on Sonnet (default tier) — rubric: routine slices (view/rendering, doc reconciliation, live validation run, single-package two-line handler fix with exact instruction).
+
+Batch D (start-fix + T023-T025) gated PASS: fc2b3ad start-with-speed = set_speed then resume (per ruling; failing set_speed never reaches resume — pinned), 6a27a94 CLI/TUI order+clock surfaces (calibrate/Kinds enumeration confirmed automatic), 1442a11 docs reconciliation. Orchestrator re-verified metatron/tui/cmd fresh — green. T025 validation matrix on record: full suite + race green; live model-free scenarios ran (boot gates, new roster via metatron_status, pause/resume IPC, log stream); conversational Scenarios 1-5 BLOCKED in this environment — no Anthropic credentials and the default local model absent (TASK-84's dead-default reproduced live; failed fast+clean, no hang). Live conversational validation needs credentials — flagged for reign-test after merge. T026 (wiki re-pin, AC #9) next: running wiki-update in the worktree so the re-pin rides the PR (AC says before merge).
 <!-- SECTION:NOTES:END -->

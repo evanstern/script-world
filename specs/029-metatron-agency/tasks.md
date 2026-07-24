@@ -226,15 +226,15 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T023 [P] Additive client surfaces: render `Status.Orders` where
+- [X] T023 [P] Additive client surfaces: render `Status.Orders` where
   metatron status shows (TUI metatron pane `internal/tui/`, CLI
   `promptworld metatron` status output) — additive JSON already tolerated;
   verify `promptworld calibrate`/llm-status enumerate `metatron_watch` via
   `llm.Kinds()` (contracts/routing.md).
-- [ ] T024 [P] Docs reconciliation: `docs/llm-providers.md` gains the
+- [X] T024 [P] Docs reconciliation: `docs/llm-providers.md` gains the
   `metatron_watch` kind + backfill note; README capability mentions if the
   angel's tool list appears there.
-- [ ] T025 Full-suite + quickstart live validation: `go test ./...`, then run
+- [X] T025 Full-suite + quickstart live validation: `go test ./...`, then run
   quickstart.md Scenarios 1–5 against a throwaway world; record outcomes in the
   implementer report (evidence for the board).
 - [ ] T026 Post-merge (root, planning session): `/grounding-wiki:wiki-update`
