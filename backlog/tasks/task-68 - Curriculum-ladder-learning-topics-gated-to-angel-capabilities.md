@@ -4,13 +4,14 @@ title: 'Curriculum ladder: learning topics gated to angel capabilities'
 status: To Do
 assignee: []
 created_date: '2026-07-23 03:28'
+updated_date: '2026-07-24 02:42'
 labels:
   - review-2026-07-22
   - teaching-game
 dependencies:
   - TASK-64
 priority: medium
-ordinal: 61000
+ordinal: 15000
 ---
 
 ## Description

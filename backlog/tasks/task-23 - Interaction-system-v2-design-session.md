@@ -4,11 +4,11 @@ title: 'Interaction system v2: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-19 22:27'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-24 02:42'
 labels:
   - design
 dependencies: []
-ordinal: 7000
+ordinal: 9000
 ---
 
 ## Description

@@ -6,11 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-23 23:17'
+updated_date: '2026-07-24 02:42'
 labels:
   - onboarding
   - llm
 dependencies: []
-ordinal: 75000
+priority: high
+ordinal: 1000
 ---
 
 ## Description
@@ -30,3 +32,9 @@ Evidence: TASK-73 eval driver had to set model cogito:3b + tool_mode json on eve
 - [ ] #1 Fresh world on a machine without the default local model surfaces the dead tier loudly (status/attach/event), not silently
 - [ ] #2 Default local model + tool_mode decision made and aligned across DefaultConfig, docs/llm-providers.md, and README
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: verified intact — DefaultConfig at config.go:448, gemma4:12b-mlx with no ToolMode at :454; resolveToolMode defaults native at :310-313; docs/llm-providers.md:32 still shows gemma4; no startup preflight (reachability is lazy via llm/health.go circuit breaker).
+<!-- SECTION:NOTES:END -->

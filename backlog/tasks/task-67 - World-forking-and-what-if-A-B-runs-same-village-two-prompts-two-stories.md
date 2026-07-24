@@ -4,12 +4,13 @@ title: 'World forking and what-if A/B runs (same village, two prompts, two stori
 status: To Do
 assignee: []
 created_date: '2026-07-23 03:28'
+updated_date: '2026-07-24 02:42'
 labels:
   - review-2026-07-22
   - teaching-game
 dependencies: []
 priority: medium
-ordinal: 60000
+ordinal: 16000
 ---
 
 ## Description
@@ -31,3 +32,9 @@ Depends on nothing, but pairs naturally with the decision-trace view (TASK-63): 
 - [ ] #5 Budget-meter semantics for forks decided and documented in the spec
 - [ ] #6 Spec Kit spec written and linked via spec-bridge before implementation (non-trivial task)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: premises verified — save dirs self-contained/copyable (world-save-directory.md:15-16), snapshots bound recovery (snapshots.md:14-17), replay never re-calls a model (llm-orchestrator.md:20), and no fork/compare subcommand exists yet (main.go:52-88).
+<!-- SECTION:NOTES:END -->

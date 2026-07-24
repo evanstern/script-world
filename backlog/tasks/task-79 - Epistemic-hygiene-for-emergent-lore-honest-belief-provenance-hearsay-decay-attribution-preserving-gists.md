@@ -12,7 +12,7 @@ labels:
   - epistemics
 dependencies: []
 priority: medium
-ordinal: 72000
+ordinal: 12000
 ---
 
 ## Description

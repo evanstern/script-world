@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-23 17:00'
+updated_date: '2026-07-24 02:42'
 labels:
   - teaching-game
   - classroom-mode
@@ -16,7 +17,7 @@ references:
     Classroom-mode-curriculum-staged-horizon-posture-—-paused-chain-completion-for-authoring-calibrated-soft-speed-cap-for-ambient-running-budgets-stay-doctrine.md
   - docs/design/horizon-vs-learner-iteration-speed.md
 priority: medium
-ordinal: 70000
+ordinal: 8000
 ---
 
 ## Description
@@ -41,3 +42,9 @@ DOCTRINE-ADJACENT BEHAVIOR CHANGE in internal/mind — Opus 4.8 rubric tier per 
 - [ ] #4 Unpaused behavior is byte-identical to today: no new wake stimuli or routing changes apply while running
 - [ ] #5 Spec Kit spec written and linked via spec-bridge before implementation (doctrine-adjacent, non-trivial)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: pins re-verified; one moved — metatron_chat handler (no pause gate) is ipc/server.go:334-355, not :312 (:312 is llm_call). absorb() arm switch mind.go:206-228 and routeVerdict telemetry.go:61-71 hold exactly.
+<!-- SECTION:NOTES:END -->

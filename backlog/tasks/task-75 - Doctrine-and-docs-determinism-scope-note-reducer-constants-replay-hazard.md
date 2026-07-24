@@ -4,13 +4,14 @@ title: 'Doctrine and docs: determinism scope note + reducer-constants replay haz
 status: To Do
 assignee: []
 created_date: '2026-07-23 06:35'
+updated_date: '2026-07-24 02:42'
 labels:
   - review-2026-07-22
   - code-quality
   - docs
 dependencies: []
 priority: low
-ordinal: 68000
+ordinal: 20000
 ---
 
 ## Description
@@ -30,3 +31,9 @@ From the 2026-07-22 team review (improvements 5 and the replay-hazard removal no
 - [ ] #3 Audit list of reducer-re-derives sites included in the wiki note
 - [ ] #4 Wiki freshness gate passes (notes re-pinned)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: substance verified, pins moved. EffectiveRate measured at loop.go:567 (observeWindow, wall-clock), emitted in clock.degraded at loop.go:578, baked into State.EffectiveRate (state.go:35, reducer :369) — hazard confirmed. No doc yet states per-log-not-per-seed (deterministic-rng.md:40 and README.md:78 still claim per-seed). Hunt-yield re-derivation now state.go:596-600 (was ~504-511). Note: sim-state-reducer.md:132 already documents emitter-computes for agent.memory_added (spec 019) — the doctrine note here should reconcile with that precedent.
+<!-- SECTION:NOTES:END -->

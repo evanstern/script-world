@@ -4,11 +4,11 @@ title: 'Permadeath runs, death escalation, and the morgue file: design session'
 status: To Do
 assignee: []
 created_date: '2026-07-20 19:55'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-24 02:42'
 labels:
   - design
 dependencies: []
-ordinal: 15000
+ordinal: 19000
 ---
 
 ## Description
@@ -28,4 +28,6 @@ Roguelike survival design (user, 2026-07-20; see decision-3 strife doctrine). Pe
 Pre-session decisions (user, 2026-07-20): (1) Permadeath enabled per agent — already true in code; this task makes it consequential at run level. (2) Death should be a real risk from more than neglect: the gru or wounds should be able to finish someone. (3) Per decision-3, deaths should generate social material (grief, blame, inheritance of stockpiles), not just remove an agent.
 
 Re-grounding 2026-07-22: gru wound mechanics hold (gruWound=250 gru.go:38; wound floored at 1 health, gru.go:124). Spec 012 changes no death rules. Spec 013 (TASK-51) now owns the physical death-drop mechanic (FR-006: carried bulk spills as a ground pile at the death site) — defer that piece to 013; keep morgue file, graves, run.ended, and death escalation scope here.
+
+Drift audit 2026-07-23: verified exact — gruWound=250 gru.go:38, gruWoundFloor=1 gru.go:39, floor applied gru.go:124; 'wounds, never kills' doctrine comment gru.go:15-16. Spec 013 (death-drop FR-006) is now Done/merged — the deferral of the physical death-drop piece to 013 has happened; remaining scope here (morgue file, graves, run.ended, escalation) untouched.
 <!-- SECTION:NOTES:END -->
