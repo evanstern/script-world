@@ -16,6 +16,8 @@ var wantWorldOrder = []string{
 	"wander", "goto_warmth", "talk_to", "quarry", "collect_water", "cook",
 	"refuel_fire", "craft_planks", "craft_stone", "craft_spear", "build_oven",
 	"bathe", "drop", "pick_up", "build_chest", "deposit", "withdraw",
+	// Spec 032 US1 (walls) — appended after withdraw.
+	"build_wall_plank", "build_wall_stone", "demolish", "repair",
 }
 
 // wantExpressive is the expressive tools' registration order (catalog table
@@ -131,10 +133,12 @@ func TestPromptGlossBlockStructure(t *testing.T) {
 		t.Fatalf("gloss block must end in a newline")
 	}
 	lines := strings.Split(strings.TrimSuffix(block, "\n"), "\n")
-	if len(lines) != 6 {
-		t.Fatalf("gloss block has %d lines, want 6:\n%s", len(lines), block)
+	if len(lines) != 9 {
+		t.Fatalf("gloss block has %d lines, want 9:\n%s", len(lines), block)
 	}
-	leads := []string{"quarry", "cook", "craft_planks", "build_oven", "drop", "build_chest"}
+	// Spec 032 US1 appends the wall/demolish/repair glosses after build_chest.
+	leads := []string{"quarry", "cook", "craft_planks", "build_oven", "drop", "build_chest",
+		"build_wall_plank", "demolish", "repair"}
 	for i, want := range leads {
 		if !strings.HasPrefix(lines[i], want) {
 			t.Errorf("gloss line %d starts %q, want prefix %q", i, lines[i], want)

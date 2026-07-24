@@ -234,6 +234,15 @@ const (
 	glossDrop       = `drop puts down goods where you stand, creating or adding to a ground pile there anyone can take from; pick_up takes from a pile on or next to you. Name what with "kind" (wood, stone, water, planks, refined_stone, food_raw, food_cooked, meals, or spears) and how much with "qty" (omit or 0 = all of that kind); pick_up with no "kind" takes everything that fits.`
 	glossBuildChest = `build_chest needs 6 planks; chests preserve food (it never rots there, unlike a ground pile) and you keep the chest permanently once built. deposit stores goods in the nearest chest — always name a "kind" or nothing moves; withdraw takes goods back out of the nearest chest that has them ("kind" omitted or empty takes everything that fits). Taking from another villager's chest is possible too, but they will remember who took it.`
 
+	// Spec 032 (walls, axes, paths) verb glosses. Attached to the first verb each
+	// describes so PromptGlossBlock (walking registration order) rebuilds the
+	// block exactly. build_wall_stone is covered by the wall gloss below.
+	glossBuildWall = `build_wall_plank builds a wall from 2 planks and build_wall_stone from 2 refined stone (the stone wall endures far more damage before it falls); a standing wall blocks movement — villagers path around it, so walls can pen livestock or protect a place — and can be repaired back to full health.`
+	glossDemolish  = `demolish tears down the nearest wall, chipping its health down over repeated work cycles until it collapses (a full-health stone wall takes longer to bring down than a plank one).`
+	glossRepair    = `repair mends the nearest damaged wall, spending 1 of its build material (planks for a plank wall, refined stone for a stone wall) per work cycle until it is whole again.`
+	glossCraftAxe  = `craft_axe needs 1 plank + 1 stone and makes an axe (hand-crafted anywhere); carrying an axe triples every tree and stone harvest — 3 instead of 1 — and the axe wears out after 10 harvests, then breaks.`
+	glossBuildPath = `build_path lays a path tile from 1 stone; the tile stays walkable and any villager stepping off a path tile moves twice as fast, so paths between your busiest places roughly halve travel time along them.`
+
 	// Journal tool glosses (spec 019, US3). Deliberately capability + budget
 	// ONLY — the ONE rule the system imposes is the size budget, so the prompt
 	// imposes no cadence, format, or content guidance either (FR-010 applies to
@@ -292,6 +301,13 @@ var worldToolsBase = []Tool{
 	{Name: "build_chest", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true, PromptGloss: glossBuildChest},
 	{Name: "deposit", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
 	{Name: "withdraw", Effect: World, Gate: Resolvable, Params: storageParams(), Cost: Cost{DurationTicks: 0}, PlanStep: true},
+	// Spec 032 US1 (walls): plank/stone builds, plus the two multi-cycle wall
+	// verbs. Planner/plan-only (no ReflexEligible), like every post-012 verb.
+	// Appended after withdraw so no existing tool's registration position shifts.
+	{Name: "build_wall_plank", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true, PromptGloss: glossBuildWall},
+	{Name: "build_wall_stone", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true},
+	{Name: "demolish", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, PromptGloss: glossDemolish},
+	{Name: "repair", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossRepair},
 }
 
 // setPlanTool is the loop-only planning tool (spec 017 R11): Effect World
