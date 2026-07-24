@@ -1,11 +1,11 @@
 ---
 name: reflex-policy
-description: Deterministic survival decisions for idle agents (eat → food → night warmth/fire-refuel → rest → prep → wander) plus BFS pathfinding with fixed neighbor order; resolveGoal resolves the full spec-012 planner goal vocabulary (quarry, water, crafting, stations, refuel, cook, bathe) plus spec-013's storage goals (build_chest, drop, pick_up, deposit, withdraw) to coordinates
+description: Deterministic survival decisions for idle agents (eat → food → night warmth/fire-refuel → rest → prep → wander) plus BFS pathfinding with fixed neighbor order; resolveGoal resolves the full spec-012 planner goal vocabulary (quarry, water, crafting, stations, refuel, cook, bathe) plus spec-013's storage goals (build_chest, drop, pick_up, deposit, withdraw) and spec-032's walls/axes/paths goals (build_wall_plank/stone, demolish, repair, craft_axe, build_path) to coordinates
 kind: component
 sources:
   - internal/sim/policy.go
   - internal/sim/path.go
-verified_against: 367d689446f502d9351ee48959c5397d4db037a0
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # Reflex policy & pathfinding
@@ -23,7 +23,11 @@ entirely once it was re-costed in planks. Spec 013 (inventory & storage v1) wide
 `resolveGoal` again — a chest to build, goods to drop/pick up/deposit/withdraw —
 and left the reflex ladder itself completely untouched: all five new goals are
 planner/plan-only (FR-014), added to `resolveGoal` but never reachable from
-`decideIntent`. Spec 014 (TASK-53) restructured `resolveGoal` from one large
+`decideIntent`. Spec 032 (walls, axes, paths) widened it once more — two wall
+builds, a demolish/repair pair on an existing wall, a fourth hand-craft
+(`craft_axe`), and a path build — every one planner/plan-only, same pattern:
+the reflex ladder itself gains nothing from spec 032 (an axe or a wall is
+never something `decideIntent` reaches for on its own). Spec 014 (TASK-53) restructured `resolveGoal` from one large
 switch into `goalResolvers`, a name-keyed resolver table with the old per-verb
 bodies verbatim — the [[tool-registry]]'s boot-time coverage gate
 (`sim.ValidateToolCoverage`) asserts every World tool on the villager roster has
@@ -118,17 +122,44 @@ reflex uses:
   resolved `Intent`, threaded through to the completion at [[executor]] — see
   there for the truncation/re-validation rules and the theft consequences of a
   non-owner `withdraw`.
+- **`craft_axe`** (spec 032 US2) shares the same hand-craft closure as
+  `craft_planks`/`craft_stone`/`craft_spear` — no travel, resolves once
+  `recipeFor("craft_axe")`'s inputs (1 plank + 1 stone) are satisfied.
+- **`build_wall_plank`** and **`build_wall_stone`** (spec 032 US1) share a
+  `wallBuild` closure, gated on `recipeFor(goal)`'s inputs, that resolves via
+  `nearestAdjacentTo` over `buildSite` — unlike every other build (which
+  resolves the agent's own standing tile as the target), a wall build stands
+  the agent on the neighboring passable tile (`Target`) and puts the wall on
+  the adjacent buildable one (`Res`), the same stand/build split `chop`/`quarry`
+  use beside a resource: building where you stand would entomb the builder the
+  instant the wall lands (FR-007).
+- **`demolish`** (spec 032 US1) resolves via `nearestAdjacentTo` over "a wall
+  stands here" (`wallAt(s, x, y) != nil`) — adjacent-stand like the wall
+  builds, since a wall tile is impassable. No material is required to tear one
+  down.
+- **`repair`** (spec 032 US1) resolves via `nearestAdjacentTo` over "a
+  reachable wall is damaged AND I'm carrying its matching material" (`w.HP <
+  wallMaxHP(w.Kind)` and `invField(a.Inv, wallRepairMaterial(w.Kind)) >= 1`) —
+  a wall already at full health never resolves; there is nothing to repair.
+- **`build_path`** (spec 032 US3) is stand-on-target like `build_fire`
+  (resolves via plain `nearest` over `buildSite`, not adjacency), gated on
+  `pathStoneCost` (1) stone.
 - `sleep`, `goto_warmth`, `wander`, and `talk_to`/`seek` are unchanged.
 
-Pathfinding (`path.go`, unchanged by spec 012): breadth-first search with **fixed
-neighbor order (N, E, S, W)** and FIFO frontier, so shortest paths and
-nearest-match searches are identical on every run. `nextStep` re-derives one hop
-per move from the shortest path (paths are never stored in state — movement
-outcomes are evented, so replay needs no path data). `nearest` finds the closest
+Pathfinding (`path.go`, unchanged by spec 012 — and unchanged by spec 032's
+path-the-tile-improvement feature too, a naming coincidence): breadth-first
+search with **fixed neighbor order (N, E, S, W)** and FIFO frontier, so
+shortest paths and nearest-match searches are identical on every run. `nextStep`
+re-derives one hop per move from the shortest path (paths are never stored in
+state — movement outcomes are evented, so replay needs no path data); a
+standing wall (spec 032) makes its tile impassable via [[executor]]'s `passable`,
+so BFS routes around walls with no change to `path.go` itself — walls are just
+another obstacle the same search already handles. `nearest` finds the closest
 reachable tile matching a predicate in BFS order; `nearestAdjacentTo` finds a
-standing tile beside a resource — chopping a tree, quarrying rock, and drawing
-water all resolve through it. The escape clause lets an agent standing on
-impassable terrain (pre-terrain saves) step out.
+standing tile beside a resource — chopping a tree, quarrying rock, drawing
+water, and (spec 032) building/demolishing/repairing a wall all resolve through
+it. The escape clause lets an agent standing on impassable terrain (pre-terrain
+saves) step out.
 
 ## Connections
 

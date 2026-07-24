@@ -8,16 +8,25 @@ sources:
   - internal/sim/whole_feature_test.go
   - internal/sim/miracles_test.go
   - internal/sim/metatron_test.go
+  - internal/sim/origin_test.go
+  - internal/sim/belief_evidence_test.go
+  - internal/sim/belief_decay_test.go
+  - internal/sim/belief_reinforced_test.go
+  - internal/sim/wall_test.go
+  - internal/sim/axe_test.go
+  - internal/sim/path_speed_test.go
   - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
   - internal/mind/replay_test.go
+  - internal/mind/provenance_test.go
+  - internal/mind/belief_read_sites_test.go
   - internal/metatron/metatron_test.go
   - internal/metatron/metatron_gaps_test.go
   - internal/metatron/orders_test.go
   - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Testing strategy
@@ -49,13 +58,16 @@ path, replay-from-zero-snapshots determinism, the already-migrated and
 already-current guards, uncovered/tolerated event tails, a running-daemon refusal)
 for both the v1→v2 and v2→v3 steps.
 
-`internal/sim/whole_feature_test.go` carries two byte-identity suites (SC-004/SC-005):
+`internal/sim/whole_feature_test.go` carries several byte-identity suites (SC-004/SC-005):
 the original spec-012 run, a single scripted-agent script chaining every
-resources/food/crafting event kind (quarrying, water, the full craft chain, both
-cook stations, bathing, refueling, a spear breaking, a fire burning out) — rebalanced
-under spec 013's bulk cap (24) to consume-as-it-goes rather than hoard a large seeded
-larder — that replays from genesis to a byte-identical state hash; and a spec-013
-storage suite (`TestReplayByteIdentityWholeFeatureStorage`) exercising every new
+resources/food/crafting event kind (quarrying — five bare quarries at
+`quarryYieldBare` (1) each, since spec 032 T014 split the old flat `quarryYield`
+(2) into bare/axe-assisted tiers and dropped the bare yield to 1 — water, the full
+craft chain, both cook stations, bathing, refueling, a spear breaking, a fire
+burning out) — rebalanced under spec 013's bulk cap (24) to consume-as-it-goes
+rather than hoard a large seeded larder — that replays from genesis to a
+byte-identical state hash; and a spec-013 storage suite
+(`TestReplayByteIdentityWholeFeatureStorage`) exercising every new
 013 event type in one run — `agent.dropped`, `agent.picked_up`, `agent.deposited`,
 `agent.withdrew` (both an owner fetch and a non-owner theft with its full companion
 batch: `social.chest_taken`, a reason-`theft` `social.relation_changed`, and owner +
@@ -64,7 +76,17 @@ death spill — that also replays to a byte-identical hash. The same file also p
 every new 013 event type no-ops under a pre-013 reducer stub (the unknown-type
 convention: an event type the reducer's switch doesn't match falls through to a
 total no-op, never an error), so old logs stay safely replayable by builds that
-predate a given event kind. Together these prove: same seed + same command timeline
+predate a given event kind. `TestReplayByteIdentityWallsAxesPaths` (spec 032 T021,
+quickstart scenario 7) is the walls/axes/paths counterpart: one scripted session
+chains `craft_axe`, an axe-assisted chop, a `build_wall_plank`, a full
+`demolish` (chip then destroy), and a `build_path`, asserts every required event
+(`agent.crafted`, `agent.chopped`, `agent.built`, `agent.wall_chipped`,
+`agent.wall_destroyed`) actually occurred, then replays from genesis (log only) to
+a byte-identical state hash. `TestPre032SnapshotLoadsUnchanged` (spec 032 T021,
+research R7) proves a pre-032-shaped snapshot (no structure `hp`, no inventory/pile
+`axes`) round-trips unmarshal→marshal byte-identically — the new fields are
+additive `omitempty`, so an old save loads unchanged with no format-version bump.
+Together these prove: same seed + same command timeline
 over 30k ticks → byte-identical event sequences and equal state hashes; different
 seeds diverge; replaying the logged events over genesis (then re-living the quiet
 tail) reproduces the live state hash exactly; the day/night cycle behaves (nobody
@@ -142,10 +164,44 @@ plus charge doctrine (insufficient-charge rejection, gratis waives only the
 charge, gratis is logged visibly), and `TestRebaseTaxonomyComplete` — the build
 fails if a new tick-anchored `int64` field appears anywhere in the state tree
 without a SHIFT/KEEP classification in `rebaseTicks`, so the taxonomy can never
-silently drift from the state struct. Byte-identity replay suites
+silently drift from the state struct (spec 030 extended this to
+`Belief.Reinforced`, the decay-curve anchor). Byte-identity replay suites
 (`TestMiracleReplayByteIdentity`, `TestMiracleSnapReplayByteIdentity`,
 `TestMiracleGrantReplayByteIdentity`) prove each miracle type replays to the
 same state hash as live application.
+
+**Memory-provenance and belief-decay suites** (spec 030, [[metatron]]):
+`internal/sim/origin_test.go` proves the `DirectPerception` classifier's closed
+vocabulary (action/witness/omen direct; report/gist/digest/absent secondhand),
+that every situated constructor stamps `Origin` at emission, that the reducer
+copies it verbatim, and that a pre-030 memory (no `origin` field) round-trips
+byte-identically. `internal/sim/belief_evidence_test.go` proves belief
+formation stamps `Belief.Reinforced` to the formation tick regardless of
+evidence, that a later revision leaves it untouched (US2 only re-anchors on
+direct evidence), and that a log of coerced beliefs replays byte-identically.
+`internal/sim/belief_decay_test.go` pins `EffectiveConfidence`'s half-life
+curve to the tick (a pure, computed-on-read function — nothing stored ever
+mutates), including a fractional-half-life midpoint proving the curve is
+continuous, not integer-stepped, and a legacy no-stamp belief grandfathered to
+undecayed. `internal/sim/belief_reinforced_test.go` proves the
+`agent.belief_reinforced` reducer arm re-anchors a held belief's clock and is a
+total no-op against a vanished belief ID, and that a log containing the event
+replays byte-identically. On the mind side, `internal/mind/provenance_test.go`
+proves the consolidation user prompt instructs the model to cite evidence and
+reserve "witnessed" for direct perception, and that deterministic
+provenance enforcement coerces rather than rejects; `internal/mind/belief_read_sites_test.go`
+proves the nightly consolidation held-beliefs block is the one documented
+exception that renders EFFECTIVE (not stored) confidence and marks a faded
+belief while still listing it by ID.
+
+**Walls/axes/paths unit suites** (spec 032, [[tool-registry]]): `internal/sim/wall_test.go`
+covers wall build/chip/repair/demolish across both materials (plank vs stone
+HP and material cost); `internal/sim/axe_test.go` covers `craft_axe` and the
+axe-assisted chop/quarry yield and durability countdown to breakage;
+`internal/sim/path_speed_test.go` covers a path tile's travel-speed doubling
+over a deterministic grass corridor. These sit alongside
+`TestReplayByteIdentityWallsAxesPaths` and `TestPre032SnapshotLoadsUnchanged`
+above as the feature's full proof.
 
 **IPC miracle round trips** (`internal/ipc/ipc_test.go`, spec 016): the
 operator "miracle" command exercised over the real wire on a pure-sim world
@@ -250,8 +306,12 @@ writer vs IPC readers — now atomic).
 Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
 [[ipc-server]]/[[ipc-client]] (integration), and [[cli-promptworld]]/
 [[daemon-lifecycle]] (e2e). [[metatron-miracles]] and [[metatron-orders]] cover the
-reducer arms and doors these suites exercise. [[agent-mind]]/[[tool-loop]] are what the
-loop-era replay suite drives through a real `Loop` + `loopMind`. Manual
+reducer arms and doors these suites exercise; [[tool-registry]]'s spec-032 world verbs
+(walls/axe/path) are what the new whole-feature and unit suites drive.
+[[agent-mind]]/[[tool-loop]] are what the
+loop-era replay suite drives through a real `Loop` + `loopMind`; the
+provenance/belief-decay suites prove the substrate [[metatron]]'s omen/vision/miracle
+memories now stamp. Manual
 validation results live in `specs/001-world-daemon/quickstart-results.md`.
 
 ## Operational notes

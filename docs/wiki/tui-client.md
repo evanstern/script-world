@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # TUI client
@@ -78,8 +78,15 @@ hollow cold glyph △ once fuel runs out, shelters ⌂, ovens ▣, chests ☐ (s
 013 US3), and the [[gru]] as a red G while it is abroad; ground piles (spec
 013 US2, `Model.replica.Piles`) render as a dedicated overlay `%`, layered
 like structures rather than folded into them so a coincidental tile overlap
-loses neither glyph's priority silently; the camera follows the living
-agents' centroid, arrow keys pan, `c` recenters.
+loses neither glyph's priority silently. Since spec 032, a wall structure
+(`wall_plank`/`wall_stone`) renders as a solid barrier glyph — `▤` plank, `▩`
+stone — dim (`styleWallDamaged`) whenever its `HP` is below `sim.WallMaxHP`,
+the same faded-glyph treatment as a burnt-out fire, so a wall under
+demolition reads at a glance; a path structure renders at TERRAIN level
+(below agents/structures/piles, its own `paths` set rather than the
+structures map) as a warm-tan `·` distinct from plain grass's dim `·`, so an
+agent or a dropped pile standing on a path tile still shows through. The
+camera follows the living agents' centroid, arrow keys pan, `c` recenters.
 
 Inspection (spec 013 T021/T026, SC-006): the map legend — its one designated
 inspection surface, content grows the line rather than adding a second row —

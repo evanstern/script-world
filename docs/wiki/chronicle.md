@@ -6,7 +6,7 @@ sources:
   - internal/sim/chronicle.go
   - internal/mind/narrate.go
   - internal/scribe/scribe.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # Chronicle

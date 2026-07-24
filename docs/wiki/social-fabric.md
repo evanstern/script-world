@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/social.go
   - internal/mind/convo.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # Social fabric
@@ -60,9 +60,13 @@ reason `"theft"`, at `theftTrustDelta` (−120) trust and `theftAffectionDelta`
 (−40) affection; the owner (if living) gets a subject-tagged memory of the taker
 at `theftMemoryTone` (−60) regardless of distance — a `TellableFor` gossip seed,
 the same any-distance exemption a chest owner's "my things were taken" grievance
-needs to travel; and every living, awake villager within `witnessRadius` (8) of
+needs to travel, stamped `Origin: "report"` (spec 030 — the owner learned of it,
+rather than seeing it happen, even about their own chest) — and every living,
+awake villager within `witnessRadius` (8) of
 the chest, excluding the taker and the owner (who already has the stronger
-any-distance memory), gets its own witness memory at the same tone. Since spec
+any-distance memory), gets its own witness memory at the same tone, stamped
+`Origin: "witness"` — direct perception, per [[agent-mind]]'s provenance
+classifier. Since spec
 019 (US1) both are built through `situatedMemoryAboutEvent` (memory.go) rather
 than the bare `memoryAboutEvent`, so each carries a `Where` situated by the
 rememberer's OWN tile — `PlaceAt(s, owner.X, owner.Y)` for the owner,
@@ -97,8 +101,10 @@ call returns gist, 1–3 topic tags, per-participant tones (the pre-TASK-22
 `tone_a`/`tone_b` shape still parses), and the rumor paraphrase. Effects land as
 ONE atomic `inject_social` batch — turns, summary, and per participant×counterpart
 fodder: a gist memory **about** the counterpart (subject-tagged, toned ×30 — a
-`TellableFor` gossip seed) and a tone edge per pair, reason-tagged with the first
-topic; at most one rumor between the founding pair. Since spec 019 (US2) each
+`TellableFor` gossip seed, stamped `Origin: "gist"` since spec 030 — a
+conversation summary is secondhand even to the participant who lived the scene,
+per [[agent-mind]]'s provenance doctrine) and a tone edge per pair, reason-tagged
+with the first topic; at most one rumor between the founding pair. Since spec 019 (US2) each
 gist memory carries two situating fields set directly on the payload: `Where`
 (`PlaceAt` on the remembering agent's own tile in the mind replica) and `Conv`
 (`cc.conv`, the founding-talk tick that keys every `social.conversation_turn` of

@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/loop.go
   - internal/sim/landing.go
-verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Sim loop
@@ -154,7 +154,10 @@ tool-use loop's per-call trace, [[tool-loop]]) — is whitelisted as reducer
 no-ops so the [[cognition]] layer's observability is recorded, never silent,
 and (since spec 019, US3) `journal.entry_written`/`journal.entry_deleted` —
 the two mind-injectable journal mutations, whose reducer dry-run enforces the
-rune budget (written) and entry existence (deleted) before either lands):
+rune budget (written) and entry existence (deleted) before either lands, and
+(since spec 030 US2, FR-008) `agent.belief_reinforced` — the
+grounded-observation seam that re-anchors a held belief's decay clock; spec 030
+ships the whitelist entry and reducer arm only, no in-tree emitter yet):
 an atomic, whitelisted batch of conversation, consolidation, musing, chronicle,
 nudge, miracle, phrasing, or telemetry effects, dry-run on a state copy before
 applying — the dry-run probe is reconstructed from bytes and so carries no

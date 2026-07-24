@@ -10,7 +10,7 @@ sources:
   - internal/tool/registry.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Metatron's miracles
@@ -59,11 +59,14 @@ partial application (validate-not-clamp, reject-whole):
   executor could already have produced on its own; an already-overlaid tile is
   rejected as a no-op target.
 - **`applyItemGranted`**: validates a living, in-range agent index, a `grantableKind`
-  (the `Inventory` key vocabulary plus `"spear"` singular), and a positive quantity.
-  One bulk per granted unit, exactly like a carried item — a grant of `qty` items
-  always costs `qty` bulk regardless of kind, so the cap check is `bulk(*inv)+qty >
-  bulkCap`. A spear grant appends `qty` fresh `spearDurability` entries to
-  `Inv.Spears`, kept sorted ascending (hunts spend the most-worn first).
+  (the `Inventory` key vocabulary plus `"spear"`/`"axe"` singular), and a positive
+  quantity. One bulk per granted unit, exactly like a carried item — a grant of
+  `qty` items always costs `qty` bulk regardless of kind, so the cap check is
+  `bulk(*inv)+qty > bulkCap`. A spear grant appends `qty` fresh `spearDurability`
+  entries to `Inv.Spears`, kept sorted ascending (hunts spend the most-worn first);
+  since spec 032 (US2) an axe grant is the same clone against `Inv.Axes` with
+  the same fresh-`axeDurability` value the `craft_axe` verb produces, sorted
+  the same way.
 - **`applyTimeSnapped`**: rejects a non-forward target before any spend or mutation;
   spends 2 charges (the dearest miracle) unless gratis; calls `rebaseTicks`, then
   sets `State.Tick = to_tick`. FR-010 (a snap mints no charges across the skipped
@@ -107,10 +110,12 @@ classified SHIFT or KEEP in its doc comment:
   genesis-idle, a real tick, not a "never" sentinel), `Agent.LastTalk`/`LastGive`,
   `Intent.WorkStart`, `AgentHail.Until`, `PlanStep.Until`, `Guard.Tick`,
   `Structure.FuelUntil`, `Harvest.Regrow`, `DenUse.Ready`, `FoodBatch.SpoilAt`,
-  `Debt.Due`, `Gru.LastAttack`, `Meeting.OpenedTick`, `Meeting.GatherStart`, and
-  (spec 029) `MetatronOrder.ExpiresTick` — shifted ONLY for ACTIVE orders, so a
-  standing order's remaining lifetime survives the jump (a consumed order's deadline
-  is a spent artifact, left put).
+  `Debt.Due`, `Belief.Reinforced` (spec 030: the decay-curve anchor, elapsed =
+  tick − Reinforced; shifted only when non-zero — a legacy grandfathered belief
+  stays at 0 so it never decays), `Gru.LastAttack`, `Meeting.OpenedTick`,
+  `Meeting.GatherStart`, and (spec 029) `MetatronOrder.ExpiresTick` — shifted ONLY
+  for ACTIVE orders, so a standing order's remaining lifetime survives the jump (a
+  consumed order's deadline is a spent artifact, left put).
 - **KEEP** — a historical timestamp or an identity/counter; rewriting it would
   rewrite history or break a reference. `Agent.Generation`, `Agent.LastGoalTick`,
   `Memory.Tick`, `Memory.Conv` (spec 019: a conversation-ref identity, the same
@@ -119,10 +124,10 @@ classified SHIFT or KEEP in its doc comment:
   timestamp), `Belief.Tick`, `ChronicleEntry.Tick`/`Day`/`FromTick`/`ToTick`,
   `MetatronOrder.PlacedTick` (spec 029: when the order was placed, history),
   and every other identity/history field — see the doc comment for the full list.
-  `TestRebaseTaxonomyComplete` caught both spec-019 additions — and, later, spec
-  029's `MetatronOrder.ExpiresTick`/`PlacedTick` — as new tick-anchored `int64`
-  fields requiring classification, confirming the taxonomy guard holds across
-  features outside miracles' own spec.
+  `TestRebaseTaxonomyComplete` caught both spec-019 additions, the spec-030
+  `Belief.Reinforced` field, and (later) spec 029's `MetatronOrder.ExpiresTick`/
+  `PlacedTick` as new tick-anchored `int64` fields requiring classification,
+  confirming the taxonomy guard holds across features outside miracles' own spec.
 
 `TestRebaseTaxonomyComplete` (`internal/sim/miracles_test.go`) is the taxonomy guard:
 it fails the build when a new tick-anchored `int64` field appears in the state

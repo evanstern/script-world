@@ -12,7 +12,7 @@ sources:
   - internal/metatron/miracle_batch.go
   - internal/sim/metatron.go
   - internal/persona/charter.go
-verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Metatron
@@ -114,8 +114,10 @@ batch, and the soul append, VERBATIM the pre-029 `landNudge` body (wrap, don't
 rewrite): `metatron.nudged{form, targets, text}` (validating reducer spends the
 charge and enforces the omen NIGHT gate at the door; `send_omen`'s day path never
 reaches here) + one prefixed (`"You saw a vision: "` / `"You witnessed an omen: "`)
-`agent.memory_added` per target at `SalDream` (8) — provenance-unknown memories the
-villager interprets in persona. `landVision`/`landOmen` differ only in target
+`agent.memory_added` per target at `SalDream` (8), each stamped `Origin: sim.OriginOmen`
+(spec 030) — a direct-perception provenance class per `sim.DirectPerception` (same
+standing as an own act or a witnessed event), which the villager interprets in
+persona. `landVision`/`landOmen` differ only in target
 resolution and the per-tool grant gate. The firewall is structural, not behavioral:
 no code path exists from model output to any villager surface OR clock control
 outside registered tools (sentinel-audited by `TestHandlerFirewallAudit`,
@@ -135,7 +137,8 @@ day/`HH:MM` → tick via [[game-clock]]'s `ParseTimeOfDay`/`TickAt`) from an
 `agentXY` snapshot the absorb goroutine mirrors per batch (so the turn worker
 never races the live replica), then calls the shared `metatron.BuildMiracleBatch`
 — the SAME builder the IPC `miracle` door uses — to compose the event and its
-perception-memory companions, and lands it through `InjectSocial`. A rejection at
+perception-memory companions (each stamped `Origin: sim.OriginOmen`, spec 030,
+identically to a nudge's memories), and lands it through `InjectSocial`. A rejection at
 the reducer dry-run becomes a `rejected_gate` the loop feeds back (rather than an
 immediate reply-suffix refusal, though the wording is the same in-fiction
 counsel); a landed miracle also appends a soul-file line. `landMiracle`'s

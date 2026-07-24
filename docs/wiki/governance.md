@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/governance.go
   - internal/mind/meeting.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # Governance (norms and votes)
@@ -72,7 +72,12 @@ Attendees remember outcomes (subject-tagged, toned — gossip seeds). Since spec
 each voter's outcome memory, and an exiled target's cast-out memory are all
 situated: each is built with `situatedMemoryEvent`/`situatedMemoryAboutEvent`
 and `Where` set to the remembering agent's own tile at meeting time (speaker,
-proposer, each voter, or the exiled target respectively).
+proposer, each voter, or the exiled target respectively). Since spec 030 each
+also carries the required `origin` provenance stamp: the speaker's, proposer's,
+and exiled target's own memories of their own moment stamp `OriginAction` (own
+experience, `situatedMemoryEvent`), while each voter's memory of someone else's
+proposal outcome stamps `OriginWitness` (`situatedMemoryAboutEvent`) — the same
+own-act-vs-witnessed split every other situated site in the sim uses.
 
 **Teeth**: norms are a closed vocabulary (`curfew`, `repay_debts`, `exile`)
 because only observable behavior can be judged. Detectors are deterministic and
@@ -88,8 +93,8 @@ repay-debts piggybacks the hourly due-check's `promise_broken`; exile-defiance
 fires when the exile lingers near the village (latch hourly). `norm.violated`
 appends the norm's bounded violation ring (amend/repeal fodder) and moves
 witness→violator edges; companion witness memories (situated since spec 019,
-`Where` the witness's own tile) are `TellableFor`-eligible, so violations
-become rumors with zero new machinery. Agents are *not*
+`Where` the witness's own tile, stamped `OriginWitness` since spec 030) are
+`TellableFor`-eligible, so violations become rumors with zero new machinery. Agents are *not*
 hard-enforced: norms enter planner context as a "Village law" block
 (`prompt.go`), and obey/skirt/defy is persona; the [[reflex-policy]] stays
 norm-blind so defiance survives degraded mode.

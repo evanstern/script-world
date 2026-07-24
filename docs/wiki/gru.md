@@ -4,7 +4,7 @@ description: The nocturnal sight-triggered predator — an event-sourced entity 
 kind: component
 sources:
   - internal/sim/gru.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # The gru
@@ -56,8 +56,12 @@ bitmask on the `Gru` struct latches it). Sighting, attack, and witness memories
 are situated (spec 019): each is built with `situatedMemoryEvent`/
 `situatedMemoryAboutEvent` and `Where` set to the remembering agent's own tile
 at the moment of the memory (the sighter's or victim's tile for sighting/attack,
-the witness's own tile for the witness memory) — not the gru's position.
-[[event-types]] catalogs the family.
+the witness's own tile for the witness memory) — not the gru's position. Since
+spec 030 each also carries the required `origin` provenance stamp: the sighter's
+and the victim's own memories (sighting, attack) stamp `OriginAction` — they are
+the agent's own direct experience of the moment, not a report of someone else's
+act — while the nearby witness memory stamps `OriginWitness`, matching every
+other witness site in the sim. [[event-types]] catalogs the family.
 
 ## Connections
 

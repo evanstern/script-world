@@ -9,7 +9,7 @@ sources:
   - internal/tool/derive.go
   - internal/tool/validate.go
   - internal/sim/toolcheck.go
-verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Tool registry
@@ -28,11 +28,15 @@ curing that drift is the migration's sole permitted behavioral delta (FR-012).
 
 **The catalog** (`registry.go`): the pre-spec-017 30 entries, plus two spec-017
 additions — `set_plan` (a loop-only planning tool) and `work_miracle` (Metatron's
-fourth tool) — plus four spec-019 additions, the journal tools; spec 029 then
-retires the two nudges and adds seven Metatron tools (`send_vision`, `send_omen`,
-`monitor_and_act`, `cancel_order`, `pause`, `start`, `adjust_speed`) — assembled in
-order: `worldTools` (the 24 legacy world verbs, exactly the old goal-vocabulary
-order), `set_plan`, `expressiveTools` (`say`/`gist`/`muse`), `metatronTools`
+fourth tool) — plus four spec-019 additions, the journal tools; plus six spec-032
+additions (US1-3: walls, an axe, paths); and spec 029 then retires the two nudges and
+adds seven Metatron tools (`send_vision`, `send_omen`, `monitor_and_act`,
+`cancel_order`, `pause`, `start`, `adjust_speed`) — assembled in order: `worldTools`
+(now 30 World verbs: the 24 legacy verbs in the old goal-vocabulary order, then
+`build_wall_plank`/`build_wall_stone`/`demolish`/`repair`/`craft_axe`/`build_path`,
+appended after `withdraw` so no existing tool's registration position shifts —
+`worldToolsBase` wraps these too, so every one also gains the shared `reason`
+param), `set_plan`, `expressiveTools` (`say`/`gist`/`muse`), `metatronTools`
 (spec 029's agency surface, [[metatron-orders]]: `converse`/`send_vision`/
 `send_omen`/`monitor_and_act`/`cancel_order`/`pause`/`start`/`adjust_speed`/
 `work_miracle` — the retired `nudge_dream`/`nudge_omen` replaced by
@@ -42,7 +46,12 @@ appended last so no existing tool's position shifts). The tool groups are
 declared as separate literals (`worldTools`, `expressiveTools`, `metatronTools`,
 `journalTools`) rather than one, so `set_plan`'s schema can be built from
 `worldTools` alone and spliced in — building it from the assembled `registry` would
-be an initialization cycle. Each `Tool` (`tool.go`) carries an `EffectClass`
+be an initialization cycle. The spec-032 verbs carry `PlanStep: true` like every
+pre-existing World verb, so they fall out of `isLegacyWorldTool`'s discriminator
+for free — planner-only, no `ReflexEligible` — and join `RosterVillager`/
+`LoopRosterVillager` with no separate list to maintain; the storage verbs'
+`itemKinds` vocabulary (`kind` param on `drop`/`pick_up`/`deposit`/`withdraw`)
+gains `"axes"` alongside the pre-existing kinds. Each `Tool` (`tool.go`) carries an `EffectClass`
 (`World` → intents, executor-grounded; `Expressive` → immediate whitelisted event
 batches; `Read` → data back into cognition, consumed by [[tool-loop]] — spec 019
 ships the first production Read entries, `search_journal`/`read_journal`),

@@ -12,7 +12,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
+verified_against: 2bc94f55c57880e07f0e52e5de20c9cd527ab340
 ---
 
 # Agent mind
@@ -46,7 +46,8 @@ cold fire nearby is background texture, not formative) — all, like the
 pre-existing `SalDream` (8), kept below `GenerationBumpSalience` (9,
 [[cognition]]) on purpose: memorable enough to surface in the working window,
 never so high they'd interrupt an in-flight generation the way near-death or
-exile do. Spec 013's storage economy added two more on the same band:
+exile do. Spec 032 added `salAxeBroke` (8) on the same band, the axe that spent
+its last harvest use. Spec 013's storage economy added two more on the same band:
 `salChestBuilt` (7, village-visible, the oven precedent) and `salTaking` (7,
 a non-owner withdrawal from a chest — suffered by the owner and witnessed by
 neighbors, above the rumor-eligibility floor so the owner's subject-tagged
@@ -58,6 +59,18 @@ an explicit tone — `toneBath` (40), `toneOvenBuilt` (30), and spec 013's
 both the owner and nearby witnesses, alongside a trust/affection hit on the owner→taker
 relationship edge — the existing gossip and relation machinery carries a
 chest theft the same way it carries any other trust violation ([[social-fabric]]).
+
+Since spec 030, every memory also carries an `Origin` — a closed-vocabulary
+provenance class stamped at emission (`OriginAction`/`OriginWitness`/
+`OriginReport`/`OriginOmen`/`OriginGist`/`OriginDigest`), a required parameter
+on every situated constructor so a new, unstamped emission site cannot compile.
+`DirectPerception(origin)` is the pure classifier over it: an own act, a
+witnessed event, or a delivered omen/dream are direct perception; a
+chest-owner's any-distance report, a conversation gist, a nightly digest, or an
+absent/legacy origin (`""`) are secondhand — the conservative default, since
+hygiene may under-grant "witnessed" but never over-grant it. This is the ONLY
+signal [[nightly-consolidation]]'s belief validator reads to gate a model's
+"witnessed" provenance claim — no text inspection, no heuristics.
 `SelectMemories` is the deterministic working
 window: salience halved per game-day of age, top K−2, plus 2 seeded serendipity
 picks from the oldest half (bucketed to the planner cadence), presented
@@ -90,7 +103,13 @@ unchanged ([[social-fabric]]). Villagers also keep a self-authored journal
 **Souls** (`internal/scribe`): an always-on daemon component with its own replica
 renders `agents/<name>/soul.md` (dated, starred memories, death freezes the header;
 since TASK-9 also a "Who I am becoming" narrative section and a Beliefs section
-with confidence + provenance) on memory/death/consolidation events; since TASK-11
+with provenance and — since spec 030 — **effective**, decayed confidence
+(`sim.EffectiveConfidence`, computed against the replica's current tick, never
+the stored value; [[nightly-consolidation]]) rather than the stored number; a
+belief whose effective confidence has fallen below the floor renders with no
+number at all, as a hedged "half-remembered: ..." line, grouped after the
+still-live convictions so the live ones read first) on memory/death/consolidation
+events; since TASK-11
 it also renders `chronicle.md` from the narrated story ring on `chronicle.entry`
 events ([[chronicle]]), and since TASK-13 `village_charter.md` from the norm state
 on governance events ([[governance]]); and since spec 019 (US3) it also renders

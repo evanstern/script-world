@@ -8,7 +8,8 @@ sources:
   - internal/sim/recipes.go
   - internal/sim/miracles.go
   - internal/sim/journal.go
-verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
+  - internal/sim/terrain.go
+verified_against: e9213e17e6e48cf30da802949d9b59e0e3d78370
 ---
 
 # Sim state & reducer
@@ -20,7 +21,9 @@ only while the adaptive-throttle governor holds `Speed` below it; `Speed`
 itself keeps its pre-028 meaning as the loop's pacing speed, now specifically
 the EFFECTIVE speed, so the router and auto-slow observer need no change)
 plus the living world — agents with needs/intents/
-inventories (the v2 resource set, spec 012 — [[executor]])/memories (with
+inventories (the v2 resource set, spec 012 — [[executor]]; spec 032 US2 adds
+`Axes []int`, a `Spears` clone — remaining harvest uses per carried axe, sorted
+ascending, tripling chop/quarry yield)/memories (with
 `IdleSince` for the reflex grace, a `NearDeath`
 latch, a `Generation` interrupt counter and pending `Plan` steps for the
 [[cognition]] horizon — both `omitempty` so pre-TASK-32 snapshots stay
@@ -28,20 +31,30 @@ byte-stable — plus, since spec 019 US3, a self-authored `Journal *Journal`
 (`journal.go`): a durable per-agent notebook mutated ONLY by the two `journal.*`
 Apply arms; an `omitempty` pointer on the Hail precedent, so a never-journaling
 agent stays byte-identical to a pre-019 snapshot; each `Memory` also now carries
-`omitempty` situated context `Where`/`Why`/`Conv`, byte-stable when absent),
+`omitempty` situated context `Where`/`Why`/`Conv`/`Origin` (spec 030's
+closed-vocabulary provenance class — the ONLY signal `DirectPerception`,
+`memory.go`, reads to classify direct perception), byte-stable when absent),
 structures (`fire`/`shelter`/`oven`/`chest`, fires carrying a
 `FuelUntil`; chests (spec 013 US3) carrying a permanent `Owner` — the builder's
 agent index, zero-value round-tripping unambiguously since every chest has one —
 and a `Store *Inventory` capped at `chestCap` via the same derived `bulk()` used
-for agents), cleared trees, harvested forage, den cooldowns, `Quarried` depleted
+for agents; spec 032 US1 adds two wall kinds, `wall_plank`/`wall_stone`,
+carrying `HP` — current health, 1..`wallMaxHP(kind)`, derived from kind and
+never stored as a separate max, the fire lit-ness doctrine — plus a non-wall
+`path` kind carrying no `HP` and never blocking passage), cleared trees,
+harvested forage, den cooldowns, `Quarried` depleted
 rock outcrops (spec 012, permanent, `omitempty`), `Piles []Pile` — the per-tile
 ground commons of dropped/spilled goods (spec 013 US2): event-sourced overlay
 state like `Quarried`, one pile per tile (a reducer invariant), non-food a flat
 count, food batch-tracked (`FoodBatch{Kind, N, SpoilAt}`, same `(Kind,SpoilAt)`
-merges), spears sorted ascending, `omitempty` — the social
+merges), spears AND axes (spec 032 US2, a `Spears` clone) sorted ascending,
+`omitempty` — the social
 fabric — relation edges, the debt ledger, the rumor registry with per-holder
 variants and the bounded conversation-record ring ([[social-fabric]]) — the
-consolidated inner life: per-agent beliefs, self-narrative, and the
+consolidated inner life: per-agent beliefs (each now carrying a `Reinforced`
+decay-clock anchor since spec 030, `omitempty` — 0 is a legacy grandfather that
+never decays; [[nightly-consolidation]] covers the decay curve), self-narrative,
+and the
 once-per-night consolidation ledger ([[nightly-consolidation]]) — the
 [[gru]] (`Gru *Gru`, nil while not abroad; `omitempty` keeps pre-TASK-10
 snapshots valid) — and the narrated story: the bounded `State.Chronicle`
@@ -120,10 +133,18 @@ values), and death; the v2 resource/crafting events (`agent.quarried`/
 several by re-deriving the recipe from `recipes.go` (the single source for
 craft/build magnitudes — a duplicated number here would drift from the contract
 table), and — since spec 013 — clamp their gather yields to the taker's free
-bulk (`bulkCap − bulk(Inv)`); the v3 storage events (spec 013 US2/US3/US5)
+bulk (`bulkCap − bulk(Inv)`); since spec 032 US2, `agent.chopped`/
+`agent.quarried`'s own yield is no longer a single flat constant — it's
+`chopYieldBare`/`quarryYieldBare` (1) bare-handed or `chopYieldAxe`/
+`quarryYieldAxe` (3) carrying an axe, re-derived from the SAME pre-mutation
+state the emitter checked (the spear-hunt precedent), spending `Axes[0]`'s
+last use; a spent-to-zero axe's removal rides its own companion
+`agent.axe_broke` (an `agent.spear_broke` clone), not this payload; the v3
+storage events (spec 013 US2/US3/US5)
 move goods between an agent's `Inv` and a `Pile`/chest `Store`:
 `agent.dropped`/`agent.picked_up` create-or-merge or drain a tile's pile
-(food oldest-batch-first, spears most-worn-first), `agent.deposited`/
+(food oldest-batch-first, spears AND axes (spec 032 US2) most-worn-first),
+`agent.deposited`/
 `agent.withdrew` do the same against a chest's `Store`, and `sim.food_rotted`
 drains a pile's spoiled food batches (`SpoilAt ≤ tick`) — every one of these
 defensively re-clamps to what's actually carried/held/available, so the reducer
@@ -131,7 +152,24 @@ stays total even against a contested or forged event, and an emptied pile is
 removed in the same application; `social.chest_taken` is an effect-free record
 (its consequences — the reason-`"theft"` `social.relation_changed` and the
 owner/witness `agent.memory_added` events — ride the same companion batch,
-[[social-fabric]]); the `gru.*` family dispatches to
+[[social-fabric]]); the wall family (spec 032 US1) maintains a standing wall's
+`HP`: `agent.built`'s generic arm stamps a fresh `wall_plank`/`wall_stone` at
+`HP = wallMaxHP(kind)` — full health, after the same recipe-delta spend every
+structure gets — and three dedicated arms carry the multi-cycle demolish/repair
+loop: `agent.wall_chipped` decrements `HP` by `demolishChipHP` (clamped to
+never go below 1 — a standing wall never serializes ≤ 0) and resets the
+demolisher's `Intent.WorkStart` to 0, re-arming the executor's work gate for the
+next cycle under the SAME intent (no new scheduling); `agent.wall_destroyed`
+(the final chip) removes the structure — its tile is passable again by
+construction — and clears the intent (`metatron.entity_removed` reaches the
+same end through the miracle path); `agent.wall_repaired` consumes 1 unit of
+`wallRepairMaterial(kind)` (planks for a plank wall, refined stone for a stone
+wall — the same material each was built from) and restores `HP` by
+`repairHPPerUnit`, clamped to the max, re-arming the work gate the same way when
+still damaged with material in hand, otherwise clearing the intent —
+`isWall`/`wallMaxHP`/`wallAt` (`terrain.go`, a `chestAt` sibling) back every one
+of these arms, plus the movement `passable` check a standing wall now fails;
+the `gru.*` family dispatches to
 `applyGru` in `gru.go` ([[gru]]);
 the `meeting.*`/`norm.*` families — plus `meeting.convention_established` and
 the `sim.gathering_observed` watch event (TASK-36) — dispatch to
@@ -152,9 +190,12 @@ each transition one order from active to a terminal status via the shared
 fields: after checking the payload's `State.Seed` matches (a mismatched payload
 no-ops, keeping `Apply` total), it replaces `*s` wholesale with the embedded state —
 [[world-migration]] is the only producer.
-`agent.memory_added` copies the payload's situated context — `Where`/`Why`/`Conv`,
-all `omitempty` — verbatim onto the appended `Memory` (spec 019: baked at
-emission, never re-derived at render or replay, so live and replay agree), and
+`agent.memory_added` copies the payload's situated context — `Where`/`Why`/`Conv`/
+`Origin`, all `omitempty` — verbatim onto the appended `Memory` (spec 019/030:
+baked at emission, never re-derived at render or replay, so live and replay
+agree; `Origin` is the closed-vocabulary provenance class `DirectPerception`
+reads to classify direct perception, absent classifying as secondhand, the
+conservative default), and
 additionally bumps `Agent.Generation` when the memory's
 salience is at or above `GenerationBumpSalience` (9) — in-flight thoughts
 snapshotted under the old generation are superseded at landing ([[cognition]],
@@ -201,7 +242,8 @@ verification and the determinism tests. Wall-clock time never appears in state.
 [[daemon-lifecycle]] replays the [[event-log]] through `Apply` at startup;
 [[event-types]] lists every payload struct (the cognition-horizon payloads
 live in sibling files `cognition.go`, `guard.go`, and `plan.go`; the `Journal`
-type, its rune budget, and the two `journal.*` payloads live in `journal.go`);
+type, its rune budget, and the two `journal.*` payloads live in `journal.go`;
+the wall predicates `isWall`/`wallMaxHP`/`wallAt` live in `terrain.go`);
 [[world-migration]]
 is the sole producer of `world.migrated`; [[metatron-miracles]] covers the
 miracle payload shapes, cost table, and the `rebaseTicks` shift-semantics
