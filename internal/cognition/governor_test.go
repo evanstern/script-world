@@ -65,11 +65,11 @@ func TestDebtTable(t *testing.T) {
 			wantJobs: 1,
 		},
 		{
-			name:     "overdue thought floored to zero",
+			name:     "overdue thought counts its accrued drift",
 			pending:  []PendingDebtInput{{Kind: "planner", PredictedSec: 10, ElapsedSec: 15}},
 			tps:      4,
-			wantDebt: 0,
-			wantJobs: 0,
+			wantDebt: 15 * 4 / plannerBudget, // spec 033: full elapsed, not floored to zero
+			wantJobs: 1,
 		},
 		{
 			name: "mixed classes sum from real budgets",
@@ -82,14 +82,14 @@ func TestDebtTable(t *testing.T) {
 			wantJobs: 2,
 		},
 		{
-			name: "overdue neighbor does not count but valid does",
+			name: "overdue neighbor counts its accrued drift alongside a queued thought",
 			pending: []PendingDebtInput{
-				{Kind: "planner", PredictedSec: 5, ElapsedSec: 9},        // overdue, skipped
+				{Kind: "planner", PredictedSec: 5, ElapsedSec: 9},        // overdue → accrued drift 9
 				{Kind: "conversation", PredictedSec: 200, ElapsedSec: 0}, // remaining 200
 			},
 			tps:      4,
-			wantDebt: 200 * 4 / convBudget,
-			wantJobs: 1,
+			wantDebt: 9*4/plannerBudget + 200*4/convBudget, // spec 033: the overdue thought now contributes
+			wantJobs: 2,
 		},
 		{
 			name: "unknown kind skipped",
@@ -144,6 +144,188 @@ func TestDebtIsDeterministic(t *testing.T) {
 		if debt != debt0 || jobs != jobs0 {
 			t.Fatalf("output varied: (%g,%d) vs (%g,%d)", debt, jobs, debt0, jobs0)
 		}
+	}
+}
+
+// spec028Debt is the pre-033 debt arithmetic — the zero-floored remaining-work
+// sum — reproduced inline so the within-prediction bit-identical property
+// (SC-003) is checked against a literal copy of the old formula rather than a
+// paraphrase. For any set where every thought is within its prediction the new
+// piecewise arm must agree with this to full float64 equality.
+func spec028Debt(pending []PendingDebtInput, ticksPerSecond float64) (debt float64, jobs int) {
+	if ticksPerSecond <= 0 {
+		return 0, 0
+	}
+	for _, p := range pending {
+		dc, ok := ClassForKind(p.Kind)
+		if !ok {
+			continue
+		}
+		remaining := p.PredictedSec - p.ElapsedSec
+		if remaining <= 0 {
+			continue
+		}
+		fraction := remaining * ticksPerSecond / float64(dc.BudgetTicks)
+		if fraction > 0 {
+			debt += fraction
+			jobs++
+		}
+	}
+	return debt, jobs
+}
+
+// TestDebtOverdueMonotonic (SC-002, US1-AC1/AC2): a single thought stuck past its
+// prediction contributes a strictly growing, never-zero fraction as its elapsed
+// time climbs — a stuck thought's debt grows and can never evaporate by
+// overrunning. Sampled via Debt on single-element slices, the way the sampler
+// re-reads one in-flight thought each cadence.
+func TestDebtOverdueMonotonic(t *testing.T) {
+	const tps = 8.0
+	elapsed := []float64{2, 30, 45, 120} // first == PredictedSec (the boundary), then well past
+	var prev float64
+	for i, e := range elapsed {
+		debt, jobs := Debt([]PendingDebtInput{{Kind: "planner", PredictedSec: 2, ElapsedSec: e}}, tps)
+		if debt <= 0 || jobs != 1 {
+			t.Fatalf("elapsed %g: debt=%g jobs=%d, want positive debt and jobs 1 (a stuck thought never floors to zero)", e, debt, jobs)
+		}
+		if i > 0 && debt <= prev {
+			t.Errorf("elapsed %g: debt %g did not grow past the previous sample %g", e, debt, prev)
+		}
+		prev = debt
+	}
+}
+
+// TestDebtWithinPredictionBitIdentical (SC-003, US1-AC4): for any pending set
+// where every thought is still within its prediction, the new arm is
+// bit-identical to spec 028 — the fix touches only the overdue arm. Full float64
+// equality, mixed kinds/speeds and queued (elapsed 0) thoughts included.
+func TestDebtWithinPredictionBitIdentical(t *testing.T) {
+	cases := []struct {
+		name    string
+		pending []PendingDebtInput
+		tps     float64
+	}{
+		{
+			name:    "single queued planner",
+			pending: []PendingDebtInput{{Kind: "planner", PredictedSec: 100, ElapsedSec: 0}},
+			tps:     4,
+		},
+		{
+			name:    "in-flight planner draining",
+			pending: []PendingDebtInput{{Kind: "planner", PredictedSec: 100, ElapsedSec: 40}},
+			tps:     16,
+		},
+		{
+			name: "mixed kinds, mixed elapsed, queued and in-flight",
+			pending: []PendingDebtInput{
+				{Kind: "planner", PredictedSec: 30, ElapsedSec: 10},
+				{Kind: "conversation", PredictedSec: 200, ElapsedSec: 0},
+				{Kind: "consolidation", PredictedSec: 500, ElapsedSec: 120},
+				{Kind: "metatron", PredictedSec: 90, ElapsedSec: 5},
+			},
+			tps: 32,
+		},
+		{
+			name: "healthy set at a low tick rate",
+			pending: []PendingDebtInput{
+				{Kind: "conversation", PredictedSec: 300, ElapsedSec: 299},
+				{Kind: "consolidation", PredictedSec: 1000, ElapsedSec: 0},
+			},
+			tps: 1,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gotDebt, gotJobs := Debt(c.pending, c.tps)
+			wantDebt, wantJobs := spec028Debt(c.pending, c.tps)
+			if gotDebt != wantDebt { // full float64 equality — no epsilon
+				t.Errorf("debt = %v, want spec-028 %v (bit-identical within prediction)", gotDebt, wantDebt)
+			}
+			if gotJobs != wantJobs {
+				t.Errorf("jobs = %d, want spec-028 %d", gotJobs, wantJobs)
+			}
+		})
+	}
+}
+
+// TestDebtBoundaryJump (contracts/debt-formula.md, spec 033 edge case): a thought
+// exactly at its prediction (elapsed == predicted) has crossed into overdue, so
+// it contributes its full accrued drift — elapsed × tps / budget — not the
+// drained ~0 remaining work. The jump is doctrine.
+func TestDebtBoundaryJump(t *testing.T) {
+	const tps = 4.0
+	planner, _ := ClassFor("planner")
+	debt, jobs := Debt([]PendingDebtInput{{Kind: "planner", PredictedSec: 5, ElapsedSec: 5}}, tps)
+	if want := 5 * tps / float64(planner.BudgetTicks); math.Abs(debt-want) > 1e-9 {
+		t.Errorf("boundary debt = %g, want %g (full accrued drift, not drained remaining)", debt, want)
+	}
+	if jobs != 1 {
+		t.Errorf("boundary jobs = %d, want 1", jobs)
+	}
+}
+
+// TestDebtGuardsUnchanged (FR-002, FR-003): the fix leaves the guards intact —
+// unregistered kinds cannot reach a model and are skipped, and a non-positive
+// tick rate (uncapped max, refused upstream) yields zero debt and zero jobs.
+func TestDebtGuardsUnchanged(t *testing.T) {
+	if debt, jobs := Debt([]PendingDebtInput{{Kind: "oracle", PredictedSec: 100, ElapsedSec: 200}}, 8); debt != 0 || jobs != 0 {
+		t.Errorf("unknown kind contributed: debt=%g jobs=%d", debt, jobs)
+	}
+	overdue := []PendingDebtInput{{Kind: "planner", PredictedSec: 5, ElapsedSec: 50}}
+	if debt, jobs := Debt(overdue, 0); debt != 0 || jobs != 0 {
+		t.Errorf("ticksPerSecond 0 yielded debt=%g jobs=%d, want 0/0", debt, jobs)
+	}
+	if debt, jobs := Debt(overdue, -4); debt != 0 || jobs != 0 {
+		t.Errorf("negative ticksPerSecond yielded debt=%g jobs=%d, want 0/0", debt, jobs)
+	}
+}
+
+// TestGovernorWorld01ZeroShedRegression (spec 033 FR-005, SC-001) pins the
+// world-01 zero-shed defect red-first: the saturation shape that produced ZERO
+// governor sheds while 17/31 planner thoughts landed rejected-stale. Eight
+// planner thoughts predicted 1.573 s but 30 s into flight, sampled at 8 ticks/s,
+// are the worked example in contracts/debt-formula.md. Under the old floored
+// arithmetic each overdue thought contributes zero, so debt is 0.0, jobs 0, and
+// the governor never sheds — the throttle sits blind exactly while the system
+// drowns. Under accrued-drift debt each contributes 30 × 8 / 1200 = 0.2, so debt
+// is 1.6 over the 1.0 shed threshold and a shed fires when the breach window
+// completes. This test fails on the current arithmetic; T003 turns it green.
+func TestGovernorWorld01ZeroShedRegression(t *testing.T) {
+	const (
+		predicted = 1.573 // frozen-optimistic prediction (spec 031 estimator freeze)
+		elapsed   = 30.0  // long in flight — well past the prediction
+		tps       = 8.0   // 8 ticks/sec
+	)
+	pending := make([]PendingDebtInput, 8)
+	for i := range pending {
+		pending[i] = PendingDebtInput{Kind: "planner", PredictedSec: predicted, ElapsedSec: elapsed}
+	}
+
+	debt, jobs := Debt(pending, tps)
+	// planner budget 1200 ticks: each overdue thought counts 30 × 8 / 1200 = 0.2.
+	if wantDebt := 8 * (elapsed * tps / 1200); math.Abs(debt-wantDebt) > 1e-9 {
+		t.Errorf("world-01 debt = %g, want %g — overdue thoughts must count their accrued drift, not zero", debt, wantDebt)
+	}
+	if jobs != 8 {
+		t.Errorf("world-01 jobs = %d, want 8 — every overdue thought contributes", jobs)
+	}
+
+	// The same debt sampled every cadence drives a shed once the breach window
+	// completes: effective and requested both 8x, unpaused, so there is a lower
+	// notch (4x) to shed to. A shed fires on the fifth consecutive over-threshold
+	// sample (breachSamples = 5) and never before.
+	g := &Governor{}
+	for i := 1; i < breachSamples; i++ {
+		if d := g.Sample(debt, jobs, false, clock.Speed8x, clock.Speed8x); d.Action != ActionNone {
+			t.Fatalf("world-01 sample %d/%d shed early: %+v", i, breachSamples, d)
+		}
+	}
+	d := g.Sample(debt, jobs, false, clock.Speed8x, clock.Speed8x)
+	if d.Action != ActionShed {
+		t.Fatalf("world-01 sample %d did not shed: %+v — the throttle stayed blind while the system drowned", breachSamples, d)
+	}
+	if d.To != clock.Speed4x {
+		t.Errorf("world-01 shed To = %q, want 4x (one notch below 8x)", d.To)
 	}
 }
 

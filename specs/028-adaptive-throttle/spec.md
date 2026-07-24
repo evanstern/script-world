@@ -159,9 +159,13 @@ mid-governed and verify the governor suspends and restarts windows fresh.
 
 - **No calibration profile**: debt uses the same live estimates and pessimistic bootstrap defaults as spec 007 routing; an
   uncalibrated world overestimates drift and sheds conservatively — it fails toward fidelity, never toward stale action.
-- **A thought outlives its prediction** (elapsed wall time exceeds predicted): its remaining predicted drift is floored at
-  zero — it stops adding debt. Overdue thoughts are the estimator's (spike/drift) and the landing ladder's problem; the
-  governor never invents debt it cannot ground in a prediction.
+- **A thought outlives its prediction** (elapsed wall time exceeds predicted): it counts its full accrued elapsed drift — the
+  measured minimum staleness its reply will land with — and that contribution grows the longer it languishes (revised by
+  spec 033; the original definition floored the overrun to zero, which inverted the signal — the worse the drowning, the
+  sooner every in-flight thought went overdue and vanished from the sum, so the governor never shed exactly when it should).
+  An overrun is a measurement, not an invention: an overdue thought's elapsed time IS its grounded debt. See
+  specs/033-governor-accrued-debt/contracts/debt-formula.md for the piecewise arm and the deliberate boundary jump at
+  elapsed == predicted.
 - **Speed changes while thoughts are in flight**: debt is re-derived each evaluation at the current effective speed, so a
   player drop instantly shrinks debt and a climb instantly grows it; landing enforcement stays exact regardless (staleness is
   measured in actually-elapsed ticks, spec 007).
@@ -182,9 +186,12 @@ mid-governed and verify the governor suspends and restarts windows fresh.
 **Debt — the measurable signal**
 
 - **FR-001**: The system MUST continuously derive an aggregate staleness debt: for every model-bound thought currently in
-  flight or queued, its predicted remaining wall time (prediction minus elapsed, floored at zero) converted to game ticks at
-  the current effective speed, divided by its decision class's staleness budget; debt is the global sum of these dimensionless
-  budget-fractions. Salience weighting is explicitly out of scope (recorded session decision).
+  flight or queued, its staleness wall time — **piecewise**: the predicted remaining wall time (prediction minus elapsed)
+  while the thought is within its prediction, and its full accrued elapsed drift once it has overrun (elapsed ≥ predicted) —
+  converted to game ticks at the current effective speed, divided by its decision class's staleness budget; debt is the global
+  sum of these dimensionless budget-fractions. An overdue thought counts its accrued, growing drift, not zero (revised by
+  spec 033 — see specs/033-governor-accrued-debt/contracts/debt-formula.md; the original floored-to-zero definition inverted
+  the signal under overload). Salience weighting is explicitly out of scope (recorded session decision).
 - **FR-002**: Debt derivation MUST be pure arithmetic over the decision-class registry, the live latency estimates, the
   pending-thought set, and the effective speed — no model consulted, no randomness. Identical inputs MUST yield identical
   debt.
