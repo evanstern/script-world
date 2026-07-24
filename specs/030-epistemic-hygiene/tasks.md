@@ -12,14 +12,14 @@ and the eval-gated prompt → Opus 4.8; scribe rendering + docs → Sonnet).
 
 ## Phase 1: Setup
 
-- [ ] T001 Cut worktree `.worktrees/task-79` (branch `task-79-epistemic-hygiene`) from fresh `origin/main`;
+- [x] T001 Cut worktree `.worktrees/task-79` (branch `task-79-epistemic-hygiene`) from fresh `origin/main`;
       baseline `go test ./...` green before any change
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Memory origin substrate: add `Memory.Origin` + payload field (`internal/sim/agents.go`), make the three
+- [x] T002 Memory origin substrate: add `Memory.Origin` + payload field (`internal/sim/agents.go`), make the three
       situated constructors take a required origin parameter and stamp every emission site per
       contracts/events-and-decay.md (`action`/`witness`/`report` in `internal/sim/memory.go` + call sites,
       `gist` in `internal/sim/social.go`, `digest` in `internal/sim/consolidate.go` day-gist, `omen` at the
@@ -37,14 +37,14 @@ and the eval-gated prompt → Opus 4.8; scribe rendering + docs → Sonnet).
 **Independent Test**: quickstart §1–§2 — scripted reflections through the validator prove both directions;
 coercion counter visible on the night's marker.
 
-- [ ] T003 [US1] Consolidation contract: prompt gains the evidence-citation instruction + witnessed/told guidance;
+- [x] T003 [US1] Consolidation contract: prompt gains the evidence-citation instruction + witnessed/told guidance;
       output parse accepts `evidence` ordinals with `MaxBeliefEvidence` (4) best-first pre-trim, in
       `internal/mind/consolidate.go` per contracts/consolidation-contract.md
-- [ ] T004 [US1] Validator enforcement: resolve evidence like promote/fade refs, apply the coercion table
+- [x] T004 [US1] Validator enforcement: resolve evidence like promote/fade refs, apply the coercion table
       (witnessed→kept/told/inferred), add the non-fatal coercion counter to the `agent.consolidated` marker
       payload, in `internal/mind/validate.go`; fixture-table tests proving FR-004 both directions incl.
       no-evidence, unresolvable-ref, and old-shaped (no evidence field) outputs
-- [ ] T005 [US1] Landing + replay: `agent.belief_revised` payload gains `evidence` (resolved identities) +
+- [x] T005 [US1] Landing + replay: `agent.belief_revised` payload gains `evidence` (resolved identities) +
       `direct`; reducer stores them; formation stamps `Reinforced = e.Tick` (normative note in
       contracts/events-and-decay.md) in `internal/sim/consolidate.go`; reducer table tests + replay byte-identity
       for a log containing coerced beliefs (SC-003 first half)
