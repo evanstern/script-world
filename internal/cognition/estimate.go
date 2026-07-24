@@ -54,7 +54,6 @@ type Estimator struct {
 	wi, wn   int
 	samples  int
 	spikes   int
-	breached bool // recalibration signal armed state
 }
 
 func NewEstimator(seed float64) *Estimator {
@@ -94,9 +93,11 @@ func (e *Estimator) rateLocked() float64 {
 // counted. It returns non-nil exactly when the spike rate over a full window
 // first breaches BreachRate — the cog.recalibration_recommended episode, which
 // post-spec-031 also ADOPTS: the estimator re-seeds itself to the window median
-// (over the retained values, spike and non-spike alike), zeroes the ring, and
-// clears the armed state, so a fresh window must refill before any further
-// breach (re-arm is structural — spec 031 FR-002/FR-003; research R3/R4). The
+// (over the retained values, spike and non-spike alike) and zeroes the ring, so
+// a fresh window must refill before any further breach. Fire-once and re-arm
+// are structural — the reset empties the window, and post-adoption samples in
+// the new regime are no longer spikes against the adopted estimate, so no
+// separate armed flag is needed (spec 031 FR-002/FR-003; research R3/R4). The
 // returned Adoption is the audit evidence (prior, adopted, spike rate); nil
 // means no breach. The verdict is evaluated on the sample that completes a full
 // window — the earliest sample at which "rate over a full window" is defined.
@@ -123,19 +124,16 @@ func (e *Estimator) Sample(secPerPoint float64) *Adoption {
 	}
 	rate := e.rateLocked()
 	if rate > BreachRate {
-		if !e.breached {
-			// Persistence proven: adopt the window median as the new estimate
-			// and reset, rather than freezing at the stale seed (spec 031).
-			prior := e.estimate
-			adopted := e.medianLocked()
-			e.estimate = adopted
-			e.wi, e.wn = 0, 0 // fresh window must refill before the next breach
-			e.breached = false
-			return &Adoption{Prior: prior, Adopted: adopted, SpikeRate: rate}
-		}
-		return nil
+		// Persistence proven: adopt the window median as the new estimate and
+		// reset, rather than freezing at the stale seed (spec 031). Zeroing the
+		// ring makes a fresh full window accrue before the next verdict, so this
+		// fires once per breach episode and re-arms structurally.
+		prior := e.estimate
+		adopted := e.medianLocked()
+		e.estimate = adopted
+		e.wi, e.wn = 0, 0
+		return &Adoption{Prior: prior, Adopted: adopted, SpikeRate: rate}
 	}
-	e.breached = false
 	return nil
 }
 
