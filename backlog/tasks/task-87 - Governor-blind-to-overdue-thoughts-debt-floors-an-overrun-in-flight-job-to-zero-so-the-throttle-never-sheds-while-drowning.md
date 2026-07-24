@@ -3,9 +3,10 @@ id: TASK-87
 title: >-
   Governor blind to overdue thoughts: debt floors an overrun in-flight job to
   zero, so the throttle never sheds while drowning
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-24 03:19'
+updated_date: '2026-07-24 04:05'
 labels:
   - cognition
   - bug
@@ -15,7 +16,7 @@ references:
   - internal/cognition/governor.go
   - specs/028-adaptive-throttle
 priority: high
-ordinal: 75000
+ordinal: 5250
 ---
 
 ## Description
@@ -33,6 +34,10 @@ Either way the change is doctrine (spec 028 FR-001/FR-002, research R5) — revi
 ALSO VERIFY FIRST (cheap): world-01's running daemon binary was built 19:23 Jul 23 but the task-33 merge landed 21:53 — confirm the deployed binary even contains the governor (rebuild + restart), and confirm clock.governor_* events appear in a deliberately saturated run before/after the fix.
 
 Depends on TASK-86 only softly: correct debt with a frozen estimator still under-counts (predicted remaining stays tiny), so the full protection story needs both; fix A here is still correct and testable standalone.
+
+DECISION (user, 2026-07-24): option A. Specified in specs/033-governor-accrued-debt — with one planning-tier correction: plain max(Predicted, Elapsed) would break within-prediction behavior (today's arm counts REMAINING work, which drains); the normative arm is piecewise — remaining while elapsed < predicted, full accrued elapsed once overdue (research.md R1). Option B (rejection-grounded breach) recorded as future hardening, out of scope for 033.
+
+Spec: specs/033-governor-accrued-debt
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -41,4 +46,15 @@ Depends on TASK-86 only softly: correct debt with a frozen estimator still under
 - [ ] #2 Saturation scenario test: sustained 20-50s planner calls at 8x with optimistic predictions drive debt past ShedThreshold and the governor sheds within BreachWindow (reproduces world-01's zero-shed failure as a red test first)
 - [ ] #3 A live or e2e saturated run shows clock.governor_shed firing and effective speed stepping down the capped ladder; status/TUI reflects governed state
 - [ ] #4 specs/028-adaptive-throttle doctrine (FR-001/FR-002 debt definition) and the wiki governor/cognition notes updated to the accrued-drift definition; running-binary-predates-merge check recorded on this task
+- [ ] #5 Spec phase: Setup
+- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #7 Spec phase: User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP
+- [ ] #8 Spec phase: User Story 2 — The fix is provably live in a real run (Priority: P2)
+- [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Tier decision (constitution Principle V): implementation delegated to spec-implementer on OPUS 4.8 — governor logic in internal/cognition is an explicitly named senior-tier slice (scheduling/governor, doctrine-adjacent). Spec 033 authored, linked, phases seeded.
+<!-- SECTION:NOTES:END -->
