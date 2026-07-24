@@ -170,12 +170,12 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
 **Independent Test**: quickstart Scenario 1 steps 2–3.
 
-- [ ] T016 [US4] Replace the Phase 3 temporary day-refusal in `landOmen`
+- [X] T016 [US4] Replace the Phase 3 temporary day-refusal in `landOmen`
   (`internal/metatron/turn.go`): day path places a system-origin order
   (event_types `["sim.night_started"]`, action = fixed deliver-omen rendering,
   TTL 1 game day, cap-exempt) via `placeOrder`; `ResultForModel` + reply wording
   promise nightfall; trigger-time landing spends the charge (research R11).
-- [ ] T017 [US4] Tests: daytime omen → order_placed(origin system) + no nudged +
+- [X] T017 [US4] Tests: daytime omen → order_placed(origin system) + no nudged +
   no spend; night trigger → omen lands + one charge + moment; deferred omen
   cancelled before nightfall never lands; deferral order visible in status;
   system-origin orders don't count against the player cap.
@@ -188,16 +188,16 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
 **Independent Test**: quickstart Scenario 4.
 
-- [ ] T018 [US5] LoopControl seam: define
+- [X] T018 [US5] LoopControl seam: define
   `type LoopControl interface { Do(name string, speed clock.Speed) (sim.Status, error) }`
   in `internal/metatron/metatron.go`, accept it in `metatron.New`, pass the loop
   in `internal/daemon/daemon.go:209`; handlers for `pause`/`start`/`adjust_speed`
   in `internal/metatron/toolcalls.go` mapping to Do("pause"/"resume"/"set_speed")
   with in-fiction ResultForModel; grant-gated like every tool.
-- [ ] T019 [US5] Fixed-frame sentence in `internal/metatron/turn.go`
+- [X] T019 [US5] Fixed-frame sentence in `internal/metatron/turn.go`
   (`metatronNonNegotiables` or the frame block): meta tools + standing orders
   only on player request or player-placed authorization (contracts/tools.md).
-- [ ] T020 [US5] Tests: pause/start/adjust land through a stubbed LoopControl,
+- [X] T020 [US5] Tests: pause/start/adjust land through a stubbed LoopControl,
   spend nothing, respect grant gating (ungranted ⇒ handler absent + declaration
   absent); sentinel audit extended to assert LoopControl is unreachable outside
   registered handlers; frame determinism fixtures updated.
@@ -210,14 +210,14 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
 **Independent Test**: quickstart Scenario 3.
 
-- [ ] T021 [US6] Confirm path in `internal/metatron/orders.go`: fuzzy orders
+- [X] T021 [US6] Confirm path in `internal/metatron/orders.go`: fuzzy orders
   (`confirm: true`) route filter hits to a confirm step — one bare
   `Submitter.Submit` on `llm.KindMetatronWatch` (MaxTokens 16, yes/no contract
   per contracts/routing.md), per-order rate cap 1/1800 ticks via
   `lastConfirmTick` (absorb-owned, not event-sourced), skipped hits logged;
   positive verdict → normal trigger pipeline; negative/failed → order stays
   armed, no retry.
-- [ ] T022 [US6] Tests in `internal/metatron/orders_test.go`: no confirm calls
+- [X] T022 [US6] Tests in `internal/metatron/orders_test.go`: no confirm calls
   without a filter hit; rate cap skips excess hits; `no`/garbage/error verdicts
   leave the order active; `yes` triggers; confirm failure families
   (budget/tier/transport) are unconfirmed without retry.

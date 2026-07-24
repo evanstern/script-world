@@ -4,12 +4,12 @@ title: 'Scriptable agent tools: pluggable script-defined tools over an engine AP
 status: To Do
 assignee: []
 created_date: '2026-07-24 03:02'
-updated_date: '2026-07-24 03:25'
+updated_date: '2026-07-24 03:49'
 labels:
   - idea
 dependencies: []
 priority: high
-ordinal: 76000
+ordinal: 5500
 ---
 
 ## Description

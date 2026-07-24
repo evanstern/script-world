@@ -4,7 +4,7 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 03:48'
+updated_date: '2026-07-24 04:23'
 labels: []
 dependencies:
   - TASK-53
@@ -50,9 +50,9 @@ Spec: specs/029-metatron-agency
 - [x] #11 Spec phase: User Story 1 — Omens and visions replace dreams (P1)
 - [x] #12 Spec phase: User Story 2 — Standing orders via monitor_and_act (P1)
 - [x] #13 Spec phase: User Story 3 — Triggered orders act while away (P1)
-- [ ] #14 Spec phase: User Story 4 — Daytime omens defer to nightfall (P2)
-- [ ] #15 Spec phase: User Story 5 — Meta tools: pause, start, adjust speed (P2)
-- [ ] #16 Spec phase: User Story 6 — Fuzzy conditions confirmed cheaply (P3)
+- [x] #14 Spec phase: User Story 4 — Daytime omens defer to nightfall (P2)
+- [x] #15 Spec phase: User Story 5 — Meta tools: pause, start, adjust speed (P2)
+- [x] #16 Spec phase: User Story 6 — Fuzzy conditions confirmed cheaply (P3)
 - [ ] #17 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
@@ -80,4 +80,7 @@ Model-tier record: Batch B (T005-T015, Phases 3-5 P1 core) → spec-implementer 
 
 Batch B (T005-T015) gated PASS: 3 commits (8ddb4cc US1, 47d72bf US2, 1681ab7 US3). Orchestrator re-verified: fresh go test + go test -race on internal/metatron green. Gated decisions accepted: known-act precheck keyed on Origin==system (dormant until T016 deferral orders — matches R11/R12); multi-target vision structurally refused via single target param resolution. Batch C hand-offs on record: meta-tool handlers (T018 + clockSpeeds drift guard), daytime deferral (T016 — placeOrder system plumbing ready), fuzzy confirm (T021 — fuzzy orders matched but deliberately skipped in matchOrders until then).
 Model-tier record: Batch C (T016-T022) → spec-implementer on Opus 4.8 — rubric: cross-package (daemon LoopControl wiring, llm KindMetatronWatch consumer) + concurrency (confirm rate-cap in absorb path) + doctrine-adjacent (charge economy at trigger time, fixed-frame edit).
+
+Batch C (T016-T022) gated PASS: 3 commits (f05c36a US4 deferral, 14c7980 US5 meta tools + LoopControl, 6ca10f8 US6 fuzzy confirm). Orchestrator re-verified: fresh tests on metatron/tool/daemon + race on metatron, all green. Findings adjudicated: (1) start's speed arg inert at the loop's resume command — planning ruling: honor supplied speed as set_speed THEN resume; contract amended; fix lands in Batch D. (2) deferred-omen 400-rune action cap edge accepted + documented in spec assumptions. (3) metatron_watch estimator normalization accepted per the digest bare-Submit precedent (mildly pessimistic = sheds first under pressure, which is the honest degradation).
+Model-tier record: Batch D (T023-T025 + start-speed fix) → spec-implementer on Sonnet (default tier) — rubric: routine slices (view/rendering, doc reconciliation, live validation run, single-package two-line handler fix with exact instruction).
 <!-- SECTION:NOTES:END -->

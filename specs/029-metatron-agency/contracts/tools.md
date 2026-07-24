@@ -78,6 +78,9 @@ call the `LoopControl` seam (`sim.Loop.Do`); the clock's own events
 
 - `pause` — no params.
 - `start` — `speed` (Enum over clock speeds, optional; absent = resume current).
+  The loop's `resume` command ignores its speed argument (found at T018), so a
+  supplied speed is honored as `set_speed` THEN `resume` — two loop commands,
+  one tool call (planning-tier ruling on the T018 finding; lands with polish).
 - `adjust_speed` — `speed` (Enum, required).
 
 ## Rosters
