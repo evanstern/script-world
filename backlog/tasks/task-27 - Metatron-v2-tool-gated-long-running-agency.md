@@ -4,7 +4,7 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 05:04'
+updated_date: '2026-07-24 05:05'
 labels: []
 dependencies:
   - TASK-53
@@ -87,4 +87,6 @@ Model-tier record: Batch D (T023-T025 + start-speed fix) → spec-implementer on
 Batch D (start-fix + T023-T025) gated PASS: fc2b3ad start-with-speed = set_speed then resume (per ruling; failing set_speed never reaches resume — pinned), 6a27a94 CLI/TUI order+clock surfaces (calibrate/Kinds enumeration confirmed automatic), 1442a11 docs reconciliation. Orchestrator re-verified metatron/tui/cmd fresh — green. T025 validation matrix on record: full suite + race green; live model-free scenarios ran (boot gates, new roster via metatron_status, pause/resume IPC, log stream); conversational Scenarios 1-5 BLOCKED in this environment — no Anthropic credentials and the default local model absent (TASK-84's dead-default reproduced live; failed fast+clean, no hang). Live conversational validation needs credentials — flagged for reign-test after merge. T026 (wiki re-pin, AC #9) next: running wiki-update in the worktree so the re-pin rides the PR (AC says before merge).
 
 Wiki re-pin + player docs complete IN-BRANCH (AC #9 'before merge' honored): 18 notes re-verified + new metatron-orders.md (67a9f9a), 6 player pages refreshed (126f810), plan/freshness gates green (37 notes), player-docs check 7/7 fresh. The sweep flushed two real defects, both fixed + tested before pinning: TUI digest catalog missing the four metatron.order_* types (7699e72, Sonnet tier — view code) and a doubled/mislabeled 'The player says:' directive in the turn prompt where a system turn's order text masqueraded as player speech (bd02ecc, Opus tier — doctrine-adjacent; adversarially confirmed; never reached durable records). ACs 1-8 proven by the test suite (sentinel firewall audit, reducer matrices, race-clean concurrency, replay identity); live conversational reign-test remains env-blocked (no credentials — TASK-84) and is the one open follow-up. 26/26 tasks done; spec state Done-eligible; PR next.
+
+PR #59 open: https://github.com/evanstern/promptworld/pull/59 — 17 commits, one branch, one PR. Remaining after merge: worktree/branch cleanup, ff-pull root, live conversational reign-test when credentials are available (TASK-84 env gap).
 <!-- SECTION:NOTES:END -->
