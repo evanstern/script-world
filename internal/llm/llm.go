@@ -582,7 +582,7 @@ func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 	if !ok || dc.Points <= 0 {
 		return
 	}
-	if p.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+	if ad := p.est.Sample(float64(millis) / 1000 / float64(dc.Points)); ad != nil {
 		est, rate, _, _ := p.est.Stats()
 		o.recalMu.Lock()
 		hook := o.recalibrate
