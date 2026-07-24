@@ -15,6 +15,14 @@ const (
 	BootstrapCloudSecPerPt = 10.0
 )
 
+// windowSample is one retained ring slot: the observed per-point duration and
+// its spike classification. The value is retained (spec 031 FR-001) so the
+// estimator can adopt the window median at breach instead of freezing.
+type windowSample struct {
+	secPerPoint float64
+	spike       bool
+}
+
 // Estimator is the live seconds-per-point estimate for one tier: an EWMA
 // over per-point-normalized call durations with spike rejection. One-shot
 // lag spikes are excluded from the estimate but counted; systemic drift is
@@ -23,7 +31,7 @@ const (
 type Estimator struct {
 	mu       sync.Mutex
 	estimate float64
-	window   []bool // ring of the last WindowSize samples; true = spike
+	window   []windowSample // ring of the last WindowSize samples (value + spike flag)
 	wi, wn   int
 	samples  int
 	spikes   int
@@ -31,7 +39,7 @@ type Estimator struct {
 }
 
 func NewEstimator(seed float64) *Estimator {
-	return &Estimator{estimate: seed, window: make([]bool, WindowSize)}
+	return &Estimator{estimate: seed, window: make([]windowSample, WindowSize)}
 }
 
 // Estimate returns the current seconds-per-point.
@@ -55,7 +63,7 @@ func (e *Estimator) rateLocked() float64 {
 	}
 	n := 0
 	for i := 0; i < e.wn; i++ {
-		if e.window[i] {
+		if e.window[i].spike {
 			n++
 		}
 	}
@@ -77,7 +85,7 @@ func (e *Estimator) Sample(secPerPoint float64) (recalibrate bool) {
 	} else {
 		e.estimate = (1-EWMAAlpha)*e.estimate + EWMAAlpha*secPerPoint
 	}
-	e.window[e.wi] = spike
+	e.window[e.wi] = windowSample{secPerPoint: secPerPoint, spike: spike}
 	e.wi = (e.wi + 1) % WindowSize
 	if e.wn < WindowSize {
 		e.wn++
