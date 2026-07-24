@@ -4,7 +4,7 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 04:40'
+updated_date: '2026-07-24 05:04'
 labels: []
 dependencies:
   - TASK-53
@@ -37,15 +37,15 @@ Spec: specs/029-metatron-agency
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Tool registry is the sole world-action path: a sentinel/audit test proves no code path from Metatron model output to InjectSocial or loop controls exists outside registered tools; conversation (say) requires no tool
-- [ ] #2 Turn contract extended to {say, tool_calls} with a bounded Go tool loop; unusable output still downgrades to safe apology with nothing landed and nothing spent
-- [ ] #3 Game/meta tools pause, start, adjust_speed work end-to-end from a console instruction, are charge-free, and the fixed frame restricts them to player-requested or pre-authorized use
-- [ ] #4 send_omen (night-only, individual or group) and send_vision (one villager, anytime) land as atomic InjectSocial batches spending 1 charge; daytime send_omen auto-defers to next sim.night_started; dream form is retired
-- [ ] #5 monitor_and_act places an event-sourced standing order (placed/triggered/cancelled/expired events on State, survives restart+replay, cap ~3, game-day TTL); compiled predicates evaluate in Go with zero per-event model calls
-- [ ] #6 Fuzzy conditions use KindMetatronWatch (routed cheap) as a rate-capped confirm on filter hits only; a condition that cannot compile is refused with counsel
-- [ ] #7 A triggered order executes through the single-flight turn path, lands its nudge, appends to transcript, and surfaces as a queued moment in the next console reply
-- [ ] #8 Budget/degraded honesty: an order firing with empty charge bank or exhausted budget queues an honest moment instead of acting or retry-looping
-- [ ] #9 docs/wiki re-pinned for touched notes (metatron, llm-orchestrator, event-types) via grounding-wiki:wiki-update before merge
+- [x] #1 Tool registry is the sole world-action path: a sentinel/audit test proves no code path from Metatron model output to InjectSocial or loop controls exists outside registered tools; conversation (say) requires no tool
+- [x] #2 Turn contract extended to {say, tool_calls} with a bounded Go tool loop; unusable output still downgrades to safe apology with nothing landed and nothing spent
+- [x] #3 Game/meta tools pause, start, adjust_speed work end-to-end from a console instruction, are charge-free, and the fixed frame restricts them to player-requested or pre-authorized use
+- [x] #4 send_omen (night-only, individual or group) and send_vision (one villager, anytime) land as atomic InjectSocial batches spending 1 charge; daytime send_omen auto-defers to next sim.night_started; dream form is retired
+- [x] #5 monitor_and_act places an event-sourced standing order (placed/triggered/cancelled/expired events on State, survives restart+replay, cap ~3, game-day TTL); compiled predicates evaluate in Go with zero per-event model calls
+- [x] #6 Fuzzy conditions use KindMetatronWatch (routed cheap) as a rate-capped confirm on filter hits only; a condition that cannot compile is refused with counsel
+- [x] #7 A triggered order executes through the single-flight turn path, lands its nudge, appends to transcript, and surfaces as a queued moment in the next console reply
+- [x] #8 Budget/degraded honesty: an order firing with empty charge bank or exhausted budget queues an honest moment instead of acting or retry-looping
+- [x] #9 docs/wiki re-pinned for touched notes (metatron, llm-orchestrator, event-types) via grounding-wiki:wiki-update before merge
 - [x] #10 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #11 Spec phase: User Story 1 — Omens and visions replace dreams (P1)
 - [x] #12 Spec phase: User Story 2 — Standing orders via monitor_and_act (P1)
@@ -53,7 +53,7 @@ Spec: specs/029-metatron-agency
 - [x] #14 Spec phase: User Story 4 — Daytime omens defer to nightfall (P2)
 - [x] #15 Spec phase: User Story 5 — Meta tools: pause, start, adjust speed (P2)
 - [x] #16 Spec phase: User Story 6 — Fuzzy conditions confirmed cheaply (P3)
-- [ ] #17 Spec phase: Polish & Cross-Cutting
+- [x] #17 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -85,4 +85,6 @@ Batch C (T016-T022) gated PASS: 3 commits (f05c36a US4 deferral, 14c7980 US5 met
 Model-tier record: Batch D (T023-T025 + start-speed fix) → spec-implementer on Sonnet (default tier) — rubric: routine slices (view/rendering, doc reconciliation, live validation run, single-package two-line handler fix with exact instruction).
 
 Batch D (start-fix + T023-T025) gated PASS: fc2b3ad start-with-speed = set_speed then resume (per ruling; failing set_speed never reaches resume — pinned), 6a27a94 CLI/TUI order+clock surfaces (calibrate/Kinds enumeration confirmed automatic), 1442a11 docs reconciliation. Orchestrator re-verified metatron/tui/cmd fresh — green. T025 validation matrix on record: full suite + race green; live model-free scenarios ran (boot gates, new roster via metatron_status, pause/resume IPC, log stream); conversational Scenarios 1-5 BLOCKED in this environment — no Anthropic credentials and the default local model absent (TASK-84's dead-default reproduced live; failed fast+clean, no hang). Live conversational validation needs credentials — flagged for reign-test after merge. T026 (wiki re-pin, AC #9) next: running wiki-update in the worktree so the re-pin rides the PR (AC says before merge).
+
+Wiki re-pin + player docs complete IN-BRANCH (AC #9 'before merge' honored): 18 notes re-verified + new metatron-orders.md (67a9f9a), 6 player pages refreshed (126f810), plan/freshness gates green (37 notes), player-docs check 7/7 fresh. The sweep flushed two real defects, both fixed + tested before pinning: TUI digest catalog missing the four metatron.order_* types (7699e72, Sonnet tier — view code) and a doubled/mislabeled 'The player says:' directive in the turn prompt where a system turn's order text masqueraded as player speech (bd02ecc, Opus tier — doctrine-adjacent; adversarially confirmed; never reached durable records). ACs 1-8 proven by the test suite (sentinel firewall audit, reducer matrices, race-clean concurrency, replay identity); live conversational reign-test remains env-blocked (no credentials — TASK-84) and is the one open follow-up. 26/26 tasks done; spec state Done-eligible; PR next.
 <!-- SECTION:NOTES:END -->
