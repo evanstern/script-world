@@ -17,7 +17,7 @@ all read.
 
 **Purpose**: baseline verification only — no scaffolding needed (no new packages, no deps).
 
-- [ ] T001 Verify clean baseline in the task worktree: `go test ./...` green and `gofmt -l` clean
+- [x] T001 Verify clean baseline in the task worktree: `go test ./...` green and `gofmt -l` clean
       on the packages this feature touches (internal/cognition, internal/llm, internal/ipc,
       internal/daemon, cmd/promptworld); note TASK-83's pre-existing gofmt drift is out of scope —
       gate on touched files only
@@ -31,20 +31,20 @@ one seed-state fact (research R3).
 
 **⚠️ CRITICAL**: no user story work until this phase completes.
 
-- [ ] T002 Create internal/cognition/horizon.go: move `horizonSummary` from
+- [x] T002 Create internal/cognition/horizon.go: move `horizonSummary` from
       cmd/promptworld/calibrate.go verbatim as exported `HorizonSummary(secPerPt float64) string`
       (same ladder, same class list, same wording), plus the minimal exported helper(s) the
       set_speed warning needs to ask "which classes are suppressed at speed S given a per-class
       sec/pt lookup" — built strictly on the existing `Route`/`ClassFor`; stdlib-only (leaf
       purity, doc.go doctrine); constants in estimate.go UNCHANGED (spec FR-007, Doctrine Review)
-- [ ] T003 Create internal/cognition/horizon_test.go: table tests for `HorizonSummary` at
+- [x] T003 Create internal/cognition/horizon_test.go: table tests for `HorizonSummary` at
       bootstrap (20.0) and calibrated (e.g. 0.94) values, plus the agreement property from
       contracts/warnings.md — summary/helper says suppressed ⇔ `Route(dc, tps, secPerPt).Allow`
       is false, across the full ladder × class matrix
-- [ ] T004 In cmd/promptworld/calibrate.go replace the local `horizonSummary` with delegation to
+- [x] T004 In cmd/promptworld/calibrate.go replace the local `horizonSummary` with delegation to
       `cognition.HorizonSummary`; run cmd/promptworld tests to prove calibrate output is
       byte-identical (spec 024 legacy guarantee untouched by the move itself)
-- [ ] T005 In internal/llm/llm.go record seed provenance: `provider` gains a `calibratedAt string`
+- [x] T005 In internal/llm/llm.go record seed provenance: `provider` gains a `calibratedAt string`
       field set in `SeedCalibration` when (and only when) the profile has a usable entry for that
       provider name (same presence test `cognition.SeedFor` applies; carry the profile's
       `CalibratedAt` verbatim, empty = bootstrap); add the read the ipc gate needs (e.g.
@@ -68,21 +68,21 @@ all four.
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Add `Warning string `json:"warning,omitempty"`` to `StatusData` in
+- [x] T006 [US1] Add `Warning string `json:"warning,omitempty"`` to `StatusData` in
       internal/ipc/protocol.go with a doc comment scoping it to the set_speed path
       (contracts/warnings.md §2; additive-omitempty per spec FR-008)
-- [ ] T007 [US1] In internal/ipc/server.go set_speed handler (after validation + max-gate, which
+- [x] T007 [US1] In internal/ipc/server.go set_speed handler (after validation + max-gate, which
       stay untouched and take precedence): compose the warning — for each cognition class in
       registry order, resolve the serving provider + current estimate via
       `srv.llm.EstimateForKind`, gate on that provider's empty calibration state (T005 read),
       evaluate suppression at the requested speed via the T002 helper; if any class suppressed,
       set StatusData.Warning naming the classes and suggesting `promptworld calibrate <world>`;
       the speed change applies unconditionally (warning-augmented success, never an error)
-- [ ] T008 [US1] Extend internal/ipc/ipc_test.go: warning present (uncalibrated + suppressing
+- [x] T008 [US1] Extend internal/ipc/ipc_test.go: warning present (uncalibrated + suppressing
       speed), absent (uncalibrated + non-suppressing speed; calibrated world; no-LLM world),
       speed actually applied alongside the warning, max-gate error reply unchanged and
       warning-free, pause/resume/status replies never carry the field
-- [ ] T009 [US1] Render the warning in the CLI set-speed command output in
+- [x] T009 [US1] Render the warning in the CLI set-speed command output in
       cmd/promptworld/commands.go (print after the normal confirmation line, visually distinct);
       extend cmd/promptworld/commands_test.go for with/without-warning rendering
 
@@ -102,13 +102,13 @@ unreadable profile.
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] In internal/daemon/daemon.go replace the single no-profile line (and augment the
+- [x] T010 [US2] In internal/daemon/daemon.go replace the single no-profile line (and augment the
       unreadable-profile branch) with the warning block: uncalibrated statement with bootstrap
       values, `cognition.HorizonSummary(cognition.BootstrapLocalSecPerPt)` line, and
       `run \`promptworld calibrate <world>\`` with the real world name; the profile-seeded branch
       stays byte-identical; extract the block composition into a small testable function if
       daemon.go has no direct test seam
-- [ ] T011 [US2] Test the boot warning: unit-test the composing function (all three bracketed
+- [x] T011 [US2] Test the boot warning: unit-test the composing function (all three bracketed
       contract elements present; both trigger branches produce it; seeded branch does not) in the
       appropriate existing test file for internal/daemon, or add one alongside daemon.go
 
@@ -126,11 +126,11 @@ providers show timestamp; partial profiles truthful per provider; no-LLM status 
 
 ### Implementation for User Story 3
 
-- [ ] T012 [US3] In internal/llm/llm.go add `CalibratedAt string `json:"calibrated_at,omitempty"``
+- [x] T012 [US3] In internal/llm/llm.go add `CalibratedAt string `json:"calibrated_at,omitempty"``
       to `ProviderStatus` and copy it from the provider in `StatusSnapshot`; extend internal/llm
       tests: snapshot carries it, omitempty verified by marshaling a bootstrap provider (field
       absent) and a calibrated one (present), partial-profile case per provider
-- [ ] T013 [US3] Render calibration state in the CLI status output in
+- [x] T013 [US3] Render calibration state in the CLI status output in
       cmd/promptworld/commands.go: timestamp when present, `uncalibrated (bootstrap)` when
       absent, per provider row; extend cmd/promptworld/commands_test.go for both renderings and
       the no-LLM shape (unchanged)
@@ -150,7 +150,7 @@ to the horizon summary, in both config generations' output.
 
 ### Implementation for User Story 4
 
-- [ ] T014 [US4] In cmd/promptworld/calibrate.go print the disclosure (all three contract
+- [x] T014 [US4] In cmd/promptworld/calibrate.go print the disclosure (all three contract
       elements: sequential measurement, floor under concurrent load, live estimator adapts)
       once per run adjacent to the horizon summary, in both `calibrateLegacy` and
       `calibrateDeclaredProviders`; extend cmd/promptworld/calibrate_test.go to assert the
@@ -162,7 +162,7 @@ to the horizon summary, in both config generations' output.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T015 Run quickstart.md end-to-end: `go test ./...` green, gofmt clean on touched files,
+- [x] T015 Run quickstart.md end-to-end: `go test ./...` green, gofmt clean on touched files,
       and the live walk-through (steps 1–3, 5) against a scratch world where feasible; record
       outcomes in specs/035-calibration-ux/quickstart-results.md
 - [ ] T016 Re-ground the wiki (constitution Principle IV): run `/grounding-wiki:wiki-update` —
