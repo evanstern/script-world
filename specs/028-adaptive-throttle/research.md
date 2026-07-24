@@ -64,17 +64,22 @@ computing predictions at read time (rather than freezing them at submit) means d
 estimator state, including spike-rejected drift (edge case: estimator lag spike). `internal/llm` already imports
 `internal/cognition` (estimators), so points lookup is free.
 
-**Details**: queued jobs (not yet dispatched) count their full prediction; in-flight jobs count
-`max(0, PredictedSec − ElapsedSec)` — an overdue thought contributes zero (spec edge case: the governor never
-invents debt it cannot ground in a prediction). Every model-bound kind participates (planner, conversation,
-meeting, consolidation, chronicle, metatron): long-budget classes contribute proportionally tiny fractions by
-construction, so no kind-filtering is needed.
+**Details**: queued jobs (not yet dispatched) count their full prediction; in-flight jobs are **piecewise** (revised by
+spec 033 — see specs/033-governor-accrued-debt/contracts/debt-formula.md): while within prediction they count the draining
+remaining work `PredictedSec − ElapsedSec`, and once overrun (`ElapsedSec ≥ PredictedSec`) they count their full accrued
+`ElapsedSec` drift rather than zero. The original floored `max(0, PredictedSec − ElapsedSec)` inverted the signal under
+overload (overdue thoughts vanished from the sum exactly when the system was drowning); the accrued arm grounds an overrun in
+the measured staleness its reply will land with. Every model-bound kind participates (planner, conversation, meeting,
+consolidation, chronicle, metatron): long-budget classes contribute proportionally tiny fractions by construction, so no
+kind-filtering is needed.
 
 ## R5 — Debt arithmetic
 
-**Decision**: per pending thought, `fraction = (remainingSec × ticksPerSecond) / BudgetTicks`; debt = Σ fractions
-(dimensionless budget-fractions, per the spec's FR-001). Helper lives in `internal/cognition` beside `Route` — the
-same pure-arithmetic doctrine (FR-002): no wall-clock reads inside the helper; the sampler passes elapsed values in.
+**Decision**: per pending thought, `fraction = (secondsSec × ticksPerSecond) / BudgetTicks`; debt = Σ fractions
+(dimensionless budget-fractions, per the spec's FR-001), where `secondsSec` is the piecewise staleness time — draining
+remaining work within prediction, full accrued drift once overrun (revised by spec 033,
+specs/033-governor-accrued-debt/contracts/debt-formula.md). Helper lives in `internal/cognition` beside `Route` — the same
+pure-arithmetic doctrine (FR-002): no wall-clock reads inside the helper; the sampler passes elapsed values in.
 
 ## R6 — Controller constants and hysteresis math
 

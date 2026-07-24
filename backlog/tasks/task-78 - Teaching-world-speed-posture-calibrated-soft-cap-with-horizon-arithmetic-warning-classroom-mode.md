@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-23 17:00'
+updated_date: '2026-07-24 02:42'
 labels:
   - teaching-game
   - classroom-mode
@@ -16,7 +17,7 @@ references:
     Classroom-mode-curriculum-staged-horizon-posture-—-paused-chain-completion-for-authoring-calibrated-soft-speed-cap-for-ambient-running-budgets-stay-doctrine.md
   - docs/design/horizon-vs-learner-iteration-speed.md
 priority: medium
-ordinal: 71000
+ordinal: 7000
 ---
 
 ## Description
@@ -36,3 +37,9 @@ Interactions: TASK-40 (uncalibrated worlds silently over-suppress — an uncalib
 - [ ] #3 An uncalibrated teaching world prompts for calibrate rather than silently adopting the pessimistic bootstrap cap (aligns with TASK-40)
 - [ ] #4 Posture lives as per-world config consumable by TASK-68 stage presets; non-teaching worlds are unchanged
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: content holds; pin moved — horizonSummary is calibrate.go:241 with the 'suppressed above Nx' arithmetic at :261 (:173-197 is orchSampler). No teaching posture exists anywhere yet, confirmed.
+<!-- SECTION:NOTES:END -->

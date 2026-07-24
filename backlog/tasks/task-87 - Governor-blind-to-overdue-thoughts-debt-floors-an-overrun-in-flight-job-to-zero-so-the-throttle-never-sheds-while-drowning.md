@@ -1,0 +1,74 @@
+---
+id: TASK-87
+title: >-
+  Governor blind to overdue thoughts: debt floors an overrun in-flight job to
+  zero, so the throttle never sheds while drowning
+status: Done
+assignee: []
+created_date: '2026-07-24 03:19'
+updated_date: '2026-07-24 04:30'
+labels:
+  - cognition
+  - bug
+dependencies:
+  - TASK-86
+references:
+  - internal/cognition/governor.go
+  - specs/028-adaptive-throttle
+priority: high
+ordinal: 5250
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+FOUND (world-01, 2026-07-23, same run as TASK-86): ZERO clock.governor_shed events in world.db despite 17 of 31 planner thoughts landing rejected-stale during the 8x-32x window. Debt (internal/cognition/governor.go:69) is Sigma max(0, PredictedSec - ElapsedSec) x tps / BudgetTicks: the max(0, ...) floor means a job whose elapsed time exceeds its prediction contributes ZERO debt. With predictions frozen low (TASK-86) every in-flight job went 'overdue' within ~2 wall seconds and vanished from the debt sum — so the moments of WORST drift produced the LEAST debt, inverting the throttle's purpose exactly when it was needed. This defect stands alone even with a healthy estimator: any single stuck call (endpoint hang, model swap-in) disappears from debt the moment elapsed > predicted, and a fleet of stuck calls reads as debt ~0.
+
+DOCTRINE GAP: spec 028's 'an overdue thought invents no debt it cannot ground' treats the overrun as unknowable — but the overrun is a MEASUREMENT, not an invention: drift already accrued (elapsed x tps) is real staleness the reply will land with at minimum. A job guaranteed dead-on-arrival (accrued drift alone > budget) currently counts as zero.
+
+CANDIDATE FIXES:
+(A) RECOMMENDED, near one-liner — per-job fraction = max(PredictedSec, ElapsedSec) x tps / BudgetTicks, i.e. accrued drift plus predicted remaining. Overdue jobs then contribute their true, growing, fully grounded drift; jobs within prediction behave exactly as today. Pure arithmetic, deterministic, no new inputs.
+(B) Complement — rejection-grounded breach: feed landing outcomes to the governor; a rejected-stale landing counts as an immediate breach sample (or injects 1.0 debt for one window). Ground truth from the injection door, independent of any estimator.
+Either way the change is doctrine (spec 028 FR-001/FR-002, research R5) — reviewed spec update, not a knob.
+
+ALSO VERIFY FIRST (cheap): world-01's running daemon binary was built 19:23 Jul 23 but the task-33 merge landed 21:53 — confirm the deployed binary even contains the governor (rebuild + restart), and confirm clock.governor_* events appear in a deliberately saturated run before/after the fix.
+
+Depends on TASK-86 only softly: correct debt with a frozen estimator still under-counts (predicted remaining stays tiny), so the full protection story needs both; fix A here is still correct and testable standalone.
+
+DECISION (user, 2026-07-24): option A. Specified in specs/033-governor-accrued-debt — with one planning-tier correction: plain max(Predicted, Elapsed) would break within-prediction behavior (today's arm counts REMAINING work, which drains); the normative arm is piecewise — remaining while elapsed < predicted, full accrued elapsed once overdue (research.md R1). Option B (rejection-grounded breach) recorded as future hardening, out of scope for 033.
+
+Spec: specs/033-governor-accrued-debt
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [x] #1 An in-flight job whose ElapsedSec exceeds PredictedSec contributes non-decreasing, grounded debt (unit test: stuck job's fraction grows with elapsed, never drops to zero while pending)
+- [x] #2 Saturation scenario test: sustained 20-50s planner calls at 8x with optimistic predictions drive debt past ShedThreshold and the governor sheds within BreachWindow (reproduces world-01's zero-shed failure as a red test first)
+- [x] #3 A live or e2e saturated run shows clock.governor_shed firing and effective speed stepping down the capped ladder; status/TUI reflects governed state
+- [x] #4 specs/028-adaptive-throttle doctrine (FR-001/FR-002 debt definition) and the wiki governor/cognition notes updated to the accrued-drift definition; running-binary-predates-merge check recorded on this task
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — The fix is provably live in a real run (Priority: P2)
+- [x] #9 Spec phase: Polish & Cross-Cutting Concerns
+<!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Tier decision (constitution Principle V): implementation delegated to spec-implementer on OPUS 4.8 — governor logic in internal/cognition is an explicitly named senior-tier slice (scheduling/governor, doctrine-adjacent). Spec 033 authored, linked, phases seeded.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 1/2 · Polish & Cross-Cutting Concerns: 1/2
+
+Implementation complete on Opus 4.8 spec-implementer, gated by planning tier. PR: https://github.com/evanstern/promptworld/pull/57 (branch task-87-governor-accrued-debt, rebased onto origin/main). RED-FIRST proof committed (b28a8ab): world-01 shape fails on old arithmetic (debt 0/jobs 0/no shed), passes on piecewise arm (debt 1.6/jobs 8/shed→4x on 5th sample). Gates: go test ./... all ok, vet clean, gofmt clean on touched files, -race clean on cognition/daemon. Planning-tier design correction recorded in spec 033 research.md R1: plain max(Predicted,Elapsed) would break within-prediction bit-identity (SC-003) — normative arm is piecewise (remaining drains within prediction; full accrued elapsed once overdue). AC #3 (live shed observed) and the binary check half of AC #4 await T007: rebuild + restart world-01 (running daemon predates task-33 merge) + deliberate saturation probe — restarts the live world, so coordinating with operator.
+
+T007 operational verification (2026-07-24, post-merge): world-01 daemon rebuilt from merge 5dff763 and restarted (pid 78316) — binary check CLOSED: previous daemon predated the task-33 merge and had no governor; the new binary contains governorSampler (nm confirms) and the sampler is live (status carried governor_debt 0.017-0.048 / governor_jobs 2 during a brief 32x window). No live shed observed and none expected: with spec-031 honest predictions and cloud-routed planner, debt ~0.05 << ShedThreshold 1.0 at 32x — a healthy system correctly does not shed. SC-004 satisfied by the harness equivalent per spec 033 assumption (TestGovernorSamplerShedsOnOverdueThoughts: shed to 4x within breachSamples on the world-01 overdue shape). Note: 32x probe was interrupted by operator speed pulls (16x/8x, seq 134274/134276) — irrelevant to the evidence above. AC #3 satisfied at harness level per SC-004's explicit either/or; AC #4 both clauses now closed (spec 028 doctrine updated in PR #57; binary check recorded here).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 2/2 · Polish & Cross-Cutting Concerns: 2/2 — status In Progress → Done
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 2/2 · Polish & Cross-Cutting Concerns: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

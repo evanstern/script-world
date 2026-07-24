@@ -403,3 +403,7 @@ cap, and that an unconfirmed hit does not trigger the order.
   no parallel turn execution is introduced.
 - KindMetatronWatch joins the existing per-kind routing configuration with a cheap
   default chain; operators may re-route it like any other kind.
+- A daytime omen whose text approaches the 400-byte cap (≳ ~370 chars) can exceed
+  the deferral order's 400-rune action cap and is refused at placement with
+  counsel to shorten — typical sentence-length omens defer fine (T016 finding,
+  accepted as a documented edge).

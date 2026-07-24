@@ -889,8 +889,14 @@ var digestRegistry = map[string]digestFunc{
 		if !ok {
 			return nil, false
 		}
+		// Post-spec-031 events carry the adoption arithmetic; show
+		// prior→adopted when present, else the legacy current estimate.
+		est := fmt.Sprintf("est=%.2fs/pt", p.EstimateSPerPt)
+		if p.AdoptedSPerPt != 0 || p.PriorSPerPt != 0 {
+			est = fmt.Sprintf("est=%.2f→%.2fs/pt", p.PriorSPerPt, p.AdoptedSPerPt)
+		}
 		return labeled(
-			"tier="+p.Tier, fmt.Sprintf("est=%.2fs/pt", p.EstimateSPerPt),
+			"tier="+p.Tier, est,
 			fmt.Sprintf("spikes=%.2f", p.SpikeRate), fmt.Sprintf("window=%d", p.Window),
 		), true
 	},

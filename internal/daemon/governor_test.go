@@ -88,19 +88,21 @@ func (f *fakeStatus) setPaused(p bool) {
 	f.mu.Unlock()
 }
 
-// TestGovernorSamplerDebt (US1-AC1): the sampler folds pending thoughts and the
-// effective speed into aggregate debt matching the hand-computed budget-fraction
-// sum, counting only thoughts with positive remaining drift.
+// TestGovernorSamplerDebt (US1-AC1; spec 033): the sampler folds pending
+// thoughts and the effective speed into aggregate debt matching the
+// hand-computed budget-fraction sum — a within-prediction thought counts its
+// remaining work, a queued one its full prediction, and an overdue one its
+// accrued drift (spec 033: the overrun counts, it is not floored to zero).
 func TestGovernorSamplerDebt(t *testing.T) {
 	pending := &fakePending{}
 	// Effective 16x → 16 ticks/s. Budgets (internal/cognition registry):
 	// planner 1200 ticks, conversation 7200 ticks.
 	pending.set([]llm.PendingThought{
-		// in flight: remaining 20s → 20*16/1200 = 0.26666…
+		// in flight, within prediction: remaining 20s → 20*16/1200 = 0.26666…
 		{Kind: "planner", PredictedSec: 30, ElapsedSec: 10},
 		// queued: remaining 100s → 100*16/7200 = 0.22222…
 		{Kind: "conversation", PredictedSec: 100, ElapsedSec: 0},
-		// overdue: remaining < 0 → floored to zero, does not contribute or count.
+		// overdue: elapsed ≥ predicted → accrued drift 10s → 10*16/1200 = 0.13333…
 		{Kind: "planner", PredictedSec: 5, ElapsedSec: 10},
 	})
 	s := newGovernorSampler(pending, &fakeStatus{speed: clock.Speed16x})
@@ -108,12 +110,12 @@ func TestGovernorSamplerDebt(t *testing.T) {
 	s.sample()
 	got := s.Snapshot()
 
-	wantDebt := 20.0*16/1200 + 100.0*16/7200 // = 0.488888…
+	wantDebt := 20.0*16/1200 + 100.0*16/7200 + 10.0*16/1200 // = 0.62222…
 	if math.Abs(got.Debt-wantDebt) > 1e-9 {
 		t.Errorf("debt = %v, want %v", got.Debt, wantDebt)
 	}
-	if got.Jobs != 2 {
-		t.Errorf("jobs = %d, want 2 (the overdue thought is not counted)", got.Jobs)
+	if got.Jobs != 3 {
+		t.Errorf("jobs = %d, want 3 (the overdue thought now counts its accrued drift)", got.Jobs)
 	}
 }
 
@@ -243,6 +245,54 @@ func TestGovernorSamplerShedsAfterBreachWindow(t *testing.T) {
 	}
 	if wantDebt := 80.0 * 32 / 1200; math.Abs(calls[0].debt-wantDebt) > 1e-9 {
 		t.Errorf("Govern debt = %v, want %v", calls[0].debt, wantDebt)
+	}
+}
+
+// TestGovernorSamplerShedsOnOverdueThoughts (spec 033 SC-001, FR-005): the
+// world-01 saturation shape driven end to end through the sampler. Eight planner
+// thoughts predicted 1.573 s but 30 s in flight at 8x each accrue 30*8/1200 = 0.2
+// budget-fractions, so aggregate debt is 1.6 over the shed threshold — the shape
+// that produced zero sheds under the old floor. The sampler now sheds within one
+// breach window and stores a snapshot reflecting the overdue set (Debt 1.6,
+// Jobs 8), so the visible jobs figure recovers alongside the shed.
+func TestGovernorSamplerShedsOnOverdueThoughts(t *testing.T) {
+	breachSamples := int(cognition.BreachWindow / cognition.GovernorCadence)
+	pending := &fakePending{}
+	overdue := make([]llm.PendingThought, 8)
+	for i := range overdue {
+		overdue[i] = llm.PendingThought{Kind: "planner", PredictedSec: 1.573, ElapsedSec: 30}
+	}
+	pending.set(overdue)
+	status := &fakeStatus{speed: clock.Speed8x}
+	s := newGovernorSampler(pending, status)
+
+	for i := 1; i < breachSamples; i++ {
+		s.sample()
+		if calls := status.governCalls(); len(calls) != 0 {
+			t.Fatalf("shed after only %d samples, before the breach window closed: %+v", i, calls)
+		}
+	}
+	s.sample() // completes the breach window
+
+	// The stored snapshot reflects the overdue set — the visible jobs figure, blind
+	// under the old floor (world-01 showed 0 jobs while thoughts drowned), now sees
+	// all eight.
+	if snap := s.Snapshot(); math.Abs(snap.Debt-1.6) > 1e-9 || snap.Jobs != 8 {
+		t.Errorf("snapshot = %+v, want Debt 1.6 Jobs 8 (overdue thoughts count their accrued drift)", snap)
+	}
+
+	calls := status.governCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one Govern(shed) within the breach window, got %d: %+v", len(calls), calls)
+	}
+	if calls[0].to != clock.Speed4x {
+		t.Errorf("Govern to = %q, want 4x (one notch below 8x)", calls[0].to)
+	}
+	if calls[0].jobs != 8 {
+		t.Errorf("Govern jobs = %d, want 8", calls[0].jobs)
+	}
+	if math.Abs(calls[0].debt-1.6) > 1e-9 {
+		t.Errorf("Govern debt = %v, want 1.6", calls[0].debt)
 	}
 }
 

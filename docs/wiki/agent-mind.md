@@ -12,7 +12,7 @@ sources:
   - internal/persona/files.go
   - internal/scribe/scribe.go
   - internal/sim/memory.go
-verified_against: 642a75d963f0cdbc34e772fad547c0eacedcfa7c
+verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
 ---
 
 # Agent mind
@@ -292,8 +292,10 @@ emits the terminal `cog.outcome{unusable}` itself, with `loopFailReason(res,
 err)` naming which termination caused it (FR-015: no failure is silent) — the
 reflex grace (120 ticks idle) remains the floor under every gap, and the
 permanent degraded mode. The daemon also installs `RecalibrateSignal` as the
-orchestrator's drift hook: an estimator spike-rate breach lands as
-`cog.recalibration_recommended`.
+orchestrator's drift hook: an estimator spike-rate breach — which since spec
+031 also adopts the window median as the new estimate — lands as
+`cog.recalibration_recommended`, the payload carrying the adoption arithmetic
+in additive `prior_s_per_pt`/`adopted_s_per_pt` fields.
 
 **Musing** (TASK-21, retired as a scheduled channel by spec 017 R10): a
 villager no longer has its own 15-game-minute best-effort cadence, queue,

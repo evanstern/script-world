@@ -54,9 +54,10 @@ contract pins the declared surface. Guidance prose derives via
 - The `event_types` enum is the curated observable vocabulary (declared beside the
   entry): `agent.slept`, `agent.woke`, `agent.died`, `agent.memory_added`,
   `agent.intent_set`, `social.conversation`, `social.promise_broken`,
-  `social.rumor_told`, `gru.attacked`, `meeting.norm_enacted`,
-  `sim.night_started`, `sim.day_started`. (Implementer: pin the final list against
-  `docs/wiki/event-types.md` at build time; every name must be a real emitted type.)
+  `social.rumor_told`, `gru.attacked`, `norm.violated`,
+  `sim.night_started`, `sim.day_started`. (Pinned against real emitted types at
+  T003: the draft's `meeting.norm_enacted` is emitted by no code — `norm.violated`
+  is the real norms-family observable and replaced it.)
 - Door semantics: player-origin cap 3 active; ttl default 3 game days.
 - **Driver change**: `toolloop.validateArgs` generalizes authored-override
   validation from the hardcoded `validateSetPlan` to a schema-lite walker
@@ -77,6 +78,9 @@ call the `LoopControl` seam (`sim.Loop.Do`); the clock's own events
 
 - `pause` — no params.
 - `start` — `speed` (Enum over clock speeds, optional; absent = resume current).
+  The loop's `resume` command ignores its speed argument (found at T018), so a
+  supplied speed is honored as `set_speed` THEN `resume` — two loop commands,
+  one tool call (planning-tier ruling on the T018 finding; lands with polish).
 - `adjust_speed` — `speed` (Enum, required).
 
 ## Rosters

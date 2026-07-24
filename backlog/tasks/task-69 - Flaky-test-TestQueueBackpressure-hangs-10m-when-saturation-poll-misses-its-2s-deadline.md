@@ -6,10 +6,11 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-23 04:58'
+updated_date: '2026-07-24 02:42'
 labels: []
 dependencies: []
 priority: medium
-ordinal: 62000
+ordinal: 5000
 ---
 
 ## Description
@@ -23,3 +24,9 @@ Found while gating TASK-48 (commit 67c648b worktree, identical to main for this 
 - [ ] #1 Root cause confirmed against a reproduced hang or reasoned trace
 - [ ] #2 Test fails fast (seconds) when saturation is not reached; go test ./internal/llm/ -count=10 green under load
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Drift audit 2026-07-23: facts hold; line pins moved. Saturation poll 2s deadline now llm_test.go:307-309 (test at :288); overflow Submit with background ctx llm_test.go:303-304; blocking reply select is llm.go:721-722 (NOT :421); workerCallCap=2min at llm.go:284 (used :799).
+<!-- SECTION:NOTES:END -->

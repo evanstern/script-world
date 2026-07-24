@@ -4,12 +4,12 @@ title: 'Webhook sinks: post world events to external endpoints'
 status: To Do
 assignee: []
 created_date: '2026-07-19 19:30'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-24 02:42'
 labels:
   - events
   - observability
 dependencies: []
-ordinal: 17000
+ordinal: 11000
 ---
 
 ## Description
@@ -30,4 +30,6 @@ Let a world POST its committed events to configured web hooks so debugging/monit
 
 <!-- SECTION:NOTES:BEGIN -->
 Re-grounding 2026-07-22: notify fan-out moved to daemon.go:89-105 (was 67-83); consumer list has grown — Broadcast, scribe, mind, metatron (daemon.go:93/99/164/175) — which strengthens the just-another-Observe-consumer premise. Scribe 256-batch buffer holds (scribe.go:38). Pairs with TASK-17: external readers cannot do replica lookups, they need named payloads.
+
+Drift audit 2026-07-23: still real; pins shifted. Notify fan-out now at internal/daemon/daemon.go:100-115; consumers Broadcast :104, scribe :110, mind :213, metatron :224. Scribe 256-batch buffer holds (scribe.go:38). No webhook code exists anywhere.
 <!-- SECTION:NOTES:END -->

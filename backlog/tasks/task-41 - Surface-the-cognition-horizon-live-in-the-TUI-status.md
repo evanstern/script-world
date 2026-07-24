@@ -4,13 +4,13 @@ title: Surface the cognition horizon live in the TUI/status
 status: To Do
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-23 17:00'
+updated_date: '2026-07-24 02:42'
 labels:
   - ux
   - tui
 dependencies: []
 priority: medium
-ordinal: 12000
+ordinal: 6000
 ---
 
 ## Description
@@ -27,4 +27,6 @@ Sequencing: depends on TASK-34's dock landing (its natural home is a dock status
 Re-grounding 2026-07-22: narrate.go router gate holds (~:261). Blocker cleared — TASK-34's dock is Done and landed; the sequencing note about merging the TASK-34 PR first is obsolete. Unblocked.
 
 TASK-66 / decision-6 (2026-07-23): horizon legibility is a PREREQUISITE for classroom mode — a suppressed planner without a visible verdict reads to a learner as 'my prompt did nothing.' The client-decided teaching posture (TASK-77 chain-completion, TASK-78 soft speed cap) folds its learner-facing legibility needs into this task rather than a new one; spec 024 US6 (routing legibility) is the adjacent surface.
+
+Drift audit 2026-07-23: PARTIALLY overtaken — the TUI decisions view now marks suppressed chains ('didn't think': internal/tui/decisions.go:232, :358; rendered views.go:1711), so 'suppression exists only in raw cog.outcome payloads' is no longer true. Still missing (remaining scope): the live per-class horizon verdict at current speed (header/status 'conversations suppressed at 32x') and suppression counters. Narrate gate moved to internal/mind/narrate.go:266-269 (was ~:260).
 <!-- SECTION:NOTES:END -->

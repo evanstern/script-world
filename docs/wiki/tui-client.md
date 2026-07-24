@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
 ---
 
 # TUI client

@@ -10,7 +10,7 @@ sources:
   - internal/cognition/calibration.go
   - internal/cognition/governor.go
   - internal/sim/cognition.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
 ---
 
 # Cognition horizon
@@ -59,11 +59,19 @@ speed) always suppresses — prediction at unbounded speed is meaningless.
 **Estimation** (`estimate.go`): `Estimator` holds one provider's live
 seconds-per-point as an EWMA (`EWMAAlpha` 0.2) over per-point-normalized call
 durations. A sample beyond `SpikeFactor` (3.0) times the current estimate is
-excluded from the EWMA but counted in a `WindowSize`-20 ring; when the rolling
-spike rate over a full window first exceeds `BreachRate` (0.3), `Sample`
-returns true exactly once (re-armed after the rate falls back) — the
-`cog.recalibration_recommended` signal. One-shot lag spikes are thus rejected
-while systemic drift is followed. The estimator is process-lifetime only.
+excluded from the EWMA but retained — with its value — in a `WindowSize`-20
+ring of `{secPerPoint, spike}` slots; on the sample that first drives the
+rolling spike rate over a full window past `BreachRate` (0.3), the estimator
+ADOPTS (spec 031, breach-adoption): it re-seeds `estimate` to the window
+median (all retained values, spike and non-spike alike), zeroes the ring, and
+`Sample` returns a non-nil `Adoption{Prior, Adopted, SpikeRate}` — the
+`cog.recalibration_recommended` episode, which now has an actor instead of
+being an unread signal. Re-arm is structural: a fresh window must refill
+before any further verdict, and post-adoption samples in the new regime are no
+longer spikes against the adopted estimate. One-shot lag spikes (too few to
+breach) are thus still rejected while systemic drift — including a step change
+larger than `SpikeFactor`, which pre-031 froze the estimate forever — is
+followed within one window. The estimator is process-lifetime only.
 
 **Calibration** (`calibration.go`): `Profile` is `calibration.json` in the
 world save directory (`World.CalibrationPath()`), written only by the
@@ -97,13 +105,19 @@ every sample; nothing here calls a model, reads a wall clock, or is
 config-tunable at runtime.
 
 - **Debt** (`Debt(pending []PendingDebtInput, ticksPerSecond) (debt float64,
-  jobs int)`): the aggregate staleness signal (FR-001/FR-002) — for each
-  pending thought, `max(0, PredictedSec − ElapsedSec) × ticksPerSecond /
-  BudgetTicks(class)` (an overdue thought floors to zero and does not count);
-  `debt` is the sum, `jobs` counts only positive-contributing entries. Unknown
-  kinds are skipped (they cannot reach a model) and `ticksPerSecond ≤ 0`
-  (uncapped max) yields zero — pure arithmetic, no randomness, identical
-  inputs always yield identical debt.
+  jobs int)`): the aggregate staleness signal (spec 033, revising spec 028
+  FR-001/FR-002) — for each pending thought the seconds are piecewise:
+  `PredictedSec − ElapsedSec` while within prediction (remaining work, drains
+  as today), `ElapsedSec` once overrun (full accrued drift, grows) — then
+  `× ticksPerSecond / BudgetTicks(class)`. An overdue thought's elapsed time
+  IS its grounded debt; the pre-033 floor-to-zero inverted the signal under
+  overload (worst drift → least debt → no shed, the world-01 defect). The
+  boundary jump at `ElapsedSec == PredictedSec` is doctrine
+  (specs/033-governor-accrued-debt/contracts/debt-formula.md). `debt` is the
+  sum, `jobs` counts only positive-contributing entries (overdue thoughts now
+  contribute, so they count). Unknown kinds are skipped (they cannot reach a
+  model) and `ticksPerSecond ≤ 0` (uncapped max) yields zero — pure
+  arithmetic, no randomness, identical inputs always yield identical debt.
 - **`Governor`** (a hysteresis state machine, one instance owned by the
   daemon's sampler, [[daemon-lifecycle]]): `Sample(debt, jobs, paused,
   effective, requested) Decision` counts consecutive qualifying SAMPLES, not
@@ -188,7 +202,10 @@ world directory, and only `promptworld calibrate` writes it. With no profile,
 bootstrap defaults (local 20 s/pt, cloud 10 s/pt) apply and the daemon prints
 a reminder to run calibrate. Telemetry: router verdicts land as `cog.outcome`
 events with the arithmetic string as the reason; estimator drift surfaces as
-`cog.recalibration_recommended` (fires once per breach, re-armed on recovery);
+`cog.recalibration_recommended` (fires once per breach episode, and since spec
+031 the same episode adopts — the payload's additive `prior_s_per_pt` →
+`adopted_s_per_pt` fields carry the re-seed arithmetic, `estimate_s_per_pt`
+remaining "current estimate at emission", i.e. the adopted value);
 `Estimator.Stats` exposes estimate, rolling spike rate, and lifetime
 sample/spike counts. `OutcomeRetried` (`"retried"`, TASK-42) is the one
 NON-terminal outcome value — a scene reply failed to parse and the scene

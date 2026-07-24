@@ -4,6 +4,7 @@ title: 'Perception of absence: grounded arrival observations make beliefs falsif
 status: To Do
 assignee: []
 created_date: '2026-07-23 17:50'
+updated_date: '2026-07-24 02:42'
 labels:
   - emergent-lore
   - epistemics
@@ -11,7 +12,7 @@ labels:
 dependencies:
   - TASK-79
 priority: medium
-ordinal: 73000
+ordinal: 13000
 ---
 
 ## Description

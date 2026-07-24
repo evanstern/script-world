@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,46 @@ func TestCognitionTelemetryIsNoOp(t *testing.T) {
 	}
 	if string(s.Marshal()) != string(before) {
 		t.Error("telemetry event mutated state")
+	}
+}
+
+// TestRecalibrationPayloadAdoptionRoundTrip (spec 031, contracts/adoption-event.md):
+// the additive adoption fields marshal and survive a round trip; a legacy
+// pre-031 payload without them decodes with zero values and — via omitempty —
+// re-serializes without the new keys, so historical events replay identically.
+func TestRecalibrationPayloadAdoptionRoundTrip(t *testing.T) {
+	full := RecalibrationPayload{
+		Tier: "gemma", EstimateSPerPt: 11.8, SpikeRate: 1.0, Window: 20,
+		PriorSPerPt: 0.524, AdoptedSPerPt: 11.8,
+	}
+	b, err := json.Marshal(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got RecalibrationPayload
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != full {
+		t.Errorf("round trip changed payload: %+v != %+v", got, full)
+	}
+	if !strings.Contains(string(b), `"prior_s_per_pt":0.524`) ||
+		!strings.Contains(string(b), `"adopted_s_per_pt":11.8`) {
+		t.Errorf("adoption fields missing from JSON: %s", b)
+	}
+
+	// Legacy payload (pre-031): no adoption fields.
+	var lp RecalibrationPayload
+	legacy := []byte(`{"tier":"local","estimate_s_per_pt":17.2,"spike_rate":0.35,"window":20}`)
+	if err := json.Unmarshal(legacy, &lp); err != nil {
+		t.Fatal(err)
+	}
+	if lp.PriorSPerPt != 0 || lp.AdoptedSPerPt != 0 {
+		t.Errorf("legacy decode set adoption fields: %+v", lp)
+	}
+	reB, _ := json.Marshal(lp)
+	if strings.Contains(string(reB), "prior_s_per_pt") || strings.Contains(string(reB), "adopted_s_per_pt") {
+		t.Errorf("omitempty violated — zero adoption fields serialized: %s", reB)
 	}
 }
 

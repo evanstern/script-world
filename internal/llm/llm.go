@@ -361,9 +361,11 @@ type Orchestrator struct {
 	// recalibrate is invoked (in its own goroutine) when a provider's estimator
 	// first breaches the spike-rate threshold — the mind turns it into a
 	// cog.recalibration_recommended telemetry event. It carries the serving
-	// provider's name (spec 024 T009: the hook is per provider, not per tier).
+	// provider's name (spec 024 T009: the hook is per provider, not per tier)
+	// and, post-spec-031, the adoption arithmetic: the estimate before adoption
+	// (prior) and the window median installed as the new estimate (adopted).
 	recalMu     sync.Mutex
-	recalibrate func(provider string, estimate, spikeRate float64)
+	recalibrate func(provider string, estimate, spikeRate, prior, adopted float64)
 }
 
 func New(cfg Config, st MeterStore) (*Orchestrator, error) {
@@ -582,7 +584,7 @@ func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 	if !ok || dc.Points <= 0 {
 		return
 	}
-	if p.est.Sample(float64(millis) / 1000 / float64(dc.Points)) {
+	if ad := p.est.Sample(float64(millis) / 1000 / float64(dc.Points)); ad != nil {
 		est, rate, _, _ := p.est.Stats()
 		o.recalMu.Lock()
 		hook := o.recalibrate
@@ -590,7 +592,9 @@ func (o *Orchestrator) feedEstimate(p *provider, kind Kind, millis int64) {
 		if hook != nil {
 			// The hook fires per provider: the breaching provider's own name
 			// rides the drift signal (observational telemetry, not routing).
-			go hook(p.name, est, rate)
+			// The estimate at emission is the just-adopted value (== ad.Adopted),
+			// carried alongside the adoption arithmetic for the audit record.
+			go hook(p.name, est, rate, ad.Prior, ad.Adopted)
 		}
 	}
 }
@@ -623,7 +627,7 @@ func (o *Orchestrator) ObserveCognition(kind Kind, provider string, totalMillis 
 // SetRecalibrateHook installs the drift-signal consumer (the mind). The
 // hook runs in its own goroutine and must be idempotent per breach episode
 // — the estimator already fires once per breach.
-func (o *Orchestrator) SetRecalibrateHook(fn func(provider string, estimate, spikeRate float64)) {
+func (o *Orchestrator) SetRecalibrateHook(fn func(provider string, estimate, spikeRate, prior, adopted float64)) {
 	o.recalMu.Lock()
 	o.recalibrate = fn
 	o.recalMu.Unlock()

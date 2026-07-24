@@ -4,9 +4,10 @@ title: 'gofmt drift on main: five files fail gofmt -l'
 status: To Do
 assignee: []
 created_date: '2026-07-23 21:19'
+updated_date: '2026-07-24 02:42'
 labels: []
 dependencies: []
-ordinal: 75000
+ordinal: 3000
 ---
 
 ## Description
