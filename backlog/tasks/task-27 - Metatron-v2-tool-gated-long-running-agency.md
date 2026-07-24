@@ -4,7 +4,7 @@ title: 'Metatron v2: tool-gated long-running agency'
 status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 01:58'
+updated_date: '2026-07-24 03:16'
 labels: []
 dependencies:
   - TASK-53
@@ -46,7 +46,7 @@ Spec: specs/029-metatron-agency
 - [ ] #7 A triggered order executes through the single-flight turn path, lands its nudge, appends to transcript, and surfaces as a queued moment in the next console reply
 - [ ] #8 Budget/degraded honesty: an order firing with empty charge bank or exhausted budget queues an honest moment instead of acting or retry-looping
 - [ ] #9 docs/wiki re-pinned for touched notes (metatron, llm-orchestrator, event-types) via grounding-wiki:wiki-update before merge
-- [ ] #10 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #10 Spec phase: Foundational (Blocking Prerequisites)
 - [ ] #11 Spec phase: User Story 1 — Omens and visions replace dreams (P1)
 - [ ] #12 Spec phase: User Story 2 — Standing orders via monitor_and_act (P1)
 - [ ] #13 Spec phase: User Story 3 — Triggered orders act while away (P1)
@@ -55,8 +55,6 @@ Spec: specs/029-metatron-agency
 - [ ] #16 Spec phase: User Story 6 — Fuzzy conditions confirmed cheaply (P3)
 - [ ] #17 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
-
-
 
 ## Implementation Plan
 
@@ -75,4 +73,6 @@ Spec: specs/029-metatron-agency
 
 <!-- SECTION:NOTES:BEGIN -->
 Re-grounding 2026-07-22: Decision #1's infrastructure (Go tool registry as single source of truth + bounded execute-and-feed-back loop) is now owned by TASK-53 (registry, Layer 1) and TASK-52 (agent tool-use loop), written 2026-07-21 after this task. Re-scope: TASK-27 consumes that substrate and contributes the Metatron-specific pieces — roster (send_omen, send_vision, monitor_and_act, pause/start/adjust_speed), KindMetatronWatch routing, standing-order event sourcing, charge economy expressed as tool costs. Decision 1a's strict-JSON envelope may be superseded by TASK-52's provider-native tool calling — resolve in the 52 spec, not here. Other grounding verified current: sentinel test metatron_test.go:272, agent.slept/woke executor.go:385/128, KindMetatron llm.go:37. Stale next-step: 'specs/006-metatron-agency' — 006 is taken (norms); use the next free spec number. Deps added: TASK-53, TASK-52.
+
+Batch A (T001-T004) gated PASS: 4 commits on task-27-metatron-agency (a972b62 llm kind+backfill, 79a9042 toolloop schema walker, c4eb9c5 registry migration, 9302af7 sim order substrate). Orchestrator re-verified: go build/vet + fresh go test on tool/sim/metatron green. Implementer findings folded: event_types enum pinned to norm.violated (meeting.norm_enacted emitted by nowhere — contract updated); metatron_watch mapped to cognition class metatron (Batch C T021 to confirm estimator fit or split a cheap class); route-backfill names default providers verbatim (bites only custom-renamed configs missing the route — review note); BATCH-A BRIDGE comments in internal/metatron mark landNudge mapping + handler-less declared tools for Batch B.
 <!-- SECTION:NOTES:END -->

@@ -27,12 +27,12 @@ strongly coupled (the registry retirement breaks compiles in sim/metatron until
 their readers re-point) — execute sequentially in this order, keeping the build
 green at each commit.
 
-- [ ] T001 Add `KindMetatronWatch` to `internal/llm/llm.go` (acceptedKinds,
+- [X] T001 Add `KindMetatronWatch` to `internal/llm/llm.go` (acceptedKinds,
   comment) and `internal/llm/config.go` (defaultRoutes chain `["local","cloud"]`,
   missing-route backfill per contracts/routing.md — unknown keys still error;
   extend `internal/llm/config_test.go` with: v2 config without the new route boots
   with backfill + log, unknown route key still errors, defaults include the kind.
-- [ ] T002 Generalize authored-schema validation in `internal/toolloop/loop.go`:
+- [X] T002 Generalize authored-schema validation in `internal/toolloop/loop.go`:
   replace the hardcoded validateSetPlan dispatch with a schema-lite walker
   (required keys; string/integer/boolean scalars; string arrays with enum,
   maxLength, minItems/maxItems; integer minimum/maximum; string maxLength) driven
@@ -40,7 +40,7 @@ green at each commit.
   (existing `loop_test.go`/`equivalence_test.go` pass unchanged); add walker unit
   tests in `internal/toolloop/loop_test.go` covering monitor_and_act-shaped calls
   (missing required, bad enum member, array over maxItems, wrong scalar type).
-- [ ] T003 Registry migration in `internal/tool/registry.go` + `roster.go`:
+- [X] T003 Registry migration in `internal/tool/registry.go` + `roster.go`:
   retire `nudge_dream`/`nudge_omen`; add `send_vision`, `send_omen`,
   `monitor_and_act` (authored InputSchemaJSON + curated event_types enum pinned
   against real emitted types), `cancel_order`, `pause`, `start`, `adjust_speed`
@@ -50,7 +50,7 @@ green at each commit.
   `tool.Validate()` green; extend `internal/tool/registry_test.go`/
   `derive_test.go`: roster contents, guidance renders the new tools, InputSchema
   for monitor_and_act returns the authored schema verbatim, retired names miss.
-- [ ] T004 Sim substrate in `internal/sim/`: `state.go` gains
+- [X] T004 Sim substrate in `internal/sim/`: `state.go` gains
   `MetatronOrders []MetatronOrder` (data-model §1, `metatron_orders,omitempty`,
   prune-to-32 non-active); `metatron.go` gains the four order reducer arms
   (validation matrix per contracts/events.md) and the `metatron.nudged` form
