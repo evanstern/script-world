@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-07-21 13:47'
-updated_date: '2026-07-24 03:19'
+updated_date: '2026-07-24 13:24'
 labels:
   - ux
 dependencies: []
@@ -20,6 +20,23 @@ ordinal: 2000
 From TASK-39: BootstrapLocalSecPerPt=20.0 is ~20x slower than this rig's measured 0.94 s/pt, so every uncalibrated world silently loses conversations (above ~27x) and planners at high speed, with no signal. Options per TASK-39: lower the bootstrap, or make high-speed launch of an uncalibrated world warn loudly / auto-suggest scriptworld calibrate. Pessimism-toward-reflex is intentional doctrine (decision-4) — changing the default is a doctrine-adjacent call, review against specs/007-cognition-horizon.
 <!-- SECTION:DESCRIPTION:END -->
 
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Spec phase: Setup
+- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #3 Spec phase: User Story 1 - Raising speed on an uncalibrated world warns loudly (Priority: P1) 🎯 MVP
+- [ ] #4 Spec phase: User Story 2 - Boot warning states the concrete consequence (Priority: P2)
+- [ ] #5 Spec phase: User Story 3 - Calibration state visible in status (Priority: P3)
+- [ ] #6 Spec phase: User Story 4 - Calibrate discloses its sequential-measurement bias (Priority: P3)
+- [ ] #7 Spec phase: Polish & Cross-Cutting Concerns
+<!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Spec Kit flow complete: specs/035-calibration-ux (spec + plan + research + data-model + contracts/warnings.md + quickstart + tasks.md, 17 tasks / 7 phases). Doctrine review in spec closes the 'revisit bootstrap default' question: pessimistic bootstrap stands (decision-4). Implementation: one worktree .worktrees/task-40, branch task-40-calibration-ux, one PR; T001–T015 delegated to spec-implementer; T016–T017 (wiki re-pin + player-docs freshness) run at root after merge, then final sync to Done.
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
@@ -28,4 +45,6 @@ Live finding (demo world, post-calibration): scriptworld calibrate measures SEQU
 Drift audit 2026-07-23: verified intact — BootstrapLocalSecPerPt=20.0 at internal/cognition/estimate.go:14; only a generic (not speed-gated) calibrate reminder at daemon.go:160; promptworld calibrate exists (main.go:81, calibrate.go); wiki cognition.md:77 agrees.
 
 Cross-ref 2026-07-24: TASK-86 (estimator freeze under load — spike gate can't follow a >3x step, world-01 evidence) and TASK-87 (governor debt floors overdue jobs to zero) are the live-defect siblings of this task's sequential-vs-concurrent calibration bias. If TASK-86 lands (live estimator follows load), the calibration seed becomes just a starting point and this task reduces to pure UX (warn on uncalibrated + concurrency disclosure).
+
+Model-tier decision (constitution V rubric): SONNET (default tier). Justification: pure UX/visibility slice — additive omitempty wire fields, CLI rendering, boot-output composition, moving existing horizonSummary arithmetic into internal/cognition unchanged; no concurrency/scheduling/governor logic modified (the two internal/llm touches are additive bookkeeping on existing structs). Escalate to Opus 4.8 only if gates fail.
 <!-- SECTION:NOTES:END -->
