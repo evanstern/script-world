@@ -815,7 +815,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		axeBrokeIfLast()
 	case "collect_water":
 		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
-	case "craft_planks", "craft_stone", "craft_spear":
+	case "craft_planks", "craft_stone", "craft_spear", "craft_axe":
 		// T026: inputs re-validated at completion (contested-resource
 		// pattern) — insufficient inputs resolve via intent_done only, no
 		// agent.crafted. Hand-crafts have no travel window (target = the
