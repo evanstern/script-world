@@ -7,15 +7,17 @@ sources:
   - internal/sim/migrate_test.go
   - internal/sim/whole_feature_test.go
   - internal/sim/miracles_test.go
+  - internal/sim/metatron_test.go
   - internal/world/migrate_test.go
   - internal/ipc/ipc_test.go
   - internal/mind/replay_test.go
   - internal/metatron/metatron_test.go
   - internal/metatron/metatron_gaps_test.go
+  - internal/metatron/orders_test.go
   - internal/persona/persona_test.go
   - e2e/daemon_e2e_test.go
   - e2e/determinism_e2e_test.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
 ---
 
 # Testing strategy
@@ -158,11 +160,26 @@ cleanly with the connection surviving.
 `internal/metatron/metatron_gaps_test.go`, TASK-74): the package's own tests
 now prove the economy mirror, turn serialization, and context-window
 contracts, not just the TASK-64 instruction surface. `metatron_test.go`
-(pre-existing) covers turn converse/degraded/fallback paths, nudge/miracle
+(pre-existing) covers turn converse/degraded/fallback paths, influence
 landing (charge decrement, atomicity, perception memories), zero-bank
 refusal, the firewall sentinel, charter fallbacks, skill-file
 eligibility/ordering, the fixed-frame non-negotiables under an adversarial
-battery, and capability-manifest gating; spec 025 (TASK-72) extended it with
+battery, and capability-manifest gating; spec 029 (TASK-27) extended it with the
+agency surface — vision landing and its single-target rejection
+(`TestVisionLands`/`TestVisionRejectsMultiTarget`), omen group targeting and
+dead-target/day-deferral behavior (`TestOmenLandsOnNamedGroup`,
+`TestOmenDeadTargetRefused`, `TestOmenDayDefersToNightfall`,
+`TestOmenDayDeferralCapExempt`), the meta tools driving the `LoopControl` seam
+including the start-with-speed set_speed-then-resume order and the
+converse-never-touches-the-clock guarantee (`TestMetaToolsLandThroughLoopControl`,
+`TestMetaToolStartSpeedFailureStopsBeforeResume`, `TestConverseTurnNeverTouchesTheClock`,
+`TestMetaToolLoopError`), the extended handler-firewall audit (`TestHandlerFirewallAudit`,
+SC-007), the fixed `metatronInitiativeFrame` (`TestInitiativeFrameFixed`), the
+clock-speed ladder drift guard (`TestClockSpeedsMirrorLadder`), and the
+single-origin directive label — a console prompt carries exactly one
+"The player says:" and a system turn's carries none
+(`TestTurnDirectiveLabelSingleOrigin`); spec 025 (TASK-72)
+extended it with
 turn retry-visibility tests (a turn whose loop consumed its transport retry
 emits the non-terminal `cog.outcome` retried marker; a clean turn emits none)
 and turn token-budget plumbing tests (`metatron.New` stores and passes the
@@ -182,6 +199,33 @@ proves an observed batch's effects (alive map, chronicle story tail capped at
 tail-window truncation rules (`tailOfFile`, the 4000-byte `soulTail`, the
 6-whole-turn `transcriptTail`). All new concurrency tests are channel-gated,
 never sleep-as-the-only-gate (the TASK-69 flake lesson).
+
+**Standing-order suites** (spec 029, TASK-27, [[metatron-orders]]): the lifecycle
+is proven on both sides of the door. Reducer-side (`internal/sim/metatron_test.go`):
+`TestMetatronOrderPlacedRejections` and `TestMetatronPlayerOrderCap` pin the
+door validation (duplicate id, bad origin, empty event_types, TTL bounds, agent
+range, over-long condition/action, and the 3-active player cap with system-origin
+exemption); `TestMetatronOrderLifecycle` walks active→terminal transitions and the
+cancel/expiry/trigger race (exactly one terminal lands); `TestMetatronOrderExpiryExecutor`
+proves the executor emits `metatron.order_expired` as a pure function of state+tick;
+`TestMetatronOrdersSnapshotUpgrade` proves a pre-029 snapshot loads with empty order
+state; `TestMetatronOrdersReplayIdentically` proves from-genesis replay reconstructs
+the order set identically; `TestMetatronOrderPrune` pins the retain-32 rule.
+Metatron-side (`internal/metatron/orders_test.go`, 23 tests): the pure matcher and
+agent probe (`TestOrderMatches`, `TestEventConcernsAgent`), id sequencing, placement/
+cancel/expiry mirroring and prompt block, handler grant-gating, the end-to-end trigger
+firing and its serialization with a console turn through the shared `turnBusy`
+(`TestTriggerFiresEndToEnd`, `TestTriggerSerializesWithConsoleTurn`), the cancelled/raced
+door resolution, the empty-bank precheck spending nothing and the budget-exhausted
+one-moment-no-retry degradation (`TestEmptyBankPrecheckSpendsNothing`,
+`TestTriggerBudgetExhaustedOneMomentNoRetry`), `TestReplayReconstructsWithoutFiring`
+(replay rebuilds state but fires zero triggers, SC-002), the daytime-omen deferral
+landing at nightfall and its cancel-before-night path
+(`TestDeferredOmenTriggersAtNightfall`, `TestDeferredOmenCancelledNeverLands`), and the
+fuzzy-confirm matrix — no-hit silence, rate-cap skipping, negative/failed verdict leaves
+armed with no retry, and a yes verdict triggers (`TestFuzzyNoConfirmWithoutHit`,
+`TestFuzzyRateCapSkipsExcess`, `TestFuzzyNegativeVerdictLeavesArmed`,
+`TestFuzzyConfirmFailureNoRetry`, `TestFuzzyYesTriggers`). Channel-gated throughout.
 
 **Persona lifecycle suite** (`internal/persona/persona_test.go`, TASK-74): on
 top of the pre-existing genesis-once/0444/missing-file-load coverage,
@@ -205,8 +249,8 @@ writer vs IPC readers — now atomic).
 
 Exercises [[sim-loop]], [[sim-state-reducer]], [[deterministic-rng]] (unit),
 [[ipc-server]]/[[ipc-client]] (integration), and [[cli-promptworld]]/
-[[daemon-lifecycle]] (e2e). [[metatron-miracles]] covers the reducer arms and
-doors these suites exercise. [[agent-mind]]/[[tool-loop]] are what the
+[[daemon-lifecycle]] (e2e). [[metatron-miracles]] and [[metatron-orders]] cover the
+reducer arms and doors these suites exercise. [[agent-mind]]/[[tool-loop]] are what the
 loop-era replay suite drives through a real `Loop` + `loopMind`. Manual
 validation results live in `specs/001-world-daemon/quickstart-results.md`.
 

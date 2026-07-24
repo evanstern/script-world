@@ -7,7 +7,7 @@ sources:
   - README.md
   - internal/worlds/home.go
   - .gitignore
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Project rename: script-world → promptworld

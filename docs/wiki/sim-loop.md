@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/sim/loop.go
   - internal/sim/landing.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Sim loop
@@ -60,8 +60,12 @@ itself keeps meaning "the speed the loop paces at" — since spec 028 that is
 specifically the EFFECTIVE speed, with `RequestedSpeed` carrying the player's
 ceiling only while governed ([[cognition]], [[sim-state-reducer]]).
 
-`Loop.Do(name, speed)` is the thread-safe entry used by IPC sessions; it fails cleanly
-via the loop's `done` channel if the loop has stopped. `Loop.DoState()` answers the
+`Loop.Do(name, speed)` is the thread-safe entry used by IPC sessions — and, since
+spec 029 (US5, [[metatron-orders]]), by Metatron's `pause`/`start`/`adjust_speed`
+meta tools through a `LoopControl` seam the daemon wires onto the same `*Loop`
+([[daemon-lifecycle]]): an angel-issued clock command lands `clock.paused`/
+`clock.resumed`/`clock.speed_set` indistinguishably from a console one. It
+fails cleanly via the loop's `done` channel if the loop has stopped. `Loop.DoState()` answers the
 protocol's `state` command with the canonical `State` JSON plus a status captured in
 the same loop iteration — the returned `last_seq` is exactly the log position the
 state reflects, which is what makes client-side replicas gapless.
@@ -130,14 +134,19 @@ by construction.
 `Loop.InjectSocial` is the second door — the mind's injection
 door ([[social-fabric]], [[nightly-consolidation]], musings per [[agent-mind]],
 narrator entries per [[chronicle]], nudges and miracles per [[metatron]] /
-[[metatron-miracles]], proposal rephrasing
+[[metatron-miracles]], standing orders per [[metatron-orders]], proposal rephrasing
 per [[governance]] — `agent.thought` is
 whitelisted as a reducer no-op, `chronicle.entry` appends the story ring,
 `metatron.nudged` spends a charge with a validating reducer the dry-run enforces,
 the four `metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`/
 `metatron.entity_removed` miracle types (spec 016) are whitelisted the same way —
 their reducer arms enforce presence/destination/charge before anything lands,
-the whitelist is only the isolation boundary — `meeting.proposal_rephrased` swaps
+the whitelist is only the isolation boundary — `metatron.order_placed`/
+`metatron.order_cancelled`/`metatron.order_triggered` (spec 029) join the
+whitelist the same way (placement/cancellation/trigger-match validation lives
+in the reducer arm); `metatron.order_expired` needs no whitelist entry — it is
+executor-emitted, never injected, the `charge_regenerated` precedent —
+`meeting.proposal_rephrased` swaps
 an enacted norm's text and nothing else,
 the `cog.*` telemetry — `cog.thought`, `cog.outcome`,
 `cog.recalibration_recommended`, and (since spec 017) `cog.tool_call` (the
@@ -164,7 +173,8 @@ carries `MetatronCharges` so clients render the ⚡ bank without a state fetch.
 the ctx whose cancellation triggers the final snapshot. The landing ladder's
 budgets and classes come from [[cognition]] (`cognition.ClassFor`), whose router
 and estimators produce the snapshot/landing metadata the ladder judges.
-[[metatron-miracles]]'s four event types ride `InjectSocial`'s whitelist.
+[[metatron-miracles]]'s four event types ride `InjectSocial`'s whitelist, as do
+[[metatron-orders]]'s three injected order-lifecycle types.
 [[tool-loop]] is the caller behind both doors' villager/metatron traffic since
 spec 017 — its handlers wrap `InjectIntent` (world verbs, `set_plan`) and
 `InjectSocial` (`muse`, and Metatron's nudges/`work_miracle`), and its buffered

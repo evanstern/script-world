@@ -5,7 +5,7 @@ kind: component
 sources:
   - internal/toolloop/loop.go
   - internal/toolloop/record.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Tool-use loop
@@ -111,8 +111,10 @@ the terminal answer without needing a follow-up round.
 one with no registered handler), `rejected_malformed` (driver-side schema/
 param validation — `validateArgs`, catching missing required args, wrong
 scalar types, enum membership, number bounds, text caps; a tool with an
-authored `InputSchemaJSON` override instead gets `validateSetPlan`'s
-structural check), and `rejected_cardinality`. A handler's returned `Outcome`
+authored `InputSchemaJSON` override is instead validated against THAT schema
+by a general schema-lite walker — `validateAuthored`/`walkSchema`, spec 029 R5
+— NOT against `set_plan`'s shape as the retired `validateSetPlan` did), and
+`rejected_cardinality`. A handler's returned `Outcome`
 owns `landed`, `rejected_gate` (the door refused — stale, guard, scene,
 charge), `read_ok`, and `read_error`. `unlanded` covers a call the loop
 terminated before dispatching (cap reached, or a trailing call after an
@@ -197,7 +199,9 @@ consumer: it builds a `villagerDispatch`, wraps every acting tool's landing
 door in `villagerHandlers` (`internal/mind/handlers.go`), and reads `res.Term`
 to decide the terminal `cog.outcome` and rearm exactly as the pre-loop
 rejection/failure paths did. [[metatron]]'s `Turn` is the console consumer:
-its `turnHandlers` wrap `landNudge`/`landMiracle`, and `converse` is
+its `turnHandlers` wrap the spec-029 agency surface (`send_vision`/`send_omen`,
+`monitor_and_act`/`cancel_order`, `work_miracle`, and the meta tools
+`pause`/`start`/`adjust_speed` — see [[metatron-orders]]), and `converse` is
 deliberately NOT a declared tool — the model's closing prose
 (`Result.Final`) is the transcript-only answer channel. [[cognition]] owns
 the decision-class registry and staleness router both consumers gate on

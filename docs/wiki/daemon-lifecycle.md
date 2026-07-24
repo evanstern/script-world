@@ -4,7 +4,7 @@ description: Process lifecycle — startup recovery (snapshot+replay), pidfile w
 kind: pipeline
 sources:
   - internal/daemon/daemon.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Daemon lifecycle
@@ -70,7 +70,12 @@ Startup sequence:
    clamp/default rather than aborting boot (TASK-52, [[llm-orchestrator]]). The
    normalized round cap and effective budgets then thread into both loop
    consumers: `mind.New(..., loopRounds, plannerTokens, consolidationTokens)`
-   and `metatron.New(..., loopRounds, metatronTurnTokens)`.
+   and `metatron.New(orch, loop, loop, ..., loopRounds, metatronTurnTokens)` —
+   since spec 029 (US5) the loop is passed twice: once as the `Injector` it
+   was always passed as, once as the new `LoopControl` seam Metatron's
+   `pause`/`start`/`adjust_speed` meta tools drive ([[metatron-orders]],
+   [[sim-loop]]'s `Loop.Do` — the same two-interfaces-one-value pattern
+   `mind.New(loop, loop)` already used for the mind driver).
    Before the orchestrator is built, `cognition.ValidateKinds(llm.Kinds())` is a
    hard startup gate: every call kind must resolve to a registered decision class
    before a model is ever reachable ([[cognition]]). After it is built,
@@ -106,7 +111,8 @@ without touching the world.
 is the foreground engine; [[ipc-server]] the concurrent face; [[event-types]] defines
 the `daemon.*` bookkeeping events it emits; [[cognition]] supplies the startup kind
 gate, the calibration profile it seeds into the orchestrator, and (spec 028)
-the debt arithmetic and hysteresis controller the governor sampler drives.
+the debt arithmetic and hysteresis controller the governor sampler drives;
+[[metatron-orders]] is what the `LoopControl` seam wired here (spec 029) drives.
 
 ## Operational notes
 

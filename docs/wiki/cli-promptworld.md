@@ -8,7 +8,7 @@ sources:
   - cmd/promptworld/calibrate.go
   - cmd/promptworld/ps.go
   - cmd/promptworld/miracle.go
-verified_against: 056c53a140df7431739d4d6cd5d727dc96aed001
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # promptworld CLI
@@ -89,8 +89,13 @@ ambiguous or unknown names exit 1). `worldArg`/`parseWorldFlags` wrap the older
   works with no daemon; `--follow` additionally subscribes live and requires one.
 - `metatron <world> [message...]` — the console one-shot ([[metatron]], TASK-12): with
   a message, one mediated turn (prints surfaced moments, the reply, any landed
-  `⚡ dream/omen` line, and the charge bank); without, a model-free status peek
-  (charges, charter provenance, recent soul notes).
+  `⚡ vision/omen` line, a `👁 watch set`/`👁 watch released` line for a placed or
+  cancelled standing order, a `⏲` line for a landed pause/start/adjust_speed
+  meta tool call (spec 029, [[metatron-orders]]), and the charge bank); without,
+  a model-free status peek (charges, charter provenance, a `--- standing
+  orders ---` block via `orderStatusLine` — id, fuzzy marker, origin,
+  remaining game-day, status, condition — when any order stands, and recent
+  soul notes).
 - `miracle <world> <snap-time|give|move|remove> ... [--force]` — the operator door
   for Metatron's miracles ([[metatron-miracles]], spec 016 R6), a dedicated
   subcommand family independent of the `metatron` conversational path: `snap-time
@@ -154,7 +159,8 @@ resolution, discovery, and the `ps` probe; [[ipc-client]] carries every online
 command; [[world-save-directory]] and [[event-log]] back the offline paths;
 [[game-clock]] formats times in `clockLine`/`eventLine`; `calibrate` writes the
 profile [[cognition]] routes with; `migrate` hands off to [[world-migration]];
-`miracle` hands off to [[metatron-miracles]].
+`miracle` hands off to [[metatron-miracles]]; `metatron`'s standing-orders
+rendering reads [[metatron-orders]].
 
 ## Operational notes
 

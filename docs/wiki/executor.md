@@ -9,7 +9,7 @@ sources:
   - internal/sim/terrain.go
   - internal/sim/recipes.go
   - internal/sim/memory.go
-verified_against: fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Executor
@@ -243,8 +243,12 @@ re-derivation, so replay is byte-identical. Build completions situate through
 "at the fire" (T024). Gossip/witness memories carry no `Why` — a witness did not
 drive the act. It also regenerates
 Metatron's nudge charges (`metatron.charge_regenerated` at absolute 6-game-hour
-tick boundaries while below the cap — [[metatron]]); its reflex fires only
-on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the
+tick boundaries while below the cap — [[metatron]]) and, per tick, sweeps
+`State.MetatronOrders` for any active standing order whose `ExpiresTick` the
+new tick has reached, emitting `metatron.order_expired` (spec 029, the
+`charge_regenerated` pattern — a pure function of state + tick, so a
+lapsed watch reproduces on replay with no angel running — [[metatron-orders]]);
+its reflex fires only on agents idle past `reflexGraceTicks` (120). `stepEvents` also runs the
 [[gru]]'s whole turn (`gruStep`) each tick, and the heartbeat's near-death memory
 names "the gru" as the cause when the last wound was recent. The per-minute social beat
 (`socialEvents`, [[social-fabric]]) runs the adjacency ladder — repay an open
