@@ -38,8 +38,9 @@ with snapshots, per-world save directories, and a Unix-socket client protocol �
 carrying eight villagers with needs, LLM planner minds, conversations, rumors and
 debts, nightly memory consolidation, the nocturnal gru, a cloud-narrated chronicle
 (the catch-up mechanism), **Metatron** (TASK-12): the player's sole influence
-channel, conversing in the TUI console, mediating dreams and omens on a regenerating
-charge economy, governed by `charter.md` — the game's only player-editable prompt —
+channel, conversing in the TUI console, mediating visions and omens on a regenerating
+charge economy, placing standing orders that watch and act while the player is away
+(spec 029), governed by `charter.md` — the game's only player-editable prompt —
 and **norms and votes** (TASK-13): the village legislates itself at a village meeting
 whose hour is a convention (per-world config or emergent), proposals and votes
 resolving deterministically off the relationship graph, with the agreed law living in
@@ -93,9 +94,10 @@ cloud narrative tier. No model configured? The world still runs — reflex-only 
   endpoint, model, pricing, `parallel` worker slots, `tool_mode`,
   `reasoning_effort`, opt-in `endpoint_capacity` for shared-endpoint coordination).
 - `routes` — every call kind (planner, conversation, consolidation, narrator, drama,
-  metatron, meeting) maps to an **ordered chain** of provider names. Chain order is
-  the whole routing policy: first admissible candidate serves; skips happen only for
-  mechanical reasons (circuit open / budget / queue full) and are recorded.
+  metatron, meeting, metatron_watch) maps to an **ordered chain** of provider names.
+  Chain order is the whole routing policy: first admissible candidate serves; skips
+  happen only for mechanical reasons (circuit open / budget / queue full) and are
+  recorded.
 - `monthly_budget_usd` — one global ceiling; spend is attributed per provider.
 - Pre-024 configs (`local`/`cloud` shape) load unchanged, forever — no migration.
 
