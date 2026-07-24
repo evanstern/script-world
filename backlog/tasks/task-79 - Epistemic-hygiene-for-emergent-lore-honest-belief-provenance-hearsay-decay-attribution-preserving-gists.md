@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 02:21'
+updated_date: '2026-07-24 02:25'
 labels:
   - emergent-lore
   - epistemics
@@ -43,6 +43,12 @@ Spec: specs/030-epistemic-hygiene
 - [ ] #2 Never-reinforced beliefs decay in confidence deterministically over game-days; decay constants + rationale recorded on the task; replay/determinism suite passes
 - [ ] #3 Gist prompt preserves attribution: before/after eval on scripted fixtures + live sample shows no fact-flattened confabulation of the 'after investigating' shape; eval numbers recorded on the task
 - [ ] #4 A reinforcement seam exists for future grounded observations to refresh belief confidence (documented, even if no producer yet)
+- [ ] #5 Spec phase: Setup
+- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #7 Spec phase: User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP
+- [ ] #8 Spec phase: User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2)
+- [ ] #9 Spec phase: User Story 3 — Gists preserve attribution (Priority: P3)
+- [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,3 +56,11 @@ Spec: specs/030-epistemic-hygiene
 <!-- SECTION:PLAN:BEGIN -->
 1) Ground: wiki notes covering beliefs/provenance (spec 019 grounded-memories), conversation gists, rumor flow, salience decay precedent. 2) speckit-specify spec 030-epistemic-hygiene (3 mechanisms: provenance honesty, confidence decay + reinforcement seam, attribution-preserving gists; eval-gated per TASK-73 precedent). 3) Clarify genuinely-open design points with user if artifacts do not answer. 4) speckit-plan + speckit-tasks. 5) spec-bridge:link, sync. 6) Implement via spec-implementer agents per constitution V tier rubric; eval for item 3. 7) PR, wiki re-pin, Done via sync.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+spec-bridge sync: Setup: 0/1 · Foundational (Blocking Prerequisites): 0/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 0/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 0/3 · User Story 3 — Gists preserve attribution (Priority: P3): 0/3 · Polish & Cross-Cutting Concerns: 0/3
+
+Decay constants + rationale (AC #2 requirement, research R3): BeliefHalfLifeDays = 8 — a conviction unconfirmed by direct observation halves in ~a game-week, an order of magnitude slower than memory recency (halves per game-day), because convictions outlive vividness. BeliefConfidenceFloor = 20 — just under the rumor tellability floor (25), so a belief stops driving behavior slightly before its rumor stops being tellable: the story outlives the conviction (myth survives, fact fades). Legacy beliefs (no Reinforced stamp) are grandfathered — no retroactive decay at upgrade. Computed-on-read per the memory-recency precedent; no decay events; replay untouched.
+<!-- SECTION:NOTES:END -->
