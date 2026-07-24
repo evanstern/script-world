@@ -40,6 +40,11 @@ type Inventory struct {
 	FoodCooked   int   `json:"food_cooked,omitempty"`
 	Meals        int   `json:"meals,omitempty"`
 	Spears       []int `json:"spears,omitempty"` // remaining uses per spear, sorted ascending
+	// Axes (spec 032 US2) mirror Spears exactly: remaining harvest uses per
+	// carried axe, sorted ascending (harvests spend the most-worn first). A
+	// carried axe triples chop/quarry yield. omitempty keeps pre-032 inventories
+	// byte-identical.
+	Axes []int `json:"axes,omitempty"`
 }
 
 // Intent is one multi-step goal being executed unattended: walk to
@@ -226,6 +231,7 @@ type Pile struct {
 	Planks       int         `json:"planks,omitempty"`
 	RefinedStone int         `json:"refined_stone,omitempty"`
 	Spears       []int       `json:"spears,omitempty"` // remaining uses, sorted ascending
+	Axes         []int       `json:"axes,omitempty"`   // remaining uses, sorted ascending (spec 032 US2)
 	Food         []FoodBatch `json:"food,omitempty"`   // drop order; same (Kind,SpoilAt) merges
 }
 
@@ -234,7 +240,7 @@ type Pile struct {
 // removed; data-model.md).
 func (p *Pile) empty() bool {
 	return p.Wood == 0 && p.Stone == 0 && p.Water == 0 && p.Planks == 0 &&
-		p.RefinedStone == 0 && len(p.Spears) == 0 && len(p.Food) == 0
+		p.RefinedStone == 0 && len(p.Spears) == 0 && len(p.Axes) == 0 && len(p.Food) == 0
 }
 
 // addFood merges n of a food kind into the pile: an existing batch with the
@@ -259,7 +265,7 @@ func (p *Pile) addFood(kind string, n int, spoilAt int64) {
 // Kind-empty pick_up/withdraw walks these in this exact order (spec 013 US2).
 var canonicalKinds = []string{
 	"wood", "stone", "water", "planks", "refined_stone",
-	"food_raw", "food_cooked", "meals", "spears",
+	"food_raw", "food_cooked", "meals", "spears", "axes",
 }
 
 // isFoodKind reports whether a kind is one of the batch-tracked food forms
@@ -277,8 +283,11 @@ var foodKinds = []string{"food_raw", "food_cooked", "meals"}
 // carriedCount is how many units of a kind an agent carries: spears counted
 // (durability lives in the slice), every other kind its flat inventory field.
 func carriedCount(inv Inventory, kind string) int {
-	if kind == "spears" {
+	switch kind {
+	case "spears":
 		return len(inv.Spears)
+	case "axes":
+		return len(inv.Axes)
 	}
 	return invField(inv, kind)
 }
@@ -300,6 +309,8 @@ func (p *Pile) avail(kind string) int {
 		return p.RefinedStone
 	case "spears":
 		return len(p.Spears)
+	case "axes":
+		return len(p.Axes)
 	case "food_raw", "food_cooked", "meals":
 		n := 0
 		for _, b := range p.Food {
@@ -633,7 +644,7 @@ const (
 // Chest capacity uses this same function over *Store.
 func bulk(inv Inventory) int {
 	return inv.Wood + inv.Stone + inv.Water + inv.Planks + inv.RefinedStone +
-		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears)
+		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears) + len(inv.Axes)
 }
 
 // freeBulk is the remaining carry capacity under the cap: bulkCap − bulk(inv),
