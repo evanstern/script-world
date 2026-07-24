@@ -21,18 +21,25 @@ import (
 // order) for snapshots and determinism hashing. Wall-clock time never
 // appears here.
 type State struct {
-	Tick          int64       `json:"tick"`
-	Paused        bool        `json:"paused"`
-	Speed         clock.Speed `json:"speed"`
-	Degraded      bool        `json:"degraded"`
-	EffectiveRate float64     `json:"effective_rate"`
-	Seed          uint64      `json:"seed"`
-	Night         bool        `json:"night"`
-	Agents        []Agent     `json:"agents"`
-	Structures    []Structure `json:"structures,omitempty"`
-	Cleared       []Point     `json:"cleared,omitempty"`
-	Harvested     []Harvest   `json:"harvested,omitempty"`
-	DenUses       []DenUse    `json:"den_uses,omitempty"`
+	Tick   int64       `json:"tick"`
+	Paused bool        `json:"paused"`
+	Speed  clock.Speed `json:"speed"`
+	// RequestedSpeed (spec 028 US2) is the player's speed CEILING, carried only
+	// while the adaptive-throttle governor holds the effective Speed below it;
+	// empty means ungoverned (requested == effective). Speed stays the effective
+	// speed the loop paces at, so the router and auto-slow observer need no
+	// change (research R2). omitempty keeps every pre-028 snapshot byte-identical:
+	// a field-absent snapshot is a valid ungoverned state.
+	RequestedSpeed clock.Speed `json:"requested_speed,omitempty"`
+	Degraded       bool        `json:"degraded"`
+	EffectiveRate  float64     `json:"effective_rate"`
+	Seed           uint64      `json:"seed"`
+	Night          bool        `json:"night"`
+	Agents         []Agent     `json:"agents"`
+	Structures     []Structure `json:"structures,omitempty"`
+	Cleared        []Point     `json:"cleared,omitempty"`
+	Harvested      []Harvest   `json:"harvested,omitempty"`
+	DenUses        []DenUse    `json:"den_uses,omitempty"`
 	// Quarried (spec 012, US1) marks depleted rock outcrops — permanent in
 	// v1, no regrow entry (unlike Harvested/Cleared, which do regrow). A
 	// quarried tile is passable but NOT buildable and NOT quarryable again;
@@ -168,6 +175,19 @@ type (
 	SpeedSetPayload struct {
 		Speed clock.Speed `json:"speed"`
 	}
+	// GovernorPayload is the recorded arithmetic behind one governor speed change
+	// (spec 028 FR-008): the shed/recover decision carries the player's ceiling,
+	// the effective speed before and after, and the measured debt + contributing-
+	// thought count that justified it — so the event log alone reconstructs every
+	// governed interval (SC-005). Shared by clock.governor_shed and
+	// clock.governor_recovered; no governor speed change is ever silent.
+	GovernorPayload struct {
+		Requested clock.Speed `json:"requested"`
+		From      clock.Speed `json:"from"`
+		To        clock.Speed `json:"to"`
+		Debt      float64     `json:"debt"`
+		Jobs      int         `json:"jobs"`
+	}
 	DegradedPayload struct {
 		EffectiveRate float64 `json:"effective_rate"`
 	}
@@ -302,8 +322,43 @@ func (s *State) Apply(e store.Event) error {
 			return fmt.Errorf("apply %s: %w", e.Type, err)
 		}
 		s.Speed = p.Speed
+		// A player speed command always collapses governed state (spec 028
+		// FR-009): the request becomes the new ceiling AND the effective speed,
+		// so any standing governor ceiling is cleared.
+		s.RequestedSpeed = ""
 		if !s.Degraded {
 			s.EffectiveRate = p.Speed.TicksPerSecond()
+		}
+	case "clock.governor_shed":
+		// The governor shed one notch (spec 028 US2): Speed becomes the governed
+		// (lower) effective speed and RequestedSpeed records the player's ceiling.
+		// EffectiveRate follows the new Speed unless the host is separately
+		// reporting a degraded pace (the auto-slow observer owns that fact).
+		var p GovernorPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		s.Speed = p.To
+		s.RequestedSpeed = p.Requested
+		if !s.Degraded {
+			s.EffectiveRate = p.To.TicksPerSecond()
+		}
+	case "clock.governor_recovered":
+		// The governor climbed one notch back (spec 028 US3): Speed becomes the
+		// restored effective speed. When it reaches the ceiling the world leaves
+		// governed state (RequestedSpeed cleared); otherwise the ceiling stands.
+		var p GovernorPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		s.Speed = p.To
+		if p.To != p.Requested {
+			s.RequestedSpeed = p.Requested
+		} else {
+			s.RequestedSpeed = ""
+		}
+		if !s.Degraded {
+			s.EffectiveRate = p.To.TicksPerSecond()
 		}
 	case "clock.degraded":
 		var p DegradedPayload

@@ -48,6 +48,7 @@ type Server struct {
 	loop     *sim.Loop
 	llm      *llm.Orchestrator // nil when the world has no llm.json
 	metatron Angel             // nil when the world has no llm.json
+	governor Governor          // nil when the world has no llm.json
 	shutdown func()            // requests daemon shutdown (graceful)
 	started  time.Time
 
@@ -79,6 +80,18 @@ type Angel interface {
 
 // SetMetatron attaches the optional angel (before Serve).
 func (s *Server) SetMetatron(a Angel) { s.metatron = a }
+
+// Governor is the daemon governor's status surface (spec 028 US1): the latest
+// sampled staleness debt and the count of pending model-bound thoughts driving
+// it. nil when the world has no orchestrator, so a no-LLM world folds zero
+// governor values into status and preserves pre-028 bytes (FR-003, SC-004).
+// Kept as a local interface (like Angel) so ipc never imports the daemon.
+type Governor interface {
+	GovernorStatus() (debt float64, jobs int)
+}
+
+// SetGovernor attaches the optional debt sampler (before Serve).
+func (s *Server) SetGovernor(g Governor) { s.governor = g }
 
 // SetLoop wires the sim loop in after construction (loop and server
 // reference each other: the loop notifies the server, the server commands
@@ -182,6 +195,9 @@ func (s *Server) statusData(cs sim.Status) StatusData {
 			EffectiveRate:   cs.EffectiveRate,
 			Degraded:        cs.Degraded,
 			MetatronCharges: cs.MetatronCharges,
+			// RequestedSpeed folds from the sim-state ceiling (spec 028 US2);
+			// empty/omitempty when ungoverned keeps the pre-028 byte shape.
+			RequestedSpeed: string(cs.RequestedSpeed),
 		},
 		Daemon: DaemonStatus{
 			Pid:           os.Getpid(),
@@ -197,6 +213,12 @@ func (s *Server) statusDataFull(cs sim.Status) StatusData {
 	if s.llm != nil {
 		st := s.llm.StatusSnapshot()
 		sd.LLM = &st
+	}
+	// Governor debt (spec 028 US1): folded exactly like the LLM snapshot — a nil
+	// governor (no-LLM world) leaves the zero values, which omitempty drops from
+	// the wire so pre-028 status bytes are unchanged.
+	if s.governor != nil {
+		sd.Clock.GovernorDebt, sd.Clock.GovernorJobs = s.governor.GovernorStatus()
 	}
 	return sd
 }

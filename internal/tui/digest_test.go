@@ -34,8 +34,16 @@ var catalogFixture = map[string]digestFixture{
 	"clock.speed_set": {`{"speed":"4x"}`, `speed=4x`},
 	"clock.degraded":  {`{"effective_rate":3.5}`, `degraded rate=3.50`},
 	"clock.recovered": {`{}`, `recovered`},
-	"daemon.started":  {`{"tick":100,"recovery_ms":250}`, `tick=100 recovery_ms=250`},
-	"daemon.stopped":  {`{"tick":100}`, `tick=100`},
+	"clock.governor_shed": {
+		`{"requested":"32x","from":"32x","to":"16x","debt":1.4,"jobs":3}`,
+		`governor shed 32x→16x debt=140% jobs=3`,
+	},
+	"clock.governor_recovered": {
+		`{"requested":"32x","from":"8x","to":"16x","debt":0.3,"jobs":1}`,
+		`governor recovered 8x→16x debt=30% jobs=1`,
+	},
+	"daemon.started": {`{"tick":100,"recovery_ms":250}`, `tick=100 recovery_ms=250`},
+	"daemon.stopped": {`{"tick":100}`, `tick=100`},
 
 	// --- sim ---
 	"sim.day_started":        {`{"day":3}`, `day 3 begins`},

@@ -130,6 +130,15 @@ type ClockStatus struct {
 	// MetatronCharges is the nudge bank (TASK-12) — surfaced here so
 	// clients render ⚡ without a state fetch.
 	MetatronCharges int `json:"metatron_charges"`
+	// Adaptive-throttle governor surface (spec 028 US1/US2). All three are
+	// additive-omitempty so pre-028 status bytes are byte-identical when the
+	// governor is inert (no-LLM worlds, or an LLM world with zero pending
+	// debt). RequestedSpeed is the player's ceiling from sim state — empty when
+	// ungoverned (requested == effective). GovernorDebt/GovernorJobs are folded
+	// from the daemon governor snapshot, like the LLM StatusSnapshot.
+	RequestedSpeed string  `json:"requested_speed,omitempty"`
+	GovernorDebt   float64 `json:"governor_debt,omitempty"`
+	GovernorJobs   int     `json:"governor_jobs,omitempty"`
 }
 
 type DaemonStatus struct {

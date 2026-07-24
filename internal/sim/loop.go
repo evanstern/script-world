@@ -25,13 +25,18 @@ const degradeWindow = 5 * time.Second
 // Status is the clock section of the protocol status shape, snapshotted
 // inside the loop goroutine so it is always coherent.
 type Status struct {
-	Tick          int64       `json:"tick"`
-	GameTime      string      `json:"game_time"`
-	Paused        bool        `json:"paused"`
-	Speed         clock.Speed `json:"speed"`
-	EffectiveRate float64     `json:"effective_rate"`
-	Degraded      bool        `json:"degraded"`
-	LastSeq       int64       `json:"last_seq"`
+	Tick     int64       `json:"tick"`
+	GameTime string      `json:"game_time"`
+	Paused   bool        `json:"paused"`
+	Speed    clock.Speed `json:"speed"`
+	// RequestedSpeed (spec 028 US2) is the player's ceiling while the governor
+	// holds Speed below it, empty when ungoverned — mirrors State.RequestedSpeed
+	// so the daemon's governor sampler can read the ceiling (and paused) through
+	// the loop's non-blocking status door without touching State directly.
+	RequestedSpeed clock.Speed `json:"requested_speed,omitempty"`
+	EffectiveRate  float64     `json:"effective_rate"`
+	Degraded       bool        `json:"degraded"`
+	LastSeq        int64       `json:"last_seq"`
 	// MetatronCharges surfaces the nudge bank (TASK-12) so clients can
 	// display ⚡ without a state fetch.
 	MetatronCharges int `json:"metatron_charges"`
@@ -65,11 +70,20 @@ type InjectArgs struct {
 }
 
 type command struct {
-	name   string // status | state | pause | resume | set_speed | inject_intent | inject_social
+	name   string // status | state | pause | resume | set_speed | govern | inject_intent | inject_social
 	speed  clock.Speed
+	govern *governArgs
 	inject *InjectArgs
 	social []store.Event
 	reply  chan commandResult
+}
+
+// governArgs carries a governor decision into the command channel: the target
+// effective speed and the debt arithmetic to record on the resulting event.
+type governArgs struct {
+	to   clock.Speed
+	debt float64
+	jobs int
 }
 
 type commandResult struct {
@@ -140,6 +154,32 @@ func (l *Loop) InjectIntent(args InjectArgs) error {
 		return res.err
 	case <-l.done:
 		return errors.New("simulation loop stopped")
+	}
+}
+
+// Govern applies a governor decision at the next tick boundary: it records a
+// clock.governor_shed or clock.governor_recovered event and paces at the new
+// effective speed immediately, exactly the path a player set_speed takes. A
+// decision that no longer applies — the world paused, the speed already moved,
+// `to` off the capped ladder or not exactly one notch from the current speed,
+// or a recover above the standing ceiling — emits NOTHING and returns cleanly;
+// the daemon's controller simply re-samples next cadence, so there is never a
+// merge to resolve (spec 028 contracts/internal-api.md, FR-005/FR-006/FR-014).
+//
+// Thread-safe from any goroutine (the daemon's sampler owns the only caller);
+// fails cleanly if the loop has stopped, mirroring InjectIntent.
+func (l *Loop) Govern(to clock.Speed, debt float64, jobs int) (Status, error) {
+	cmd := command{name: "govern", govern: &governArgs{to: to, debt: debt, jobs: jobs}, reply: make(chan commandResult, 1)}
+	select {
+	case l.commands <- cmd:
+	case <-l.done:
+		return Status{}, errors.New("simulation loop is not running")
+	}
+	select {
+	case res := <-cmd.reply:
+		return res.status, res.err
+	case <-l.done:
+		return Status{}, errors.New("simulation loop stopped")
 	}
 }
 
@@ -259,6 +299,7 @@ func (l *Loop) status() Status {
 		GameTime:        clock.Format(s.Tick),
 		Paused:          s.Paused,
 		Speed:           s.Speed,
+		RequestedSpeed:  s.RequestedSpeed,
 		EffectiveRate:   eff,
 		Degraded:        s.Degraded,
 		LastSeq:         l.st.LastSeq(),
@@ -393,6 +434,42 @@ func (l *Loop) handleCommand(cmd command) error {
 		} else if cmd.speed != l.state.Speed {
 			emit("clock.speed_set", SpeedSetPayload{Speed: cmd.speed})
 		}
+	case "govern":
+		// A governor decision lands as a recorded event exactly like set_speed,
+		// or is dropped silently (no event, clean return) when it no longer
+		// applies. Every drop path just returns — the controller re-samples next
+		// cadence (contracts/internal-api.md). Pause and off-ladder are checked
+		// first; direction and one-notch adjacency infer the event type.
+		g := cmd.govern
+		cur := l.state.Speed
+		curIdx, toIdx := clock.LadderIndex(cur), clock.LadderIndex(g.to)
+		switch {
+		case l.state.Paused:
+			// Never govern a paused world (FR-013): the clock and the governor
+			// with it are frozen; in-flight thoughts drain debt under pause.
+		case curIdx < 0 || toIdx < 0:
+			// Off the capped ladder (e.g. max) — the governor never touches it.
+		case g.to == cur:
+			// Stale decision: the speed already moved to the target (a player
+			// change or a prior govern landed first). No-op.
+		case toIdx-curIdx == -1:
+			// Shed one notch down. The ceiling is the standing RequestedSpeed, or
+			// the current speed on the first shed of an ungoverned world.
+			emit("clock.governor_shed", GovernorPayload{
+				Requested: l.requestedCeiling(), From: cur, To: g.to, Debt: g.debt, Jobs: g.jobs,
+			})
+		case toIdx-curIdx == 1:
+			// Recover one notch up — but never above the player's ceiling.
+			req := l.requestedCeiling()
+			if reqIdx := clock.LadderIndex(req); reqIdx >= 0 && toIdx > reqIdx {
+				break // a recover above the requested ceiling is dropped
+			}
+			emit("clock.governor_recovered", GovernorPayload{
+				Requested: req, From: cur, To: g.to, Debt: g.debt, Jobs: g.jobs,
+			})
+		default:
+			// Not exactly one notch (a stale multi-notch decision) — dropped.
+		}
 	case "inject_social":
 		batch := cmd.social
 		if len(batch) == 0 {
@@ -467,6 +544,17 @@ func (l *Loop) handleCommand(cmd command) error {
 	}
 	cmd.reply <- commandResult{status: l.status(), state: stateJSON, err: err}
 	return nil
+}
+
+// requestedCeiling is the player's speed ceiling for a governor event payload:
+// the standing RequestedSpeed while already governed, else the current
+// effective Speed — the first shed of an ungoverned world records the speed the
+// player actually asked for as the ceiling (contracts/internal-api.md).
+func (l *Loop) requestedCeiling() clock.Speed {
+	if l.state.RequestedSpeed != "" {
+		return l.state.RequestedSpeed
+	}
+	return l.state.Speed
 }
 
 // observeWindow keeps the effective-rate measurement honest and emits
