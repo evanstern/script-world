@@ -36,12 +36,13 @@ func parseMemRef(ref string, bufferLen int) int {
 }
 
 type beliefChange struct {
-	ID         int    `json:"id"` // 0 = new
-	Statement  string `json:"statement"`
-	Confidence int    `json:"confidence"`
-	Provenance string `json:"provenance"`
-	Source     int    `json:"source"`
-	Subject    int    `json:"subject"`
+	ID         int      `json:"id"` // 0 = new
+	Statement  string   `json:"statement"`
+	Confidence int      `json:"confidence"`
+	Provenance string   `json:"provenance"`
+	Source     int      `json:"source"`
+	Subject    int      `json:"subject"`
+	Evidence   []string `json:"evidence,omitempty"` // spec 030: ordinal buffer refs ("m3") the belief rests on
 }
 
 // consolidationOutput is the model's reply, per
@@ -61,6 +62,10 @@ const (
 	maxFades        = 8
 	maxBeliefEdits  = 4
 	maxNarrativeLen = 1200
+	// maxBeliefEvidence (spec 030) caps a belief's evidence citations. Over-long
+	// lists are pre-trimmed best-first before judging — absorbed, not punished
+	// (contracts/consolidation-contract.md), so there is no matching reject.
+	maxBeliefEvidence = 4
 	// Prompt asks for <200 chars; the cap allows overrun headroom (live
 	// finding: hard-failing a whole night on a wordy sentence is waste).
 	maxGistLen = 300
