@@ -81,13 +81,36 @@ func (p *Profile) Save(path string) error {
 // legacy names land on their historical constants (local is zero-priced, cloud
 // is priced) — byte-identical to the pre-spec-024 name-keyed fallback.
 func SeedFor(p *Profile, name string, zeroPriced bool) float64 {
-	if p != nil {
-		if tp, ok := p.Tiers[name]; ok && tp.SecondsPerPoint > 0 {
-			return tp.SecondsPerPoint
-		}
+	if tp, ok := profileEntry(p, name); ok {
+		return tp.SecondsPerPoint
 	}
 	if zeroPriced {
 		return BootstrapLocalSecPerPt
 	}
 	return BootstrapCloudSecPerPt
+}
+
+// profileEntry reports the profile's usable (positive SecondsPerPoint) entry
+// for a named provider, and whether one exists — the single presence test
+// SeedFor's seed value and Calibrated's provenance decision both apply, so
+// the two questions ("what seed?" and "is it calibrated?") can never
+// disagree (spec 035 R3).
+func profileEntry(p *Profile, name string) (TierProfile, bool) {
+	if p == nil {
+		return TierProfile{}, false
+	}
+	tp, ok := p.Tiers[name]
+	if !ok || tp.SecondsPerPoint <= 0 {
+		return TierProfile{}, false
+	}
+	return tp, true
+}
+
+// Calibrated reports whether the profile has a usable entry for a named
+// provider — the seed PROVENANCE decision (bootstrap vs calibrated) a caller
+// outside this package needs to record and gate on (spec 035 R2/R3), using
+// the exact same presence test SeedFor applies to pick the seed value.
+func Calibrated(p *Profile, name string) bool {
+	_, ok := profileEntry(p, name)
+	return ok
 }

@@ -271,6 +271,11 @@ type ProviderStatus struct {
 	Slots     int     `json:"slots"`
 	Contended bool    `json:"contended"`
 	SpentUSD  float64 `json:"spent_usd"`
+	// CalibratedAt is the calibration profile's timestamp when this provider's
+	// estimator was seeded from a usable profile entry; omitted (empty) means
+	// bootstrap-seeded — no separate marker field (spec 035 FR-004/FR-008).
+	// Never mutated by live estimator adaptation (spec 031) or drift.
+	CalibratedAt string `json:"calibrated_at,omitempty"`
 }
 
 // Status feeds the protocol status shape and the TUI. The per-provider table
@@ -327,6 +332,12 @@ type provider struct {
 	// the worker is the one place every call's true duration is observed,
 	// so it feeds the estimator; the mind reads it to route.
 	est *cognition.Estimator
+	// calibratedAt is the loaded profile's CalibratedAt when this provider had
+	// a usable profile entry at SeedCalibration; empty means bootstrap-seeded
+	// (spec 035 R3). Set exactly once, at SeedCalibration; never mutated by
+	// live estimator adaptation (spec 031) — the seed-state fact and the live
+	// estimate are deliberately independent (research R2).
+	calibratedAt string
 	// leases is the advisory endpoint-lease pool bounding COMBINED cross-world
 	// concurrency on this provider's normalized endpoint (spec 024 US5), or nil
 	// when endpoint_capacity was not declared — nil means zero lease syscalls and
@@ -501,10 +512,32 @@ func (o *Orchestrator) Close() { o.closeOnce.Do(func() { close(o.done) }) }
 // A provider with no recorded entry bootstraps by its pricing class (zero-priced
 // → local constant, priced → cloud constant, spec 024 R5). Called once at daemon
 // start, before traffic.
+//
+// It also records each provider's seed PROVENANCE (spec 035 R3): calibratedAt
+// is the profile's CalibratedAt when cognition.Calibrated finds a usable entry
+// for that provider, empty otherwise — the exact presence test SeedFor uses
+// to pick the seed value, so the seed and its provenance can never disagree.
 func (o *Orchestrator) SeedCalibration(p *cognition.Profile) {
 	for name, pv := range o.providers {
 		pv.est = cognition.NewEstimator(cognition.SeedFor(p, name, pv.cfg.zeroPriced()))
+		pv.calibratedAt = ""
+		if cognition.Calibrated(p, name) {
+			pv.calibratedAt = p.CalibratedAt
+		}
 	}
+}
+
+// CalibratedAt returns the named provider's calibration-profile timestamp, or
+// "" when it is running on bootstrap estimates (never seeded via
+// SeedCalibration, or the profile had no usable entry for it) — the seed-
+// state read the set_speed warning gate uses (spec 035 R2/R3): "" means
+// bootstrap-seeded and eligible to trigger the uncalibrated warning.
+func (o *Orchestrator) CalibratedAt(name string) string {
+	p, ok := o.providers[name]
+	if !ok {
+		return ""
+	}
+	return p.calibratedAt
 }
 
 // ProviderNames returns every declared provider name, sorted — the operator-
@@ -897,8 +930,9 @@ func (o *Orchestrator) StatusSnapshot() Status {
 			Name: p.name, Model: p.cfg.Model, Endpoint: p.cfg.Endpoint,
 			Up: !p.health.down(), Queue: len(p.queue),
 			Inflight: int(p.inflight.Load()), Slots: p.slots,
-			Contended: p.leases != nil && p.leases.contended.Load(),
-			SpentUSD:  perProvider[p.name],
+			Contended:    p.leases != nil && p.leases.contended.Load(),
+			SpentUSD:     perProvider[p.name],
+			CalibratedAt: p.calibratedAt,
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })

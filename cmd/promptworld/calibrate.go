@@ -237,31 +237,12 @@ func villagerProbeJob(sh refShape, rounds int, provider string) toolloop.Job {
 
 // horizonSummary evaluates the registry against a fresh seconds-per-point
 // across the watchable speed ladder: the operator sees the cognition horizon
-// for their hardware before ever running a world.
+// for their hardware before ever running a world. Delegates to
+// cognition.HorizonSummary (spec 035 R1/T004): the daemon boot warning, the
+// set_speed warning, and calibrate all read the one implementation, so the
+// warning may never disagree with the router (FR-006).
 func horizonSummary(secPerPt float64) string {
-	ladder := []float64{1, 4, 8, 16, 32}
-	parts := []string{}
-	for _, class := range []string{"planner", "conversation", "meeting"} {
-		dc, ok := cognition.ClassFor(class)
-		if !ok {
-			continue
-		}
-		maxOK := 0.0
-		for _, sp := range ladder {
-			if cognition.Route(dc, sp, secPerPt).Allow {
-				maxOK = sp
-			}
-		}
-		switch {
-		case maxOK == 0:
-			parts = append(parts, class+" always suppressed")
-		case maxOK >= 32:
-			parts = append(parts, class+" OK at 32x")
-		default:
-			parts = append(parts, fmt.Sprintf("%s suppressed above %gx", class, maxOK))
-		}
-	}
-	return strings.Join(parts, "; ")
+	return cognition.HorizonSummary(secPerPt)
 }
 
 // memMeter satisfies llm.MeterStore without touching world.db — local-tier
