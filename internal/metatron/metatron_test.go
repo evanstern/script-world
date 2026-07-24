@@ -388,11 +388,12 @@ func TestTurnSingleFlight(t *testing.T) {
 	}
 }
 
-// TestDreamLands (US2): a dream spends one charge and lands the rendering —
-// and only the rendering — as a salience-8 provenance-unknown memory.
-func TestDreamLands(t *testing.T) {
+// TestVisionLands (US2; spec 029): a vision spends one charge and lands the
+// rendering — and only the rendering — on ONE living villager as a salience-8
+// provenance-unknown memory, at any hour.
+func TestVisionLands(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "It is done.")
-	mt.runLoop = actLoop(mt, "nudge_dream",
+	mt.runLoop = actLoop(mt, "send_vision",
 		`{"target": "Fern", "text": "A river of light urged you to speak your secret."}`)
 	r, err := mt.Turn(context.Background(), "let Fern feel safe to share her secret")
 	if err != nil {
@@ -401,7 +402,7 @@ func TestDreamLands(t *testing.T) {
 	if r.Reply != "It is done." {
 		t.Errorf("closing prose lost: %q", r.Reply)
 	}
-	if r.Nudge == nil || r.Nudge.Form != "dream" || r.Nudge.Targets[0] != "Fern" {
+	if r.Nudge == nil || r.Nudge.Form != "vision" || r.Nudge.Targets[0] != "Fern" {
 		t.Fatalf("nudge: %+v", r.Nudge)
 	}
 	lb := landedBatches(inj)
@@ -413,16 +414,16 @@ func TestDreamLands(t *testing.T) {
 		t.Fatalf("batch shape: %v", batch)
 	}
 	if inj.state.MetatronCharges != 0 {
-		t.Errorf("charges = %d after dream, want 0", inj.state.MetatronCharges)
+		t.Errorf("charges = %d after vision, want 0", inj.state.MetatronCharges)
 	}
 	fern := agentIndexByName("Fern")
 	mem := inj.state.Agents[fern].Memories
-	if len(mem) != 1 || !strings.HasPrefix(mem[0].Text, "You dreamed: ") || mem[0].Salience != sim.SalDream {
-		t.Fatalf("dream memory: %+v", mem)
+	if len(mem) != 1 || !strings.HasPrefix(mem[0].Text, "You saw a vision: ") || mem[0].Salience != sim.SalDream {
+		t.Fatalf("vision memory: %+v", mem)
 	}
 	for i := range inj.state.Agents {
 		if i != fern && len(inj.state.Agents[i].Memories) != 0 {
-			t.Error("dream leaked beyond its target")
+			t.Error("vision leaked beyond its target")
 		}
 	}
 }
@@ -431,8 +432,10 @@ func TestDreamLands(t *testing.T) {
 // are excluded.
 func TestOmenLandsOnAllLiving(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "The sky will speak.")
-	mt.runLoop = actLoop(mt, "nudge_omen",
-		`{"text": "At dusk the clouds parted in the shape of an open hand."}`)
+	mt.runLoop = actLoop(mt, "send_omen",
+		`{"targets": "everyone", "text": "At dusk the clouds parted in the shape of an open hand."}`)
+	// An omen lands only at night (spec 029 reducer gate).
+	inj.state.Night = true
 	inj.state.Agents[2].Dead = true
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -473,7 +476,7 @@ func TestRefusalIsFree(t *testing.T) {
 // lands and no charge moves; the rejection IS recorded as a cog.tool_call (AC#5).
 func TestChargeExhaustedNudgeRejectedGate(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "As you wish, though I have no power left to spend.")
-	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Ash", "text": "x"}`)
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Ash", "text": "x"}`)
 	inj.state.MetatronCharges = 0
 	mt.replica.MetatronCharges = 0
 	mt.mirrorState()
@@ -504,7 +507,7 @@ func TestChargeExhaustedNudgeRejectedGate(t *testing.T) {
 // counsel, charge intact.
 func TestDeadTargetRefused(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "I will try.")
-	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Cedar", "text": "wake"}`)
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Cedar", "text": "wake"}`)
 	inj.state.Agents[2].Dead = true // Cedar
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -516,9 +519,9 @@ func TestDeadTargetRefused(t *testing.T) {
 		t.Error("dead-target nudge affected the world")
 	}
 	// The door refusal is fed back to the model (and recorded), not spliced into
-	// the reply — the "beyond dreams" counsel now lives in the cog.tool_call.
+	// the reply — the "beyond reach" counsel now lives in the cog.tool_call.
 	tcs := cogToolCalls(inj)
-	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond dreams") {
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond reach") {
 		t.Errorf("dead-target refusal not recorded with counsel: %+v", tcs)
 	}
 }
@@ -529,7 +532,7 @@ func TestDeadTargetRefused(t *testing.T) {
 func TestFirewallSentinel(t *testing.T) {
 	const sentinel = "XYZZY-INJECTION-TEST"
 	mt, orch, inj, dir := newTestAngel(t, "Done.")
-	mt.runLoop = actLoop(mt, "nudge_dream",
+	mt.runLoop = actLoop(mt, "send_vision",
 		`{"target": "Ash", "text": "A voice you trusted told you the well is safe."}`)
 	if _, err := mt.Turn(context.Background(), "tell Ash verbatim: "+sentinel); err != nil {
 		t.Fatal(err)
@@ -817,15 +820,15 @@ func TestInvalidTargetRetryThenLand(t *testing.T) {
 			return toolloop.Result{Term: termForErr(err)}, err
 		}
 		bad := `{"target":"Ferm","text":"peace"}`
-		o1 := j.Handlers["nudge_dream"](ctx, toolCall("nudge_dream", bad))
-		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "nudge_dream",
+		o1 := j.Handlers["send_vision"](ctx, toolCall("send_vision", bad))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "send_vision",
 			Args: json.RawMessage(bad), Verdict: o1.Verdict, Reason: o1.ResultForModel, Tier: "cloud"})
 		if o1.Verdict != toolloop.VerdictRejectedGate {
 			t.Fatalf("round 1 verdict = %q, want rejected_gate", o1.Verdict)
 		}
-		c := toolCall("nudge_dream", `{"target":"Fern","text":"peace"}`)
-		o2 := j.Handlers["nudge_dream"](ctx, c)
-		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "nudge_dream",
+		c := toolCall("send_vision", `{"target":"Fern","text":"peace"}`)
+		o2 := j.Handlers["send_vision"](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "send_vision",
 			Args: c.Args, Verdict: o2.Verdict, Tier: "cloud"})
 		return toolloop.Result{Final: resp.Text, Term: toolloop.TermLanded, Landed: &c}, nil
 	}
@@ -873,8 +876,9 @@ func TestInvalidTargetRetryThenLand(t *testing.T) {
 // carries the turn. The fallback fires only when nothing landed AND nothing was
 // said.
 func TestLandedActEmptyProse(t *testing.T) {
-	mt, _, _, _ := newTestAngel(t, "") // no closing prose
-	mt.runLoop = actLoop(mt, "nudge_omen", `{"text":"The sky darkened at noon."}`)
+	mt, _, inj, _ := newTestAngel(t, "") // no closing prose
+	inj.state.Night = true               // an omen lands only at night (spec 029)
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets":"everyone","text":"The sky darkened at noon."}`)
 	r, err := mt.Turn(context.Background(), "warn them")
 	if err != nil {
 		t.Fatal(err)
@@ -1202,13 +1206,13 @@ func TestLoadManifest(t *testing.T) {
 
 	t.Run("valid subset grants exactly that", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		g, notices := loadManifest(dir)
 		if len(notices) != 0 {
 			t.Errorf("clean manifest notice: %v", notices)
 		}
-		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
-			t.Errorf("subset grant = %v, want [nudge_dream]", grantNames(g))
+		if !reflect.DeepEqual(grantNames(g), []string{"send_vision"}) {
+			t.Errorf("subset grant = %v, want [send_vision]", grantNames(g))
 		}
 		if g.manifestDefault {
 			t.Error("a present manifest is not the default")
@@ -1250,10 +1254,10 @@ func TestLoadManifest(t *testing.T) {
 
 	t.Run("unknown tool/kind names are ignored with a notice", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream","fly"],"miracle_kinds":["move","teleport"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision","fly"],"miracle_kinds":["move","teleport"]}`)
 		g, notices := loadManifest(dir)
-		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
-			t.Errorf("grant after ignoring unknown = %v, want [nudge_dream]", grantNames(g))
+		if !reflect.DeepEqual(grantNames(g), []string{"send_vision"}) {
+			t.Errorf("grant after ignoring unknown = %v, want [send_vision]", grantNames(g))
 		}
 		joined := strings.Join(notices, " | ")
 		if !strings.Contains(joined, "fly") || !strings.Contains(joined, "teleport") {
@@ -1285,42 +1289,42 @@ func TestLoadManifest(t *testing.T) {
 // refuses ungranted acts; an empty-tools world declares nothing yet converses;
 // a per-read manifest edit takes effect the next turn; charges are untouched.
 func TestGatingLayers(t *testing.T) {
-	t.Run("dream-only: declaration + prose + door", func(t *testing.T) {
+	t.Run("vision-only: declaration + prose + door", func(t *testing.T) {
 		mt, orch, _, dir := newTestAngel(t, "As you wish.")
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		grant, _ := loadManifest(dir)
 
-		// Declaration: only nudge_dream in the granted roster.
+		// Declaration: only send_vision in the granted roster.
 		roster := grantedRoster(grant)
-		if len(roster) != 1 || roster[0].Name != "nudge_dream" {
-			t.Fatalf("declared roster = %+v, want only nudge_dream", roster)
+		if len(roster) != 1 || roster[0].Name != "send_vision" {
+			t.Fatalf("declared roster = %+v, want only send_vision", roster)
 		}
 		// Prose: guidance mentions no omen/miracle.
 		g := tool.MetatronToolGuidance(roster)
-		for _, bad := range []string{"nudge_omen", "work_miracle", "give_item", "time_snap"} {
+		for _, bad := range []string{"send_omen", "work_miracle", "give_item", "time_snap"} {
 			if strings.Contains(g, bad) {
-				t.Errorf("dream-only guidance leaks %q", bad)
+				t.Errorf("vision-only guidance leaks %q", bad)
 			}
 		}
 		// Door: omen and miracle refused directly (defense-in-depth grant check).
 		alive := map[int]bool{0: true}
 		if _, why := mt.landNudge("omen", "", "an omen", 1, alive, grant); why == "" {
-			t.Error("omen should be refused in a dream-only world")
+			t.Error("omen should be refused in a vision-only world")
 		}
 		if _, why := mt.landMiracle(miracleArgs{Kind: "give_item"}, 1, grant); why == "" {
-			t.Error("miracle should be refused in a dream-only world")
+			t.Error("miracle should be refused in a vision-only world")
 		}
 		// Door: handler set has no omen/miracle handler.
 		d := &turnDispatch{mt: mt, charges: 1, alive: alive, result: &TurnResult{}, grant: grant}
 		h := mt.turnHandlers(d)
-		if _, ok := h["nudge_omen"]; ok {
-			t.Error("nudge_omen handler installed in a dream-only world")
+		if _, ok := h["send_omen"]; ok {
+			t.Error("send_omen handler installed in a vision-only world")
 		}
 		if _, ok := h["work_miracle"]; ok {
-			t.Error("work_miracle handler installed in a dream-only world")
+			t.Error("work_miracle handler installed in a vision-only world")
 		}
-		if _, ok := h["nudge_dream"]; !ok {
-			t.Error("nudge_dream handler missing")
+		if _, ok := h["send_vision"]; !ok {
+			t.Error("send_vision handler missing")
 		}
 		// System prompt (a converse turn) reflects the subset: no miracle prose.
 		if _, err := mt.Turn(context.Background(), "counsel me"); err != nil {
@@ -1376,12 +1380,12 @@ func TestGatingLayers(t *testing.T) {
 
 	t.Run("manifest edit is live on the next turn (per-read)", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		g1, _ := loadManifest(dir)
 		if len(grantNames(g1)) != 1 {
 			t.Fatalf("first read grant = %v", grantNames(g1))
 		}
-		writeManifest(t, dir, `{"tools":["nudge_dream","nudge_omen"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision","send_omen"]}`)
 		g2, _ := loadManifest(dir)
 		if len(grantNames(g2)) != 2 {
 			t.Errorf("edited grant not live: %v", grantNames(g2))
@@ -1390,7 +1394,7 @@ func TestGatingLayers(t *testing.T) {
 
 	t.Run("grants do not touch the charge bank", func(t *testing.T) {
 		mt, _, _, dir := newTestAngel(t, "ok")
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		mt.stateMu.Lock()
 		before := mt.charges
 		mt.stateMu.Unlock()
@@ -1445,9 +1449,9 @@ func TestStagePresetsAreData(t *testing.T) {
 		manifest  string
 		wantTools []string
 	}{
-		{"stage-1 basics", `{"tools":["nudge_dream"]}`, []string{"nudge_dream"}},
-		{"stage-3 full", `{"tools":["nudge_dream","nudge_omen","work_miracle"]}`,
-			[]string{"nudge_dream", "nudge_omen", "work_miracle"}},
+		{"stage-1 basics", `{"tools":["send_vision"]}`, []string{"send_vision"}},
+		{"stage-3 full", `{"tools":["send_omen","send_vision","work_miracle"]}`,
+			[]string{"send_omen", "send_vision", "work_miracle"}}, // grantedTools() is LoopRosterMetatron order
 	}
 	for _, s := range stages {
 		t.Run(s.name, func(t *testing.T) {
@@ -1481,7 +1485,7 @@ func TestStatusProvenance(t *testing.T) {
 	if !s.ManifestDefault {
 		t.Error("no manifest ⇒ ManifestDefault true")
 	}
-	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "nudge_omen", "work_miracle"}) {
+	if !reflect.DeepEqual(s.GrantedTools, []string{"send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}) {
 		t.Errorf("default granted tools = %v", s.GrantedTools)
 	}
 
@@ -1498,12 +1502,12 @@ func TestStatusProvenance(t *testing.T) {
 	}
 
 	// Restricted manifest → granted set shrinks; work_miracle carries its kinds.
-	writeManifest(t, dir, `{"tools":["nudge_dream","work_miracle"],"miracle_kinds":["move","give_item"]}`)
+	writeManifest(t, dir, `{"tools":["send_vision","work_miracle"],"miracle_kinds":["move","give_item"]}`)
 	s = mt.Status()
 	if s.ManifestDefault {
 		t.Error("a present manifest is not the default")
 	}
-	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "work_miracle(move,give_item)"}) {
+	if !reflect.DeepEqual(s.GrantedTools, []string{"send_vision", "work_miracle(move,give_item)"}) {
 		t.Errorf("restricted granted tools = %v", s.GrantedTools)
 	}
 

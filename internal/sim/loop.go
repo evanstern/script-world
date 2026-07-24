@@ -213,6 +213,14 @@ var injectSocialWhitelist = map[string]bool{
 	"metatron.item_granted":   true,
 	"metatron.entity_moved":   true,
 	"metatron.entity_removed": true,
+	// Metatron standing orders (spec 029): the injected order-lifecycle events.
+	// order_placed (monitor_and_act) and order_cancelled (cancel_order) are the
+	// two Expressive tools' Events; order_triggered is injected by the trigger
+	// worker (Batch B). order_expired is EXECUTOR-emitted (a pure function of
+	// state + tick, like charge_regenerated) and so needs no whitelist entry —
+	// only model/worker-injected types pass this door.
+	"metatron.order_placed":    true,
+	"metatron.order_cancelled": true,
 	// Governance flavor (TASK-13): the ONLY injectable governance type —
 	// re-texts an enacted norm in the proposer's voice; outcomes stay
 	// executor-deterministic. The dry-run enforces norm existence + text cap.

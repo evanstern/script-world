@@ -67,12 +67,15 @@ func TestNudgeValidation(t *testing.T) {
 		dead int // -1 = none
 	}{
 		{"unknown form", MetatronNudgedPayload{Form: "whisper", Targets: []int{0}, Text: "t"}, -1},
-		{"dream multi-target", MetatronNudgedPayload{Form: "dream", Targets: []int{0, 1}, Text: "t"}, -1},
+		{"vision multi-target", MetatronNudgedPayload{Form: "vision", Targets: []int{0, 1}, Text: "t"}, -1},
 		{"omen no targets", MetatronNudgedPayload{Form: "omen", Targets: nil, Text: "t"}, -1},
-		{"unknown target", MetatronNudgedPayload{Form: "dream", Targets: []int{99}, Text: "t"}, -1},
-		{"dead target", MetatronNudgedPayload{Form: "dream", Targets: []int{2}, Text: "t"}, 2},
-		{"empty text", MetatronNudgedPayload{Form: "dream", Targets: []int{0}, Text: ""}, -1},
-		{"over-cap text", MetatronNudgedPayload{Form: "dream", Targets: []int{0}, Text: string(long)}, -1},
+		{"unknown target", MetatronNudgedPayload{Form: "vision", Targets: []int{99}, Text: "t"}, -1},
+		{"dead target", MetatronNudgedPayload{Form: "vision", Targets: []int{2}, Text: "t"}, 2},
+		{"empty text", MetatronNudgedPayload{Form: "vision", Targets: []int{0}, Text: ""}, -1},
+		{"over-cap text", MetatronNudgedPayload{Form: "vision", Targets: []int{0}, Text: string(long)}, -1},
+		// dream (grandfathered) still requires exactly one target — a legacy
+		// multi-target payload is rejected just as it always was.
+		{"dream multi-target", MetatronNudgedPayload{Form: "dream", Targets: []int{0, 1}, Text: "t"}, -1},
 	}
 	for _, c := range cases {
 		s := NewState(7, m)
@@ -86,11 +89,24 @@ func TestNudgeValidation(t *testing.T) {
 			t.Errorf("%s: rejected nudge changed charges", c.name)
 		}
 	}
-	// The valid shapes pass.
+	// A daytime omen is rejected: the omen form lands only at night (spec 029).
+	day := NewState(7, m)
+	if err := day.Apply(nudgeEvent(t, 50, MetatronNudgedPayload{
+		Form: "omen", Targets: []int{0, 1}, Text: "not yet"})); err == nil {
+		t.Error("daytime omen must be rejected (omen is night-only)")
+	}
+
+	// The valid shapes pass: a vision any time; an omen at night.
 	s := NewState(7, m)
 	if err := s.Apply(nudgeEvent(t, 50, MetatronNudgedPayload{
+		Form: "vision", Targets: []int{0}, Text: "a waking light"})); err != nil {
+		t.Fatalf("valid vision rejected: %v", err)
+	}
+	night := NewState(7, m)
+	night.Night = true
+	if err := night.Apply(nudgeEvent(t, 50, MetatronNudgedPayload{
 		Form: "omen", Targets: []int{0, 1, 2, 3, 4, 5, 6, 7}, Text: "the sky split"})); err != nil {
-		t.Fatalf("valid omen rejected: %v", err)
+		t.Fatalf("valid night omen rejected: %v", err)
 	}
 }
 
@@ -160,8 +176,11 @@ func TestChargesReplayIdentically(t *testing.T) {
 	live := NewState(7, m)
 	events := []store.Event{
 		regenEvent, regenEvent, // 1 -> 3
-		nudgeEvent(t, 10, MetatronNudgedPayload{Form: "dream", Targets: []int{3}, Text: "d1"}),   // 2
-		nudgeEvent(t, 20, MetatronNudgedPayload{Form: "omen", Targets: []int{0, 1}, Text: "o1"}), // 1
+		// A grandfathered dream (legacy replay) and a live-form vision, so the
+		// replay test spans both an old and a new nudge form; neither depends on
+		// State.Night (only omen does), keeping this a pure charge-economy check.
+		nudgeEvent(t, 10, MetatronNudgedPayload{Form: "dream", Targets: []int{3}, Text: "d1"}),  // 2
+		nudgeEvent(t, 20, MetatronNudgedPayload{Form: "vision", Targets: []int{0}, Text: "v1"}), // 1
 		regenEvent, // 2
 	}
 	for _, e := range events {

@@ -329,23 +329,106 @@ var expressiveTools = []Tool{
 		Events: []string{"agent.thought"}},
 }
 
+// observableEventTypes is the curated vocabulary a monitor_and_act condition may
+// watch (spec 029, contracts/tools.md): the enum of monitor_and_act's
+// `event_types` param, so the model can only compile a standing order against
+// REAL world happenings. Every name here is a genuinely emitted event type,
+// verified against internal/sim and docs/wiki/event-types.md at build time. The
+// spec's draft list named `meeting.norm_enacted`, which no code emits; the real
+// governance type `norm.violated` stands in its place (the contract's own
+// "every name must be a real emitted type" instruction).
+var observableEventTypes = []string{
+	"agent.slept", "agent.woke", "agent.died", "agent.memory_added",
+	"agent.intent_set", "social.conversation", "social.promise_broken",
+	"social.rumor_told", "gru.attacked", "norm.violated",
+	"sim.night_started", "sim.day_started",
+}
+
+// clockSpeeds mirrors internal/clock's watchable speed ladder (1x…32x; SpeedMax
+// is excluded — an LLM-configured world refuses it at the set_speed door).
+// MIRRORED, not imported: internal/tool is a leaf (research R1) and cannot see
+// internal/clock. The start/adjust_speed meta tools (spec 029) declare it as
+// their `speed` Enum. (Batch B / T018 wires the LoopControl handlers and should
+// add a drift guard pinning this equal to clock.CappedLadder(), the
+// TestMiracleKindsMirrorTool pattern.)
+var clockSpeeds = []string{"1x", "4x", "8x", "16x", "32x"}
+
+// monitorAndActSchema is monitor_and_act's authored InputSchemaJSON (spec 029
+// R5): the turn model itself is the compiler — it supplies the compiled standing-
+// order structure in the tool call. The condition/action are NL; event_types is
+// an array drawn from observableEventTypes; keywords is a coarse string-array
+// filter; confirm marks a fuzzy order; ttl_days bounds the lifetime. Arrays are
+// unrepresentable in the scalar Param model, so the schema is hand-built like
+// setPlanSchema, and the loop driver's schema-lite walker (toolloop, spec 029
+// T002) validates a call against it.
+func monitorAndActSchema() json.RawMessage {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"condition": map[string]any{"type": "string", "maxLength": 300},
+			"action":    map[string]any{"type": "string", "maxLength": 400},
+			"event_types": map[string]any{"type": "array", "minItems": 1, "maxItems": 4,
+				"items": map[string]any{"type": "string", "enum": observableEventTypes}},
+			"agent": map[string]any{"type": "string"},
+			"keywords": map[string]any{"type": "array", "maxItems": 6,
+				"items": map[string]any{"type": "string", "maxLength": 40}},
+			"confirm":  map[string]any{"type": "boolean"},
+			"ttl_days": map[string]any{"type": "integer", "minimum": 1, "maximum": 7},
+		},
+		"required": []string{"condition", "action", "event_types"},
+	}
+	b, err := json.Marshal(schema)
+	if err != nil {
+		// Built from literal Go data; marshaling cannot fail (setPlanSchema precedent).
+		panic("tool: monitorAndActSchema marshal: " + err.Error())
+	}
+	return b
+}
+
 // metatronTools are the metatron roster's tools. converse produces a
 // transcript reply and lands NO world events. It is the metatron's
 // expressive speech channel, so it is Effect Expressive with an empty Events
 // set — the one eventless expressive tool (see Validate: Events are
 // required to be ⊆ whitelist but are not required to be non-empty, so an
 // eventless expressive tool is legal).
+//
+// Spec 029 (TASK-27) retires nudge_dream / nudge_omen and adds the angel's
+// agency surface: send_vision (one living villager, any hour) and send_omen (one
+// villager, a named group, or everyone — night-only, gated in the reducer)
+// replace the two nudges; monitor_and_act places an event-sourced standing order
+// (authored schema — arrays); cancel_order retires one; and the charge-free meta
+// tools pause / start / adjust_speed wrap the loop's own clock controls (Effect
+// Expressive with EMPTY Events, the converse precedent — acting cardinality
+// applies, nothing is injected: the clock's own clock.paused/clock.resumed remain
+// the record). The order/meta HANDLERS and the send_* landers are Batch B
+// (T005/T006/T009/T018); this task ships the declared surface + schemas.
 var metatronTools = []Tool{
 	{Name: "converse", Effect: Expressive, Gate: None,
 		Params: []Param{{Name: "text", Kind: Text}}},
-	{Name: "nudge_dream", Effect: Expressive, Gate: Charge,
-		Params: []Param{{Name: "target", Kind: AgentName, Required: true}, {Name: "text", Kind: Text, MaxBytes: 400}},
+	{Name: "send_vision", Effect: Expressive, Gate: Charge,
+		Params: []Param{
+			{Name: "target", Kind: AgentName, Required: true},
+			{Name: "text", Kind: Text, Required: true, MaxBytes: 400}},
 		Cost:   Cost{Charges: 1, TextCapBytes: 400},
 		Events: []string{"metatron.nudged", "agent.memory_added"}},
-	{Name: "nudge_omen", Effect: Expressive, Gate: Charge,
-		Params: []Param{{Name: "text", Kind: Text, MaxBytes: 400}},
+	{Name: "send_omen", Effect: Expressive, Gate: Charge,
+		Params: []Param{
+			{Name: "targets", Kind: Text, Required: true,
+				Description: `comma-separated living villager names, or "everyone"`},
+			{Name: "text", Kind: Text, Required: true, MaxBytes: 400}},
 		Cost:   Cost{Charges: 1, TextCapBytes: 400},
 		Events: []string{"metatron.nudged", "agent.memory_added"}},
+	{Name: "monitor_and_act", Effect: Expressive, Gate: None,
+		InputSchemaJSON: monitorAndActSchema(),
+		Events:          []string{"metatron.order_placed"}},
+	{Name: "cancel_order", Effect: Expressive, Gate: None,
+		Params: []Param{{Name: "id", Kind: Text, Required: true}},
+		Events: []string{"metatron.order_cancelled"}},
+	{Name: "pause", Effect: Expressive, Gate: None},
+	{Name: "start", Effect: Expressive, Gate: None,
+		Params: []Param{{Name: "speed", Kind: Enum, Enum: clockSpeeds}}},
+	{Name: "adjust_speed", Effect: Expressive, Gate: None,
+		Params: []Param{{Name: "speed", Kind: Enum, Required: true, Enum: clockSpeeds}}},
 	// work_miracle is the metatron's fourth loop tool (spec 017 T019b, R13
 	// amendment): a direct, charge-priced world edit landed through the SAME
 	// InjectSocial door the nudges use (metatron.landMiracle → the shared

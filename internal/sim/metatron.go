@@ -23,11 +23,12 @@ const (
 )
 
 // NudgeTextMax caps the villager-bound rendering — read from the tool registry
-// (spec 014 T021/R7): the nudge tools' TextCapBytes (400). The reducer dry-run
-// stays the enforcer; the registry is the single source of the cap, so the
-// enforcer and the metatron-side truncation can never carry divergent literals.
+// (spec 014 T021/R7; re-pointed at send_vision when spec 029 retired the nudges):
+// the influence tools' TextCapBytes (400). The reducer dry-run stays the
+// enforcer; the registry is the single source of the cap, so the enforcer and
+// the metatron-side truncation can never carry divergent literals.
 var NudgeTextMax = func() int {
-	t, _ := tool.Lookup("nudge_dream")
+	t, _ := tool.Lookup("send_vision")
 	return t.Cost.TextCapBytes
 }()
 
@@ -63,20 +64,33 @@ func (s *State) applyMetatron(e store.Event) error {
 		if s.MetatronCharges <= 0 {
 			return fmt.Errorf("apply %s: no charges banked", e.Type)
 		}
-		// Roster enforcement (spec 014 US3, FR-008): only the metatron nudge
-		// forms (nudge_dream / nudge_omen) may land. The dry-run refuses anything
-		// else exactly like an unknown form — same reason string.
-		if !tool.OnRoster(tool.RosterMetatron, "nudge_"+p.Form) {
-			return fmt.Errorf("apply %s: unknown form %q", e.Type, p.Form)
-		}
+		// Form validation (spec 029): the metatron.nudged form domain is
+		// {vision, omen, dream}. A vision reaches exactly one living villager at
+		// any hour; an omen reaches ≥1 living villagers and lands ONLY at night
+		// (State.Night); dream is the RETIRED legacy form, grandfathered here
+		// (exactly one target) so pre-029 histories replay to identical state —
+		// but no tool, handler, or roster entry can produce a NEW one, so
+		// structural absence is the guarantee dreams cannot land afresh. This
+		// explicit form switch REPLACES the spec-014 OnRoster(RosterMetatron,
+		// "nudge_"+form) check, which could no longer hold once nudge_dream/
+		// nudge_omen left the registry (contracts/events.md).
 		switch p.Form {
-		case "dream":
+		case "vision":
 			if len(p.Targets) != 1 {
-				return fmt.Errorf("apply %s: dream needs exactly one target, got %d", e.Type, len(p.Targets))
+				return fmt.Errorf("apply %s: vision needs exactly one target, got %d", e.Type, len(p.Targets))
 			}
 		case "omen":
 			if len(p.Targets) == 0 {
 				return fmt.Errorf("apply %s: omen needs targets", e.Type)
+			}
+			if !s.Night {
+				return fmt.Errorf("apply %s: an omen may land only at night", e.Type)
+			}
+		case "dream":
+			// Legacy (pre-029), replay-only — grandfathered so recorded histories
+			// reproduce identically; unreachable from any live tool.
+			if len(p.Targets) != 1 {
+				return fmt.Errorf("apply %s: dream needs exactly one target, got %d", e.Type, len(p.Targets))
 			}
 		default:
 			return fmt.Errorf("apply %s: unknown form %q", e.Type, p.Form)

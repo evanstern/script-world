@@ -22,15 +22,18 @@ var wantWorldOrder = []string{
 // order). The villager roster orders its expressive tail differently — say,
 // muse, gist (data-model.md / T007) — captured separately below.
 var wantExpressive = []string{"say", "gist", "muse"}
-var wantMetatron = []string{"converse", "nudge_dream", "nudge_omen"}
 
-// wantMetatronCatalog is the metatron tools' catalog membership (registration
-// order): the RosterMetatron three plus work_miracle (spec 017 T019b). It is a
-// superset of wantMetatron (the name-only DOOR roster) because work_miracle is a
-// registered capability that lands through landMiracle, not through landNudge's
-// OnRoster(RosterMetatron) check — so it belongs in the catalog and the LOOP
-// roster, but RosterMetatron (the pre-loop door roster) is left unchanged.
-var wantMetatronCatalog = []string{"converse", "nudge_dream", "nudge_omen", "work_miracle"}
+// wantMetatron is the metatron DOOR roster (RosterMetatron) name set (spec 029:
+// converse plus the agency acting tools; nudge_dream/nudge_omen retired). Order-
+// insensitive — TestRostersResolve sorts before comparing.
+var wantMetatron = []string{"converse", "send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}
+
+// wantMetatronCatalog is the metatron tools' catalog membership in REGISTRATION
+// order (spec 029): converse, then the two influence forms (send_vision/
+// send_omen), the standing-order tools (monitor_and_act/cancel_order), the meta
+// tools (pause/start/adjust_speed), then work_miracle last (its position unshifted
+// by the migration).
+var wantMetatronCatalog = []string{"converse", "send_vision", "send_omen", "monitor_and_act", "cancel_order", "pause", "start", "adjust_speed", "work_miracle"}
 var wantVillagerExpressiveTail = []string{"say", "muse", "gist"}
 
 // wantJournal is the four villager journal tools (spec 019, US3): two Expressive

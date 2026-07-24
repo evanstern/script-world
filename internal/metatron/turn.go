@@ -17,12 +17,12 @@ import (
 )
 
 // nudgeTextMax is the nudge rendering cap, read from the tool registry (spec
-// 014 T021): tool.Lookup("nudge_dream").Cost.TextCapBytes (400). It matches the
-// sim reducer's NudgeTextMax enforcer — both derive from the same registry
-// entry, so the metatron-side truncation and the door-side enforcement can
-// never diverge.
+// 014 T021; re-pointed at send_vision when spec 029 retired nudge_dream):
+// tool.Lookup("send_vision").Cost.TextCapBytes (400). It matches the sim
+// reducer's NudgeTextMax enforcer — both derive from the same registry entry, so
+// the metatron-side truncation and the door-side enforcement can never diverge.
 var nudgeTextMax = func() int {
-	t, _ := tool.Lookup("nudge_dream")
+	t, _ := tool.Lookup("send_vision")
 	return t.Cost.TextCapBytes
 }()
 
@@ -200,23 +200,34 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 }
 
 // landNudge validates a nudge and lands it as one atomic batch. form is the
-// tool that was called (nudge_dream → "dream", nudge_omen → "omen"); target is
-// the dream's villager name (ignored for omen); text is the model's rendering.
-// The validation, atomic InjectSocial batch, and soul append are UNCHANGED from
-// the pre-loop turnReply path (spec 017 T020: wrap, don't rewrite) — only the
-// input plumbing moved from a parsed JSON struct to the tool-call arguments.
-// Returns the landed nudge, or (nil, refusal reason) which the handler maps to a
-// rejected_gate the model may correct within the loop's round cap.
+// influence form the calling tool fixes (send_vision → "vision", send_omen →
+// "omen"); target is the vision's villager name (ignored for omen); text is the
+// model's rendering. The validation, atomic InjectSocial batch, and soul append
+// are otherwise UNCHANGED from the pre-loop turnReply path. Returns the landed
+// nudge, or (nil, refusal reason) which the handler maps to a rejected_gate the
+// model may correct within the loop's round cap.
+//
+// SPEC 029 BATCH-A BRIDGE: this is a temporary shared lander that keeps the turn
+// acting under the new tool names (send_vision→vision, send_omen→omen) while the
+// reducer/registry migration lands. Batch B (T005/T006) REPLACES it with the
+// proper landVision / landOmen split: omen group-targeting (comma list /
+// "everyone" — this bridge lands all-living, the old omen shape) and the daytime
+// deferral (this bridge lets the reducer's night gate refuse a day omen as a
+// rejected_gate). The dream form is gone from every live path (grandfathered in
+// the reducer for replay only).
 func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
 	form = strings.ToLower(strings.TrimSpace(form))
-	// Capability gate (spec 021 R5.3, door layer): the world must grant this
-	// nudge form. Defense-in-depth behind the handler-absence gate — a form whose
-	// handler was never installed cannot reach here, but the check keeps the door
-	// authoritative on its own rather than trusting the wiring above it.
-	if !grant.allows("nudge_" + form) {
+	// Capability gate (spec 021 R5.3, door layer): the world must grant the tool
+	// for this form. Defense-in-depth behind the handler-absence gate — a tool
+	// whose handler was never installed cannot reach here, but the check keeps the
+	// door authoritative on its own rather than trusting the wiring above it.
+	// (Batch-A bridge: form→tool mapping; Batch B's landVision/landOmen each
+	// grant-check their own tool directly.)
+	grantTool := map[string]string{"vision": "send_vision", "omen": "send_omen"}[form]
+	if grantTool == "" || !grant.allows(grantTool) {
 		return nil, "that power is not granted in this world"
 	}
 	text = strings.TrimSpace(text)
@@ -226,21 +237,20 @@ func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[
 	if len(text) > nudgeTextMax {
 		text = text[:nudgeTextMax]
 	}
-	// Roster enforcement (spec 014 US3, FR-008): the form must name a metatron
-	// nudge tool on the metatron roster (nudge_dream / nudge_omen). Anything
-	// else is refused exactly like an unknown form — same reason string.
-	if !tool.OnRoster(tool.RosterMetatron, "nudge_"+form) {
-		return nil, fmt.Sprintf("unknown form %q", form)
-	}
+	// Form dispatch: a vision reaches exactly one living villager; an omen reaches
+	// every living villager (the reducer's night gate decides whether it may land
+	// at all). The reducer's explicit form-set validation is the door authority
+	// (spec 029) — the old OnRoster(RosterMetatron, "nudge_"+form) check is gone
+	// with the nudge tools.
 	var targets []int
 	switch form {
-	case "dream":
+	case "vision":
 		idx := agentIndexByName(target)
 		if idx < 0 {
 			return nil, fmt.Sprintf("no villager named %q", target)
 		}
 		if !alive[idx] {
-			return nil, fmt.Sprintf("%s is beyond dreams now", sim.AgentNames[idx])
+			return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
 		}
 		targets = []int{idx}
 	case "omen":
@@ -256,7 +266,7 @@ func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[
 		return nil, fmt.Sprintf("unknown form %q", form)
 	}
 
-	prefix := "You dreamed: "
+	prefix := "You saw a vision: "
 	if form == "omen" {
 		prefix = "You witnessed an omen: "
 	}

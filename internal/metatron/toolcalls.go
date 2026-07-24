@@ -47,7 +47,7 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 }
 
 // turnHandlers builds the handler map the tool-use loop dispatches against for
-// one console turn. nudge_dream / nudge_omen wrap landNudge (the tool name fixes
+// one console turn. send_vision / send_omen wrap landNudge (the tool name fixes
 // the form); work_miracle wraps landMiracle. converse is absent by design — it
 // is the final-text channel, and it is not on the declared loop roster
 // (tool.LoopRosterMetatron), so the model never calls it as a tool.
@@ -56,13 +56,21 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 // ONLY for a tool the world grants. An ungranted tool therefore has no handler
 // and the loop rejects any call to it as rejected_unknown — structural absence
 // at the door, matching the structural absence in the declaration and the prose.
+//
+// SPEC 029 BATCH-A BRIDGE: send_vision / send_omen replace nudge_dream /
+// nudge_omen, mapped to landNudge (form vision/omen). The other agency tools —
+// monitor_and_act, cancel_order, and the meta tools pause/start/adjust_speed —
+// are DECLARED on the loop roster but have no handler yet: a call to one hits
+// rejected_unknown (the ungranted-equivalent absence) until Batch B wires
+// landVision/landOmen (T006), the order handlers (T009), and the LoopControl
+// meta handlers (T018).
 func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
 	h := make(map[string]toolloop.Handler, 3)
-	if d.grant.allows("nudge_dream") {
-		h["nudge_dream"] = mt.handleNudge(d, "dream")
+	if d.grant.allows("send_vision") {
+		h["send_vision"] = mt.handleNudge(d, "vision")
 	}
-	if d.grant.allows("nudge_omen") {
-		h["nudge_omen"] = mt.handleNudge(d, "omen")
+	if d.grant.allows("send_omen") {
+		h["send_omen"] = mt.handleNudge(d, "omen")
 	}
 	if d.grant.allows("work_miracle") {
 		h["work_miracle"] = mt.handleMiracle(d)
