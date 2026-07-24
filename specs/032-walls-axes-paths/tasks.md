@@ -82,7 +82,7 @@
 ## Phase 6: Polish & Cross-Cutting
 
 - [x] T021 Whole-feature determinism pass in internal/sim/whole_feature_test.go (or a new spec-032 section): one session exercising axe+wall+path end-to-end, replayed to a byte-identical hash; pre-032 snapshot (no hp/axes fields) loads unchanged (quickstart scenario 7)
-- [ ] T022 Run quickstart Gate 0 (go build ./... && go vet ./... && go test ./internal/sim/ ./internal/tool/ ./internal/tui/) and the TUI smoke; fix anything surfaced
+- [x] T022 Run quickstart Gate 0 (go build ./... && go vet ./... && go test ./internal/sim/ ./internal/tool/ ./internal/tui/) and the TUI smoke; fix anything surfaced
 - [ ] T023 Re-ground: /grounding-wiki:wiki-update over touched notes (docs/wiki/executor.md, reflex-policy.md, sim-state-reducer.md, tool-registry.md), then player-docs freshness check (node .claude/skills/player-docs/scripts/check-freshness.mjs --check) and regenerate if stale
 
 ---
