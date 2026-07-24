@@ -2,6 +2,7 @@ package llm
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -62,6 +63,14 @@ func TestLegacyShapeDerivesRegistry(t *testing.T) {
 		rc, ok := routes[kind]
 		if !ok {
 			t.Errorf("kind %q has no derived route", kind)
+			continue
+		}
+		// The watch kind (spec 029) is the one multi-entry default chain:
+		// cheap-first local with a reliable cloud fallback (contracts/routing.md).
+		if kind == KindMetatronWatch {
+			if rc.NoFallback || !reflect.DeepEqual(rc.Chain, []string{"local", "cloud"}) {
+				t.Errorf("route %q = %+v, want a [local cloud] fallback chain", kind, rc)
+			}
 			continue
 		}
 		if len(rc.Chain) != 1 || rc.NoFallback {
@@ -141,10 +150,14 @@ func v2Body(routes string) string {
 		`"routes":` + routes + `}`
 }
 
-// validRoutes covers exactly the seven accepted kinds — the baseline a matrix
-// case mutates.
+// validRoutes covers exactly the accepted kinds — the baseline a matrix case
+// mutates. metatron_watch (spec 029) is routed explicitly here with declared
+// providers so the positive controls stay complete without leaning on the
+// missing-route backfill (which TestMetatronWatchRouteBackfill exercises on its
+// own incomplete config).
 const validRoutes = `{"planner":["gemma"],"conversation":["gemma"],"meeting":["gemma"],` +
-	`"consolidation":["anthropic"],"narrator":["anthropic"],"drama":["anthropic"],"metatron":["anthropic"]}`
+	`"consolidation":["anthropic"],"narrator":["anthropic"],"drama":["anthropic"],"metatron":["anthropic"],` +
+	`"metatron_watch":["gemma","anthropic"]}`
 
 // TestValidationMatrix (spec 024 FR-003, SC-008, contracts/llm-config.md): every
 // row of the boot-error matrix fails LoadConfig with an error naming the
@@ -240,6 +253,91 @@ func TestValidV2Loads(t *testing.T) {
 	}
 	if len(providers) != 2 || len(routes) != len(acceptedKinds) {
 		t.Errorf("valid v2 resolved to %d providers / %d routes", len(providers), len(routes))
+	}
+}
+
+// TestMetatronWatchRouteBackfill (spec 029 T001, contracts/routing.md / research
+// R8): a v2 llm.json written before metatron_watch shipped is MISSING its route.
+// validateV2 backfills it from defaultRoutes() with one boot log line rather than
+// failing the boot, so pre-existing worlds keep booting on upgrade; the post-load
+// invariant (every accepted kind routed) still holds.
+func TestMetatronWatchRouteBackfill(t *testing.T) {
+	// A default-shaped v2 world (providers local/cloud) whose routes predate the
+	// watch kind: all seven pre-029 kinds routed, metatron_watch absent.
+	body := `{"monthly_budget_usd":100,` +
+		`"providers":{` +
+		`"local":{"transport":"openai_compat","endpoint":"http://x/v1","model":"g"},` +
+		`"cloud":{"transport":"anthropic","model":"claude","input_usd_per_mtok":5}},` +
+		`"routes":{"planner":["local"],"conversation":["local"],"meeting":["local"],` +
+		`"consolidation":["cloud"],"narrator":["cloud"],"drama":["cloud"],"metatron":["cloud"]}}`
+
+	var logged []string
+	prev := configWarnf
+	configWarnf = func(format string, args ...any) { logged = append(logged, fmt.Sprintf(format, args...)) }
+	defer func() { configWarnf = prev }()
+
+	cfg, err := LoadConfig(writeConfigFile(t, body))
+	if err != nil {
+		t.Fatalf("v2 config missing the metatron_watch route must still boot, got: %v", err)
+	}
+	_, routes, err := cfg.resolveRegistry()
+	if err != nil {
+		t.Fatalf("resolveRegistry: %v", err)
+	}
+	rc, ok := routes[KindMetatronWatch]
+	if !ok {
+		t.Fatal("metatron_watch route was not backfilled — post-load completeness invariant broken")
+	}
+	if rc.NoFallback || !reflect.DeepEqual(rc.Chain, []string{"local", "cloud"}) {
+		t.Errorf("backfilled metatron_watch route = %+v, want the default [local cloud] chain", rc)
+	}
+	// The backfill announces itself on the boot channel, naming the kind.
+	named := false
+	for _, l := range logged {
+		if strings.Contains(l, string(KindMetatronWatch)) {
+			named = true
+		}
+	}
+	if !named {
+		t.Errorf("backfill emitted no boot log line naming %q; got %v", KindMetatronWatch, logged)
+	}
+}
+
+// TestUnknownRouteKeyStillErrors (spec 029 T001): the missing-route backfill is
+// narrowly scoped to the curated backfill set — it never turns an unknown route
+// KEY into a silent backfill. A typo'd kind is still a boot error naming it.
+func TestUnknownRouteKeyStillErrors(t *testing.T) {
+	body := v2Body(`{"planner":["gemma"],"conversation":["gemma"],"meeting":["gemma"],` +
+		`"consolidation":["anthropic"],"narrator":["anthropic"],"drama":["anthropic"],` +
+		`"metatron":["anthropic"],"metatron_watch":["gemma"],"sorcery":["gemma"]}`)
+	if _, err := LoadConfig(writeConfigFile(t, body)); err == nil {
+		t.Fatal("unknown route key must be a boot error")
+	} else if !strings.Contains(err.Error(), "sorcery") {
+		t.Errorf("boot error %q does not name the unknown key", err)
+	}
+}
+
+// TestDefaultsIncludeWatchKind (spec 029 T001): the shipped defaults route the
+// new watch kind, so a fresh world and every legacy-derived world pick it up for
+// free — DefaultConfig, defaultRoutes(), and the accepted-kind set agree.
+func TestDefaultsIncludeWatchKind(t *testing.T) {
+	if _, ok := acceptedKinds[KindMetatronWatch]; !ok {
+		t.Fatal("KindMetatronWatch is not an accepted kind")
+	}
+	rc, ok := defaultRoutes()[string(KindMetatronWatch)]
+	if !ok {
+		t.Fatal("defaultRoutes() has no metatron_watch entry")
+	}
+	if !reflect.DeepEqual(rc.Chain, []string{"local", "cloud"}) {
+		t.Errorf("default metatron_watch chain = %v, want [local cloud]", rc.Chain)
+	}
+	// A default-config world routes every accepted kind, watch included.
+	_, routes, err := DefaultConfig().resolveRegistry()
+	if err != nil {
+		t.Fatalf("DefaultConfig resolveRegistry: %v", err)
+	}
+	if _, ok := routes[KindMetatronWatch]; !ok {
+		t.Error("DefaultConfig does not route metatron_watch")
 	}
 }
 
