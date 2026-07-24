@@ -63,10 +63,13 @@ func TestBulkYieldTruncatesAtPartialSpace(t *testing.T) {
 	t.Run("chop", func(t *testing.T) {
 		s := NewState(seed, m)
 		a := &s.Agents[0]
-		a.Inv = Inventory{Wood: bulkCap - 1}
+		// Spec 032 US2: with an axe a chop yields chopYieldAxe (3); one free bulk
+		// truncates it to 1. The axe occupies a bulk itself, so wood starts at
+		// cap-2 (22 wood + 1 axe = 23, one free).
+		a.Inv = Inventory{Wood: bulkCap - 2, Axes: []int{axeDurability}}
 		apply(t, s, "agent.chopped", HarvestPayload{Agent: 0, X: 5, Y: 6})
-		if a.Inv.Wood != bulkCap { // 23 + min(2,1) = 24
-			t.Errorf("Wood = %d, want %d (yield truncated to 1)", a.Inv.Wood, bulkCap)
+		if a.Inv.Wood != bulkCap-1 { // 22 + min(3,1) = 23
+			t.Errorf("Wood = %d, want %d (axe yield 3 truncated to one free bulk)", a.Inv.Wood, bulkCap-1)
 		}
 		if len(s.Cleared) != 1 {
 			t.Errorf("Cleared = %+v, want the tree cleared despite truncation", s.Cleared)
@@ -76,10 +79,11 @@ func TestBulkYieldTruncatesAtPartialSpace(t *testing.T) {
 	t.Run("quarry", func(t *testing.T) {
 		s := NewState(seed, m)
 		a := &s.Agents[0]
-		a.Inv = Inventory{Wood: bulkCap - 1}
+		// Spec 032 US2: axe quarry yields quarryYieldAxe (3), truncated to one free.
+		a.Inv = Inventory{Wood: bulkCap - 2, Axes: []int{axeDurability}}
 		apply(t, s, "agent.quarried", HarvestPayload{Agent: 0, X: 7, Y: 8})
-		if a.Inv.Stone != 1 {
-			t.Errorf("Stone = %d, want 1 (truncated from %d)", a.Inv.Stone, quarryYield)
+		if a.Inv.Stone != 1 { // 22 wood + 1 stone + 1 axe = 24 = cap
+			t.Errorf("Stone = %d, want 1 (axe yield 3 truncated to one free bulk)", a.Inv.Stone)
 		}
 		if len(s.Quarried) != 1 {
 			t.Errorf("Quarried = %+v, want the outcrop depleted despite truncation", s.Quarried)

@@ -39,8 +39,73 @@ func passable(m *worldmap.Map, s *State, x, y int) bool {
 	if !m.InBounds(x, y) {
 		return false
 	}
+	// T004 (spec 032 US1, FR-002): a standing wall makes its tile impassable —
+	// the first structure family to block pathing. A linear scan of the
+	// structure overlay, matching effectiveKind's overlay scans; wallAt is nil
+	// for every non-wall tile, so this is a no-op on pre-032 worlds.
+	if wallAt(s, x, y) != nil {
+		return false
+	}
 	k := effectiveKind(m, s, x, y)
 	return k == worldmap.Grass || k == worldmap.Forage || k == worldmap.Depleted
+}
+
+// isWall names the wall family (spec 032, research R1): kind ∈ {wall_plank,
+// wall_stone}. Paths are not walls (they never block).
+func isWall(kind string) bool {
+	return kind == "wall_plank" || kind == "wall_stone"
+}
+
+// wallMaxHP is a wall kind's derived maximum health — the single source the
+// build stamp, repair clamp, and TUI damage styling all read (never stored, so
+// it cannot drift; fire lit-ness precedent). Zero for non-wall kinds.
+func wallMaxHP(kind string) int {
+	switch kind {
+	case "wall_plank":
+		return wallPlankHP
+	case "wall_stone":
+		return wallStoneHP
+	}
+	return 0
+}
+
+// wallAt returns a pointer to the standing wall on (x,y), or nil when the tile
+// holds none — the passable scan, the demolish/repair completions, and the
+// reducer arms re-validate the wall by coord through it (chestAt sibling).
+func wallAt(s *State, x, y int) *Structure {
+	for i := range s.Structures {
+		st := &s.Structures[i]
+		if isWall(st.Kind) && st.X == x && st.Y == y {
+			return st
+		}
+	}
+	return nil
+}
+
+// pathAt reports whether a path structure stands on (x,y) — the movement
+// dual-phase cadence's per-step predicate (research R3), a structure scan
+// sibling of chestAt/wallAt.
+func pathAt(s *State, x, y int) bool {
+	for i := range s.Structures {
+		st := &s.Structures[i]
+		if st.Kind == "path" && st.X == x && st.Y == y {
+			return true
+		}
+	}
+	return false
+}
+
+// agentAt reports whether any living agent occupies (x,y) — the wall-build
+// occupancy guard (spec 032 FR-007): a wall may never land on a tile holding an
+// agent (entombment). Map-free; villagers may share a tile, so the first match
+// suffices.
+func agentAt(s *State, x, y int) bool {
+	for i := range s.Agents {
+		if !s.Agents[i].Dead && s.Agents[i].X == x && s.Agents[i].Y == y {
+			return true
+		}
+	}
+	return false
 }
 
 // buildSite: effective grass with no structure on it.

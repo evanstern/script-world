@@ -237,7 +237,7 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 - [X] T025 Full-suite + quickstart live validation: `go test ./...`, then run
   quickstart.md Scenarios 1–5 against a throwaway world; record outcomes in the
   implementer report (evidence for the board).
-- [ ] T026 Post-merge (root, planning session): `/grounding-wiki:wiki-update`
+- [X] T026 Post-merge (root, planning session): `/grounding-wiki:wiki-update`
   re-pin (metatron, tool-registry, tool-loop, llm-orchestrator, event-types,
   sim-loop, sim-state-reducer, executor, ipc-protocol if status contract noted)
   + player-docs freshness check — constitution Principle IV; tracked on TASK-27

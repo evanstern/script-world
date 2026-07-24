@@ -375,7 +375,9 @@ func (md *Mind) runConversation(cc convoCtx) {
 			add("agent.memory_added", sim.MemoryAddedPayload{
 				Agent: cc.idx[i], Text: fmt.Sprintf("Talked with %s%s — %s", cc.names[j], others, out.Gist),
 				Salience: sim.SalConvoGist, Subject: cc.idx[j], Tone: tones[i] * convoMemoryToneScale,
-				Where: sim.PlaceAt(md.replica, md.replica.Agents[cc.idx[i]].X, md.replica.Agents[cc.idx[i]].Y), Conv: cc.conv,
+				Where:  sim.PlaceAt(md.replica, md.replica.Agents[cc.idx[i]].X, md.replica.Agents[cc.idx[i]].Y),
+				Conv:   cc.conv,
+				Origin: sim.OriginGist, // spec 030: a conversation summary is secondhand
 			})
 			add("social.relation_changed", sim.RelationChangedPayload{
 				A: cc.idx[i], B: cc.idx[j],

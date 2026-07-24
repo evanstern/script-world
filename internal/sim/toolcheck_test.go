@@ -91,9 +91,14 @@ func TestWhitelistDiffIdentical(t *testing.T) {
 		"agent.belief_revised":     true,
 		"agent.narrative_set":      true,
 		"agent.consolidated":       true,
-		"agent.thought":            true,
-		"chronicle.entry":          true,
-		"metatron.nudged":          true,
+		// Spec 030 (US2, FR-008) widens the boundary by one: the reinforcement
+		// seam that re-anchors a belief's decay clock. Consumer-side only in 030
+		// (whitelist + reducer + tests); the perception-of-absence task is the
+		// intended future producer.
+		"agent.belief_reinforced": true,
+		"agent.thought":           true,
+		"chronicle.entry":         true,
+		"metatron.nudged":         true,
 		// Spec 016 (metatron miracles) deliberately widens the isolation
 		// boundary by four recorded miracle event types (contracts §4). They
 		// land through the same InjectSocial door as the nudge; they are NOT
@@ -179,6 +184,15 @@ func TestWorldToolDurationsMatchSimConstants(t *testing.T) {
 		"build_chest":   buildFireTicks, // recipes.go's build_chest recipe entry reuses buildFireTicks (600)
 		"deposit":       0,
 		"withdraw":      0,
+		// Spec 032 US1 (walls).
+		"build_wall_plank": buildWallTicks,
+		"build_wall_stone": buildWallTicks,
+		"demolish":         demolishTicks,
+		"repair":           repairTicks,
+		// Spec 032 US2 (axe) — 240-tick hand-craft, reusing craftSpearTicks.
+		"craft_axe": craftSpearTicks,
+		// Spec 032 US3 (path).
+		"build_path": buildPathTicks,
 	}
 
 	seen := make(map[string]bool, len(want))

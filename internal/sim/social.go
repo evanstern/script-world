@@ -400,7 +400,7 @@ func theftCompanions(s *State, owner, taker, x, y int, nextTick int64, takerName
 	if !s.Agents[owner].Dead {
 		events = append(events, situatedMemoryAboutEvent(nextTick, owner, taker, theftMemoryTone, salTaking,
 			PlaceAt(s, s.Agents[owner].X, s.Agents[owner].Y),
-			"%s took from my chest without asking.", takerName))
+			OriginReport, "%s took from my chest without asking.", takerName))
 	}
 	// Witnesses: whoever stood near enough to see, minus the two principals.
 	ownerName := s.Agents[owner].Name
@@ -411,7 +411,7 @@ func theftCompanions(s *State, owner, taker, x, y int, nextTick int64, takerName
 		}
 		if abs(wa.X-x)+abs(wa.Y-y) <= witnessRadius {
 			events = append(events, situatedMemoryAboutEvent(nextTick, w, taker, theftMemoryTone, salTaking,
-				PlaceAt(s, wa.X, wa.Y), "Saw %s take from %s's chest.", takerName, ownerName))
+				PlaceAt(s, wa.X, wa.Y), OriginWitness, "Saw %s take from %s's chest.", takerName, ownerName))
 		}
 	}
 	return events

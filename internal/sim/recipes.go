@@ -49,6 +49,12 @@ var recipes = []Recipe{
 	{Goal: "craft_planks", Inputs: []Item{{"wood", 1}}, Outputs: []Item{{"planks", plankYield}}, Duration: craftPlanksTicks, Site: SiteAnywhere},
 	{Goal: "craft_stone", Inputs: []Item{{"stone", 1}}, Outputs: []Item{{"refined_stone", 1}}, Duration: craftStoneTicks, Site: SiteAnywhere},
 	{Goal: "craft_spear", Inputs: []Item{{"wood", 1}, {"refined_stone", 1}}, Outputs: []Item{{"spear", 1}}, Duration: craftSpearTicks, Site: SiteAnywhere},
+	// craft_axe (spec 032 US2): 1 plank + 1 raw stone → 1 axe (axeDurability
+	// uses). The "axe" output counts one bulk in craftNetBulk like the spear; the
+	// reducer appends a fresh axe to Inv.Axes rather than a plain field (addItems
+	// has no "axe" case, exactly like "spear"). Same 240-tick hand-craft cost as
+	// the spear (contracts/recipes.md).
+	{Goal: "craft_axe", Inputs: []Item{{"planks", 1}, {"stone", 1}}, Outputs: []Item{{"axe", 1}}, Duration: craftSpearTicks, Site: SiteAnywhere},
 
 	// Builds (on-site). Fire is also reflex-buildable; the rest are planner-only.
 	{Goal: "build_fire", Inputs: []Item{{"wood", fireWoodCost}}, Structure: "fire", Duration: buildFireTicks, Site: SiteOnSite},
@@ -58,6 +64,17 @@ var recipes = []Recipe{
 	// build time. Build-site validation (all build_*) additionally rejects tiles
 	// holding a pile (FR-007), wired with the goal in Phase 5.
 	{Goal: "build_chest", Inputs: []Item{{"planks", chestPlankCost}}, Structure: "chest", Duration: buildFireTicks, Site: SiteOnSite},
+	// Walls (spec 032 US1): two Structure kinds, two recipes — the reducer's
+	// generic agent.built arm derives each cost via recipeFor("build_"+Kind), so
+	// two kinds fall out the same way fire always has (research R1). Adjacent-
+	// stand builds (the resolver stands the builder beside the wall tile) so a
+	// builder never entombs itself.
+	{Goal: "build_wall_plank", Inputs: []Item{{"planks", wallPlankCost}}, Structure: "wall_plank", Duration: buildWallTicks, Site: SiteOnSite},
+	{Goal: "build_wall_stone", Inputs: []Item{{"refined_stone", wallStoneCost}}, Structure: "wall_stone", Duration: buildWallTicks, Site: SiteOnSite},
+	// Path (spec 032 US3): a walkable tile improvement, built ON the tile the
+	// agent stands on (stand-on-target, unlike walls) — 1 raw stone, no HP. The
+	// generic agent.built arm spends the stone and appends the path structure.
+	{Goal: "build_path", Inputs: []Item{{"stone", pathStoneCost}}, Structure: "path", Duration: buildPathTicks, Site: SiteOnSite},
 
 	// Station actions. cook_fire is fuel-free (the fire's own fuel); cook_oven
 	// and bathe each burn 1 wood from the worker's inventory.
@@ -173,6 +190,8 @@ func craftKindFor(goal string) string {
 		return "refined_stone"
 	case "craft_spear":
 		return "spear"
+	case "craft_axe":
+		return "axe"
 	}
 	return ""
 }
@@ -185,6 +204,24 @@ func craftGoalFor(kind string) string {
 		return "craft_stone"
 	case "spear":
 		return "craft_spear"
+	case "axe":
+		return "craft_axe"
+	}
+	return ""
+}
+
+// wallRepairMaterial is the inventory kind a wall of the given kind is repaired
+// with (spec 032 US1, research R5): a plank wall mends with planks, a stone wall
+// with refined stone — the same material each was built from. "" for non-wall
+// kinds. The repair resolver requires 1 unit carried; the reducer consumes 1 per
+// repair cycle. It doubles as the demolish/repair damage-material source, so the
+// build cost and the repair cost can never name different materials.
+func wallRepairMaterial(kind string) string {
+	switch kind {
+	case "wall_plank":
+		return "planks"
+	case "wall_stone":
+		return "refined_stone"
 	}
 	return ""
 }

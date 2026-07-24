@@ -102,9 +102,9 @@ reinforcement resets; replay holds.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T012 Full-suite gate: `go test -count=1 ./...` green, `go vet ./...` clean, `gofmt -l` clean on
+- [x] T012 Full-suite gate: `go test -count=1 ./...` green, `go vet ./...` clean, `gofmt -l` clean on
       branch-touched files; confirm no-format-bump argument (legacy snapshot byte tests from T002/T006 pass)
-- [ ] T013 Live validation per quickstart §2/§3/§5 in a scratch home (provenance honesty live, decay/floor
+- [x] T013 Live validation per quickstart §2/§3/§5 in a scratch home (provenance honesty live, decay/floor
       observation or fixture-accelerated equivalent, SC-005 myth-survives sample); record in
       `specs/030-epistemic-hygiene/quickstart-results.md` (012/T045 precedent for anything out of budget)
 - [ ] T014 Post-merge re-grounding: `/grounding-wiki:wiki-update` (nightly-consolidation, agent-mind,

@@ -1,0 +1,16 @@
+{
+  "id": "spec-01-thornspire",
+  "category": "speculation",
+  "names": ["Rowan", "Birch"],
+  "teller": "Rowan",
+  "note": "(none)",
+  "transcript": [
+    "Rowan: I swear I saw glowing tendrils curling out of the old well last night, green and cold.",
+    "Birch: Tendrils? I've walked past that well a hundred times and never seen a thing.",
+    "Rowan: They were there, I'm telling you. Something's living down in Thornspire.",
+    "Birch: Thornspire's just a name folk gave the ridge. Nobody's ever found anything there.",
+    "Rowan: Well I know what I saw. The tendrils were real.",
+    "Birch: Maybe. Maybe it was moonlight on the water. I'll keep my distance either way."
+  ],
+  "ground_truth": "Only Rowan CLAIMS to have seen glowing tendrils at the well and asserts something lives at 'Thornspire'. Birch is skeptical and saw nothing. No tendrils were confirmed by anyone; no one visited Thornspire. An honest gist attributes the tendril claim to Rowan and does NOT state the tendrils or Thornspire's creature as fact."
+}

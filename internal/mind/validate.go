@@ -36,12 +36,19 @@ func parseMemRef(ref string, bufferLen int) int {
 }
 
 type beliefChange struct {
-	ID         int    `json:"id"` // 0 = new
-	Statement  string `json:"statement"`
-	Confidence int    `json:"confidence"`
-	Provenance string `json:"provenance"`
-	Source     int    `json:"source"`
-	Subject    int    `json:"subject"`
+	ID         int      `json:"id"` // 0 = new
+	Statement  string   `json:"statement"`
+	Confidence int      `json:"confidence"`
+	Provenance string   `json:"provenance"`
+	Source     int      `json:"source"`
+	Subject    int      `json:"subject"`
+	Evidence   []string `json:"evidence,omitempty"` // spec 030: ordinal buffer refs ("m3") the belief rests on
+
+	// Filled by enforceProvenance (spec 030), never unmarshaled: the evidence
+	// ordinals resolved to durable identities and whether >=1 is direct
+	// perception. Landed on the belief_revised payload (T005).
+	resolved []sim.MemoryRef
+	direct   bool
 }
 
 // consolidationOutput is the model's reply, per
@@ -61,10 +68,55 @@ const (
 	maxFades        = 8
 	maxBeliefEdits  = 4
 	maxNarrativeLen = 1200
+	// maxBeliefEvidence (spec 030) caps a belief's evidence citations. Over-long
+	// lists are pre-trimmed best-first before judging — absorbed, not punished
+	// (contracts/consolidation-contract.md), so there is no matching reject.
+	maxBeliefEvidence = 4
 	// Prompt asks for <200 chars; the cap allows overrun headroom (live
 	// finding: hard-failing a whole night on a wordy sentence is waste).
 	maxGistLen = 300
 )
+
+// enforceProvenance is the spec-030 provenance gate (deterministic, no model
+// call): for each belief it resolves the evidence ordinals to durable memory
+// identities exactly as promote/fade refs resolve — deduping, dropping
+// unresolvable refs silently — records whether >=1 resolved memory is direct
+// perception, and coerces the label. "witnessed" survives only with >=1
+// direct-perception memory; otherwise it drops to "told" (some secondhand
+// evidence resolved) or "inferred" (nothing resolved). "told"/"inferred" pass
+// through untouched. The resolved refs + direct flag are stashed on each belief
+// for landing (T005). Returns the count of coerced beliefs; the night is NEVER
+// rejected here — hygiene coerces, never punishes (FR-003).
+func enforceProvenance(beliefs []beliefChange, buffer []sim.Memory) int {
+	coerced := 0
+	for i := range beliefs {
+		b := &beliefs[i]
+		seen := map[int]bool{}
+		b.resolved = nil
+		b.direct = false
+		for _, r := range b.Evidence {
+			idx := parseMemRef(r, len(buffer))
+			if idx < 0 || seen[idx] {
+				continue
+			}
+			seen[idx] = true
+			m := buffer[idx]
+			b.resolved = append(b.resolved, sim.MemoryRef{Tick: m.Tick, Hash: sim.MemoryHash(m.Text)})
+			if sim.DirectPerception(m.Origin) {
+				b.direct = true
+			}
+		}
+		if b.Provenance == sim.ProvenanceWitnessed && !b.direct {
+			if len(b.resolved) > 0 {
+				b.Provenance = sim.ProvenanceTold
+			} else {
+				b.Provenance = sim.ProvenanceInferred
+			}
+			coerced++
+		}
+	}
+	return coerced
+}
 
 var anchorSpaces = regexp.MustCompile(`\s+`)
 

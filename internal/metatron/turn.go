@@ -423,7 +423,7 @@ func (mt *Metatron) landNudgeBatch(form string, targets []int, text string) (*Nu
 		Form: form, Targets: targets, Text: text})}}
 	for _, t := range targets {
 		batch = append(batch, store.Event{Type: "agent.memory_added", Payload: mustJSON(sim.MemoryAddedPayload{
-			Agent: t, Text: prefix + text, Salience: sim.SalDream, Subject: -1})})
+			Agent: t, Text: prefix + text, Salience: sim.SalDream, Subject: -1, Origin: sim.OriginOmen})})
 	}
 	if err := mt.social.InjectSocial(batch); err != nil {
 		log.Printf("metatron: nudge rejected at the door: %v", err)

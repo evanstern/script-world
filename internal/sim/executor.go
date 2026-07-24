@@ -36,7 +36,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			a := &s.Agents[i]
 			if !a.Dead && a.Needs.Warmth < coldNightBelow {
 				events = append(events, situatedMemoryEvent(nextTick, i, salColdNight,
-					PlaceAt(s, a.X, a.Y), "", "Survived a freezing night in the open."))
+					PlaceAt(s, a.X, a.Y), "", OriginAction, "Survived a freezing night in the open."))
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 				}
 				if abs(s.Agents[w].X-st.X)+abs(s.Agents[w].Y-st.Y) <= witnessRadius {
 					events = append(events, situatedMemoryEvent(nextTick, w, salFireOut,
-						PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "", "Watched the fire burn out."))
+						PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "", OriginAction, "Watched the fire burn out."))
 				}
 			}
 		}
@@ -123,7 +123,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 				if s.Gru != nil && s.Gru.LastVictim == i && nextTick-s.Gru.LastAttack <= 3600 {
 					cause = "the gru"
 				}
-				events = append(events, situatedMemoryEvent(nextTick, i, salNearDeath, PlaceAt(s, a.X, a.Y), "", "Nearly died — %s almost took me.", cause))
+				events = append(events, situatedMemoryEvent(nextTick, i, salNearDeath, PlaceAt(s, a.X, a.Y), "", OriginAction, "Nearly died — %s almost took me.", cause))
 			}
 			if n.Health == 0 {
 				cause := "collapse"
@@ -141,7 +141,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 					}
 					if abs(s.Agents[w].X-a.X)+abs(s.Agents[w].Y-a.Y) <= witnessRadius {
 						events = append(events, situatedMemoryAboutEvent(nextTick, w, i, -80, salWitnessDeath,
-							PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s die of %s.", a.Name, cause))
+							PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), OriginWitness, "Watched %s die of %s.", a.Name, cause))
 					}
 				}
 			}
@@ -268,8 +268,14 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			continue // frozen in place: no stepping toward the target
 		}
 
-		// En route: one tile per moveEveryTicks, staggered like decisions.
-		if (nextTick+int64(i)*3)%moveEveryTicks == 0 {
+		// En route: one tile per moveEveryTicks, staggered like decisions. Spec 032
+		// US3 (research R3): a second stateless cadence slot at phase 2 fires only
+		// when the agent is standing ON a path tile, so stepping FROM a path moves
+		// at exactly 2x (two steps per 5-tick window) — the tile stepped from
+		// decides, matching the spec. Phase 0 always steps (baseline speed intact);
+		// off-path agents never see phase 2, so no existing behavior changes.
+		phase := (nextTick + int64(i)*3) % moveEveryTicks
+		if phase == 0 || (phase == 2 && pathAt(s, a.X, a.Y)) {
 			nx, ny := nextStep(m, s, a.X, a.Y, in.TargetX, in.TargetY)
 			if nx == a.X && ny == a.Y {
 				emit("agent.intent_done", AgentPayload{Agent: i}) // unreachable
@@ -300,7 +306,7 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 							Reason: "promise broken"})},
 					situatedMemoryAboutEvent(nextTick, d.Creditor, d.Debtor, toneNeverPaid, salNeverPaid,
 						PlaceAt(s, s.Agents[d.Creditor].X, s.Agents[d.Creditor].Y),
-						"%s never repaid the food I gave them.", s.Agents[d.Debtor].Name))
+						OriginWitness, "%s never repaid the food I gave them.", s.Agents[d.Debtor].Name))
 				// A repay-debts norm in force makes the broken promise a
 				// witnessed crime too (TASK-13).
 				if repayNorm != nil {
@@ -332,8 +338,8 @@ func socialEvents(s *State, nextTick int64) []store.Event {
 					A: from, B: to, TrustDelta: 0, AffectionDelta: giveAffectionToRecv,
 					Reason: "shared food"})},
 			situatedMemoryAboutEvent(nextTick, to, from, toneSaved, salWasSaved,
-				PlaceAt(s, t.X, t.Y), "%s gave me food when I needed it.", f.Name),
-			situatedMemoryEvent(nextTick, from, salGaveHelp, PlaceAt(s, f.X, f.Y), "", "Gave food to %s.", t.Name))
+				PlaceAt(s, t.X, t.Y), OriginWitness, "%s gave me food when I needed it.", f.Name),
+			situatedMemoryEvent(nextTick, from, salGaveHelp, PlaceAt(s, f.X, f.Y), "", OriginAction, "Gave food to %s.", t.Name))
 	}
 
 	for i := range s.Agents {
@@ -385,8 +391,8 @@ func talkEvents(s *State, i, j int, nextTick int64) []store.Event {
 		{Tick: nextTick, Type: "social.relation_changed",
 			Payload: mustPayload(RelationChangedPayload{
 				A: j, B: i, AffectionDelta: talkAffection, Reason: "talked"})},
-		situatedMemoryEvent(nextTick, i, salTalk, PlaceAt(s, a.X, a.Y), "", "Talked with %s.", b.Name),
-		situatedMemoryEvent(nextTick, j, salTalk, PlaceAt(s, b.X, b.Y), "", "Talked with %s.", a.Name),
+		situatedMemoryEvent(nextTick, i, salTalk, PlaceAt(s, a.X, a.Y), "", OriginAction, "Talked with %s.", b.Name),
+		situatedMemoryEvent(nextTick, j, salTalk, PlaceAt(s, b.X, b.Y), "", OriginAction, "Talked with %s.", a.Name),
 	}
 	if tell, ok := TellableFor(s, i, j); ok {
 		events = append(events, rumorTellEvent(nextTick, i, j, tell))
@@ -638,8 +644,27 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Tree
 	case "hunt":
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
-	case "build_fire", "build_shelter", "build_oven", "build_chest":
+	case "build_fire", "build_shelter", "build_oven", "build_chest", "build_path":
+		// build_path is stand-on-target like fire/oven/chest (paths are walkable),
+		// so it re-validates the same buildSite(Target) way (spec 032 US3, T018).
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
+	case "build_wall_plank", "build_wall_stone":
+		// Spec 032 US1 (FR-007, research R2): walls build ADJACENT — the wall
+		// lands on the Res tile while the builder stands on Target. Re-validate
+		// the Res tile is still a build site AND holds no agent (never entomb
+		// someone by walling their tile); a failed guard resolves via intent_done
+		// with no wall and no spend (contested/occupancy pattern).
+		valid = buildSite(m, s, in.ResX, in.ResY) && !agentAt(s, in.ResX, in.ResY)
+	case "demolish":
+		// Contested-wall (research R5): someone else may have destroyed this wall
+		// while the demolisher worked — a vanished wall resolves via intent_done.
+		valid = wallAt(s, in.ResX, in.ResY) != nil
+	case "repair":
+		// Repair needs a still-standing, still-damaged wall AND 1 matching
+		// material still carried; any of those failing (wall gone, mended by
+		// another, material spent) resolves via intent_done (research R5).
+		w := wallAt(s, in.ResX, in.ResY)
+		valid = w != nil && w.HP < wallMaxHP(w.Kind) && invField(a.Inv, wallRepairMaterial(w.Kind)) >= 1
 	case "quarry":
 		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
 		// have quarried this outcrop while this agent walked over.
@@ -687,15 +712,29 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 	// reflex) into the memory's Why — baked at emission so replay reproduces the
 	// identical situated text with no lookup.
 	where := PlaceAt(s, a.X, a.Y)
+	// axeBrokeIfLast co-emits agent.axe_broke immediately after a chop/quarry
+	// completion when the most-worn carried axe is on its last use (pre-event
+	// Axes[0] == 1) — the spear-broke precedent (T027). The harvest reducer
+	// decrements Axes[0] to 0 first, then this companion removes it; a situated
+	// memory rides alongside carrying no Why (the reason belongs to the harvest).
+	// Judged against pre-mutation state, exactly what the reducer re-derives.
+	axeBrokeIfLast := func() {
+		if len(a.Inv.Axes) > 0 && a.Inv.Axes[0] == 1 {
+			emit("agent.axe_broke", AxeBrokePayload{Agent: i})
+			events = append(events, situatedMemoryEvent(nextTick, i, salAxeBroke, where, "", OriginAction,
+				"My axe broke at the work — I'll need to craft another."))
+		}
+	}
 	switch in.Goal {
 	case "forage":
 		emit("agent.foraged", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
 		if a.Needs.Food < 150 {
 			events = append(events, situatedMemoryEvent(nextTick, i, salStarvingForage,
-				where, in.Reason, "Found food when I was starving."))
+				where, in.Reason, OriginAction, "Found food when I was starving."))
 		}
 	case "chop":
 		emit("agent.chopped", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		axeBrokeIfLast()
 	case "hunt":
 		// T027: carrying a spear (checked against pre-mutation state, exactly
 		// what the reducer will independently re-derive when it applies this
@@ -704,22 +743,22 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		// same batch, immediately after, so apply order matches: the hunt
 		// reducer decrements Spears[0] to 0, then spear_broke removes it.
 		emit("agent.hunted", HarvestPayload{Agent: i, X: in.TargetX, Y: in.TargetY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salHunt, where, in.Reason,
+		events = append(events, situatedMemoryEvent(nextTick, i, salHunt, where, in.Reason, OriginAction,
 			"Hunted at the den and came back with meat."))
 		if len(a.Inv.Spears) > 0 && a.Inv.Spears[0] == 1 {
 			emit("agent.spear_broke", SpearBrokePayload{Agent: i})
 			// The broken spear is an incidental consequence, not the driven act —
 			// situated by place but carrying no Why (the reason belongs to the hunt
 			// memory above), which also avoids a double em-dash in this base text.
-			events = append(events, situatedMemoryEvent(nextTick, i, salSpearBroke, where, "",
+			events = append(events, situatedMemoryEvent(nextTick, i, salSpearBroke, where, "", OriginAction,
 				"My spear broke on the hunt — I'll need to craft another."))
 		}
 	case "build_fire":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "fire", X: in.TargetX, Y: in.TargetY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salFire, placeForBuild(s, a.X, a.Y, "fire"), in.Reason, "Built a fire."))
+		events = append(events, situatedMemoryEvent(nextTick, i, salFire, placeForBuild(s, a.X, a.Y, "fire"), in.Reason, OriginAction, "Built a fire."))
 	case "build_shelter":
 		emit("agent.built", BuiltPayload{Agent: i, Kind: "shelter", X: in.TargetX, Y: in.TargetY})
-		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, placeForBuild(s, a.X, a.Y, "shelter"), in.Reason,
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, placeForBuild(s, a.X, a.Y, "shelter"), in.Reason, OriginAction,
 			"Raised a shelter with my own hands."))
 	case "build_oven":
 		// T030: the flagship station. "First oven" wording (research R8) is
@@ -732,14 +771,14 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Raised the village's first oven — meals and baths, at last."
 		}
-		events = append(events, situatedMemoryEvent(nextTick, i, salOvenBuilt, placeForBuild(s, a.X, a.Y, "oven"), in.Reason, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salOvenBuilt, placeForBuild(s, a.X, a.Y, "oven"), in.Reason, OriginAction, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue
 			}
 			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
 				events = append(events, situatedMemoryAboutEvent(nextTick, w, i, toneOvenBuilt, salOvenBuilt,
-					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s raise an oven for the village.", a.Name))
+					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), OriginWitness, "Watched %s raise an oven for the village.", a.Name))
 			}
 		}
 	case "build_chest":
@@ -755,21 +794,55 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		if first {
 			text = "Built the village's first chest — a place to keep things safe."
 		}
-		events = append(events, situatedMemoryEvent(nextTick, i, salChestBuilt, placeForBuild(s, a.X, a.Y, "chest"), in.Reason, "%s", text))
+		events = append(events, situatedMemoryEvent(nextTick, i, salChestBuilt, placeForBuild(s, a.X, a.Y, "chest"), in.Reason, OriginAction, "%s", text))
 		for w := range s.Agents {
 			if w == i || s.Agents[w].Dead {
 				continue
 			}
 			if abs(s.Agents[w].X-in.TargetX)+abs(s.Agents[w].Y-in.TargetY) <= witnessRadius {
 				events = append(events, situatedMemoryAboutEvent(nextTick, w, i, toneChestBuilt, salChestBuilt,
-					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s build a chest for the village.", a.Name))
+					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), OriginWitness, "Watched %s build a chest for the village.", a.Name))
 			}
 		}
+	case "build_wall_plank", "build_wall_stone":
+		// Spec 032 US1: the wall lands on the Res tile (adjacent-stand build). The
+		// reducer stamps HP = wallMaxHP(kind) and spends the recipe inputs. A
+		// situated builder memory rides along at the shelter salience tier
+		// (events.md: "wall builds emit a situated builder memory"); the wall is
+		// at Res, so the memory is situated by the builder's own stand tile.
+		r, _ := recipeFor(in.Goal)
+		emit("agent.built", BuiltPayload{Agent: i, Kind: r.Structure, X: in.ResX, Y: in.ResY})
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason, OriginAction, "Built a wall."))
+	case "build_path":
+		// Spec 032 US3: the generic reducer arm spends the stone and appends the
+		// path structure (no HP — isWall is false for "path"). Built on the Target
+		// tile (stand-on-target). No builder memory — a path is not formative
+		// (events.md: paths emit none, the forage/chop spam-avoidance precedent).
+		emit("agent.built", BuiltPayload{Agent: i, Kind: "path", X: in.TargetX, Y: in.TargetY})
+	case "demolish":
+		// Spec 032 US1 (research R5): one chip per completed work cycle. When the
+		// chip would leave the wall standing (HP − chip ≥ 1) emit wall_chipped and
+		// the reducer re-arms the work gate (WorkStart = 0) for the next cycle;
+		// otherwise emit wall_destroyed and the reducer removes the wall and clears
+		// the intent. Validity above guarantees the wall still stands here. No
+		// memory — a chip is not formative (spam avoidance, forage/chop precedent).
+		if w := wallAt(s, in.ResX, in.ResY); w != nil && w.HP-demolishChipHP >= 1 {
+			emit("agent.wall_chipped", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		} else {
+			emit("agent.wall_destroyed", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		}
+	case "repair":
+		// Spec 032 US1 (research R5): one repair per completed work cycle. The
+		// reducer consumes 1 matching material, clamps HP up to the derived max,
+		// and either re-arms the work gate (still damaged AND material remains) or
+		// clears the intent. Validity above guarantees a damaged wall + material.
+		emit("agent.wall_repaired", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		axeBrokeIfLast()
 	case "collect_water":
 		emit("agent.collected_water", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
-	case "craft_planks", "craft_stone", "craft_spear":
+	case "craft_planks", "craft_stone", "craft_spear", "craft_axe":
 		// T026: inputs re-validated at completion (contested-resource
 		// pattern) — insufficient inputs resolve via intent_done only, no
 		// agent.crafted. Hand-crafts have no travel window (target = the
@@ -828,7 +901,7 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		morale := minInt(1000, a.Needs.Morale+bathMorale)
 		warmth := minInt(1000, a.Needs.Warmth+bathWarmth)
 		emit("agent.bathed", BathedPayload{Agent: i, MoraleAfter: morale, WarmthAfter: warmth})
-		events = append(events, situatedMemoryToned(nextTick, i, salBath, toneBath, where, in.Reason,
+		events = append(events, situatedMemoryToned(nextTick, i, salBath, toneBath, where, in.Reason, OriginAction,
 			"Took a hot bath at the oven — warm, clean, and content."))
 	}
 	return events

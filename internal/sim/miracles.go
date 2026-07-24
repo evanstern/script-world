@@ -167,6 +167,8 @@ func (s *State) applyTimeSnapped(e store.Event) error {
 //	DenUse.Ready          den cooldown deadline
 //	FoodBatch.SpoilAt     ground-food rot deadline
 //	Debt.Due              repayment deadline; ONLY non-zero
+//	Belief.Reinforced     decay anchor (elapsed = tick-Reinforced); ONLY non-zero
+//	                      (0 = legacy grandfather, must stay 0 so it never decays)
 //	Gru.LastAttack        attack-cooldown anchor; ONLY non-zero (0 = never) and
 //	                      only while the gru is abroad
 //	Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
@@ -212,6 +214,9 @@ func rebaseTicks(s *State, delta int64) {
 		a.IdleSince += delta // unconditional: zero is genesis-idle, not "never"
 		shift(&a.LastTalk)
 		shift(&a.LastGive)
+		for j := range a.Beliefs {
+			shift(&a.Beliefs[j].Reinforced) // spec 030: decay anchor (elapsed = tick-Reinforced); 0 = grandfather, stays 0
+		}
 		if a.Intent != nil {
 			shift(&a.Intent.WorkStart)
 		}
@@ -293,14 +298,23 @@ func (s *State) applyItemGranted(e store.Event) error {
 	if err := s.spendMiracleCharge(e.Type, p.Gratis); err != nil {
 		return err
 	}
-	if p.Kind == "spear" {
+	switch p.Kind {
+	case "spear":
 		// Each granted unit is one fresh, full-durability spear; keep the
 		// remaining-uses slice sorted ascending (hunts spend the most-worn first).
 		for n := 0; n < p.Qty; n++ {
 			inv.Spears = append(inv.Spears, spearDurability)
 		}
 		sort.Ints(inv.Spears)
-	} else {
+	case "axe":
+		// Spec 032 US2: each granted unit is one fresh, full-durability axe —
+		// the spear-grant clone (durability lives in Inventory.Axes, so it has
+		// no invField).
+		for n := 0; n < p.Qty; n++ {
+			inv.Axes = append(inv.Axes, axeDurability)
+		}
+		sort.Ints(inv.Axes)
+	default:
 		addItems(inv, []Item{{Kind: p.Kind, N: p.Qty}}, +1)
 	}
 	return nil
@@ -313,7 +327,7 @@ func (s *State) applyItemGranted(e store.Event) error {
 func grantableKind(kind string) bool {
 	switch kind {
 	case "wood", "stone", "water", "planks", "refined_stone",
-		"food_raw", "food_cooked", "meals", "spear":
+		"food_raw", "food_cooked", "meals", "spear", "axe":
 		return true
 	}
 	return false
@@ -527,6 +541,11 @@ func (s *State) movePile(fromX, fromY, toX, toY int) {
 		dest.Spears = append(dest.Spears, moved.Spears...)
 		sort.Ints(dest.Spears)
 	}
+	if len(moved.Axes) > 0 {
+		// Spec 032 US2: axes ride the pile move with their durabilities, sorted.
+		dest.Axes = append(dest.Axes, moved.Axes...)
+		sort.Ints(dest.Axes)
+	}
 }
 
 // spillInventory pours an inventory (a removed chest's Store) onto the ground
@@ -549,6 +568,11 @@ func (s *State) spillInventory(x, y int, inv *Inventory, tick int64) {
 	if len(inv.Spears) > 0 {
 		pile.Spears = append(pile.Spears, inv.Spears...)
 		sort.Ints(pile.Spears)
+	}
+	if len(inv.Axes) > 0 {
+		// Spec 032 US2: axes spill with their durabilities, like spears.
+		pile.Axes = append(pile.Axes, inv.Axes...)
+		sort.Ints(pile.Axes)
 	}
 }
 

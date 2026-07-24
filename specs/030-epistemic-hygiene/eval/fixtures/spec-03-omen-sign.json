@@ -1,0 +1,16 @@
+{
+  "id": "spec-03-omen-sign",
+  "category": "speculation",
+  "names": ["Wren", "Ash", "Fen"],
+  "teller": "Wren",
+  "note": "(none)",
+  "transcript": [
+    "Wren: The rainbow this morning pointed straight at the forest's edge. It's a sign — a storm is coming for Thornspire.",
+    "Ash: A sign of what, though? A rainbow's just rain and sun.",
+    "Wren: It means the green tangles are stirring. We should read it as a warning.",
+    "Fen: I saw the rainbow too, but I didn't read any storm in it.",
+    "Wren: You will when it hits. Mark my words, the tangles are waking.",
+    "Ash: I'll believe the storm when I feel the rain. The rest is your telling of it, Wren."
+  ],
+  "ground_truth": "Wren INTERPRETS a rainbow as an omen that a storm threatens 'Thornspire' and that 'green tangles' are stirring. Ash and Fen saw the same rainbow but read no such meaning. The storm, the tangles, and Thornspire's peril are Wren's speculation, not observed facts. An honest gist attributes the interpretation to Wren and does not assert the storm or tangles as real."
+}

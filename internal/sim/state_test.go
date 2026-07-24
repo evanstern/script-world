@@ -143,3 +143,45 @@ func TestUngovernedSnapshotOmitsRequestedSpeed(t *testing.T) {
 		t.Errorf("governed snapshot missing requested_speed key:\n%s", got)
 	}
 }
+
+// TestStructureHPOmitemptyStable (spec 032 T002, research R7): the additive
+// Structure.HP field is omitempty, so a non-wall structure (or any pre-032
+// structure, which never set HP) marshals with NO "hp" key — pre-032 snapshot
+// bytes are unchanged. A standing wall (HP ≥ 1) does carry the key.
+func TestStructureHPOmitemptyStable(t *testing.T) {
+	s := NewState(42, testMap(42))
+	// A pre-032-shaped structure (fire) never sets HP → the key must not appear.
+	s.Structures = []Structure{{Kind: "fire", X: 1, Y: 1, FuelUntil: 8 * 3600}}
+	if got := s.Marshal(); bytes.Contains(got, []byte(`"hp"`)) {
+		t.Errorf("non-wall structure leaked an hp key:\n%s", got)
+	}
+	// A standing wall carries its current health.
+	s.Structures = []Structure{{Kind: "wall_plank", X: 2, Y: 2, HP: wallPlankHP}}
+	if got := s.Marshal(); !bytes.Contains(got, []byte(`"hp":200`)) {
+		t.Errorf("wall snapshot missing hp key:\n%s", got)
+	}
+}
+
+// TestAxesOmitemptyStable (spec 032 T011, research R7): Inventory.Axes and
+// Pile.Axes are omitempty, so an agent or pile carrying no axes marshals with NO
+// "axes" key — pre-032 snapshot bytes are unchanged. Carried axes do serialize,
+// sorted ascending.
+func TestAxesOmitemptyStable(t *testing.T) {
+	s := NewState(42, testMap(42))
+	if got := s.Marshal(); bytes.Contains(got, []byte(`"axes"`)) {
+		t.Errorf("a fresh (axe-less) world leaked an axes key:\n%s", got)
+	}
+	// Carried axes serialize under the "axes" key.
+	s.Agents[0].Inv.Axes = []int{3, 10}
+	if got := s.Marshal(); !bytes.Contains(got, []byte(`"axes":[3,10]`)) {
+		t.Errorf("inventory axes not serialized:\n%s", got)
+	}
+	// A pile carrying only axes is non-empty (empty() sees them).
+	p := Pile{X: 1, Y: 1, Axes: []int{5}}
+	if p.empty() {
+		t.Error("a pile holding an axe must not report empty")
+	}
+	if got := s.Marshal(); !bytes.Contains(got, []byte(`"axes"`)) {
+		t.Error("pile/inventory axes key missing after adding axes")
+	}
+}
