@@ -4,7 +4,7 @@ title: 'Walls, axes, and paths: build-system additions (spec 032)'
 status: In Progress
 assignee: []
 created_date: '2026-07-24 04:07'
-updated_date: '2026-07-24 04:07'
+updated_date: '2026-07-24 05:02'
 labels: []
 dependencies: []
 ordinal: 75000
@@ -20,11 +20,11 @@ Spec: specs/032-walls-axes-paths
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Spec phase: Setup
-- [ ] #2 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #3 Spec phase: User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP
-- [ ] #4 Spec phase: User Story 2 - Axes make harvesting worthwhile (Priority: P2)
-- [ ] #5 Spec phase: User Story 3 - Paths speed travel (Priority: P3)
+- [x] #1 Spec phase: Setup
+- [x] #2 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #3 Spec phase: User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP
+- [x] #4 Spec phase: User Story 2 - Axes make harvesting worthwhile (Priority: P2)
+- [x] #5 Spec phase: User Story 3 - Paths speed travel (Priority: P3)
 - [ ] #6 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
 
@@ -38,4 +38,8 @@ Full Spec Kit run complete: spec.md (+clarifications 2026-07-23: demolish verb; 
 
 <!-- SECTION:NOTES:BEGIN -->
 Model tier: Opus 4.8 (spec-implementer via Agent model param). Rubric justification (constitution V): cross-package slice (internal/sim + internal/tool + internal/tui); changes core movement/pathability semantics (passable(), movement cadence dual-phase gate); introduces new executor scheduling shape (WorkStart-reset multi-cycle work for demolish/repair). Not a routine single-package slice.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 - Walls shape the world (Priority: P1) 🎯 MVP: 8/8 · User Story 2 - Axes make harvesting worthwhile (Priority: P2): 6/6 · User Story 3 - Paths speed travel (Priority: P3): 4/4 · Polish & Cross-Cutting: 2/3
+
+Implementation complete on branch task-88-walls-axes-paths (rebased onto origin/main, full suite green): T001-T022 done, 21 commits, HEAD verified by orchestrator (build/vet/full go test green post-rebase). PR #58 open: https://github.com/evanstern/promptworld/pull/58. Remaining: T023 wiki re-pin + player-docs after merge.
 <!-- SECTION:NOTES:END -->

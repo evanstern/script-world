@@ -14,7 +14,7 @@
 
 **Purpose**: the shared tuning surface every story reads
 
-- [ ] T001 Add the spec-032 constants block to internal/sim/agents.go (wallPlankCost/wallStoneCost/wallPlankHP/wallStoneHP/buildWallTicks/demolishChipHP/demolishTicks/repairHPPerUnit/repairTicks/pathStoneCost/buildPathTicks/axeDurability/chopYieldBare/chopYieldAxe/quarryYieldBare/quarryYieldAxe — literals per contracts/recipes.md and research R8; leave chopWood/quarryYield in place until T014 replaces their uses)
+- [x] T001 Add the spec-032 constants block to internal/sim/agents.go (wallPlankCost/wallStoneCost/wallPlankHP/wallStoneHP/buildWallTicks/demolishChipHP/demolishTicks/repairHPPerUnit/repairTicks/pathStoneCost/buildPathTicks/axeDurability/chopYieldBare/chopYieldAxe/quarryYieldBare/quarryYieldAxe — literals per contracts/recipes.md and research R8; leave chopWood/quarryYield in place until T014 replaces their uses)
 
 ---
 
@@ -22,7 +22,7 @@
 
 **Purpose**: state fields and pure helpers that US1 and US3 both build on
 
-- [ ] T002 Add Structure.HP (`json:"hp,omitempty"`) to internal/sim/agents.go and the pure helpers isWall/wallMaxHP/wallAt/pathAt/agentAt to internal/sim/terrain.go (data-model.md helper table); assert pre-032 snapshot bytes are unchanged by the additive field in internal/sim/state_test.go
+- [x] T002 Add Structure.HP (`json:"hp,omitempty"`) to internal/sim/agents.go and the pure helpers isWall/wallMaxHP/wallAt/pathAt/agentAt to internal/sim/terrain.go (data-model.md helper table); assert pre-032 snapshot bytes are unchanged by the additive field in internal/sim/state_test.go
 
 **Checkpoint**: compiles green, no behavior change — user stories can begin
 
@@ -34,14 +34,14 @@
 
 **Independent Test**: quickstart scenarios 2–4 — build a wall and watch routes detour; chip a plank wall down in 2 cycles / stone in 6 under one intent; repair a chipped wall; occupancy guard rejects building onto an occupied tile
 
-- [ ] T003 [P] [US1] Add build_wall_plank (2 planks) and build_wall_stone (2 refined_stone) recipes plus the wallRepairMaterial helper to internal/sim/recipes.go; extend the contract-mirror assertions in internal/sim/recipes_test.go with the contracts/recipes.md literals
-- [ ] T004 [P] [US1] Teach passable() to return false on standing-wall tiles in internal/sim/terrain.go; add reroute-around-wall and unreachable-when-enclosed BFS tests in internal/sim/wall_test.go (new file)
-- [ ] T005 [US1] Add worldToolsBase rows build_wall_plank/build_wall_stone/demolish/repair with PromptGloss lines (walls block movement + HP + repairable; demolish cycles; repair cost) in internal/tool/registry.go — lands with T006 (coverage gate)
-- [ ] T006 [US1] Add goalResolvers arms in internal/sim/policy.go: wall builds via nearestAdjacentTo over buildSite (stand=Target, build=Res; input check per recipe), demolish targeting the nearest wall via nearestAdjacentTo over isWall, repair targeting the nearest damaged wall (HP < wallMaxHP) with 1 matching material carried
-- [ ] T007 [US1] Executor work in internal/sim/executor.go: wall-build completion re-validates buildSite(ResX,ResY) && !agentAt(ResX,ResY) and emits agent.built with Res coords + a situated builder memory (shelter salience); demolish cycles emit agent.wall_chipped or (HP ≤ chip) agent.wall_destroyed; repair cycles re-validate wall+damage+material and emit agent.wall_repaired; contested-wall completions resolve via agent.intent_done (contracts/events.md ordering rules)
-- [ ] T008 [US1] Reducer arms in internal/sim/state.go: agent.built stamps HP=wallMaxHP for wall kinds; agent.wall_chipped subtracts demolishChipHP and resets the actor's Intent.WorkStart=0; agent.wall_destroyed removes the structure and clears the intent; agent.wall_repaired consumes 1 matching material, clamps HP to max, and either resets WorkStart (damaged + material remains) or clears the intent
-- [ ] T009 [US1] Scenario tests in internal/sim/wall_test.go: full wall lifecycle (build→chip×N→destroy→tile passable), plank 2 cycles vs stone 6, repair math + at-full-HP no-resolve, occupancy guard, no-agent-ever-on-wall-tile over a long run, replay hash identical (quickstart scenarios 2–4, 7)
-- [ ] T010 [P] [US1] TUI glyphs in internal/tui/views.go: wall_plank "▤", wall_stone "▩", dim style when HP < wallMaxHP (cold-fire precedent); extend internal/tui/tui_test.go fixture
+- [x] T003 [P] [US1] Add build_wall_plank (2 planks) and build_wall_stone (2 refined_stone) recipes plus the wallRepairMaterial helper to internal/sim/recipes.go; extend the contract-mirror assertions in internal/sim/recipes_test.go with the contracts/recipes.md literals
+- [x] T004 [P] [US1] Teach passable() to return false on standing-wall tiles in internal/sim/terrain.go; add reroute-around-wall and unreachable-when-enclosed BFS tests in internal/sim/wall_test.go (new file)
+- [x] T005 [US1] Add worldToolsBase rows build_wall_plank/build_wall_stone/demolish/repair with PromptGloss lines (walls block movement + HP + repairable; demolish cycles; repair cost) in internal/tool/registry.go — lands with T006 (coverage gate)
+- [x] T006 [US1] Add goalResolvers arms in internal/sim/policy.go: wall builds via nearestAdjacentTo over buildSite (stand=Target, build=Res; input check per recipe), demolish targeting the nearest wall via nearestAdjacentTo over isWall, repair targeting the nearest damaged wall (HP < wallMaxHP) with 1 matching material carried
+- [x] T007 [US1] Executor work in internal/sim/executor.go: wall-build completion re-validates buildSite(ResX,ResY) && !agentAt(ResX,ResY) and emits agent.built with Res coords + a situated builder memory (shelter salience); demolish cycles emit agent.wall_chipped or (HP ≤ chip) agent.wall_destroyed; repair cycles re-validate wall+damage+material and emit agent.wall_repaired; contested-wall completions resolve via agent.intent_done (contracts/events.md ordering rules)
+- [x] T008 [US1] Reducer arms in internal/sim/state.go: agent.built stamps HP=wallMaxHP for wall kinds; agent.wall_chipped subtracts demolishChipHP and resets the actor's Intent.WorkStart=0; agent.wall_destroyed removes the structure and clears the intent; agent.wall_repaired consumes 1 matching material, clamps HP to max, and either resets WorkStart (damaged + material remains) or clears the intent
+- [x] T009 [US1] Scenario tests in internal/sim/wall_test.go: full wall lifecycle (build→chip×N→destroy→tile passable), plank 2 cycles vs stone 6, repair math + at-full-HP no-resolve, occupancy guard, no-agent-ever-on-wall-tile over a long run, replay hash identical (quickstart scenarios 2–4, 7)
+- [x] T010 [P] [US1] TUI glyphs in internal/tui/views.go: wall_plank "▤", wall_stone "▩", dim style when HP < wallMaxHP (cold-fire precedent); extend internal/tui/tui_test.go fixture
 
 **Checkpoint**: walls fully functional and demoable with no axe/path code present
 
@@ -53,12 +53,12 @@
 
 **Independent Test**: quickstart scenarios 1 and 6 — yield comparison with/without axe, break on 10th use, axes move through piles/chests like spears
 
-- [ ] T011 [P] [US2] Add Inventory.Axes and Pile.Axes ([]int, sorted ascending, omitempty) to internal/sim/agents.go; count len(Axes) in bulk(); add "axes" to canonicalKinds; extend Pile.empty(); snapshot-stability assertions in internal/sim/state_test.go
-- [ ] T012 [US2] Add the craft_axe recipe (1 plank + 1 stone → 1 axe) and "axe" cases in craftKindFor/craftGoalFor in internal/sim/recipes.go; add the craft_axe worldToolsBase row + axe gloss and "axes" in itemKinds in internal/tool/registry.go; route craft_axe through the shared craft resolver closure in internal/sim/policy.go (single commit group — coverage gate)
-- [ ] T013 [US2] Executor in internal/sim/executor.go: co-emit agent.axe_broke immediately after a chop/quarry completion when pre-event Axes[0]==1 (same batch, spear-broke precedent incl. situated memory)
-- [ ] T014 [US2] Reducer in internal/sim/state.go: agent.crafted "axe" appends an axeDurability-use axe (sorted); agent.chopped/agent.quarried switch to chopYieldBare|chopYieldAxe / quarryYieldBare|quarryYieldAxe derived from pre-mutation len(Axes) and spend Axes[0] when carried; add the agent.axe_broke arm; DELETE chopWood/quarryYield from internal/sim/agents.go and fix every stale use the compiler surfaces
-- [ ] T015 [US2] Storage plumbing: move axes through drop/pick_up/deposit/withdraw transfer paths in internal/sim/state.go (uses-preserving, sorted, "axes" kind key) and let give_item grant fresh axes in internal/sim/miracles.go
-- [ ] T016 [US2] Tests in internal/sim/axe_test.go (new): craft→10 uses, 1-vs-3 yields both verbs, durability spend, break-on-last-use companion ordering, bare-after-break, bulk truncation atop axe yield, storage round-trip; update yield expectations in existing internal/sim/craft_test.go and internal/sim/quarry_test.go (2 → 1/3)
+- [x] T011 [P] [US2] Add Inventory.Axes and Pile.Axes ([]int, sorted ascending, omitempty) to internal/sim/agents.go; count len(Axes) in bulk(); add "axes" to canonicalKinds; extend Pile.empty(); snapshot-stability assertions in internal/sim/state_test.go
+- [x] T012 [US2] Add the craft_axe recipe (1 plank + 1 stone → 1 axe) and "axe" cases in craftKindFor/craftGoalFor in internal/sim/recipes.go; add the craft_axe worldToolsBase row + axe gloss and "axes" in itemKinds in internal/tool/registry.go; route craft_axe through the shared craft resolver closure in internal/sim/policy.go (single commit group — coverage gate)
+- [x] T013 [US2] Executor in internal/sim/executor.go: co-emit agent.axe_broke immediately after a chop/quarry completion when pre-event Axes[0]==1 (same batch, spear-broke precedent incl. situated memory)
+- [x] T014 [US2] Reducer in internal/sim/state.go: agent.crafted "axe" appends an axeDurability-use axe (sorted); agent.chopped/agent.quarried switch to chopYieldBare|chopYieldAxe / quarryYieldBare|quarryYieldAxe derived from pre-mutation len(Axes) and spend Axes[0] when carried; add the agent.axe_broke arm; DELETE chopWood/quarryYield from internal/sim/agents.go and fix every stale use the compiler surfaces
+- [x] T015 [US2] Storage plumbing: move axes through drop/pick_up/deposit/withdraw transfer paths in internal/sim/state.go (uses-preserving, sorted, "axes" kind key) and let give_item grant fresh axes in internal/sim/miracles.go
+- [x] T016 [US2] Tests in internal/sim/axe_test.go (new): craft→10 uses, 1-vs-3 yields both verbs, durability spend, break-on-last-use companion ordering, bare-after-break, bulk truncation atop axe yield, storage round-trip; update yield expectations in existing internal/sim/craft_test.go and internal/sim/quarry_test.go (2 → 1/3)
 
 **Checkpoint**: axe economy live; walls (US1) untouched and still green
 
@@ -70,10 +70,10 @@
 
 **Independent Test**: quickstart scenario 5 — paved corridor traversed in half the ticks (±1 step); only steps FROM path tiles accelerate
 
-- [ ] T017 [US3] Add the build_path recipe (1 stone, no HP) to internal/sim/recipes.go + contract-mirror test; add the build_path worldToolsBase row + path gloss to internal/tool/registry.go; add the build_path goalResolvers arm (stand-on-target build, build_fire pattern) to internal/sim/policy.go (single commit group — coverage gate)
-- [ ] T018 [US3] Movement cadence in internal/sim/executor.go: replace the single modulo gate with phase := (nextTick+int64(i)*3)%moveEveryTicks; step on phase==0 always, and on phase==2 iff pathAt(s, a.X, a.Y) (research R3); wall/oven-style completion validation for build_path is the existing generic buildSite arm — extend the executor's build-kind switch to include it
-- [ ] T019 [P] [US3] TUI path glyph "·" (terrain-level, structures/agents win) in internal/tui/views.go
-- [ ] T020 [US3] Tests in internal/sim/path_speed_test.go (new): N-tile paved corridor = half the unpaved ticks (±1), mixed-route per-step acceleration, off-path agents unaffected, replay hash identical
+- [x] T017 [US3] Add the build_path recipe (1 stone, no HP) to internal/sim/recipes.go + contract-mirror test; add the build_path worldToolsBase row + path gloss to internal/tool/registry.go; add the build_path goalResolvers arm (stand-on-target build, build_fire pattern) to internal/sim/policy.go (single commit group — coverage gate)
+- [x] T018 [US3] Movement cadence in internal/sim/executor.go: replace the single modulo gate with phase := (nextTick+int64(i)*3)%moveEveryTicks; step on phase==0 always, and on phase==2 iff pathAt(s, a.X, a.Y) (research R3); wall/oven-style completion validation for build_path is the existing generic buildSite arm — extend the executor's build-kind switch to include it
+- [x] T019 [P] [US3] TUI path glyph "·" (terrain-level, structures/agents win) in internal/tui/views.go
+- [x] T020 [US3] Tests in internal/sim/path_speed_test.go (new): N-tile paved corridor = half the unpaved ticks (±1), mixed-route per-step acceleration, off-path agents unaffected, replay hash identical
 
 **Checkpoint**: all three stories independently functional
 
@@ -81,8 +81,8 @@
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T021 Whole-feature determinism pass in internal/sim/whole_feature_test.go (or a new spec-032 section): one session exercising axe+wall+path end-to-end, replayed to a byte-identical hash; pre-032 snapshot (no hp/axes fields) loads unchanged (quickstart scenario 7)
-- [ ] T022 Run quickstart Gate 0 (go build ./... && go vet ./... && go test ./internal/sim/ ./internal/tool/ ./internal/tui/) and the TUI smoke; fix anything surfaced
+- [x] T021 Whole-feature determinism pass in internal/sim/whole_feature_test.go (or a new spec-032 section): one session exercising axe+wall+path end-to-end, replayed to a byte-identical hash; pre-032 snapshot (no hp/axes fields) loads unchanged (quickstart scenario 7)
+- [x] T022 Run quickstart Gate 0 (go build ./... && go vet ./... && go test ./internal/sim/ ./internal/tool/ ./internal/tui/) and the TUI smoke; fix anything surfaced
 - [ ] T023 Re-ground: /grounding-wiki:wiki-update over touched notes (docs/wiki/executor.md, reflex-policy.md, sim-state-reducer.md, tool-registry.md), then player-docs freshness check (node .claude/skills/player-docs/scripts/check-freshness.mjs --check) and regenerate if stale
 
 ---
