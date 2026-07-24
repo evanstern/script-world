@@ -10,7 +10,7 @@ sources:
   - internal/llm/providers.go
   - internal/llm/lease.go
   - internal/llm/pending.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
 ---
 
 # LLM orchestrator
@@ -168,8 +168,11 @@ falls back to the chain head when none admissible), `ResolveProvider(kind)` is t
 pin-resolution dry walk, `ProviderNames()`/`ProviderConfig(name)` serve calibrate,
 and `Kinds()` still feeds the cognition registry's completeness gate at daemon start.
 Per-provider recalibrate hooks fire once per breach episode via `SetRecalibrateHook`;
-the mind records `cog.recalibration_recommended` (the provider name rides the
-recorded payload's `Tier` field, kept for replay-schema stability).
+since spec 031 a breach also ADOPTS (the estimator re-seeds to its window median), and
+`feedEstimate` forwards the evidence — the hook signature carries `prior` and `adopted`
+alongside the post-adoption estimate. The mind records `cog.recalibration_recommended`
+(the provider name rides the recorded payload's `Tier` field, kept for replay-schema
+stability; the adoption arithmetic rides additive omitempty fields).
 
 **Advisory endpoint leases** (`lease.go`, spec 024 US5 — closes TASK-24): a provider
 declaring `endpoint_capacity` C joins a cross-process lease pool keyed by its

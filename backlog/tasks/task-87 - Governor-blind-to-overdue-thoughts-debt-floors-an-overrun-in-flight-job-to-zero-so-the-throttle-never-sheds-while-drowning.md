@@ -3,10 +3,10 @@ id: TASK-87
 title: >-
   Governor blind to overdue thoughts: debt floors an overrun in-flight job to
   zero, so the throttle never sheds while drowning
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-24 03:19'
-updated_date: '2026-07-24 04:23'
+updated_date: '2026-07-24 04:30'
 labels:
   - cognition
   - bug
@@ -49,8 +49,8 @@ Spec: specs/033-governor-accrued-debt
 - [x] #5 Spec phase: Setup
 - [x] #6 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #7 Spec phase: User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — The fix is provably live in a real run (Priority: P2)
-- [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #8 Spec phase: User Story 2 — The fix is provably live in a real run (Priority: P2)
+- [x] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -63,4 +63,12 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · Us
 Implementation complete on Opus 4.8 spec-implementer, gated by planning tier. PR: https://github.com/evanstern/promptworld/pull/57 (branch task-87-governor-accrued-debt, rebased onto origin/main). RED-FIRST proof committed (b28a8ab): world-01 shape fails on old arithmetic (debt 0/jobs 0/no shed), passes on piecewise arm (debt 1.6/jobs 8/shed→4x on 5th sample). Gates: go test ./... all ok, vet clean, gofmt clean on touched files, -race clean on cognition/daemon. Planning-tier design correction recorded in spec 033 research.md R1: plain max(Predicted,Elapsed) would break within-prediction bit-identity (SC-003) — normative arm is piecewise (remaining drains within prediction; full accrued elapsed once overdue). AC #3 (live shed observed) and the binary check half of AC #4 await T007: rebuild + restart world-01 (running daemon predates task-33 merge) + deliberate saturation probe — restarts the live world, so coordinating with operator.
 
 T007 operational verification (2026-07-24, post-merge): world-01 daemon rebuilt from merge 5dff763 and restarted (pid 78316) — binary check CLOSED: previous daemon predated the task-33 merge and had no governor; the new binary contains governorSampler (nm confirms) and the sampler is live (status carried governor_debt 0.017-0.048 / governor_jobs 2 during a brief 32x window). No live shed observed and none expected: with spec-031 honest predictions and cloud-routed planner, debt ~0.05 << ShedThreshold 1.0 at 32x — a healthy system correctly does not shed. SC-004 satisfied by the harness equivalent per spec 033 assumption (TestGovernorSamplerShedsOnOverdueThoughts: shed to 4x within breachSamples on the world-01 overdue shape). Note: 32x probe was interrupted by operator speed pulls (16x/8x, seq 134274/134276) — irrelevant to the evidence above. AC #3 satisfied at harness level per SC-004's explicit either/or; AC #4 both clauses now closed (spec 028 doctrine updated in PR #57; binary check recorded here).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 2/2 · Polish & Cross-Cutting Concerns: 2/2 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 2/2 · Polish & Cross-Cutting Concerns: 2/2). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->

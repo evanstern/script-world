@@ -47,7 +47,7 @@
 **Independent Test**: a saturated run's event log contains `clock.governor_shed`.
 
 - [x] T006 [US2] Doctrine text update in `specs/028-adaptive-throttle`: revise the debt definition (FR-001/FR-002 there) and the "an overdue thought invents no debt it cannot ground" rationale to the accrued-drift doctrine, cross-referencing specs/033-governor-accrued-debt/contracts/debt-formula.md; keep hysteresis doctrine untouched
-- [ ] T007 [US2] Operational verification, recorded on TASK-87 (coordinate with the operator — restarts their live world): rebuild `go build -o promptworld ./cmd/promptworld` from the merged (or branch) build; stop/restart world-01; confirm the governor is sampling (status carries governor debt/jobs); drive deliberate saturation per quickstart.md and capture at least one `clock.governor_shed` event (seq + tick + payload) plus the governed status; append the evidence to TASK-87 notes. If impractical pre-merge, an e2e-harness equivalent satisfies SC-004 and the live probe follows the merge
+- [x] T007 [US2] Operational verification, recorded on TASK-87 (coordinate with the operator — restarts their live world): rebuild `go build -o promptworld ./cmd/promptworld` from the merged (or branch) build; stop/restart world-01; confirm the governor is sampling (status carries governor debt/jobs); drive deliberate saturation per quickstart.md and capture at least one `clock.governor_shed` event (seq + tick + payload) plus the governed status; append the evidence to TASK-87 notes. If impractical pre-merge, an e2e-harness equivalent satisfies SC-004 and the live probe follows the merge
 
 **Checkpoint**: full story set
 
@@ -56,7 +56,7 @@
 ## Phase 5: Polish & Cross-Cutting Concerns
 
 - [x] T008 Full gates inside the worktree: `go test ./...`, `gofmt -l .` (only the 5 pre-existing TASK-83 files may appear), `go vet ./...`; record results on TASK-87
-- [ ] T009 Open the PR from `.worktrees/task-87` (one TASK, one PR; branch `task-87-governor-accrued-debt`), body linking specs/033 + TASK-87 evidence + red-first proof; after merge: `/grounding-wiki:wiki-update` for notes sourcing governor.go, then player-docs freshness check (FR-007 — post-merge gate, tracked on TASK-87)
+- [x] T009 Open the PR from `.worktrees/task-87` (one TASK, one PR; branch `task-87-governor-accrued-debt`), body linking specs/033 + TASK-87 evidence + red-first proof; after merge: `/grounding-wiki:wiki-update` for notes sourcing governor.go, then player-docs freshness check (FR-007 — post-merge gate, tracked on TASK-87)
 
 ---
 

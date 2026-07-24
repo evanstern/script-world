@@ -79,7 +79,7 @@ and TASK-86 AC #1 requires the world-01 shape as a test.
 - [x] T012 [P] Append breach-adoption doctrine to `specs/007-cognition-horizon/contracts/calibration.md`: at breach the estimator adopts the window median (cross-reference specs/031-estimator-breach-adoption/contracts/adoption-event.md for the wire shape); constants remain doctrine
 - [x] T013 Full gates inside the worktree: `go test ./...`, `gofmt -l .` (empty), `go vet ./...`; run the quickstart unit-level validation section and record results on TASK-86
 - [x] T014 Verify `internal/daemon/daemon.go` hook install site (`orch.SetRecalibrateHook(md.RecalibrateSignal)`) compiles against the new signature with no daemon logic change; if a change proves necessary, keep it mechanical and note it on TASK-86
-- [ ] T015 Open the PR from `.worktrees/task-86` (one TASK, one PR; branch `task-86-estimator-breach-adoption`), body linking specs/031 and TASK-86 evidence; after merge: run `/grounding-wiki:wiki-update` (docs/wiki/cognition.md sources include estimate.go) then `node .claude/skills/player-docs/scripts/check-freshness.mjs --check` (FR-008 — post-merge gate, tracked on TASK-86)
+- [x] T015 Open the PR from `.worktrees/task-86` (one TASK, one PR; branch `task-86-estimator-breach-adoption`), body linking specs/031 and TASK-86 evidence; after merge: run `/grounding-wiki:wiki-update` (docs/wiki/cognition.md sources include estimate.go) then `node .claude/skills/player-docs/scripts/check-freshness.mjs --check` (FR-008 — post-merge gate, tracked on TASK-86)
 
 ---
 

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
-<meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@642a75d963f0cdbc34e772fad547c0eacedcfa7c">
-<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@6eb8b60ceb65d760408051eadf50a789603efa18">
-<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@6eb8b60ceb65d760408051eadf50a789603efa18">
+<meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
+<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
 <meta name="promptworld-docs:source" content="docs/wiki/nightly-consolidation.md@8ada1050cc5b108790d0e48640dba0b985632e25">
 <meta name="promptworld-docs:source" content="docs/wiki/social-fabric.md@056c53a140df7431739d4d6cd5d727dc96aed001">
 <title>The AI behind the village — promptworld player docs</title>
@@ -127,17 +127,32 @@ instead. You may notice villagers acting a bit more routine-driven at the fastes
 speeds — that's this trade-off in action, not a bug; dial the speed back down and
 full AI-driven decisions resume.</p>
 
+<h2>The game keeps relearning how slow its own AI actually is</h2>
+<p>Behind the "is this decision still worth waiting for" call above, the game keeps
+a running sense of how long a typical thought actually takes to come back from
+whatever AI model is answering it. That pace isn't assumed to be fixed forever: if a
+model starts consistently taking a lot longer than it used to — busier hardware, a
+different model swapped in, or anything else — the game notices once enough recent
+thoughts have run well over its expectation, and it updates its own sense of "how
+long this normally takes" to match what's actually happening now, instead of
+clinging to an outdated number. That keeps every speed and staleness decision
+honest — grounded in how the AI is actually performing right now, not how it used to
+perform a while back.</p>
+
 <h2>The world would rather slow down than let a thought go stale</h2>
 <p>The autopilot fallback above is a last resort, not the first line of defense.
 Underneath it, the world keeps a running measure of how many villager thoughts are
-currently in flight and how overdue they're getting for the speed you asked for. If
-that overdue-ness climbs too high for a few seconds running, the world quietly drops
-your effective speed by one notch on its own — giving whatever model is serving your
-villagers more real time to think per game-second, no input needed from you. Once the
-backlog clears for a good stretch, it climbs back up again, all the way to the speed
-you actually asked for. Your own speed and pause commands always cut through this
-instantly. See the <a href="time-and-speed.html">time & speed page</a> for what this
-looks like in the full-screen client's header and chronicle feed.</p>
+currently in flight and how overdue they're getting for the speed you asked for. A
+thought that's already running late counts for exactly how late it is — the longer
+it drags on, the more it weighs — so a village that's genuinely struggling to keep
+up always gets caught by this and slowed down, rather than slipping through
+unnoticed. If that overdue-ness climbs too high for a few seconds running, the world
+quietly drops your effective speed by one notch on its own — giving whatever model is
+serving your villagers more real time to think per game-second, no input needed from
+you. Once the backlog clears for a good stretch, it climbs back up again, all the way
+to the speed you actually asked for. Your own speed and pause commands always cut
+through this instantly. See the <a href="time-and-speed.html">time & speed page</a>
+for what this looks like in the full-screen client's header and chronicle feed.</p>
 <p>The two mechanisms work together, in order: the world tries slowing itself down
 first, buying villagers more real thinking time; only if you're already down at the
 slowest speed on the watchable ladder and villagers are still falling behind does the
