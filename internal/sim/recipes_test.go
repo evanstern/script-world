@@ -15,6 +15,7 @@ func TestRecipeTableMirror(t *testing.T) {
 		"craft_planks":  {Goal: "craft_planks", Inputs: []Item{{"wood", 1}}, Outputs: []Item{{"planks", 4}}, Duration: 180, Site: SiteAnywhere},
 		"craft_stone":   {Goal: "craft_stone", Inputs: []Item{{"stone", 1}}, Outputs: []Item{{"refined_stone", 1}}, Duration: 180, Site: SiteAnywhere},
 		"craft_spear":   {Goal: "craft_spear", Inputs: []Item{{"wood", 1}, {"refined_stone", 1}}, Outputs: []Item{{"spear", 1}}, Duration: 240, Site: SiteAnywhere},
+		"craft_axe":     {Goal: "craft_axe", Inputs: []Item{{"planks", 1}, {"stone", 1}}, Outputs: []Item{{"axe", 1}}, Duration: 240, Site: SiteAnywhere},
 		"build_fire":    {Goal: "build_fire", Inputs: []Item{{"wood", 2}}, Structure: "fire", Duration: 600, Site: SiteOnSite},
 		"build_shelter": {Goal: "build_shelter", Inputs: []Item{{"planks", 8}}, Structure: "shelter", Duration: 1200, Site: SiteOnSite},
 		"build_oven":    {Goal: "build_oven", Inputs: []Item{{"refined_stone", 4}, {"planks", 2}}, Structure: "oven", Duration: 900, Site: SiteOnSite},

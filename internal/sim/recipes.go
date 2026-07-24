@@ -49,6 +49,12 @@ var recipes = []Recipe{
 	{Goal: "craft_planks", Inputs: []Item{{"wood", 1}}, Outputs: []Item{{"planks", plankYield}}, Duration: craftPlanksTicks, Site: SiteAnywhere},
 	{Goal: "craft_stone", Inputs: []Item{{"stone", 1}}, Outputs: []Item{{"refined_stone", 1}}, Duration: craftStoneTicks, Site: SiteAnywhere},
 	{Goal: "craft_spear", Inputs: []Item{{"wood", 1}, {"refined_stone", 1}}, Outputs: []Item{{"spear", 1}}, Duration: craftSpearTicks, Site: SiteAnywhere},
+	// craft_axe (spec 032 US2): 1 plank + 1 raw stone → 1 axe (axeDurability
+	// uses). The "axe" output counts one bulk in craftNetBulk like the spear; the
+	// reducer appends a fresh axe to Inv.Axes rather than a plain field (addItems
+	// has no "axe" case, exactly like "spear"). Same 240-tick hand-craft cost as
+	// the spear (contracts/recipes.md).
+	{Goal: "craft_axe", Inputs: []Item{{"planks", 1}, {"stone", 1}}, Outputs: []Item{{"axe", 1}}, Duration: craftSpearTicks, Site: SiteAnywhere},
 
 	// Builds (on-site). Fire is also reflex-buildable; the rest are planner-only.
 	{Goal: "build_fire", Inputs: []Item{{"wood", fireWoodCost}}, Structure: "fire", Duration: buildFireTicks, Site: SiteOnSite},
@@ -180,6 +186,8 @@ func craftKindFor(goal string) string {
 		return "refined_stone"
 	case "craft_spear":
 		return "spear"
+	case "craft_axe":
+		return "axe"
 	}
 	return ""
 }
@@ -192,6 +200,8 @@ func craftGoalFor(kind string) string {
 		return "craft_stone"
 	case "spear":
 		return "craft_spear"
+	case "axe":
+		return "craft_axe"
 	}
 	return ""
 }

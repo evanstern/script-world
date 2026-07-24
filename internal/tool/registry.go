@@ -16,7 +16,7 @@ import "encoding/json"
 // omitted argument, not an enum value.
 var itemKinds = []string{
 	"wood", "stone", "water", "planks", "refined_stone",
-	"food_raw", "food_cooked", "meals", "spears",
+	"food_raw", "food_cooked", "meals", "spears", "axes",
 }
 
 // ItemKinds returns a copy of the storage verbs' item-kind vocabulary, in the
@@ -308,6 +308,8 @@ var worldToolsBase = []Tool{
 	{Name: "build_wall_stone", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 600}, PlanStep: true},
 	{Name: "demolish", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 300}, PlanStep: true, PromptGloss: glossDemolish},
 	{Name: "repair", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossRepair},
+	// Spec 032 US2 (axe): a hand-craft, anywhere, planner-only.
+	{Name: "craft_axe", Effect: World, Gate: Resolvable, Cost: Cost{DurationTicks: 240}, PlanStep: true, PromptGloss: glossCraftAxe},
 }
 
 // setPlanTool is the loop-only planning tool (spec 017 R11): Effect World

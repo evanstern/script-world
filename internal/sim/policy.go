@@ -322,6 +322,7 @@ func buildGoalResolvers() map[string]goalResolver {
 		"craft_planks":     craft,
 		"craft_stone":      craft,
 		"craft_spear":      craft,
+		"craft_axe":        craft, // spec 032 US2: same shared hand-craft closure
 		"build_wall_plank": wallBuild,
 		"build_wall_stone": wallBuild,
 		"demolish": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
