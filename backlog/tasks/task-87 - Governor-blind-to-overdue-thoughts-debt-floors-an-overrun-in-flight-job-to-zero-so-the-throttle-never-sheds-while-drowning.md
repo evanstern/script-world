@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-24 03:19'
-updated_date: '2026-07-24 04:05'
+updated_date: '2026-07-24 04:18'
 labels:
   - cognition
   - bug
@@ -42,13 +42,13 @@ Spec: specs/033-governor-accrued-debt
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An in-flight job whose ElapsedSec exceeds PredictedSec contributes non-decreasing, grounded debt (unit test: stuck job's fraction grows with elapsed, never drops to zero while pending)
-- [ ] #2 Saturation scenario test: sustained 20-50s planner calls at 8x with optimistic predictions drive debt past ShedThreshold and the governor sheds within BreachWindow (reproduces world-01's zero-shed failure as a red test first)
+- [x] #1 An in-flight job whose ElapsedSec exceeds PredictedSec contributes non-decreasing, grounded debt (unit test: stuck job's fraction grows with elapsed, never drops to zero while pending)
+- [x] #2 Saturation scenario test: sustained 20-50s planner calls at 8x with optimistic predictions drive debt past ShedThreshold and the governor sheds within BreachWindow (reproduces world-01's zero-shed failure as a red test first)
 - [ ] #3 A live or e2e saturated run shows clock.governor_shed firing and effective speed stepping down the capped ladder; status/TUI reflects governed state
 - [ ] #4 specs/028-adaptive-throttle doctrine (FR-001/FR-002 debt definition) and the wiki governor/cognition notes updated to the accrued-drift definition; running-binary-predates-merge check recorded on this task
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #7 Spec phase: User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP
 - [ ] #8 Spec phase: User Story 2 — The fix is provably live in a real run (Priority: P2)
 - [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
@@ -57,4 +57,8 @@ Spec: specs/033-governor-accrued-debt
 
 <!-- SECTION:NOTES:BEGIN -->
 Tier decision (constitution Principle V): implementation delegated to spec-implementer on OPUS 4.8 — governor logic in internal/cognition is an explicitly named senior-tier slice (scheduling/governor, doctrine-adjacent). Spec 033 authored, linked, phases seeded.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Overdue thoughts contribute their true, growing drift (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The fix is provably live in a real run (Priority: P2): 1/2 · Polish & Cross-Cutting Concerns: 1/2
+
+Implementation complete on Opus 4.8 spec-implementer, gated by planning tier. PR: https://github.com/evanstern/promptworld/pull/57 (branch task-87-governor-accrued-debt, rebased onto origin/main). RED-FIRST proof committed (b28a8ab): world-01 shape fails on old arithmetic (debt 0/jobs 0/no shed), passes on piecewise arm (debt 1.6/jobs 8/shed→4x on 5th sample). Gates: go test ./... all ok, vet clean, gofmt clean on touched files, -race clean on cognition/daemon. Planning-tier design correction recorded in spec 033 research.md R1: plain max(Predicted,Elapsed) would break within-prediction bit-identity (SC-003) — normative arm is piecewise (remaining drains within prediction; full accrued elapsed once overdue). AC #3 (live shed observed) and the binary check half of AC #4 await T007: rebuild + restart world-01 (running daemon predates task-33 merge) + deliberate saturation probe — restarts the live world, so coordinating with operator.
 <!-- SECTION:NOTES:END -->

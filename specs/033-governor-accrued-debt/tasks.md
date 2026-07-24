@@ -12,7 +12,7 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Create worktree: from repo root run `git fetch origin && git worktree add .worktrees/task-87 -b task-87-governor-accrued-debt origin/main`; all subsequent work happens inside `.worktrees/task-87/`
+- [x] T001 Create worktree: from repo root run `git fetch origin && git worktree add .worktrees/task-87 -b task-87-governor-accrued-debt origin/main`; all subsequent work happens inside `.worktrees/task-87/`
 
 ---
 
@@ -20,7 +20,7 @@
 
 **Purpose**: pin the defect red before touching the arithmetic (FR-005)
 
-- [ ] T002 RED-FIRST regression in `internal/cognition/governor_test.go`: encode the world-01 shape from contracts/debt-formula.md — 8 planner-kind inputs, PredictedSec 1.573, ElapsedSec 30, ticksPerSecond 8 → assert debt ≈ 1.6 and jobs 8, then feed 5 consecutive such samples to a Governor at 8x (requested 8x) and assert an ActionShed decision on the 5th. Run it and CONFIRM IT FAILS against current main (debt 0, jobs 0, no shed) before proceeding; commit the failing test with a message noting red-first
+- [x] T002 RED-FIRST regression in `internal/cognition/governor_test.go`: encode the world-01 shape from contracts/debt-formula.md — 8 planner-kind inputs, PredictedSec 1.573, ElapsedSec 30, ticksPerSecond 8 → assert debt ≈ 1.6 and jobs 8, then feed 5 consecutive such samples to a Governor at 8x (requested 8x) and assert an ActionShed decision on the 5th. Run it and CONFIRM IT FAILS against current main (debt 0, jobs 0, no shed) before proceeding; commit the failing test with a message noting red-first
 
 **Checkpoint**: the defect is executable
 
@@ -32,9 +32,9 @@
 
 **Independent Test**: T002 turns green; monotonic and bit-identical properties hold.
 
-- [ ] T003 [US1] Implement the piecewise arm in `internal/cognition/governor.go` `Debt`: `seconds = PredictedSec − ElapsedSec` when `ElapsedSec < PredictedSec`, else `seconds = ElapsedSec` (NOT plain max — see research.md R1 for why plain max(Predicted, Elapsed) breaks SC-003). Jobs rule unchanged (positive fraction counts). Rewrite the Debt doc comment to the accrued-drift doctrine ("an overdue thought's elapsed time IS its grounded debt"; the boundary jump is doctrine — contracts/debt-formula.md), citing spec 033. Constants, Sample, Decision untouched. T002 now green
-- [ ] T004 [P] [US1] Property tests in `internal/cognition/governor_test.go`: (a) monotonic stuck thought — one input sampled at ElapsedSec 2→30→45→120 past PredictedSec 2 yields strictly non-decreasing, never-zero fractions (SC-002, US1-AC1/AC2); (b) within-prediction bit-identical — table of healthy sets (elapsed < predicted, mixed kinds/speeds incl. elapsed 0 queued) asserts Debt output equals the spec 028 arithmetic (inline reference implementation) to full float64 equality (SC-003, US1-AC4); (c) boundary — elapsed == predicted contributes elapsed (the doctrine jump); (d) unchanged guards — unknown kind skipped, tps ≤ 0 → 0/0
-- [ ] T005 [US1] Sampler-level scenario in `internal/daemon/governor_test.go`: using the existing sampler test harness, a pending set of overdue thoughts (predicted 1.573 / elapsed 30, planner kind) at effective 8x drives sample() to a shed decision within breachSamples consecutive samples and issues the Govern call; assert the governor snapshot (Debt/Jobs) now reflects the overdue set (visible-jobs fix rides along)
+- [x] T003 [US1] Implement the piecewise arm in `internal/cognition/governor.go` `Debt`: `seconds = PredictedSec − ElapsedSec` when `ElapsedSec < PredictedSec`, else `seconds = ElapsedSec` (NOT plain max — see research.md R1 for why plain max(Predicted, Elapsed) breaks SC-003). Jobs rule unchanged (positive fraction counts). Rewrite the Debt doc comment to the accrued-drift doctrine ("an overdue thought's elapsed time IS its grounded debt"; the boundary jump is doctrine — contracts/debt-formula.md), citing spec 033. Constants, Sample, Decision untouched. T002 now green
+- [x] T004 [P] [US1] Property tests in `internal/cognition/governor_test.go`: (a) monotonic stuck thought — one input sampled at ElapsedSec 2→30→45→120 past PredictedSec 2 yields strictly non-decreasing, never-zero fractions (SC-002, US1-AC1/AC2); (b) within-prediction bit-identical — table of healthy sets (elapsed < predicted, mixed kinds/speeds incl. elapsed 0 queued) asserts Debt output equals the spec 028 arithmetic (inline reference implementation) to full float64 equality (SC-003, US1-AC4); (c) boundary — elapsed == predicted contributes elapsed (the doctrine jump); (d) unchanged guards — unknown kind skipped, tps ≤ 0 → 0/0
+- [x] T005 [US1] Sampler-level scenario in `internal/daemon/governor_test.go`: using the existing sampler test harness, a pending set of overdue thoughts (predicted 1.573 / elapsed 30, planner kind) at effective 8x drives sample() to a shed decision within breachSamples consecutive samples and issues the Govern call; assert the governor snapshot (Debt/Jobs) now reflects the overdue set (visible-jobs fix rides along)
 
 **Checkpoint**: US1 provable — `go test ./internal/cognition/ ./internal/daemon/`
 
@@ -46,7 +46,7 @@
 
 **Independent Test**: a saturated run's event log contains `clock.governor_shed`.
 
-- [ ] T006 [US2] Doctrine text update in `specs/028-adaptive-throttle`: revise the debt definition (FR-001/FR-002 there) and the "an overdue thought invents no debt it cannot ground" rationale to the accrued-drift doctrine, cross-referencing specs/033-governor-accrued-debt/contracts/debt-formula.md; keep hysteresis doctrine untouched
+- [x] T006 [US2] Doctrine text update in `specs/028-adaptive-throttle`: revise the debt definition (FR-001/FR-002 there) and the "an overdue thought invents no debt it cannot ground" rationale to the accrued-drift doctrine, cross-referencing specs/033-governor-accrued-debt/contracts/debt-formula.md; keep hysteresis doctrine untouched
 - [ ] T007 [US2] Operational verification, recorded on TASK-87 (coordinate with the operator — restarts their live world): rebuild `go build -o promptworld ./cmd/promptworld` from the merged (or branch) build; stop/restart world-01; confirm the governor is sampling (status carries governor debt/jobs); drive deliberate saturation per quickstart.md and capture at least one `clock.governor_shed` event (seq + tick + payload) plus the governed status; append the evidence to TASK-87 notes. If impractical pre-merge, an e2e-harness equivalent satisfies SC-004 and the live probe follows the merge
 
 **Checkpoint**: full story set
@@ -55,7 +55,7 @@
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T008 Full gates inside the worktree: `go test ./...`, `gofmt -l .` (only the 5 pre-existing TASK-83 files may appear), `go vet ./...`; record results on TASK-87
+- [x] T008 Full gates inside the worktree: `go test ./...`, `gofmt -l .` (only the 5 pre-existing TASK-83 files may appear), `go vet ./...`; record results on TASK-87
 - [ ] T009 Open the PR from `.worktrees/task-87` (one TASK, one PR; branch `task-87-governor-accrued-debt`), body linking specs/033 + TASK-87 evidence + red-first proof; after merge: `/grounding-wiki:wiki-update` for notes sourcing governor.go, then player-docs freshness check (FR-007 — post-merge gate, tracked on TASK-87)
 
 ---
