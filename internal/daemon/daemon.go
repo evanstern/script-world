@@ -152,13 +152,13 @@ func Run(dir string) error {
 		// stale action).
 		if prof, perr := cognition.LoadProfile(w.CalibrationPath()); perr != nil {
 			fmt.Printf("daemon: %v — using bootstrap calibration defaults\n", perr)
+			fmt.Print(uncalibratedBootWarning(w.Manifest.Name))
 		} else if prof != nil {
 			orch.SeedCalibration(prof)
 			fmt.Printf("daemon: calibration seeded (local %.1fs/pt, cloud %.1fs/pt, calibrated %s)\n",
 				cognition.SeedFor(prof, "local", true), cognition.SeedFor(prof, "cloud", false), prof.CalibratedAt)
 		} else {
-			fmt.Printf("daemon: no calibration profile — bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt); run `promptworld calibrate`\n",
-				cognition.BootstrapLocalSecPerPt, cognition.BootstrapCloudSecPerPt)
+			fmt.Print(uncalibratedBootWarning(w.Manifest.Name))
 		}
 		cloudDesc := llmCfg.Cloud.Model
 		if llmCfg.Cloud.Provider == llm.ProviderOpenAICompat {
@@ -250,6 +250,24 @@ func Run(dir string) error {
 	}
 	fmt.Printf("daemon: stopped at tick %d\n", state.Tick)
 	return runErr
+}
+
+// uncalibratedBootWarning composes the boot warning block for an LLM world
+// with no usable calibration profile (spec 035 FR-001, contracts/warnings.md
+// §1): the uncalibrated statement, the per-class suppression horizon at
+// bootstrap seeds (the identical string `promptworld calibrate` prints,
+// cognition.HorizonSummary — FR-006), and the exact calibrate command for
+// this world. Both the absent-profile and unreadable-profile boot branches
+// print it — an unreadable file already falls back to bootstrap and is
+// uncalibrated in every sense that matters (spec edge case); the
+// profile-seeded branch never calls this and stays byte-identical (US2 AC2).
+func uncalibratedBootWarning(worldName string) string {
+	return fmt.Sprintf(
+		"daemon: WARNING — world is UNCALIBRATED: latency estimates are pessimistic bootstrap defaults (local %.0fs/pt, cloud %.0fs/pt)\n"+
+			"daemon: at these estimates: %s\n"+
+			"daemon: run `promptworld calibrate %s` to measure this rig\n",
+		cognition.BootstrapLocalSecPerPt, cognition.BootstrapCloudSecPerPt,
+		cognition.HorizonSummary(cognition.BootstrapLocalSecPerPt), worldName)
 }
 
 // seedMeetingConvention injects the config-declared meeting convention on boot

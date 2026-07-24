@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/sim"
@@ -223,6 +225,32 @@ func (s *Server) statusDataFull(cs sim.Status) StatusData {
 	return sd
 }
 
+// uncalibratedWarning composes the set_speed reply's additive warning (spec
+// 035 FR-002): non-empty only when this world has an orchestrator AND the
+// requested speed suppresses one or more watched cognition classes at their
+// CURRENT estimates (the router's own arithmetic, FR-006) — gated to classes
+// whose serving provider is still bootstrap-seeded (research R2: a
+// calibrated world's live drift is a different signal — spec 031's adoption
+// event and the governor — not this one). Empty for no-LLM worlds and any
+// world with nothing suppressed at the requested speed.
+func (s *Server) uncalibratedWarning(speed clock.Speed) string {
+	if s.llm == nil {
+		return ""
+	}
+	suppressed := cognition.SuppressedAt(speed.TicksPerSecond(), func(class string) (float64, bool) {
+		name, est, ok := s.llm.EstimateForKind(llm.Kind(class))
+		if !ok || s.llm.CalibratedAt(name) != "" {
+			return 0, false
+		}
+		return est, true
+	})
+	if len(suppressed) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("uncalibrated world at %s: %s suppressed at current estimates — run `promptworld calibrate %s`",
+		speed, strings.Join(suppressed, ", "), s.w.Manifest.Name)
+}
+
 // session is one attached client.
 type session struct {
 	srv  *Server
@@ -265,7 +293,7 @@ func (c *session) serve() {
 func (c *session) handle(req Request) {
 	switch req.Cmd {
 	case "status":
-		c.replyStatus(req.ID, "status", "")
+		c.replyStatus(req.ID, "status", "", "")
 	case "state":
 		stateJSON, cs, err := c.srv.loop.DoState()
 		if err != nil {
@@ -279,9 +307,9 @@ func (c *session) handle(req Request) {
 		}
 		c.writeResponse(Response{ID: req.ID, OK: true, Data: data})
 	case "pause":
-		c.replyStatus(req.ID, "pause", "")
+		c.replyStatus(req.ID, "pause", "", "")
 	case "resume":
-		c.replyStatus(req.ID, "resume", "")
+		c.replyStatus(req.ID, "resume", "", "")
 	case "set_speed":
 		var args SetSpeedArgs
 		if req.Args != nil {
@@ -301,7 +329,7 @@ func (c *session) handle(req Request) {
 				Error: "speed max is reserved for pure-sim worlds; this world has an LLM configured — top speed is 32x (delete llm.json to unlock max)"})
 			return
 		}
-		c.replyStatus(req.ID, "set_speed", clock.Speed(args.Speed))
+		c.replyStatus(req.ID, "set_speed", clock.Speed(args.Speed), c.srv.uncalibratedWarning(clock.Speed(args.Speed)))
 	case "llm_call":
 		if c.srv.llm == nil {
 			c.writeResponse(Response{ID: req.ID, OK: false, Error: "llm orchestrator disabled (no llm.json in the save directory)"})
@@ -478,13 +506,19 @@ func (c *session) handleMiracle(id int64, args MiracleArgs) {
 	c.writeResponse(Response{ID: id, OK: true, Data: data})
 }
 
-func (c *session) replyStatus(id int64, cmd string, speed clock.Speed) {
+// replyStatus replies with the shared status/pause/resume/set_speed shape.
+// warning rides only the set_speed path (spec 035 FR-002); every other
+// caller passes "" so its reply is byte-identical to before this feature
+// (omitempty drops an empty Warning).
+func (c *session) replyStatus(id int64, cmd string, speed clock.Speed, warning string) {
 	cs, err := c.srv.loop.Do(cmd, speed)
 	if err != nil {
 		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
 		return
 	}
-	data, err := json.Marshal(c.srv.statusDataFull(cs))
+	sd := c.srv.statusDataFull(cs)
+	sd.Warning = warning
+	data, err := json.Marshal(sd)
 	if err != nil {
 		c.writeResponse(Response{ID: id, OK: false, Error: err.Error()})
 		return

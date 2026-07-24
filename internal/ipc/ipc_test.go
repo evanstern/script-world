@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -910,5 +911,145 @@ func TestLLMCallAndDegradedWorld(t *testing.T) {
 	// Cloud tier at a dead port: same story, plus the error reaches the client.
 	if _, err := c.Call("llm_call", LLMCallArgs{Kind: "narrator", Prompt: "x"}); err == nil {
 		t.Error("cloud call against dead endpoint should error")
+	}
+}
+
+// llmForWarningTests attaches a legacy-config orchestrator (providers named
+// "local"/"cloud") to the harness — the dead endpoints never take traffic;
+// only the seeded/live estimate matters for the warning arithmetic.
+func llmForWarningTests(t *testing.T, h *harness) *llm.Orchestrator {
+	t.Helper()
+	orch, err := llm.New(llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: "http://127.0.0.1:1", Model: "unused"},
+		Cloud:            llm.CloudConfig{Model: "claude-opus-4-8", Endpoint: "http://127.0.0.1:1", InputUSDPerMTok: 5, OutputUSDPerMTok: 25},
+	}, h.st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(orch.Close)
+	h.srv.SetLLM(orch)
+	return orch
+}
+
+// TestSetSpeedWarnsUncalibratedSuppressing (spec 035 US1 AC1/AC2): an
+// uncalibrated world raised into suppressing territory (32x) warns, naming
+// the suppressed classes and the calibrate command, while the speed change
+// still applies; the same world dropped to a non-suppressing notch (4x)
+// carries no warning (edge case: "speed lowered out of suppression").
+func TestSetSpeedWarnsUncalibratedSuppressing(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	llmForWarningTests(t, h)
+	c := h.dial(t)
+
+	sd, err := c.Status("set_speed", SetSpeedArgs{Speed: "32x"})
+	if err != nil {
+		t.Fatalf("set_speed 32x: %v", err)
+	}
+	if sd.Clock.Speed != "32x" {
+		t.Errorf("speed = %s, want 32x (the warning must never block the change)", sd.Clock.Speed)
+	}
+	if sd.Warning == "" {
+		t.Fatal("expected an uncalibrated warning at 32x")
+	}
+	if !strings.Contains(sd.Warning, "planner") || !strings.Contains(sd.Warning, "conversation") {
+		t.Errorf("warning missing suppressed classes: %q", sd.Warning)
+	}
+	if !strings.Contains(sd.Warning, "promptworld calibrate") {
+		t.Errorf("warning missing the calibrate suggestion: %q", sd.Warning)
+	}
+
+	sd2, err := c.Status("set_speed", SetSpeedArgs{Speed: "4x"})
+	if err != nil {
+		t.Fatalf("set_speed 4x: %v", err)
+	}
+	if sd2.Warning != "" {
+		t.Errorf("4x should not suppress anything at bootstrap estimates, got warning %q", sd2.Warning)
+	}
+}
+
+// TestSetSpeedWarningAbsentWhenCalibrated (spec 035 US1 AC3): a calibrated
+// world at a speed that WOULD suppress at bootstrap estimates gets no
+// warning — the gate is seed state, not the raw arithmetic (research R2).
+func TestSetSpeedWarningAbsentWhenCalibrated(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	orch := llmForWarningTests(t, h)
+	orch.SeedCalibration(&cognition.Profile{
+		CalibratedAt: "2026-07-20T21:40:00Z",
+		Tiers: map[string]cognition.TierProfile{
+			"local": {SecondsPerPoint: 0.94},
+			"cloud": {SecondsPerPoint: 0.94},
+		},
+	})
+	c := h.dial(t)
+
+	sd, err := c.Status("set_speed", SetSpeedArgs{Speed: "32x"})
+	if err != nil {
+		t.Fatalf("set_speed 32x: %v", err)
+	}
+	if sd.Clock.Speed != "32x" {
+		t.Errorf("speed = %s, want 32x", sd.Clock.Speed)
+	}
+	if sd.Warning != "" {
+		t.Errorf("calibrated world must not warn, got %q", sd.Warning)
+	}
+}
+
+// TestSetSpeedWarningAbsentNoLLM (spec 035 US1 AC4): a world with no
+// orchestrator never carries the warning, at any speed.
+func TestSetSpeedWarningAbsentNoLLM(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	c := h.dial(t)
+
+	sd, err := c.Status("set_speed", SetSpeedArgs{Speed: "32x"})
+	if err != nil {
+		t.Fatalf("set_speed 32x: %v", err)
+	}
+	if sd.Warning != "" {
+		t.Errorf("no-LLM world must never warn, got %q", sd.Warning)
+	}
+}
+
+// TestSetSpeedMaxGateStillPrecedesWarning (spec 035 edge case: "max speed on
+// a pure-sim world" / the max-gate takes precedence): an LLM world refusing
+// max gets an error reply with no StatusData at all — the pre-035 refusal is
+// untouched and carries no warning field.
+func TestSetSpeedMaxGateStillPrecedesWarning(t *testing.T) {
+	h := newHarness(t, clock.Speed1x)
+	llmForWarningTests(t, h)
+	c := h.dial(t)
+
+	if _, err := c.Status("set_speed", SetSpeedArgs{Speed: "max"}); err == nil {
+		t.Fatal("LLM world must still refuse speed max (spec 020, untouched by spec 035)")
+	} else if !strings.Contains(err.Error(), "32x") {
+		t.Errorf("max refusal should still point at 32x: %v", err)
+	}
+}
+
+// TestStatusPauseResumeNeverCarryWarning (spec 035 contract §2): even on an
+// uncalibrated world sitting at a suppressing speed, status/pause/resume
+// replies never carry the warning — it rides ONLY the set_speed path.
+func TestStatusPauseResumeNeverCarryWarning(t *testing.T) {
+	h := newHarness(t, clock.Speed32x)
+	llmForWarningTests(t, h)
+	c := h.dial(t)
+
+	for _, cmd := range []string{"status", "pause", "resume"} {
+		sd, err := c.Status(cmd, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", cmd, err)
+		}
+		if sd.Warning != "" {
+			t.Errorf("%s reply carried a warning %q, want none", cmd, sd.Warning)
+		}
+	}
+}
+
+// TestStatusDataWarningOmitempty: the zero StatusData omits "warning" from
+// the wire (pre-035 byte shape preserved for every reply but set_speed).
+func TestStatusDataWarningOmitempty(t *testing.T) {
+	b, _ := json.Marshal(StatusData{})
+	if strings.Contains(string(b), "warning") {
+		t.Errorf("zero StatusData must omit \"warning\", got %s", b)
 	}
 }

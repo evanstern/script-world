@@ -226,6 +226,10 @@ func TestCalibrateLegacyOutputStructureUnchanged(t *testing.T) {
 		"seconds_per_point:",
 		"cognition at this profile:",
 		"wrote " + w.CalibrationPath(),
+		// Spec 035 US4/FR-005: the sequential-floor disclosure, deliberately
+		// superseding this T020 byte-identity guarantee for this one addition
+		// (research R6) — every generation of config gets the disclosure.
+		"note: calibration measures one call at a time",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("legacy output missing %q; got:\n%s", want, out)
@@ -234,6 +238,9 @@ func TestCalibrateLegacyOutputStructureUnchanged(t *testing.T) {
 	if strings.Contains(out, "provider") {
 		t.Errorf("legacy output must keep the pre-spec-024 \"tier\" wording, not \"provider\": %s", out)
 	}
+	if n := strings.Count(out, "note: calibration measures one call at a time"); n != 1 {
+		t.Errorf("sequential-floor disclosure must print exactly once per run, got %d: %s", n, out)
+	}
 
 	prof, err := cognition.LoadProfile(w.CalibrationPath())
 	if err != nil {
@@ -241,6 +248,40 @@ func TestCalibrateLegacyOutputStructureUnchanged(t *testing.T) {
 	}
 	if _, ok := prof.Tiers["local"]; !ok || len(prof.Tiers) != 1 {
 		t.Errorf("profile = %+v, want exactly one entry keyed \"local\"", prof.Tiers)
+	}
+}
+
+// TestCalibrateLegacyCloudOnlyStillDiscloses (spec 035 US4 AC1): a run that
+// calibrates only the priced cloud tier prints no horizon-summary line (the
+// existing behavior — horizon is local-only), yet still discloses the
+// sequential-measurement floor exactly once.
+func TestCalibrateLegacyCloudOnlyStillDiscloses(t *testing.T) {
+	srv := stubToolCallServer()
+	defer srv.Close()
+
+	w, err := world.Create(t.TempDir()+"/w", "calib-cloud-only", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := llm.Config{
+		MonthlyBudgetUSD: 100,
+		Local:            llm.LocalConfig{Endpoint: "http://127.0.0.1:1", Model: "unused"},
+		Cloud: llm.CloudConfig{
+			Provider: llm.ProviderOpenAICompat,
+			Model:    "cloud-mock", Endpoint: srv.URL,
+			InputUSDPerMTok: 5, OutputUSDPerMTok: 25,
+		},
+	}
+	out := captureStdout(t, func() {
+		if err := calibrateLegacy(w, &cfg, "cloud", 1); err != nil {
+			t.Fatalf("calibrateLegacy: %v", err)
+		}
+	})
+	if strings.Contains(out, "cognition at this profile:") {
+		t.Errorf("cloud-only calibration must not print the local-only horizon summary: %s", out)
+	}
+	if n := strings.Count(out, "note: calibration measures one call at a time"); n != 1 {
+		t.Errorf("cloud-only run must still disclose the sequential floor exactly once, got %d: %s", n, out)
 	}
 }
 
@@ -282,6 +323,12 @@ func TestCalibrateDeclaredProvidersThreeNamedEntries(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q; got:\n%s", want, out)
 		}
+	}
+	// Spec 035 US4/FR-005: the v2 path discloses too, exactly once per run
+	// even though all three declared providers here are zero-priced (each
+	// would otherwise print its own horizon-summary line).
+	if n := strings.Count(out, "note: calibration measures one call at a time"); n != 1 {
+		t.Errorf("sequential-floor disclosure must print exactly once per run, got %d: %s", n, out)
 	}
 
 	prof, err := cognition.LoadProfile(w.CalibrationPath())
