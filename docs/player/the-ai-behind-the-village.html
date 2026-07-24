@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
-<meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@642a75d963f0cdbc34e772fad547c0eacedcfa7c">
 <meta name="promptworld-docs:source" content="docs/wiki/cognition.md@056c53a140df7431739d4d6cd5d727dc96aed001">
 <meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@056c53a140df7431739d4d6cd5d727dc96aed001">
 <meta name="promptworld-docs:source" content="docs/wiki/nightly-consolidation.md@8ada1050cc5b108790d0e48640dba0b985632e25">
@@ -90,6 +90,22 @@ persona and recent memories as the basis for the decision. This mix is why a vil
 can run smoothly at high speed instead of grinding to a halt waiting on AI responses
 for every little thing: most of a villager's second-to-second existence is free,
 and AI is spent where it actually matters.</p>
+
+<h2>One thought, one act</h2>
+<p>When a villager does stop to think, the AI is told three things, plainly: who this
+villager is (one line, plus their written nature), what their situation looks like
+right now, and what they remember. Then it must commit to exactly one action for that
+moment — do something in the world, set a short plan, or just muse. Musing counts:
+a moment spent thinking is a moment not spent doing, so even daydreaming is a real
+choice with a real cost, not a free extra. That "one thought, one act" rule is built
+into the game's machinery, so a villager can never act twice off a single thought.</p>
+<p>The exact wording villagers are given got a careful rewrite recently — and because
+this is a game about prompt-writing, the rewrite was held to its own standard: the old
+and new versions were run head-to-head in identical worlds and only the measurably
+better one shipped. The new wording produces noticeably fewer garbled decisions, and
+villagers spend about half as much time lost in thought and more time actually doing
+things. (A version that also included a worked example was tested too — and rejected,
+because villagers started copying the example instead of thinking for themselves.)</p>
 
 <h2>Local model vs. cloud model</h2>
 <p>promptworld can split AI work across two kinds of models: a fast, typically free

@@ -8,9 +8,9 @@ import (
 	"github.com/evanstern/promptworld/internal/sim"
 )
 
-// Prompt construction: a stable per-agent system prefix (persona + tool-choice
-// instruction — prompt-cache friendly) and a variable user suffix (situation +
-// the bounded working-memory window).
+// Prompt construction: a stable per-agent system prefix (identity + persona +
+// tool-choice framing — prompt-cache friendly) and a variable user suffix
+// (situation + the bounded working-memory window).
 //
 // In the tool-use era (spec 017) the goal vocabulary and per-verb gloss are no
 // longer hand-rendered into the prompt: each tool carries its own name, gloss
@@ -20,20 +20,40 @@ import (
 // prompt test that pinned the free-text contract retires with this change
 // (contracts/loop-api.md).
 
+// systemPrompt renders the villager system prefix (spec 027,
+// contracts/system-prompt.md) as a crafted three-part frame:
+//
+//  1. Identity — one statement, the ONLY place the frame names the agent
+//     (FR-001); everything after speaks to "you".
+//  2. Persona — the agent's authored nature verbatim, set off as its own block;
+//     absent cleanly when personaText is empty (FR-002).
+//  3. Task framing — the decision contract in the second person, doctrine
+//     preserved (FR-003): the decision is one acting-tool call; read-only tools
+//     may precede it; set_plan and muse are actions carrying an opportunity
+//     cost; no free-text action path is offered.
+//
+// It is a pure function of (name, personaText): identical inputs render
+// byte-identical output, so it stays the cacheable per-agent prefix (FR-005,
+// contract C1) — it carries NO dynamic world state (that lives in userPrompt).
 func systemPrompt(name, personaText string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are %s, a villager in a small settlement.\n\n", name)
-	if personaText != "" {
-		b.WriteString(personaText)
+	// Part 1 — identity.
+	fmt.Fprintf(&b, "You are %s, a villager in a small settlement.\n", name)
+	// Part 2 — persona. Trailing newlines are trimmed so the block separator is
+	// the frame's, not the persona's: an empty persona then vanishes with no
+	// doubled blank line or dangling separator (C4).
+	if p := strings.TrimRight(personaText, "\n"); p != "" {
+		b.WriteString("\n")
+		b.WriteString(p)
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, "You decide what %s does next by calling exactly one acting tool. "+
-		"Each tool is an action %s can take; its description says what it does and its "+
-		"arguments what it needs. You may first call read-only tools to look something "+
-		"up, then finish by calling one acting tool: a world action, a short plan "+
-		"(set_plan), or a passing thought (muse). Musing is an action too — a beat "+
-		"spent thinking is a beat not spent doing. Choose the single action that best "+
-		"fits %s's situation and needs right now.\n", name, name, name)
+	// Part 3 — task framing (doctrine-preserving, name-free).
+	b.WriteString("\nEach turn you decide what you do next by calling exactly one acting tool. " +
+		"Every tool is an action; its description says what it does and its arguments say what it needs. " +
+		"You may first call read-only tools to look something up, then finish by calling a single acting tool — " +
+		"a world action, a short plan (set_plan), or a passing thought (muse). " +
+		"Musing and planning are actions too: a beat spent thinking is a beat not spent doing. " +
+		"Choose the one action that best fits your situation and needs right now.\n")
 	return b.String()
 }
 
