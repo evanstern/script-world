@@ -300,9 +300,21 @@ func (s *Scribe) render(idx int) {
 	}
 
 	// Beliefs: durable convictions with confidence and provenance (TASK-9).
+	// Spec 030 (US2, FR-006/FR-007): the number shown is EFFECTIVE confidence,
+	// computed on read against the replica's current tick — the stored value
+	// never mutates. At/above the floor a belief renders as before (now with
+	// the effective number); below the floor it stops reading as a conviction
+	// at all — no number, the hedged "half-remembered" line instead — and
+	// those hedged beliefs are grouped after the still-live ones so the live
+	// convictions read first.
 	if len(a.Beliefs) > 0 {
-		b.WriteString("\n## Beliefs\n\n")
+		var live, faded []string
 		for _, bl := range a.Beliefs {
+			eff := sim.EffectiveConfidence(bl, s.replica.Tick)
+			if eff < sim.BeliefConfidenceFloor {
+				faded = append(faded, fmt.Sprintf("- half-remembered: %s\n", bl.Statement))
+				continue
+			}
 			src := ""
 			switch {
 			case bl.Provenance == sim.ProvenanceTold && bl.Source >= 0 && bl.Source < len(s.replica.Agents):
@@ -310,7 +322,14 @@ func (s *Scribe) render(idx int) {
 			default:
 				src = bl.Provenance
 			}
-			fmt.Fprintf(&b, "- %s *(%d%% sure — %s, %s)*\n", bl.Statement, bl.Confidence, src, clock.Format(bl.Tick))
+			live = append(live, fmt.Sprintf("- %s *(%d%% sure — %s, %s)*\n", bl.Statement, eff, src, clock.Format(bl.Tick)))
+		}
+		b.WriteString("\n## Beliefs\n\n")
+		for _, l := range live {
+			b.WriteString(l)
+		}
+		for _, l := range faded {
+			b.WriteString(l)
 		}
 	}
 

@@ -281,7 +281,18 @@ func consolidateUserPrompt(job consolJob) string {
 	if len(job.held) > 0 {
 		b.WriteString("\nBeliefs you already hold:\n")
 		for _, bl := range job.held {
-			fmt.Fprintf(&b, "- [id %d] (confidence %d, %s) %s\n", bl.ID, bl.Confidence, bl.Provenance, bl.Statement)
+			// Spec 030 (US2, FR-006): the model reads the EFFECTIVE confidence
+			// (decayed, never the stored value) so it revises against what the
+			// belief actually feels like tonight. Unlike other belief-surfacing
+			// prompts, below-floor beliefs are NOT excluded here — they stay
+			// listed by ID (still revisable; a reinforcement-worthy revision can
+			// bring one back), just marked faded (data-model.md read sites).
+			eff := sim.EffectiveConfidence(bl, job.sleepTick)
+			faded := ""
+			if eff < sim.BeliefConfidenceFloor {
+				faded = " (faded)"
+			}
+			fmt.Fprintf(&b, "- [id %d] (confidence %d, %s) %s%s\n", bl.ID, eff, bl.Provenance, bl.Statement, faded)
 		}
 	}
 	if job.social != "" {

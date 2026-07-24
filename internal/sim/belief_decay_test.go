@@ -125,3 +125,39 @@ func TestDirectRevisionRefreshesClock(t *testing.T) {
 		t.Errorf("post-refresh effective = %d, want 70 (curve reset to full)", got)
 	}
 }
+
+// TestPromptBeliefsExcludesBelowFloor (spec 030 US2, FR-007; T008): the
+// general read-site exclusion rule for a model-facing prompt that lists
+// beliefs as live convictions — distinct from the nightly consolidation
+// held-beliefs block (mind/consolidate.go), which is the documented
+// exception and does NOT call this (it lists faded beliefs too, marked).
+func TestPromptBeliefsExcludesBelowFloor(t *testing.T) {
+	const day = int64(86400)
+	const R = int64(1000)
+	tick := R + 17*day // matches TestEffectiveConfidenceCurve's floor-crossing day
+
+	live := Belief{ID: 1, Confidence: 95, Reinforced: R}
+	faded := Belief{ID: 2, Confidence: 80, Reinforced: R}
+	if got := EffectiveConfidence(live, tick); got < BeliefConfidenceFloor {
+		t.Fatalf("test setup: expected the confidence-95 belief to stay live at day 17, got effective %d", got)
+	}
+	if got := EffectiveConfidence(faded, tick); got >= BeliefConfidenceFloor {
+		t.Fatalf("test setup: expected the confidence-80 belief to fall below the floor at day 17, got effective %d", got)
+	}
+
+	got := PromptBeliefs([]Belief{live, faded}, tick)
+	if len(got) != 1 || got[0].ID != 1 {
+		t.Errorf("PromptBeliefs([live, faded], day17) = %+v, want only the live belief (id 1)", got)
+	}
+
+	// Every belief below the floor: excluded down to empty, no panic.
+	if got := PromptBeliefs([]Belief{faded}, tick); len(got) != 0 {
+		t.Errorf("PromptBeliefs([faded], day17) = %+v, want empty", got)
+	}
+
+	// Nothing below the floor (no elapsed time): passthrough, order preserved.
+	stillLive := Belief{ID: 3, Confidence: 90, Reinforced: R}
+	if got := PromptBeliefs([]Belief{live, stillLive}, R); len(got) != 2 || got[0].ID != 1 || got[1].ID != 3 {
+		t.Errorf("PromptBeliefs at formation = %+v, want both beliefs unchanged", got)
+	}
+}

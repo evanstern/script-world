@@ -80,6 +80,28 @@ func EffectiveConfidence(b Belief, tick int64) int {
 	return int(math.Round(float64(b.Confidence) * math.Pow(0.5, days/BeliefHalfLifeDays)))
 }
 
+// PromptBeliefs is the general read-site exclusion rule (spec 030 US2, FR-007;
+// contracts/events-and-decay.md "Read sites"): a model-facing prompt that
+// LISTS beliefs as live convictions must drop any whose effective confidence
+// has fallen below BeliefConfidenceFloor — below the floor a belief stops
+// driving behavior. The nightly consolidation held-beliefs block is the one
+// documented exception (data-model.md): it keeps every held belief listed by
+// ID so faded ones stay revisable, marking them instead of dropping them, so
+// it does not call this helper. As of spec 030 no OTHER belief-listing prompt
+// exists in-tree (T008 audit: internal/mind's daytime/conversation/meeting
+// prompts do not surface beliefs) — this ships filtered and tested as the
+// seam for the next one, the same ship-the-seam-before-the-producer pattern
+// as BeliefReinforcedPayload (FR-008).
+func PromptBeliefs(beliefs []Belief, tick int64) []Belief {
+	out := make([]Belief, 0, len(beliefs))
+	for _, b := range beliefs {
+		if EffectiveConfidence(b, tick) >= BeliefConfidenceFloor {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 // ConsolidationGapTicks is the secondary once-per-night guard: 12 game-hours
 // must separate markers, closing the post-midnight-sleep double-dip (a
 // starving agent dozing at 01:00 maps to the next night index).

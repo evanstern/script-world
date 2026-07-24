@@ -2,6 +2,7 @@ package scribe
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -197,9 +198,14 @@ func TestDeathFreezesSoulHeader(t *testing.T) {
 	t.Fatal("soul header never marked death")
 }
 
-// TestSoulShowsConsolidatedGrowth (TASK-9, US2): two synthetic nights of
-// consolidation events render a changing narrative and beliefs with
-// confidence + provenance referencing two distinct days.
+// TestSoulShowsConsolidatedGrowth (TASK-9, US2; confidence lines updated for
+// spec 030 US2/T008): two synthetic nights of consolidation events render a
+// changing narrative and beliefs with confidence + provenance referencing
+// two distinct days. The rendered confidence is now the EFFECTIVE value at
+// the replica's final tick (170000): belief 1 (formed tick 80000, stored 70)
+// has decayed by the time belief 2 lands, so it reads below its stored
+// value; belief 2 (formed tick 170000, stored 60) reads at its anchor —
+// elapsed 0 — so it reads unchanged.
 func TestSoulShowsConsolidatedGrowth(t *testing.T) {
 	dir := t.TempDir()
 	if err := persona.Genesis(dir); err != nil {
@@ -233,6 +239,18 @@ func TestSoulShowsConsolidatedGrowth(t *testing.T) {
 	scr.Observe(night(170000, "Second night: the fire held.",
 		"I am the one who keeps the fire.", "Fire keeps the wolves honest.", 60))
 
+	// Effective, not stored, confidence (spec 030): belief 1 anchors at tick
+	// 80000 and is read at the replica's final tick 170000 (elapsed > 0, so it
+	// has decayed some); belief 2 anchors at 170000 and is read at the same
+	// tick (elapsed == 0, full conviction).
+	belief1Eff := sim.EffectiveConfidence(sim.Belief{Confidence: 70, Reinforced: 80000}, 170000)
+	belief2Eff := sim.EffectiveConfidence(sim.Belief{Confidence: 60, Reinforced: 170000}, 170000)
+	if belief2Eff != 60 {
+		t.Fatalf("test setup: expected belief 2 to read unchanged (elapsed 0), got %d", belief2Eff)
+	}
+	belief1Line := fmt.Sprintf("Wolves hunt the ridge. *(%d%% sure — witnessed, day 2", belief1Eff)
+	belief2Line := fmt.Sprintf("Fire keeps the wolves honest. *(%d%% sure — witnessed, day 3", belief2Eff)
+
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		data, _ := os.ReadFile(persona.SoulPath(dir, "Ash"))
@@ -241,8 +259,8 @@ func TestSoulShowsConsolidatedGrowth(t *testing.T) {
 			strings.Contains(s, "I am the one who keeps the fire.") && // latest narrative won
 			!strings.Contains(s, "watches the dark") && // replaced, not appended
 			strings.Contains(s, "## Beliefs") &&
-			strings.Contains(s, "Wolves hunt the ridge. *(70% sure — witnessed, day 2") &&
-			strings.Contains(s, "Fire keeps the wolves honest. *(60% sure — witnessed, day 3") &&
+			strings.Contains(s, belief1Line) &&
+			strings.Contains(s, belief2Line) &&
 			strings.Contains(s, "First night: wolves at the treeline.") &&
 			strings.Contains(s, "Second night: the fire held.") {
 			return
