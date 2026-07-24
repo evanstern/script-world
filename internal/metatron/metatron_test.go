@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/persona"
 	"github.com/evanstern/promptworld/internal/sim"
@@ -49,6 +50,38 @@ func (m *mockOrch) requests() []llm.Request {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]llm.Request(nil), m.reqs...)
+}
+
+// loopCall records one LoopControl.Do invocation (spec 029 US5, T020).
+type loopCall struct {
+	name  string
+	speed clock.Speed
+}
+
+// loopControlStub is the LoopControl seam the test angel wires (spec 029 US5,
+// T020): it records every clock-control call and cans a Status/error, so a meta
+// tool lands through a real handler without a live *sim.Loop. Tests reach it via
+// mt.loop.(*loopControlStub) — the seam is a field, so no return-signature churn.
+type loopControlStub struct {
+	mu    sync.Mutex
+	calls []loopCall
+	err   error
+}
+
+func (l *loopControlStub) Do(name string, speed clock.Speed) (sim.Status, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, loopCall{name, speed})
+	if l.err != nil {
+		return sim.Status{}, l.err
+	}
+	return sim.Status{Paused: name == "pause", Speed: speed}, nil
+}
+
+func (l *loopControlStub) recorded() []loopCall {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]loopCall(nil), l.calls...)
 }
 
 // stateInjector applies batches to a real state through the reducer —
@@ -92,7 +125,7 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
+	mt, err := New(orch, inj, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,10 +743,12 @@ func TestHandlerFirewallAudit(t *testing.T) {
 	if _, ok := h["converse"]; ok {
 		t.Error("converse must never be a handler — it is the final-text channel")
 	}
-	// Meta tools are the Batch C hand-off: declared on the roster, not yet handled.
+	// Meta tools are wired this batch (T018): present under a full grant. The
+	// LoopControl seam (mt.loop) is reachable ONLY through these three registered
+	// handlers — no other model-output path touches the clock (SC-007/R14).
 	for _, meta := range []string{"pause", "start", "adjust_speed"} {
-		if _, ok := h[meta]; ok {
-			t.Errorf("%s handler installed — meta tools are the Batch C hand-off (T018)", meta)
+		if _, ok := h[meta]; !ok {
+			t.Errorf("%s handler missing under a full grant — T018 wires the meta tools", meta)
 		}
 	}
 	// Every installed handler is an acting tool on the door roster (RosterMetatron).
@@ -726,8 +761,8 @@ func TestHandlerFirewallAudit(t *testing.T) {
 			t.Errorf("handler %q is not on RosterMetatron — an unregistered world path", name)
 		}
 	}
-	// send_vision / send_omen are wired this batch (T006); assert their presence so
-	// the audit fails if the wiring is lost.
+	// send_vision / send_omen are wired (T006); assert their presence so the audit
+	// fails if the wiring is lost.
 	for _, want := range []string{"send_vision", "send_omen"} {
 		if _, ok := h[want]; !ok {
 			t.Errorf("%s handler missing under a full grant", want)
@@ -739,6 +774,134 @@ func TestHandlerFirewallAudit(t *testing.T) {
 	vh := mt.turnHandlers(vd)
 	if _, ok := vh["send_omen"]; ok {
 		t.Error("send_omen handler installed in a vision-only world")
+	}
+	// A withheld meta tool is absent from BOTH the handler set (no door path) AND
+	// the declared roster (grantedRoster feeds Job.Roster) — the LoopControl seam is
+	// unreachable when the tool is not granted (T020, structural firewall over the clock).
+	noMeta := grantSet{tools: map[string]bool{"pause": true}} // start / adjust_speed withheld
+	nh := mt.turnHandlers(&turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: noMeta, result: &TurnResult{}})
+	for _, withheld := range []string{"start", "adjust_speed"} {
+		if _, ok := nh[withheld]; ok {
+			t.Errorf("%s handler installed when ungranted — the clock seam is reachable", withheld)
+		}
+	}
+	declared := map[string]bool{}
+	for _, tl := range grantedRoster(noMeta) {
+		declared[tl.Name] = true
+	}
+	if !declared["pause"] {
+		t.Error("granted meta tool pause missing from the declared roster")
+	}
+	for _, withheld := range []string{"start", "adjust_speed"} {
+		if declared[withheld] {
+			t.Errorf("withheld meta tool %q leaked into the declared roster", withheld)
+		}
+	}
+}
+
+// TestMetaToolsLandThroughLoopControl (US5, spec 029 T018/T020): pause / start /
+// adjust_speed each land through the LoopControl seam with R10's mapping, spend no
+// charge, inject no world event, and set the Clock line the console renders.
+func TestMetaToolsLandThroughLoopControl(t *testing.T) {
+	cases := []struct {
+		tool, args, wantDo string
+		wantSpeed          clock.Speed
+	}{
+		{"pause", `{}`, "pause", ""},
+		{"start", `{"speed":"16x"}`, "resume", "16x"},
+		{"adjust_speed", `{"speed":"8x"}`, "set_speed", "8x"},
+	}
+	for _, c := range cases {
+		t.Run(c.tool, func(t *testing.T) {
+			mt, _, inj, _ := newTestAngel(t, "As you say.")
+			stub := mt.loop.(*loopControlStub)
+			mt.runLoop = actLoop(mt, c.tool, c.args)
+			r, err := mt.Turn(context.Background(), "control the clock")
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := stub.recorded()
+			if len(calls) != 1 || calls[0].name != c.wantDo || calls[0].speed != c.wantSpeed {
+				t.Fatalf("LoopControl calls = %+v, want one %s(%q)", calls, c.wantDo, c.wantSpeed)
+			}
+			if r.Clock == "" {
+				t.Error("a landed meta act set no Clock line")
+			}
+			if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+				t.Errorf("a meta act spent a charge: %d", inj.state.MetatronCharges)
+			}
+			if len(landedBatches(inj)) != 0 {
+				t.Errorf("a meta act injected a world event: %+v", landedBatches(inj))
+			}
+		})
+	}
+}
+
+// TestConverseTurnNeverTouchesTheClock (US5 R14, spec 029 T020): a converse-only
+// turn drives no LoopControl call — the clock seam is reachable ONLY through a
+// landed meta-tool handler, never any other model-output path.
+func TestConverseTurnNeverTouchesTheClock(t *testing.T) {
+	mt, _, _, _ := newTestAngel(t, "Just talking.")
+	stub := mt.loop.(*loopControlStub)
+	if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.recorded()) != 0 {
+		t.Errorf("a converse turn touched the clock: %+v", stub.recorded())
+	}
+}
+
+// TestMetaToolLoopError (US5, spec 029 T020): a LoopControl error maps to an
+// in-fiction rejected_gate — nothing lands, and the failure is recorded with counsel.
+func TestMetaToolLoopError(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "I could not.")
+	mt.loop.(*loopControlStub).err = context.DeadlineExceeded
+	mt.runLoop = actLoop(mt, "pause", `{}`)
+	r, err := mt.Turn(context.Background(), "pause the world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Clock != "" {
+		t.Error("a failed meta act still set a Clock line")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" {
+		t.Errorf("loop error not fed back as a rejected_gate: %+v", tcs)
+	}
+}
+
+// TestClockSpeedsMirrorLadder (US5 T018 drift guard): tool.ClockSpeeds() — the
+// start/adjust_speed `speed` Enum — equals clock.CappedLadder() stringified, so
+// the hand-mirrored ladder in internal/tool cannot drift from the clock package's
+// canonical one (the TestMiracleKindsMirrorTool pattern).
+func TestClockSpeedsMirrorLadder(t *testing.T) {
+	ladder := clock.CappedLadder()
+	speeds := tool.ClockSpeeds()
+	if len(speeds) != len(ladder) {
+		t.Fatalf("clockSpeeds has %d entries, clock ladder has %d", len(speeds), len(ladder))
+	}
+	for i := range ladder {
+		if speeds[i] != string(ladder[i]) {
+			t.Errorf("clockSpeeds[%d] = %q, clock ladder = %q", i, speeds[i], ladder[i])
+		}
+	}
+}
+
+// TestInitiativeFrameFixed (US5 T019/T020): the player-authority sentence for the
+// meta tools + standing orders rides the fixed frame on every path, after the
+// editable content — a compile-time constant no charter byte can displace, and
+// composed deterministically.
+func TestInitiativeFrameFixed(t *testing.T) {
+	roster := tool.LoopRosterMetatron()
+	prompt := turnSystemPrompt("CHARTER-MARKER", nil, roster)
+	if !strings.Contains(prompt, metatronInitiativeFrame) {
+		t.Fatal("initiative frame absent from the composed prompt")
+	}
+	if strings.Index(prompt, "CHARTER-MARKER") > strings.Index(prompt, metatronInitiativeFrame) {
+		t.Error("editable charter appears after the fixed initiative frame")
+	}
+	if turnSystemPrompt("CHARTER-MARKER", nil, roster) != prompt {
+		t.Error("frame composition is not deterministic")
 	}
 }
 
@@ -820,14 +983,15 @@ func TestCharterFallbacks(t *testing.T) {
 	// the bound sits between the truncated total (charter capped at
 	// CharterMaxChars + the fixed frame) and what a full oversized charter would
 	// produce, so it still proves truncation happened. The fixed-frame headroom
-	// is CharterMaxChars+2500 (the frame documents four miracle families as of
-	// spec 016; ~2.1 KB), leaving comfortable margin over the capped total.
+	// is CharterMaxChars+3500 (the frame documents four miracle families plus the
+	// spec-029 agency surface — meta tools + the initiative sentence; ~2.7 KB),
+	// leaving comfortable margin over the capped total and well under the untruncated.
 	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars*2)), 0o644)
 	r, _ = mt.Turn(context.Background(), "verbose?")
 	if !strings.Contains(r.Reply, "cap") {
 		t.Errorf("oversize notice absent: %q", r.Reply)
 	}
-	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2500 {
+	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+3500 {
 		t.Error("oversized charter not truncated in prompt")
 	}
 }
@@ -1840,7 +2004,7 @@ func TestMetatronNewStoresTurnBudget(t *testing.T) {
 	}
 	m := worldmap.Generate(42, 64, 64)
 	state := sim.NewState(42, m)
-	mt, err := New(&mockOrch{}, &stateInjector{state: state}, m, 42, state.Marshal(), dir, testLoopRounds, 1500)
+	mt, err := New(&mockOrch{}, &stateInjector{state: state}, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, 1500)
 	if err != nil {
 		t.Fatal(err)
 	}

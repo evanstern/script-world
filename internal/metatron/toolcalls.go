@@ -20,6 +20,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -60,13 +61,13 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 // and the loop rejects any call to it as rejected_unknown — structural absence
 // at the door, matching the structural absence in the declaration and the prose.
 //
-// SPEC 029 BATCH-C HAND-OFF: the meta tools pause / start / adjust_speed are
-// DECLARED on the loop roster (Batch A) but have no handler yet — a call to one
-// hits rejected_unknown (the ungranted-equivalent absence) until Batch C (T018)
-// wires the LoopControl seam. The sentinel/audit tests tolerate this
-// declared-but-not-yet-handled surface (T007/T011/T015).
+// The meta tools pause / start / adjust_speed wrap the LoopControl seam (spec 029
+// US5, T018): each is grant-gated like every other tool (structural absence when
+// ungranted), and drives mt.loop.Do — the SAME clock control the IPC server uses.
+// They inject no world event and spend no charge (Effect Expressive, EMPTY Events)
+// but consume the turn's one act.
 func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
-	h := make(map[string]toolloop.Handler, 6)
+	h := make(map[string]toolloop.Handler, 9)
 	if d.grant.allows("send_vision") {
 		h["send_vision"] = mt.handleVision(d)
 	}
@@ -81,6 +82,15 @@ func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
 	}
 	if d.grant.allows("work_miracle") {
 		h["work_miracle"] = mt.handleMiracle(d)
+	}
+	if d.grant.allows("pause") {
+		h["pause"] = mt.handlePause(d)
+	}
+	if d.grant.allows("start") {
+		h["start"] = mt.handleStart(d)
+	}
+	if d.grant.allows("adjust_speed") {
+		h["adjust_speed"] = mt.handleAdjustSpeed(d)
 	}
 	return h
 }
@@ -172,6 +182,68 @@ func (mt *Metatron) handleMiracle(d *turnDispatch) toolloop.Handler {
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}
 	}
+}
+
+// handlePause / handleStart / handleAdjustSpeed drive the LoopControl seam (spec
+// 029 US5, T018/R10). Effect Expressive with EMPTY Events: they inject NOTHING
+// (the loop's own clock.paused / clock.resumed / clock.speed_set stay the record),
+// spend no charge, and consume the turn's one act. The mapping is R10's:
+// pause→Do("pause"), start→Do("resume", speed-or-empty), adjust_speed→
+// Do("set_speed", speed). A LoopControl error maps to an in-fiction rejected_gate.
+func (mt *Metatron) handlePause(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, _ llm.ToolCall) toolloop.Outcome {
+		if why := mt.controlLoop(d, "pause", "", "the world holds still — I have paused it"); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world holds still — I have paused it"}
+	}
+}
+
+// handleStart resumes the clock (spec 029 R10): start→Do("resume", speed). The
+// loop's resume command changes only the paused state — a supplied speed is inert
+// through resume (see the implementer finding); the pace is set with adjust_speed.
+func (mt *Metatron) handleStart(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		speed := clock.Speed(argString(call.Args, "speed"))
+		if why := mt.controlLoop(d, "resume", speed, "the world moves again"); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world moves again"}
+	}
+}
+
+// handleAdjustSpeed sets the clock pace (spec 029 R10): adjust_speed→
+// Do("set_speed", speed). The `speed` arg is a required Enum over clockSpeeds, so
+// the driver already gated membership; ParseSpeed is the door-side re-check.
+func (mt *Metatron) handleAdjustSpeed(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		raw := argString(call.Args, "speed")
+		speed, err := clock.ParseSpeed(raw)
+		if err != nil {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal("that is not a pace I can set (" + raw + ")")}
+		}
+		if why := mt.controlLoop(d, "set_speed", speed, "the world now moves at "+raw); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world now moves at " + raw}
+	}
+}
+
+// controlLoop calls the LoopControl seam and, on success, sets the human-readable
+// Clock line on the shared result (so the turn records the meta act even when the
+// model adds no prose — the "nothing landed" fallback keys on result.Clock too).
+// Returns "" on success or an in-fiction refusal the handler feeds back as a
+// rejected_gate. A nil seam (a world wired without loop control) refuses in
+// fiction rather than panicking — defense-in-depth behind handler absence.
+func (mt *Metatron) controlLoop(d *turnDispatch, name string, speed clock.Speed, clockLine string) string {
+	if mt.loop == nil {
+		return "I cannot touch the flow of time in this world"
+	}
+	if _, err := mt.loop.Do(name, speed); err != nil {
+		return "the world would not heed me (" + err.Error() + ")"
+	}
+	d.result.Clock = clockLine
+	return ""
 }
 
 // refusal guarantees a non-empty rejection reason for the model's feedback and

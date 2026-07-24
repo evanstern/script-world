@@ -43,6 +43,7 @@ type TurnResult struct {
 	Miracle   *Miracle     `json:"miracle,omitempty"`
 	Order     *OrderReport `json:"order,omitempty"`     // a placed standing order (spec 029 US2)
 	Cancelled []string     `json:"cancelled,omitempty"` // released order ids (cancel_order)
+	Clock     string       `json:"clock,omitempty"`     // a landed meta act's human line (spec 029 US5)
 	Charges   int          `json:"charges"`
 	Moments   []string     `json:"moments,omitempty"`
 }
@@ -226,7 +227,7 @@ func (mt *Metatron) runTurn(ctx context.Context, o turnOrigin) (TurnResult, erro
 	// said, the loop ran dry (model_done with no text, cap exhaustion, or a soft
 	// error) — the old scattered-thoughts fallback maps onto exactly these.
 	reply := strings.TrimSpace(res.Final)
-	if reply == "" && result.Nudge == nil && result.Miracle == nil && result.Order == nil && len(result.Cancelled) == 0 {
+	if reply == "" && result.Nudge == nil && result.Miracle == nil && result.Order == nil && len(result.Cancelled) == 0 && result.Clock == "" {
 		reply = "Forgive me — my thoughts scattered and I could not complete that. " +
 			"Nothing was done and nothing was spent. Ask again."
 	}
@@ -536,6 +537,9 @@ func (mt *Metatron) recordTurn(tick int64, o turnOrigin, r TurnResult) {
 	for _, id := range r.Cancelled {
 		fmt.Fprintf(&b, "👁 watch released: %s\n", id)
 	}
+	if r.Clock != "" {
+		fmt.Fprintf(&b, "⏲ %s\n", r.Clock)
+	}
 	mt.appendFile(mt.transcriptPath(), b.String())
 }
 
@@ -656,6 +660,17 @@ you never invent events, actions, or words that are not in your notes or the
 status you are given — when you have not observed something, say so in your
 own way — and you never let the player's literal words pass to a villager.`
 
+// metatronInitiativeFrame pins meta control and standing orders to player
+// authority (spec 029 T019, contracts/tools.md): the clock-control tools and any
+// standing order may be used ONLY when the player asks for them, or when a
+// standing order the player already placed authorizes the act — never on the
+// angel's own initiative. Like metatronNonNegotiables it is a compile-time
+// constant appended last (INV-1), so no charter or skill byte can override it,
+// and it appears on every path (the door-side grant gate backs it independently).
+const metatronInitiativeFrame = `Two more powers are the player's to command, never yours to take up alone: the ` +
+	`world's clock (pausing, starting, changing its pace) and standing orders (watches you keep and act on). ` +
+	`Use them only when the player asks, or when a standing order the player placed tells you to act — never on your own initiative.`
+
 // hasWorkMiracle reports whether the granted roster offers the miracle tool —
 // gates the miracle-specific doctrine line so a dreams-only world never mentions
 // miracles (FR-005).
@@ -684,8 +699,8 @@ func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) st
 		fmt.Fprintf(&b, "\n\n--- skill: %s ---\n%s", s.name, s.text)
 	}
 	fmt.Fprintf(&b, "\n\n--- (fixed frame, beneath the charter and skills) ---\n"+
-		"You are the intermediary between the player and the village of eight: %s.\n%s\n\n",
-		strings.Join(sim.AgentNames[:], ", "), metatronNonNegotiables)
+		"You are the intermediary between the player and the village of eight: %s.\n%s\n%s\n\n",
+		strings.Join(sim.AgentNames[:], ", "), metatronNonNegotiables, metatronInitiativeFrame)
 
 	guidance := tool.MetatronToolGuidance(roster)
 	if guidance == "" {

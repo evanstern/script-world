@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -34,6 +35,16 @@ type Injector interface {
 	InjectSocial(events []store.Event) error
 }
 
+// LoopControl is the clock-control surface the meta tools drive (spec 029 US5,
+// R10 / data-model §5): the SAME *sim.Loop.Do the IPC server uses, so a
+// metatron-issued pause/start/adjust_speed lands the loop's own clock.paused /
+// clock.resumed / clock.speed_set events and is indistinguishable from a console
+// one. Injected at New — a second interface over the loop the daemon already
+// passes as Injector (the mind.New(loop, loop) precedent); a test seam otherwise.
+type LoopControl interface {
+	Do(name string, speed clock.Speed) (sim.Status, error)
+}
+
 const (
 	// turnTimeout bounds one console turn's cloud call (SC-001 wants ≤30s
 	// in practice; the cap covers slow routers without wedging the console).
@@ -46,6 +57,7 @@ const (
 type Metatron struct {
 	orch     Submitter
 	social   Injector
+	loop     LoopControl // clock control for the meta tools (spec 029 US5)
 	worldDir string
 
 	replica *sim.State
@@ -118,12 +130,16 @@ type Metatron struct {
 // New starts the angel from a state snapshot. The metatron/ dir and an
 // empty soul are created on first flight; existing files are kept.
 //
+// loop is the clock-control seam the meta tools drive (spec 029 US5): the daemon
+// passes the same *sim.Loop it passes as the social Injector — one value, two
+// interfaces (the mind.New(loop, loop) precedent).
+//
 // loopRounds is the tool-use loop's iteration cap (llm.json loop_max_rounds,
 // already normalized by the daemon). The variadic runLoopOverride is a test
 // seam: it installs a scripted loop BEFORE any goroutine starts, for tests that
 // stub the model rather than pass a real *llm.Orchestrator. Production omits it —
 // New wires runLoop from the concrete orchestrator.
-func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, turnTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
+func New(orch Submitter, social Injector, loop LoopControl, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, turnTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
@@ -131,6 +147,7 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 	mt := &Metatron{
 		orch:           orch,
 		social:         social,
+		loop:           loop,
 		worldDir:       worldDir,
 		replica:        replica,
 		m:              m,

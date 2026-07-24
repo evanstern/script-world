@@ -348,10 +348,19 @@ var observableEventTypes = []string{
 // is excluded — an LLM-configured world refuses it at the set_speed door).
 // MIRRORED, not imported: internal/tool is a leaf (research R1) and cannot see
 // internal/clock. The start/adjust_speed meta tools (spec 029) declare it as
-// their `speed` Enum. (Batch B / T018 wires the LoopControl handlers and should
-// add a drift guard pinning this equal to clock.CappedLadder(), the
-// TestMiracleKindsMirrorTool pattern.)
+// their `speed` Enum. internal/metatron's TestClockSpeedsMirrorLadder (T018)
+// pins this equal to clock.CappedLadder() — the drift guard, the
+// TestMiracleKindsMirrorTool pattern — so this literal cannot silently diverge.
 var clockSpeeds = []string{"1x", "4x", "8x", "16x", "32x"}
+
+// ClockSpeeds returns a copy of the meta tools' clock-speed Enum, in ladder
+// order. Exported for internal/metatron's drift cross-check test (T018), which
+// pins it equal to clock.CappedLadder() stringified.
+func ClockSpeeds() []string {
+	out := make([]string, len(clockSpeeds))
+	copy(out, clockSpeeds)
+	return out
+}
 
 // monitorAndActSchema is monitor_and_act's authored InputSchemaJSON (spec 029
 // R5): the turn model itself is the compiler — it supplies the compiled standing-

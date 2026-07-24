@@ -575,7 +575,7 @@ func TestReplayReconstructsWithoutFiring(t *testing.T) {
 	}
 	orch := &mockOrch{}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
+	mt, err := New(orch, inj, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}
