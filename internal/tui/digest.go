@@ -799,6 +799,50 @@ var digestRegistry = map[string]digestFunc{
 		}
 		return join([]seg{txt("Metatron "), emph(p.Form), txt(" → ")}, targets, []seg{txt(": "), speech(p.Text)}), true
 	},
+	// metatron.order_placed / order_triggered / order_cancelled / order_expired
+	// (spec 029, TASK-27 wiki-sweep gap): the standing-order lifecycle
+	// (internal/sim/metatron.go, [[metatron-orders]]) predates this contract
+	// (specs/018) same as the miracle types below, so voice mirrors
+	// metatron.nudged's — "Metatron" as subject regardless of Origin, since
+	// monitor_and_act/cancel_order are Metatron's own tools whether a player
+	// or the system asked for the watch (MetatronOrder.Origin distinguishes
+	// who, never how it renders). order_triggered/cancelled/expired carry no
+	// condition text (internal/sim/metatron.go's OrderTriggeredPayload /
+	// OrderIDPayload), only the order's id, so they reference the watch by
+	// id rather than repeating its condition.
+	"metatron.order_placed": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.MetatronOrder](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("Metatron set a watch: "), speech(truncateRunes(p.Condition, 80)),
+		}), true
+	},
+	"metatron.order_triggered": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.OrderTriggeredPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{
+			txt("Metatron's watch came true ("), emph(p.MatchedType), txt(" @ t"), emphI64(p.MatchedTick), txt(")"),
+		}), true
+	},
+	"metatron.order_cancelled": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.OrderIDPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{txt("Metatron released a watch ("), emph(p.ID), txt(")")}), true
+	},
+	"metatron.order_expired": func(e store.Event, names []string) ([]seg, bool) {
+		p, ok := decode[sim.OrderIDPayload](e)
+		if !ok {
+			return nil, false
+		}
+		return join([]seg{txt("Metatron's watch lapsed ("), emph(p.ID), txt(")")}), true
+	},
+
 	// metatron.time_snapped / item_granted / entity_moved / entity_removed
 	// (TASK-59, spec 016) predate this contract (specs/018) — no template
 	// row exists for them, so voice/style mirrors metatron.nudged's (natural

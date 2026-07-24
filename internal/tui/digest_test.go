@@ -130,10 +130,17 @@ var catalogFixture = map[string]digestFixture{
 	"chronicle.entry":             {`{"day":3,"from_tick":100,"to_tick":200,"text":"Ash lit the first fire.","thread":"cold-start","agents":[0]}`, `day 3 · cold-start: Ash lit the first fire.`},
 	"metatron.charge_regenerated": {`{}`, `a charge regenerated`},
 	"metatron.nudged":             {`{"form":"dream","targets":[0],"text":"beware the cold"}`, `Metatron dream → Ash: "beware the cold"`},
-	"metatron.time_snapped":       {`{"to_tick":106200,"gratis":false}`, `Metatron snapped time forward to day 2 11:30`},
-	"metatron.item_granted":       {`{"agent":0,"kind":"food_raw","qty":2,"gratis":false}`, `Metatron granted Ash 2 food_raw`},
-	"metatron.entity_moved":       {`{"class":"pile","x":3,"y":4,"to_x":6,"to_y":7,"gratis":false}`, `Metatron moved the pile at (3,4) to (6,7)`},
-	"metatron.entity_removed":     {`{"class":"structure","x":12,"y":8,"gratis":false}`, `Metatron removed the structure at (12,8)`},
+	"metatron.order_placed": {
+		`{"id":"ord-100-1","origin":"player","condition":"the woodpile drops below 5 logs","action":"nudge someone to chop wood","event_types":["sim.forage_regrown"],"agent":-1,"placed_tick":100,"expires_tick":100000,"status":"active"}`,
+		`Metatron set a watch: "the woodpile drops below 5 logs"`,
+	},
+	"metatron.order_triggered": {`{"id":"ord-100-1","matched_type":"sim.forage_regrown","matched_tick":150}`, `Metatron's watch came true (sim.forage_regrown @ t150)`},
+	"metatron.order_cancelled": {`{"id":"ord-100-1"}`, `Metatron released a watch (ord-100-1)`},
+	"metatron.order_expired":   {`{"id":"ord-100-1"}`, `Metatron's watch lapsed (ord-100-1)`},
+	"metatron.time_snapped":    {`{"to_tick":106200,"gratis":false}`, `Metatron snapped time forward to day 2 11:30`},
+	"metatron.item_granted":    {`{"agent":0,"kind":"food_raw","qty":2,"gratis":false}`, `Metatron granted Ash 2 food_raw`},
+	"metatron.entity_moved":    {`{"class":"pile","x":3,"y":4,"to_x":6,"to_y":7,"gratis":false}`, `Metatron moved the pile at (3,4) to (6,7)`},
+	"metatron.entity_removed":  {`{"class":"structure","x":12,"y":8,"gratis":false}`, `Metatron removed the structure at (12,8)`},
 
 	// --- cog (labeled) ---
 	"cog.thought": {
