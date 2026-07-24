@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
 <meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@642a75d963f0cdbc34e772fad547c0eacedcfa7c">
-<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@056c53a140df7431739d4d6cd5d727dc96aed001">
-<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@6eb8b60ceb65d760408051eadf50a789603efa18">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@6eb8b60ceb65d760408051eadf50a789603efa18">
 <meta name="promptworld-docs:source" content="docs/wiki/nightly-consolidation.md@8ada1050cc5b108790d0e48640dba0b985632e25">
 <meta name="promptworld-docs:source" content="docs/wiki/social-fabric.md@056c53a140df7431739d4d6cd5d727dc96aed001">
 <title>The AI behind the village — promptworld player docs</title>
@@ -126,6 +126,22 @@ anyway, the game simply falls back to the simple built-in behavior for that mome
 instead. You may notice villagers acting a bit more routine-driven at the fastest
 speeds — that's this trade-off in action, not a bug; dial the speed back down and
 full AI-driven decisions resume.</p>
+
+<h2>The world would rather slow down than let a thought go stale</h2>
+<p>The autopilot fallback above is a last resort, not the first line of defense.
+Underneath it, the world keeps a running measure of how many villager thoughts are
+currently in flight and how overdue they're getting for the speed you asked for. If
+that overdue-ness climbs too high for a few seconds running, the world quietly drops
+your effective speed by one notch on its own — giving whatever model is serving your
+villagers more real time to think per game-second, no input needed from you. Once the
+backlog clears for a good stretch, it climbs back up again, all the way to the speed
+you actually asked for. Your own speed and pause commands always cut through this
+instantly. See the <a href="time-and-speed.html">time & speed page</a> for what this
+looks like in the full-screen client's header and chronicle feed.</p>
+<p>The two mechanisms work together, in order: the world tries slowing itself down
+first, buying villagers more real thinking time; only if you're already down at the
+slowest speed on the watchable ladder and villagers are still falling behind does the
+autopilot fallback above kick in.</p>
 
 <h2>Sleep is when a soul actually grows</h2>
 <p>Once a night, when a villager sleeps, one AI call (using the higher-quality cloud

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
 <meta name="promptworld-docs:source" content="docs/wiki/chronicle.md@fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f">
-<meta name="promptworld-docs:source" content="docs/wiki/tui-client.md@056c53a140df7431739d4d6cd5d727dc96aed001">
+<meta name="promptworld-docs:source" content="docs/wiki/tui-client.md@6eb8b60ceb65d760408051eadf50a789603efa18">
 <meta name="promptworld-docs:source" content="docs/wiki/event-log.md@8be4440aae8d108884080cb6476782d2f11ad165">
 <title>Reading the story — promptworld player docs</title>
 <style>
@@ -113,9 +113,13 @@ editor, no game required.</li>
 reads as a short, plain-language summary of one thing that happened — for example
 "Ash foraged at (14,9)" or a line of dialogue shown as "Ash→Rowan: ...". A handful of
 especially important moments (a death, an attack, a chest theft, a village-law
-violation) are visually called out so they don't slip by in a busy feed. In the
-full-screen client, pausing the world lets you select any entry and see its full raw
-detail underneath.</p>
+violation) are visually called out so they don't slip by in a busy feed. If your
+villagers are AI-driven, you'll also occasionally see a <code>governor shed</code> or
+<code>governor recovered</code> line — that's the world automatically dialing its own
+speed down a notch to keep villagers' thinking sensible, then dialing back up once it
+catches up; see the <a href="time-and-speed.html">time & speed page</a> for the full
+story. In the full-screen client, pausing the world lets you select any entry and see
+its full raw detail underneath.</p>
 
 <h2>Nothing is ever rewritten</h2>
 <p>Under all of this sits one append-only history of every single thing that has ever
