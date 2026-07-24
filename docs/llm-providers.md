@@ -1,9 +1,10 @@
 # LLM providers & routing — operator guide
 
 How model traffic is configured in `llm.json` (in each world's save directory), as of
-spec 024 (multi-provider routing, TASK-35, PR #52) and spec 025 (robustness knobs,
-TASK-72). Formal shapes live in `specs/024-provider-routing/contracts/llm-config.md`;
-this is the operator-facing reference.
+spec 024 (multi-provider routing, TASK-35, PR #52), spec 025 (robustness knobs,
+TASK-72), and spec 029 (metatron agency, TASK-27). Formal shapes live in
+`specs/024-provider-routing/contracts/llm-config.md`; this is the operator-facing
+reference.
 
 ## Is a migration required?
 
@@ -110,6 +111,32 @@ route, an unknown kind key, a duplicate provider in a chain, an empty chain,
 without `endpoint`, or both shapes in one file. Tuning knobs (`parallel`, `tool_mode`,
 `reasoning_effort`, `loop_max_rounds`, `max_tokens`) never fail the boot — out-of-range
 values clamp with an operator warning.
+
+### The `metatron_watch` kind (spec 029)
+
+The angel's standing orders can be phrased fuzzily ("when Rowan seems
+heartbroken…"), and confirming a fuzzy hit needs a model — but cheaply and rarely,
+not through the metatron's premium conversational chain. `metatron_watch` is a
+dedicated kind for exactly that: one bare yes/no call per confirm (16 tokens, no
+tools, no tool loop), rate-capped per standing order so a chatty world can never
+turn watching into spend. It routes and prices like any other kind — nothing about
+it is a special case in the wallet or the breaker.
+
+Default chain: `["local", "cloud"]` — cheap-first, with a reliable fallback so a
+confirm still resolves when the local tier is down. Re-route it like any kind (e.g.
+pin it to a small dedicated provider) by adding `"metatron_watch": [...]` under
+`routes`.
+
+**Upgrading an existing world**: a v2 `llm.json` written before this kind existed
+has no route for it. Rather than failing the boot, the missing route is
+backfilled from the default chain above with one boot log line naming the
+backfill (`llm: route for call kind "metatron_watch" missing — backfilled from
+defaults …`); add the route explicitly to silence the warning. This backfill is
+scoped to kinds introduced after the v2 format shipped — a route missing for any
+other kind is still a boot error, and an unknown route *key* (a typo) still fails
+the boot exactly as before. Legacy (v1, two-tier) configs need no attention at
+all: they resolve entirely through the same default table and pick the new kind
+up for free.
 
 ## Money: one wallet, per-provider attribution
 

@@ -216,7 +216,7 @@ func Run(dir string) error {
 		orch.SetRecalibrateHook(md.RecalibrateSignal)
 		fmt.Printf("daemon: mind driver on (%d villagers, cadence %d game-min)\n",
 			sim.AgentCount, sim.PlannerCadenceTicks/60)
-		mt, err := metatron.New(orch, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir, loopRounds, metatronTurnTokens)
+		mt, err := metatron.New(orch, loop, loop, w.Map(), w.Manifest.Seed, state.Marshal(), dir, loopRounds, metatronTurnTokens)
 		if err != nil {
 			return err
 		}

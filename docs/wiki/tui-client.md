@@ -9,7 +9,7 @@ sources:
   - internal/tui/grammar.go
   - internal/tui/digest.go
   - internal/tui/decisions.go
-verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
+verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
 ---
 
 # TUI client
@@ -105,6 +105,13 @@ badge the tab `metatron •` when it isn't visible; the pane header shows the ch
 bank plus the spec-021 instruction/capability provenance summary — charter
 default/custom, skill-file count when non-zero, and the granted-tool summary from
 `Status.GrantedTools`, quiet for a full-grant default world — [[metatron]]; the
+transcript itself gains a `👁 watch set`/`👁 watch released` line for a
+placed/cancelled standing order and a `⏲` line for a landed pause/start/
+adjust_speed meta tool call, alongside the existing `⚡` vision/omen line;
+below the transcript, a `👁 standing orders (n)` block (spec 029,
+`orderStatusLines`, [[metatron-orders]]) renders one compact row per order
+from `Status.Orders` — id, a `~` fuzzy marker, origin, remaining game-day,
+status, and condition — present only while orders stand; the
 same pane renders the LLM provider table since spec 024 — `llmProviderLines`,
 one row per provider with name, model, up/down glyph, queue, inflight/slots, a
 contended marker, and spend share, plus an `(unattributed)` row for pre-024
@@ -209,12 +216,23 @@ fills the story pane and [[event-types]] the raw feed; [[cli-promptworld]] mount
 it as the `ui` subcommand. The header's governed-speed suffix and the two
 governor digest lines read [[cognition]]'s `ShedThreshold` and the
 `clock.governor_shed`/`clock.governor_recovered` payload the [[daemon-lifecycle]]
-governor sampler emits through the loop.
+governor sampler emits through the loop. The metatron pane's standing-orders
+block and transcript lines project [[metatron-orders]]' `Status.Orders`/
+`TurnResult` fields verbatim, with no client-side re-derivation.
 
 ## Operational notes
 
 Rendering requires no daemon round trips — map updates come from pushed events, so the
-UI stays smooth at max speed (the chronicle simply scrolls fast). Unit tests cover pane
+UI stays smooth at max speed (the chronicle simply scrolls fast). The four spec-029
+standing-order event types (`metatron.order_placed`/`order_triggered`/
+`order_cancelled`/`order_expired`) carry `digestRegistry` entries (digest.go —
+"Metatron set a watch: …" / "…watch came true/released/lapsed", the placed
+condition truncated to 80 runes and quoted through the same speech helper as
+nudge text; the id-only lifecycle payloads reference the watch by id), so order
+activity reaches the raw chronicle feed as well as the dedicated metatron-pane
+block and transcript lines above; `TestCatalogSweep` pins the coverage against
+[[event-types]]' backticked catalog.
+Unit tests cover pane
 navigation, replica application, ring capping, quit behavior, the widescreen layout
 math (layout.go), the digest grammar (per-family digests + the catalog sweep in
 digest_test.go, plain/segment equivalence under wrap), focus-contract key

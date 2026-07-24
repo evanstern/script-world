@@ -470,7 +470,30 @@ func defaultRoutes() map[string]RouteConfig {
 		string(KindNarrator):      {Chain: []string{"cloud"}},
 		string(KindDrama):         {Chain: []string{"cloud"}},
 		string(KindMetatron):      {Chain: []string{"cloud"}},
+		// The watch confirm (spec 029) is the one multi-entry default chain:
+		// cheap-first local for a bare yes/no, reliable cloud fallback. Operators
+		// re-route it like any kind.
+		string(KindMetatronWatch): {Chain: []string{"local", "cloud"}},
 	}
+}
+
+// defaultBackfillKinds is the set of call kinds introduced AFTER the v2 config
+// format shipped (spec 029: metatron_watch). A v2 llm.json written before one of
+// these kinds existed is missing its route; validateV2 backfills it from
+// defaultRoutes() with a boot log line rather than failing the boot (research
+// R8 / contracts/routing.md) — pre-existing worlds keep booting on upgrade.
+// Kinds NOT in this set still require an explicit route (completeness/typo
+// protection unchanged), and an unknown route KEY is still a boot error.
+var defaultBackfillKinds = map[Kind]struct{}{
+	KindMetatronWatch: {},
+}
+
+// configWarnf surfaces a config boot log line (warn-not-error), mirroring
+// leaseWarnf: a v2 config missing a route for a post-format kind is backfilled
+// from defaults rather than failing to boot (research R8). Overridable so tests
+// can capture it.
+var configWarnf = func(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "llm: "+format+"\n", args...)
 }
 
 // LoadConfig reads llm.json; (nil, nil) when the file doesn't exist — the
@@ -596,6 +619,25 @@ func (c Config) validateV2() (map[string]ProviderConfig, map[Kind]RouteConfig, e
 			seen[name] = struct{}{}
 		}
 		routes[kind] = rc
+	}
+	// Backfill routes for kinds introduced after this config was written (spec
+	// 029 / research R8): a strict completeness check would brick every existing
+	// v2 llm.json the moment a new kind ships. Only kinds in defaultBackfillKinds
+	// are eligible — the default chain is spliced in with a boot log line, so the
+	// post-load invariant (every kind routed) holds and the operator is told.
+	// This runs BEFORE the completeness check below so a missing backfill-kind
+	// route is no longer fatal; a missing route for any OTHER kind still is.
+	defaults := defaultRoutes()
+	for kind := range defaultBackfillKinds {
+		if _, ok := routes[kind]; ok {
+			continue
+		}
+		rc, ok := defaults[string(kind)]
+		if !ok {
+			continue // defensive: a backfill kind without a default route is a code bug, not a config one — let completeness catch it
+		}
+		routes[kind] = rc
+		configWarnf("route for call kind %q missing — backfilled from defaults (chain %v); add it to llm.json `routes` to silence this", kind, rc.Chain)
 	}
 	// Completeness: every accepted kind must have a route (FR-003).
 	for kind := range acceptedKinds {

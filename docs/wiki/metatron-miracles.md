@@ -10,14 +10,15 @@ sources:
   - internal/tool/registry.go
   - internal/ipc/server.go
   - cmd/promptworld/miracle.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: bd02ecccd1930adb5259e24147e566154d1b66f7
 ---
 
 # Metatron's miracles
 
 Miracles (spec 016) are four direct, charge-priced world edits — spent from the same
-bank as a [[metatron]] nudge, but landing a concrete change rather than a villager's
-subjective experience. Like a nudge, a miracle lands through `Loop.InjectSocial` as
+bank as a [[metatron]] omen or vision, but landing a concrete change rather than a
+villager's subjective experience. Like an influence, a miracle lands through
+`Loop.InjectSocial` as
 one atomic, whitelisted batch; the reducer validates rather than clamps, so an
 invalid miracle is rejected wholesale before recording and a recorded miracle always
 re-applies cleanly in replay (spec 016 R1). No new persistent entities exist —
@@ -106,17 +107,22 @@ classified SHIFT or KEEP in its doc comment:
   genesis-idle, a real tick, not a "never" sentinel), `Agent.LastTalk`/`LastGive`,
   `Intent.WorkStart`, `AgentHail.Until`, `PlanStep.Until`, `Guard.Tick`,
   `Structure.FuelUntil`, `Harvest.Regrow`, `DenUse.Ready`, `FoodBatch.SpoilAt`,
-  `Debt.Due`, `Gru.LastAttack`, `Meeting.OpenedTick`, `Meeting.GatherStart`.
+  `Debt.Due`, `Gru.LastAttack`, `Meeting.OpenedTick`, `Meeting.GatherStart`, and
+  (spec 029) `MetatronOrder.ExpiresTick` — shifted ONLY for ACTIVE orders, so a
+  standing order's remaining lifetime survives the jump (a consumed order's deadline
+  is a spent artifact, left put).
 - **KEEP** — a historical timestamp or an identity/counter; rewriting it would
   rewrite history or break a reference. `Agent.Generation`, `Agent.LastGoalTick`,
   `Memory.Tick`, `Memory.Conv` (spec 019: a conversation-ref identity, the same
   founding-talk tick as `ConvoRecord.Conv` — an identity, not a duration anchor),
   `JournalEntry.Tick` (spec 019: when the entry was written, a historical
   timestamp), `Belief.Tick`, `ChronicleEntry.Tick`/`Day`/`FromTick`/`ToTick`,
+  `MetatronOrder.PlacedTick` (spec 029: when the order was placed, history),
   and every other identity/history field — see the doc comment for the full list.
-  `TestRebaseTaxonomyComplete` caught both spec-019 additions as new
-  tick-anchored `int64` fields requiring classification, confirming the taxonomy
-  guard holds across features outside miracles' own spec.
+  `TestRebaseTaxonomyComplete` caught both spec-019 additions — and, later, spec
+  029's `MetatronOrder.ExpiresTick`/`PlacedTick` — as new tick-anchored `int64`
+  fields requiring classification, confirming the taxonomy guard holds across
+  features outside miracles' own spec.
 
 `TestRebaseTaxonomyComplete` (`internal/sim/miracles_test.go`) is the taxonomy guard:
 it fails the build when a new tick-anchored `int64` field appears in the state
@@ -136,7 +142,7 @@ only COMPOSES — validation lives entirely in the reducer arms above, enforced 
 always re-applies in replay. `MiracleParams` is the door-neutral, already-resolved
 input (villager names resolved to indices, day/`HH:MM` resolved to a tick, by the
 caller). Fixed, deterministic memory templates land at `SalDream` — miracles are
-exactly as memorable as an angelic dream:
+exactly as memorable as an angelic omen or vision:
 
 - `time_snap` touches every living villager (`s.LivingAgents()`) with
   `"The light lurched across the sky; a great span of time passed in a single
@@ -158,8 +164,10 @@ exactly as memorable as an angelic dream:
   017 the turn runs through [[tool-loop]]'s bounded loop ([[metatron]]); "at most
   one mediated act per turn" is now the driver's cardinality rule (one acting call
   lands, every other call this cognition is rejected) rather than a hand-written
-  nudge-wins-over-miracle precedence — the model calls `work_miracle` (or a nudge
-  tool) and whichever lands first ends the turn. Since spec 021 the world's
+  nudge-wins-over-miracle precedence — the model calls `work_miracle` (or one of the
+  other acting tools: `send_vision`/`send_omen`/`monitor_and_act`/`cancel_order`/the
+  meta tools, spec 029) and whichever lands first ends the turn. Since spec 021 the
+  world's
   `capabilities.json` can withhold `work_miracle` entirely or restrict its `kind`
   vocabulary ([[metatron]]): an ungranted tool/kind is structurally absent from the
   declared schema and guidance, its handler is never installed, and `landMiracle`
@@ -173,7 +181,7 @@ exactly as memorable as an angelic dream:
   `gratis=false`. A reducer rejection becomes a `rejected_gate` outcome the loop
   feeds back to the model within its round cap (the in-fiction wording is
   unchanged, just no longer necessarily turn-ending), exactly like a refused
-  nudge; a landed miracle appends a soul-file line and is recorded in the
+  omen or vision; a landed miracle appends a soul-file line and is recorded in the
   transcript with a `✨` prefix.
   Tool-call contract: `work_miracle(kind, day, time, villager, item, qty, class,
   x, y, to_x, to_y)`, no gratis parameter (`internal/tool` registry's
@@ -207,7 +215,9 @@ between the three contexts.
 
 ## Connections
 
-[[metatron]] hosts the angel's door (`landMiracle`, `turnReply.Miracle`);
+[[metatron]] hosts the angel's door (`landMiracle`, the `work_miracle` tool call
+parsed into `miracleArgs`); [[metatron-orders]] shares this note's `rebaseTicks`
+taxonomy (a standing order's `ExpiresTick` is a SHIFT field);
 [[sim-loop]] whitelists the four event types in `injectSocialWhitelist` and
 reattaches the static map to the dry-run probe; [[sim-state-reducer]] dispatches to
 `applyMiracle` and carries the unexported `m *worldmap.Map` field the reducer arms

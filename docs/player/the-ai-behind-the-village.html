@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
 <meta name="promptworld-docs:source" content="docs/wiki/agent-mind.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
-<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
-<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
+<meta name="promptworld-docs:source" content="docs/wiki/cognition.md@be38288fa137064174eedbfb3b8a94cc5b1fb0b9">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@be38288fa137064174eedbfb3b8a94cc5b1fb0b9">
 <meta name="promptworld-docs:source" content="docs/wiki/nightly-consolidation.md@8ada1050cc5b108790d0e48640dba0b985632e25">
 <meta name="promptworld-docs:source" content="docs/wiki/social-fabric.md@056c53a140df7431739d4d6cd5d727dc96aed001">
 <title>The AI behind the village — promptworld player docs</title>
@@ -117,6 +117,15 @@ quality for — most notably nightly memory digestion (below) and the narrated
 you. This split is configurable, and the
 <a href="llm-setup-basics.html">setup basics page</a> walks through the minimum you
 need to turn it on.</p>
+<p>There's a third, much smaller kind of AI call too: when you've asked Metatron to
+watch for something loosely phrased ("when Rowan seems heartbroken"), confirming
+that a matching moment really fits what you described takes one tiny, cheap yes/no
+check — far smaller than a real conversational reply, and rate-limited so it can
+never turn watching into meaningful spend. By default it tries the local model
+first and only asks the cloud model if that isn't available. If you're running an
+older world whose AI configuration predates this feature, promptworld quietly fills
+in a sensible default for it the next time the world starts, and says so in one line
+in the startup log — nothing you need to do by hand.</p>
 
 <h2>Why villagers sometimes feel more "on autopilot" at very high speed</h2>
 <p>An AI model takes real wall-clock time to respond, but the game world keeps ticking

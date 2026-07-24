@@ -38,7 +38,7 @@ func newLiveTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateI
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
+	mt, err := New(orch, inj, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestTranscriptTailTurns(t *testing.T) {
 	mt, _, _, _ := newTestAngel(t, "")
 	const totalTurns = 8 // > transcriptTailTurns (6)
 	for i := 1; i <= totalTurns; i++ {
-		mt.recordTurn(int64(i), fmt.Sprintf("question %d", i), TurnResult{Reply: fmt.Sprintf("answer %d", i)})
+		mt.recordTurn(int64(i), turnOrigin{jobPrefix: "turn", seed: fmt.Sprintf("question %d", i)}, TurnResult{Reply: fmt.Sprintf("answer %d", i)})
 	}
 
 	got := mt.transcriptTail()

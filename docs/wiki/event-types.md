@@ -13,7 +13,7 @@ sources:
   - internal/sim/miracles.go
   - internal/sim/journal.go
   - internal/daemon/daemon.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Event types
@@ -45,6 +45,21 @@ Spec 028 (adaptive throttle) likewise adds **no** format bump: `State` gains
 snapshot is a valid ungoverned state), and two new reducer-applied types,
 `clock.governor_shed`/`clock.governor_recovered`, land the governor's
 speed-ladder decisions ([[cognition]]).
+Spec 029 (Metatron agency — [[metatron]], [[metatron-orders]]) likewise adds
+**no** format bump: `State` gains `MetatronOrders []MetatronOrder`
+(`omitempty` — an empty order set is genuinely zero-value, unlike
+`MetatronCharges`'s spent-to-zero precedent, so a pre-029 snapshot with the
+field absent unmarshals to nil), and FOUR new event types drive a standing
+order's lifecycle — `metatron.order_placed` (monitor_and_act), one-shot
+`metatron.order_triggered` (the trigger worker, live-only, never replayed),
+`metatron.order_cancelled` (cancel_order), and executor-emitted
+`metatron.order_expired` (the `charge_regenerated` pattern: a pure function
+of state + tick, so it reproduces on replay with no angel running). The same
+spec retires `nudge_dream`/`nudge_omen` from the tool registry in favor of
+`send_vision`, so `metatron.nudged`'s `form` domain is now `vision` (exactly
+one living target, any hour) / `omen` (≥1 living targets, night-only,
+`State.Night`) / `dream` (legacy, grandfathered: accepted on replay for
+historical events, but no live tool can produce a new one).
 
 ## How it works
 
@@ -93,7 +108,11 @@ speed-ladder decisions ([[cognition]]).
 | `gru.emerged` / `gru.moved` / `gru.sighted` / `gru.attacked` / `gru.withdrew` | payload structs in `internal/sim/gru.go` | `gruStep` (executor tick) | `State.Gru` lifecycle/position; sighting latch; attack sets absolute post-wound health, wakes victim, clears intent ([[gru]]); reducer-total (vanished gru no-ops) |
 | `chronicle.entry` | `ChronicleEntryPayload{day, from_tick, to_tick, text, thread, agents}` in `internal/sim/chronicle.go` | narrator driver (injected, TASK-11) | appends the bounded `State.Chronicle` ring ([[chronicle]]) |
 | `metatron.charge_regenerated` | `ChargeRegeneratedPayload{}` in `internal/sim/metatron.go` | executor, absolute 6-game-hour boundaries below cap | `MetatronCharges` +1, cap 3 ([[metatron]]) |
-| `metatron.nudged` | `MetatronNudgedPayload{form, targets, text}` | Metatron console turn (injected, TASK-12) | validates (charges > 0, form, living targets, text cap) then `MetatronCharges` −1; villager memories ride companion `agent.memory_added` events in the same atomic batch |
+| `metatron.nudged` | `MetatronNudgedPayload{form, targets, text}` | Metatron console turn (injected, TASK-12) | validates (charges > 0, form ∈ vision\|omen\|dream, living targets, text cap) then `MetatronCharges` −1; `vision` (spec 029, replaces `dream` as the live one-target form) needs exactly one living target at any hour; `omen` needs ≥1 living targets AND `State.Night`; `dream` is legacy-only (grandfathered exactly-one-target validation so historical events replay, but no tool can emit a new one); villager memories ride companion `agent.memory_added` events in the same atomic batch |
+| `metatron.order_placed` (spec 029, [[metatron-orders]]) | `MetatronOrder{id, origin, condition, action, event_types, agent, keywords?, confirm?, placed_tick, expires_tick, status}` | Metatron's `monitor_and_act` tool, injected via `InjectSocial` | validates (non-empty id not reused by any past order regardless of status, `origin` ∈ player\|system, non-empty `event_types`, ttl 1..7 game days, `agent` index valid or −1 for any, `condition` ≤300 chars, `action` ≤400 chars, and — player-origin only — fewer than 3 already-active player orders, `MetatronPlayerOrderCap`; system-origin deferral orders are exempt from the cap); the payload's `status` is ignored — a landed order is always `active`; `MetatronOrders` appended then pruned to every active order plus the most recent 32 non-active (`pruneMetatronOrders`) |
+| `metatron.order_triggered` | `OrderTriggeredPayload{id, matched_type, matched_tick}` | the angel's trigger worker (injected, live-only — NEVER emitted during replay, since the matching runs off live events the replica sees post-batch) | the named order transitions active → triggered (one-shot consumption); rejects an unknown id or one not currently active |
+| `metatron.order_cancelled` | `OrderIDPayload{id}` | Metatron's `cancel_order` tool, injected | the named order transitions active → cancelled; same rejection rule as triggered |
+| `metatron.order_expired` | `OrderIDPayload{id}` | executor, `stepEvents`, once per order once `nextTick >= expires_tick` for an active order (the `charge_regenerated` pattern — a pure function of state + tick, so replay reproduces it without any angel running) | the named order transitions active → expired, freeing its slot against the player cap |
 | `metatron.time_snapped` | `TimeSnappedPayload{to_tick, gratis}` in `internal/sim/miracles.go` | angel's turn reply or the `promptworld miracle` CLI/IPC door (spec 016, [[metatron-miracles]]), injected via `InjectSocial` | rejects a target at or before the current tick (forward-only); spends 2 charges (the dearest miracle) unless `gratis`; `rebaseTicks` shifts every relative-duration field forward by the jump so remaining durations are preserved, then `State.Tick = to_tick`; the skipped regeneration boundaries mint no charges |
 | `metatron.item_granted` | `ItemGrantedPayload{agent, kind, qty, gratis}` | angel's turn reply or the CLI/IPC door, injected | validates a living villager, a known item kind, positive qty, and the bulk cap (reject-whole, never clamp); spends 1 charge unless `gratis`; adds `qty` units (a spear grant appends `qty` fresh `spearDurability` entries, kept sorted) |
 | `metatron.entity_moved` | `EntityMovedPayload{class, x, y, to_x, to_y, gratis}` (`class` ∈ villager\|structure\|pile) | angel's turn reply or the CLI/IPC door, injected | validates presence at the source and the destination's placement rule (villager/pile → passable, structure → buildSite); spends 1 charge unless `gratis`; relocates the entity (a moved villager drops its intent and goes idle at the landing tick; a moved structure carries its `FuelUntil`/`Owner`/`Store`; a moved pile merges onto any pile already at the destination) |
@@ -136,7 +155,14 @@ emits `daemon.*`; [[event-log]] stores them;
 [[ipc-protocol]] pushes them to subscribers verbatim. The `metatron.*` miracle
 family is emitted through [[metatron]]'s two doors and reduced in
 `internal/sim/miracles.go` — see [[metatron-miracles]] for the cost table,
-gratis doctrine, and the shift-semantics re-base taxonomy.
+gratis doctrine, and the shift-semantics re-base taxonomy. The standing-order
+lifecycle (spec 029) reduces in `internal/sim/metatron.go` alongside
+`charge_regenerated`/`nudged` — see [[metatron-orders]] for the placement
+validation, trigger-matching, and confirm/degradation mechanics; `order_placed`/
+`order_triggered`/`order_cancelled` are whitelisted in [[sim-loop]]'s
+`InjectSocial` door exactly like the miracle types, while `order_expired`
+needs no whitelist entry (executor-emitted, the `charge_regenerated`
+precedent).
 
 ## Operational notes
 

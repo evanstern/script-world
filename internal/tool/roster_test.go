@@ -36,13 +36,13 @@ func TestLoopRosterVillagerContents(t *testing.T) {
 	}
 }
 
-// TestLoopRosterMetatronContents (spec 017 T020): the metatron loop roster is
-// nudge_dream, nudge_omen, work_miracle — the DECLARED loop surface, which
-// differs from RosterMetatron: converse is excluded (it is the final-answer
-// text channel, not a callable tool) and work_miracle is included (the R13
-// post-#38 amendment).
+// TestLoopRosterMetatronContents (spec 017 T020; spec 029 R2): the metatron loop
+// roster is the agency surface — send_omen, send_vision, monitor_and_act,
+// cancel_order, work_miracle, then the meta tools pause/start/adjust_speed. It is
+// the DECLARED loop surface, which differs from RosterMetatron: converse is
+// excluded (it is the final-answer text channel, not a callable tool).
 func TestLoopRosterMetatronContents(t *testing.T) {
-	want := []string{"nudge_dream", "nudge_omen", "work_miracle"}
+	want := []string{"send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}
 	got := namesOf(LoopRosterMetatron())
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoopRosterMetatron() names = %v, want %v", got, want)

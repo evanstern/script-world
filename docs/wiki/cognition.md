@@ -10,7 +10,7 @@ sources:
   - internal/cognition/calibration.go
   - internal/cognition/governor.go
   - internal/sim/cognition.go
-verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Cognition horizon
@@ -40,8 +40,12 @@ The `musing` class retired with spec 017: musing is no longer a scheduled
 call kind gated by its own router entry — it is a roster tool inside the
 planner's tool-use loop, so it now shares the `planner` class's 3pt/1200t
 horizon gate rather than carrying its own 1pt/3600t budget ([[agent-mind]],
-[[tool-loop]]). `kindToClass` maps every LLM call kind (as a string, keeping
-the package leaf) to a class; `ValidateKinds` enforces FR-002 at daemon start
+[[tool-loop]]). Spec 029 adds no new class: the angel's fuzzy-order confirm
+kind (`metatron_watch`, [[metatron-orders]]) maps to the EXISTING `metatron`
+class (5pt/86400t) — same actor, event-triggered not cadence-scheduled, a
+one-line `kindToClass` entry on the narrator/drama→`chronicle` precedent, so the
+spec-007 registry doctrine contract is untouched. `kindToClass` maps every LLM
+call kind (as a string, keeping the package leaf) to a class; `ValidateKinds` enforces FR-002 at daemon start
 — an unmapped kind, a non-Fibonacci point value, or a non-positive budget is
 a fatal startup error. `Degrade` names the suppression floor: `skip`
 (recorded, not silent), `reflex`, or `template` (a `faster-tier` variant

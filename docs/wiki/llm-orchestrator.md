@@ -10,7 +10,7 @@ sources:
   - internal/llm/providers.go
   - internal/llm/lease.go
   - internal/llm/pending.go
-verified_against: 6db823f64dc0483df12210f03b0aa28e36d1c3ce
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # LLM orchestrator
@@ -39,7 +39,12 @@ forever via `deriveLegacy` — a two-provider registry named `local`/`cloud` wit
 pre-024 routes (planner/conversation/meeting → local; consolidation/narrator/drama/
 metatron → cloud), byte-identical behavior; declaring both shapes in one file is a
 load error. `KindMusing` retired with spec 017: musing is a roster tool inside the
-planner loop ([[agent-mind]], [[tool-loop]]).
+planner loop ([[agent-mind]], [[tool-loop]]). Spec 029 adds `KindMetatronWatch`
+(`"metatron_watch"`) — the angel's fuzzy standing-order confirm, a single bare
+yes/no `Submit` (never a tool loop, [[metatron-orders]]); it is the one kind
+whose `defaultRoutes()` chain is MULTI-ENTRY (`["local","cloud"]` — cheap-first
+local for the yes/no, cloud fallback), and it maps to [[cognition]]'s existing
+`metatron` decision class.
 
 **Chain-walk admission** (`Submit`, spec 024 US3): submission walks the kind's chain
 in order and dispatches to the first admissible candidate; a candidate is skipped only
@@ -220,11 +225,18 @@ Inflight, Slots, Contended, SpentUSD}`.
 are never stored — only an env var NAME (`api_key_env`, default `ANTHROPIC_API_KEY`);
 the optional inline `api_key` is for LAN-router keys only and wins when both are set.
 `resolveRegistry` is the single validation authority (LoadConfig and `New` both call
-it): boot ERRORS name the offender for a route to an undeclared provider, an accepted
+it, dispatching to `validateV2` for v2): boot ERRORS name the offender for a route to
+an undeclared provider, an accepted
 kind with no route, an unknown kind key, a duplicate provider in a chain, an empty
 chain, `no_fallback` with chain length > 1, missing transport/model, `openai_compat`
 without endpoint, or both config shapes at once; tuning knobs clamp with warnings,
-never errors. `RouteConfig.UnmarshalJSON` accepts the bare-array shorthand
+never errors. One narrow exception to the completeness check (spec 029, research
+R8): kinds in `defaultBackfillKinds` — those introduced AFTER the v2 format shipped,
+currently just `KindMetatronWatch` — are BACKFILLED from `defaultRoutes()` with a
+boot log line (`configWarnf`, warn-not-error) rather than failing boot, so a v2
+`llm.json` written before the kind existed keeps booting on upgrade. This runs
+before the completeness loop; a missing route for any OTHER kind is still fatal, and
+an unknown route KEY is still a boot error. `RouteConfig.UnmarshalJSON` accepts the bare-array shorthand
 (`["a","b"]`) and the `{chain, no_fallback}` object; `MarshalJSON` re-emits the
 shorthand, and the shape-aware `Config.MarshalJSON` round-trips both shapes —
 including top-level `max_tokens` — byte-for-byte.

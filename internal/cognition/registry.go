@@ -53,6 +53,13 @@ var kindToClass = map[string]string{
 	"narrator":      "chronicle",
 	"drama":         "chronicle",
 	"metatron":      "metatron",
+	// The angel's fuzzy-order watch confirm (spec 029) shares the metatron
+	// decision class: same actor, DegradeSkip (an unconfirmed/failed confirm
+	// leaves the order armed — nothing runs), long staleness budget (the confirm
+	// is event-triggered, never cadence-scheduled). Reusing the class keeps this
+	// a one-line mapping — the narrator/drama→chronicle precedent — without
+	// touching the spec-007 registry.md doctrine contract.
+	"metatron_watch": "metatron",
 }
 
 // ClassFor returns the registered class by name.

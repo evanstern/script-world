@@ -46,6 +46,11 @@ const (
 	// KindMeeting is governance flavor (TASK-13): rephrasing a tabled
 	// proposal in the proposer's voice. Best-effort, never outcome-bearing.
 	KindMeeting Kind = "meeting"
+	// KindMetatronWatch is the angel's fuzzy standing-order confirm (spec 029,
+	// TASK-27): a single bare yes/no Submit that decides whether a fuzzy
+	// condition truly holds for a structural filter hit. Cheap-first by default
+	// (route chain local→cloud) and rate-capped per order — never a tool loop.
+	KindMetatronWatch Kind = "metatron_watch"
 )
 
 // Tier is the retired routing concept (decision-5): routing is now per named
@@ -76,6 +81,7 @@ var acceptedKinds = map[Kind]struct{}{
 	KindDrama:         {},
 	KindMetatron:      {},
 	KindMeeting:       {},
+	KindMetatronWatch: {},
 }
 
 // Kinds returns every call kind the orchestrator accepts, sorted — the

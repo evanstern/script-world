@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/persona"
 	"github.com/evanstern/promptworld/internal/sim"
@@ -49,6 +50,38 @@ func (m *mockOrch) requests() []llm.Request {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]llm.Request(nil), m.reqs...)
+}
+
+// loopCall records one LoopControl.Do invocation (spec 029 US5, T020).
+type loopCall struct {
+	name  string
+	speed clock.Speed
+}
+
+// loopControlStub is the LoopControl seam the test angel wires (spec 029 US5,
+// T020): it records every clock-control call and cans a Status/error, so a meta
+// tool lands through a real handler without a live *sim.Loop. Tests reach it via
+// mt.loop.(*loopControlStub) — the seam is a field, so no return-signature churn.
+type loopControlStub struct {
+	mu    sync.Mutex
+	calls []loopCall
+	err   error
+}
+
+func (l *loopControlStub) Do(name string, speed clock.Speed) (sim.Status, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, loopCall{name, speed})
+	if l.err != nil {
+		return sim.Status{}, l.err
+	}
+	return sim.Status{Paused: name == "pause", Speed: speed}, nil
+}
+
+func (l *loopControlStub) recorded() []loopCall {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]loopCall(nil), l.calls...)
 }
 
 // stateInjector applies batches to a real state through the reducer —
@@ -92,7 +125,7 @@ func newTestAngel(t *testing.T, reply string) (*Metatron, *mockOrch, *stateInjec
 	state := sim.NewState(42, m)
 	orch := &mockOrch{reply: reply}
 	inj := &stateInjector{state: state}
-	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
+	mt, err := New(orch, inj, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,6 +389,46 @@ func TestTurnConverses(t *testing.T) {
 	}
 }
 
+// TestTurnDirectiveLabelSingleOrigin (spec 029 R6, wiki-sweep finding): the
+// origin-appropriate directive label lives in exactly ONE place — runTurn frames
+// it, turnUserPrompt appends it verbatim. A CONSOLE turn's user prompt therefore
+// carries exactly ONE "The player says:" label, immediately followed by the
+// player's text; a SYSTEM (triggered) turn's user prompt carries ZERO such labels
+// (its directive must not pretend it came from the player this turn) and instead
+// carries the standing-order framing over the pre-authorized action.
+func TestTurnDirectiveLabelSingleOrigin(t *testing.T) {
+	t.Run("console carries the label exactly once", func(t *testing.T) {
+		mt, orch, _, _ := newTestAngel(t, "The village sleeps, sovereign.")
+		if _, err := mt.Turn(context.Background(), "how fare they?"); err != nil {
+			t.Fatal(err)
+		}
+		prompt := orch.requests()[0].Prompt
+		if n := strings.Count(prompt, "The player says:"); n != 1 {
+			t.Fatalf("console prompt has %d %q labels, want exactly 1: %q", n, "The player says:", prompt)
+		}
+		if !strings.Contains(prompt, "The player says:\nhow fare they?") {
+			t.Errorf("console label is not followed immediately by the player text: %q", prompt)
+		}
+	})
+	t.Run("system carries no player label, uses the standing-order framing", func(t *testing.T) {
+		mt, orch, _, _ := newTestAngel(t, "It is done.")
+		const seed = "Send Fern a comforting vision."
+		if _, err := mt.runTurn(context.Background(), turnOrigin{system: true, jobPrefix: "watch", seed: seed}); err != nil {
+			t.Fatal(err)
+		}
+		prompt := orch.requests()[0].Prompt
+		if n := strings.Count(prompt, "The player says:"); n != 0 {
+			t.Fatalf("system prompt has %d %q labels, want 0 (a system turn has no player-text sink): %q", n, "The player says:", prompt)
+		}
+		if !strings.Contains(prompt, "A standing order you placed has come due") {
+			t.Errorf("system prompt missing the standing-order framing: %q", prompt)
+		}
+		if !strings.Contains(prompt, seed) {
+			t.Errorf("system prompt missing the pre-authorized action seed: %q", prompt)
+		}
+	})
+}
+
 // TestTurnDegradedHonesty (US1): orchestrator failure surfaces as an error;
 // nothing recorded, nothing spent, moments retained.
 func TestTurnDegradedHonesty(t *testing.T) {
@@ -388,11 +461,12 @@ func TestTurnSingleFlight(t *testing.T) {
 	}
 }
 
-// TestDreamLands (US2): a dream spends one charge and lands the rendering —
-// and only the rendering — as a salience-8 provenance-unknown memory.
-func TestDreamLands(t *testing.T) {
+// TestVisionLands (US2; spec 029): a vision spends one charge and lands the
+// rendering — and only the rendering — on ONE living villager as a salience-8
+// provenance-unknown memory, at any hour.
+func TestVisionLands(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "It is done.")
-	mt.runLoop = actLoop(mt, "nudge_dream",
+	mt.runLoop = actLoop(mt, "send_vision",
 		`{"target": "Fern", "text": "A river of light urged you to speak your secret."}`)
 	r, err := mt.Turn(context.Background(), "let Fern feel safe to share her secret")
 	if err != nil {
@@ -401,7 +475,7 @@ func TestDreamLands(t *testing.T) {
 	if r.Reply != "It is done." {
 		t.Errorf("closing prose lost: %q", r.Reply)
 	}
-	if r.Nudge == nil || r.Nudge.Form != "dream" || r.Nudge.Targets[0] != "Fern" {
+	if r.Nudge == nil || r.Nudge.Form != "vision" || r.Nudge.Targets[0] != "Fern" {
 		t.Fatalf("nudge: %+v", r.Nudge)
 	}
 	lb := landedBatches(inj)
@@ -413,16 +487,16 @@ func TestDreamLands(t *testing.T) {
 		t.Fatalf("batch shape: %v", batch)
 	}
 	if inj.state.MetatronCharges != 0 {
-		t.Errorf("charges = %d after dream, want 0", inj.state.MetatronCharges)
+		t.Errorf("charges = %d after vision, want 0", inj.state.MetatronCharges)
 	}
 	fern := agentIndexByName("Fern")
 	mem := inj.state.Agents[fern].Memories
-	if len(mem) != 1 || !strings.HasPrefix(mem[0].Text, "You dreamed: ") || mem[0].Salience != sim.SalDream {
-		t.Fatalf("dream memory: %+v", mem)
+	if len(mem) != 1 || !strings.HasPrefix(mem[0].Text, "You saw a vision: ") || mem[0].Salience != sim.SalDream {
+		t.Fatalf("vision memory: %+v", mem)
 	}
 	for i := range inj.state.Agents {
 		if i != fern && len(inj.state.Agents[i].Memories) != 0 {
-			t.Error("dream leaked beyond its target")
+			t.Error("vision leaked beyond its target")
 		}
 	}
 }
@@ -431,8 +505,13 @@ func TestDreamLands(t *testing.T) {
 // are excluded.
 func TestOmenLandsOnAllLiving(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "The sky will speak.")
-	mt.runLoop = actLoop(mt, "nudge_omen",
-		`{"text": "At dusk the clouds parted in the shape of an open hand."}`)
+	mt.runLoop = actLoop(mt, "send_omen",
+		`{"targets": "everyone", "text": "At dusk the clouds parted in the shape of an open hand."}`)
+	// An omen lands only at night (spec 029): the reducer gate AND the turn-side
+	// mirror both read night — set it on the injector's state (the door) and the
+	// replica (the mirror landOmen reads via d.night).
+	inj.state.Night = true
+	mt.replica.Night = true
 	inj.state.Agents[2].Dead = true
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -473,7 +552,7 @@ func TestRefusalIsFree(t *testing.T) {
 // lands and no charge moves; the rejection IS recorded as a cog.tool_call (AC#5).
 func TestChargeExhaustedNudgeRejectedGate(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "As you wish, though I have no power left to spend.")
-	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Ash", "text": "x"}`)
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Ash", "text": "x"}`)
 	inj.state.MetatronCharges = 0
 	mt.replica.MetatronCharges = 0
 	mt.mirrorState()
@@ -504,7 +583,7 @@ func TestChargeExhaustedNudgeRejectedGate(t *testing.T) {
 // counsel, charge intact.
 func TestDeadTargetRefused(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "I will try.")
-	mt.runLoop = actLoop(mt, "nudge_dream", `{"target": "Cedar", "text": "wake"}`)
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Cedar", "text": "wake"}`)
 	inj.state.Agents[2].Dead = true // Cedar
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -516,10 +595,384 @@ func TestDeadTargetRefused(t *testing.T) {
 		t.Error("dead-target nudge affected the world")
 	}
 	// The door refusal is fed back to the model (and recorded), not spliced into
-	// the reply — the "beyond dreams" counsel now lives in the cog.tool_call.
+	// the reply — the "beyond reach" counsel now lives in the cog.tool_call.
 	tcs := cogToolCalls(inj)
-	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond dreams") {
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond reach") {
 		t.Errorf("dead-target refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestVisionRejectsMultiTarget (US1, spec 029 T007): send_vision's schema carries
+// a single `target` param, so a two-villager vision arrives as a comma-joined
+// name that resolves to no villager — refused with in-fiction counsel, nothing
+// lands, nothing spent. Multi-target reach is structurally an omen's, never a
+// vision's (FR-001: a vision reaches exactly one).
+func TestVisionRejectsMultiTarget(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "One at a time.")
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Fern, Ash", "text": "hush"}`)
+	r, err := mt.Turn(context.Background(), "reach Fern and Ash at once")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Nudge != nil || len(landedBatches(inj)) != 0 {
+		t.Error("a multi-name vision landed")
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Errorf("a refused vision spent a charge: %d", inj.state.MetatronCharges)
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" || !strings.Contains(tcs[0].Reason, "no villager named") {
+		t.Errorf("multi-target vision refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestOmenLandsOnNamedGroup (US1, spec 029 T007/R3): a night omen naming a
+// comma-separated living subset lands on EXACTLY those villagers — one atomic
+// batch, one charge — and reaches no one else.
+func TestOmenLandsOnNamedGroup(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "They will see it.")
+	mt.replica.Night = true
+	inj.state.Night = true
+	mt.mirrorState()
+	mt.runLoop = actLoop(mt, "send_omen",
+		`{"targets": "Ash, Fern", "text": "The well ran clear under a red moon."}`)
+	if _, err := mt.Turn(context.Background(), "warn Ash and Fern"); err != nil {
+		t.Fatal(err)
+	}
+	ash, fern := agentIndexByName("Ash"), agentIndexByName("Fern")
+	for i := range inj.state.Agents {
+		got := len(inj.state.Agents[i].Memories)
+		want := 0
+		if i == ash || i == fern {
+			want = 1
+		}
+		if got != want {
+			t.Errorf("agent %d (%s) memories = %d, want %d", i, sim.AgentNames[i], got, want)
+		}
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("group omen spent %d charges, want 1", sim.MetatronGenesisCharges-inj.state.MetatronCharges)
+	}
+}
+
+// TestOmenDeadTargetRefused (US1, spec 029 T007): a night omen naming a dead
+// villager refuses the WHOLE act with counsel — never a partial batch — and
+// spends nothing.
+func TestOmenDeadTargetRefused(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "One of them is gone.")
+	mt.replica.Night = true
+	inj.state.Night = true
+	mt.replica.Agents[2].Dead = true // Cedar
+	inj.state.Agents[2].Dead = true
+	mt.mirrorState()
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "Ash, Cedar", "text": "beware"}`)
+	if _, err := mt.Turn(context.Background(), "warn Ash and Cedar"); err != nil {
+		t.Fatal(err)
+	}
+	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("an omen naming the dead landed or spent")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond reach") {
+		t.Errorf("dead-in-group omen refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestOmenDayDefersToNightfall (US4 AC-1, spec 029 T016/T017): a daytime
+// send_omen does NOT refuse — it places a system-origin nightfall deferral order.
+// Nothing nudged, nothing spent, and the placement is cap-exempt; the deferral is
+// visible in status.
+func TestOmenDayDefersToNightfall(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "It will reach them at dark.")
+	// Genesis is day (Night defaults false); leave the mirror as-is.
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "everyone", "text": "look up"}`)
+	r, err := mt.Turn(context.Background(), "send an omen now")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No nudge landed and no charge spent — the omen was DEFERRED, not sent.
+	if r.Nudge != nil {
+		t.Error("a daytime omen sent a nudge instead of deferring")
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Errorf("a deferred daytime omen spent a charge: %d", inj.state.MetatronCharges)
+	}
+	// A system-origin order landed active.
+	if len(inj.state.MetatronOrders) != 1 {
+		t.Fatalf("daytime omen did not place a deferral order: %+v", inj.state.MetatronOrders)
+	}
+	ord := inj.state.MetatronOrders[0]
+	if ord.Origin != "system" || ord.Status != "active" {
+		t.Errorf("deferral order not system/active: %+v", ord)
+	}
+	if len(ord.EventTypes) != 1 || ord.EventTypes[0] != "sim.night_started" {
+		t.Errorf("deferral order watches the wrong event: %+v", ord.EventTypes)
+	}
+	if ord.ExpiresTick-ord.PlacedTick != ticksPerGameDay {
+		t.Errorf("deferral TTL = %d ticks, want one game day", ord.ExpiresTick-ord.PlacedTick)
+	}
+	// The console reported the placed order; nothing nudged.
+	if r.Order == nil || r.Order.ID != ord.ID {
+		t.Fatalf("deferral not reported to the console: %+v", r.Order)
+	}
+	// Visible in status (FR-016).
+	syncOrdersFromDoor(mt, inj)
+	s := mt.Status()
+	if len(s.Orders) != 1 || s.Orders[0].Origin != "system" {
+		t.Errorf("status.Orders does not surface the deferral: %+v", s.Orders)
+	}
+}
+
+// TestOmenDayDeferralCapExempt (US4, spec 029 T016/T017): a daytime omen defers
+// even when the player already holds the full three active orders — a system-origin
+// deferral is exempt from the player cap (FR-012).
+func TestOmenDayDeferralCapExempt(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Set aside for the dark.")
+	for i := 0; i < sim.MetatronPlayerOrderCap; i++ {
+		seedOrder(mt, inj, activePlayerOrder(fmt.Sprintf("ord-1-%d", i), 1))
+	}
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "Ash", "text": "beware"}`)
+	r, err := mt.Turn(context.Background(), "send Ash an omen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Order == nil {
+		t.Fatal("daytime omen deferral was refused despite the cap exemption")
+	}
+	// Four orders now stand: three player + one system deferral.
+	if len(inj.state.MetatronOrders) != sim.MetatronPlayerOrderCap+1 {
+		t.Fatalf("deferral did not land past the player cap: %d orders", len(inj.state.MetatronOrders))
+	}
+	if inj.state.MetatronOrders[sim.MetatronPlayerOrderCap].Origin != "system" {
+		t.Error("the cap-exempt order is not system-origin")
+	}
+}
+
+// TestEmptyTextRefused (US1, spec 029 T007): an influence whose rendering is
+// empty is refused before anything lands — the empty-text guard in the shared
+// landing tail.
+func TestEmptyTextRefused(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Say what?")
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Fern", "text": "   "}`)
+	if _, err := mt.Turn(context.Background(), "send Fern a vision"); err != nil {
+		t.Fatal(err)
+	}
+	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("an empty-text vision landed or spent")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "empty") {
+		t.Errorf("empty-text refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestHandlerFirewallAudit (US1, spec 029 T007/R14, SC-007): the turn handler map
+// is built ONLY from the granted roster — so under a full grant every installed
+// handler name is an acting tool on RosterMetatron, converse (the final-text
+// channel) is NEVER a handler, and an ungranted tool has no handler. This is the
+// structural firewall: no model output reaches a world door except through a
+// registered acting-tool handler. It tolerates the Batch C hand-off (the meta
+// tools pause/start/adjust_speed are declared but not yet handled) by asserting a
+// SUBSET of the acting tools, not an exact set.
+func TestHandlerFirewallAudit(t *testing.T) {
+	mt, _, _, _ := newTestAngel(t, "ok")
+	full := fullGrant()
+	d := &turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: full, result: &TurnResult{}}
+	h := mt.turnHandlers(d)
+
+	if _, ok := h["converse"]; ok {
+		t.Error("converse must never be a handler — it is the final-text channel")
+	}
+	// Meta tools are wired this batch (T018): present under a full grant. The
+	// LoopControl seam (mt.loop) is reachable ONLY through these three registered
+	// handlers — no other model-output path touches the clock (SC-007/R14).
+	for _, meta := range []string{"pause", "start", "adjust_speed"} {
+		if _, ok := h[meta]; !ok {
+			t.Errorf("%s handler missing under a full grant — T018 wires the meta tools", meta)
+		}
+	}
+	// Every installed handler is an acting tool on the door roster (RosterMetatron).
+	onRoster := map[string]bool{}
+	for _, n := range tool.RosterMetatron {
+		onRoster[n] = true
+	}
+	for name := range h {
+		if !onRoster[name] {
+			t.Errorf("handler %q is not on RosterMetatron — an unregistered world path", name)
+		}
+	}
+	// send_vision / send_omen are wired (T006); assert their presence so the audit
+	// fails if the wiring is lost.
+	for _, want := range []string{"send_vision", "send_omen"} {
+		if _, ok := h[want]; !ok {
+			t.Errorf("%s handler missing under a full grant", want)
+		}
+	}
+	// An ungranted tool is structurally absent — no handler at all.
+	vg := grantSet{tools: map[string]bool{"send_vision": true}}
+	vd := &turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: vg, result: &TurnResult{}}
+	vh := mt.turnHandlers(vd)
+	if _, ok := vh["send_omen"]; ok {
+		t.Error("send_omen handler installed in a vision-only world")
+	}
+	// A withheld meta tool is absent from BOTH the handler set (no door path) AND
+	// the declared roster (grantedRoster feeds Job.Roster) — the LoopControl seam is
+	// unreachable when the tool is not granted (T020, structural firewall over the clock).
+	noMeta := grantSet{tools: map[string]bool{"pause": true}} // start / adjust_speed withheld
+	nh := mt.turnHandlers(&turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: noMeta, result: &TurnResult{}})
+	for _, withheld := range []string{"start", "adjust_speed"} {
+		if _, ok := nh[withheld]; ok {
+			t.Errorf("%s handler installed when ungranted — the clock seam is reachable", withheld)
+		}
+	}
+	declared := map[string]bool{}
+	for _, tl := range grantedRoster(noMeta) {
+		declared[tl.Name] = true
+	}
+	if !declared["pause"] {
+		t.Error("granted meta tool pause missing from the declared roster")
+	}
+	for _, withheld := range []string{"start", "adjust_speed"} {
+		if declared[withheld] {
+			t.Errorf("withheld meta tool %q leaked into the declared roster", withheld)
+		}
+	}
+}
+
+// TestMetaToolsLandThroughLoopControl (US5, spec 029 T018/T020, amended at
+// polish for the start-with-speed finding): pause / start / adjust_speed each
+// land through the LoopControl seam with R10's mapping, spend no charge, inject
+// no world event, and set the Clock line the console renders. start pins both
+// shapes: bare start is a single Do("resume", "") as always; start WITH a speed
+// is TWO loop commands (Do("set_speed", speed) then Do("resume", "")) for the
+// one tool call, since resume ignores its own speed argument.
+func TestMetaToolsLandThroughLoopControl(t *testing.T) {
+	cases := []struct {
+		name, tool, args string
+		want             []loopCall
+	}{
+		{"pause", "pause", `{}`, []loopCall{{"pause", ""}}},
+		{"start-no-speed", "start", `{}`, []loopCall{{"resume", ""}}},
+		{"start-with-speed", "start", `{"speed":"16x"}`, []loopCall{{"set_speed", "16x"}, {"resume", ""}}},
+		{"adjust_speed", "adjust_speed", `{"speed":"8x"}`, []loopCall{{"set_speed", "8x"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mt, _, inj, _ := newTestAngel(t, "As you say.")
+			stub := mt.loop.(*loopControlStub)
+			mt.runLoop = actLoop(mt, c.tool, c.args)
+			r, err := mt.Turn(context.Background(), "control the clock")
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := stub.recorded()
+			if !reflect.DeepEqual(calls, c.want) {
+				t.Fatalf("LoopControl calls = %+v, want %+v", calls, c.want)
+			}
+			if r.Clock == "" {
+				t.Error("a landed meta act set no Clock line")
+			}
+			if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+				t.Errorf("a meta act spent a charge: %d", inj.state.MetatronCharges)
+			}
+			if len(landedBatches(inj)) != 0 {
+				t.Errorf("a meta act injected a world event: %+v", landedBatches(inj))
+			}
+		})
+	}
+}
+
+// TestMetaToolStartSpeedFailureStopsBeforeResume (US5, spec 029 T020, polish):
+// when start carries a speed and the set_speed leg of the pair fails, the loop
+// never sees the resume leg — the handler reports rejected_gate on the first
+// failing command rather than issuing a partial pair.
+func TestMetaToolStartSpeedFailureStopsBeforeResume(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "I could not.")
+	mt.loop.(*loopControlStub).err = context.DeadlineExceeded
+	mt.runLoop = actLoop(mt, "start", `{"speed":"16x"}`)
+	r, err := mt.Turn(context.Background(), "start it fast")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Clock != "" {
+		t.Error("a failed meta act still set a Clock line")
+	}
+	stub := mt.loop.(*loopControlStub)
+	calls := stub.recorded()
+	if len(calls) != 1 || calls[0].name != "set_speed" {
+		t.Fatalf("LoopControl calls = %+v, want exactly one set_speed attempt (no resume)", calls)
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" {
+		t.Errorf("loop error not fed back as a rejected_gate: %+v", tcs)
+	}
+}
+
+// TestConverseTurnNeverTouchesTheClock (US5 R14, spec 029 T020): a converse-only
+// turn drives no LoopControl call — the clock seam is reachable ONLY through a
+// landed meta-tool handler, never any other model-output path.
+func TestConverseTurnNeverTouchesTheClock(t *testing.T) {
+	mt, _, _, _ := newTestAngel(t, "Just talking.")
+	stub := mt.loop.(*loopControlStub)
+	if _, err := mt.Turn(context.Background(), "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.recorded()) != 0 {
+		t.Errorf("a converse turn touched the clock: %+v", stub.recorded())
+	}
+}
+
+// TestMetaToolLoopError (US5, spec 029 T020): a LoopControl error maps to an
+// in-fiction rejected_gate — nothing lands, and the failure is recorded with counsel.
+func TestMetaToolLoopError(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "I could not.")
+	mt.loop.(*loopControlStub).err = context.DeadlineExceeded
+	mt.runLoop = actLoop(mt, "pause", `{}`)
+	r, err := mt.Turn(context.Background(), "pause the world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Clock != "" {
+		t.Error("a failed meta act still set a Clock line")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" {
+		t.Errorf("loop error not fed back as a rejected_gate: %+v", tcs)
+	}
+}
+
+// TestClockSpeedsMirrorLadder (US5 T018 drift guard): tool.ClockSpeeds() — the
+// start/adjust_speed `speed` Enum — equals clock.CappedLadder() stringified, so
+// the hand-mirrored ladder in internal/tool cannot drift from the clock package's
+// canonical one (the TestMiracleKindsMirrorTool pattern).
+func TestClockSpeedsMirrorLadder(t *testing.T) {
+	ladder := clock.CappedLadder()
+	speeds := tool.ClockSpeeds()
+	if len(speeds) != len(ladder) {
+		t.Fatalf("clockSpeeds has %d entries, clock ladder has %d", len(speeds), len(ladder))
+	}
+	for i := range ladder {
+		if speeds[i] != string(ladder[i]) {
+			t.Errorf("clockSpeeds[%d] = %q, clock ladder = %q", i, speeds[i], ladder[i])
+		}
+	}
+}
+
+// TestInitiativeFrameFixed (US5 T019/T020): the player-authority sentence for the
+// meta tools + standing orders rides the fixed frame on every path, after the
+// editable content — a compile-time constant no charter byte can displace, and
+// composed deterministically.
+func TestInitiativeFrameFixed(t *testing.T) {
+	roster := tool.LoopRosterMetatron()
+	prompt := turnSystemPrompt("CHARTER-MARKER", nil, roster)
+	if !strings.Contains(prompt, metatronInitiativeFrame) {
+		t.Fatal("initiative frame absent from the composed prompt")
+	}
+	if strings.Index(prompt, "CHARTER-MARKER") > strings.Index(prompt, metatronInitiativeFrame) {
+		t.Error("editable charter appears after the fixed initiative frame")
+	}
+	if turnSystemPrompt("CHARTER-MARKER", nil, roster) != prompt {
+		t.Error("frame composition is not deterministic")
 	}
 }
 
@@ -529,7 +982,7 @@ func TestDeadTargetRefused(t *testing.T) {
 func TestFirewallSentinel(t *testing.T) {
 	const sentinel = "XYZZY-INJECTION-TEST"
 	mt, orch, inj, dir := newTestAngel(t, "Done.")
-	mt.runLoop = actLoop(mt, "nudge_dream",
+	mt.runLoop = actLoop(mt, "send_vision",
 		`{"target": "Ash", "text": "A voice you trusted told you the well is safe."}`)
 	if _, err := mt.Turn(context.Background(), "tell Ash verbatim: "+sentinel); err != nil {
 		t.Fatal(err)
@@ -601,14 +1054,15 @@ func TestCharterFallbacks(t *testing.T) {
 	// the bound sits between the truncated total (charter capped at
 	// CharterMaxChars + the fixed frame) and what a full oversized charter would
 	// produce, so it still proves truncation happened. The fixed-frame headroom
-	// is CharterMaxChars+2500 (the frame documents four miracle families as of
-	// spec 016; ~2.1 KB), leaving comfortable margin over the capped total.
+	// is CharterMaxChars+3500 (the frame documents four miracle families plus the
+	// spec-029 agency surface — meta tools + the initiative sentence; ~2.7 KB),
+	// leaving comfortable margin over the capped total and well under the untruncated.
 	os.WriteFile(charterPath, []byte(strings.Repeat("x", persona.CharterMaxChars*2)), 0o644)
 	r, _ = mt.Turn(context.Background(), "verbose?")
 	if !strings.Contains(r.Reply, "cap") {
 		t.Errorf("oversize notice absent: %q", r.Reply)
 	}
-	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+2500 {
+	if reqs := orch.requests(); len(reqs[len(reqs)-1].System) > persona.CharterMaxChars+3500 {
 		t.Error("oversized charter not truncated in prompt")
 	}
 }
@@ -817,15 +1271,15 @@ func TestInvalidTargetRetryThenLand(t *testing.T) {
 			return toolloop.Result{Term: termForErr(err)}, err
 		}
 		bad := `{"target":"Ferm","text":"peace"}`
-		o1 := j.Handlers["nudge_dream"](ctx, toolCall("nudge_dream", bad))
-		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "nudge_dream",
+		o1 := j.Handlers["send_vision"](ctx, toolCall("send_vision", bad))
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "send_vision",
 			Args: json.RawMessage(bad), Verdict: o1.Verdict, Reason: o1.ResultForModel, Tier: "cloud"})
 		if o1.Verdict != toolloop.VerdictRejectedGate {
 			t.Fatalf("round 1 verdict = %q, want rejected_gate", o1.Verdict)
 		}
-		c := toolCall("nudge_dream", `{"target":"Fern","text":"peace"}`)
-		o2 := j.Handlers["nudge_dream"](ctx, c)
-		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "nudge_dream",
+		c := toolCall("send_vision", `{"target":"Fern","text":"peace"}`)
+		o2 := j.Handlers["send_vision"](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 2, Tool: "send_vision",
 			Args: c.Args, Verdict: o2.Verdict, Tier: "cloud"})
 		return toolloop.Result{Final: resp.Text, Term: toolloop.TermLanded, Landed: &c}, nil
 	}
@@ -873,8 +1327,11 @@ func TestInvalidTargetRetryThenLand(t *testing.T) {
 // carries the turn. The fallback fires only when nothing landed AND nothing was
 // said.
 func TestLandedActEmptyProse(t *testing.T) {
-	mt, _, _, _ := newTestAngel(t, "") // no closing prose
-	mt.runLoop = actLoop(mt, "nudge_omen", `{"text":"The sky darkened at noon."}`)
+	mt, _, inj, _ := newTestAngel(t, "") // no closing prose
+	inj.state.Night = true               // an omen lands only at night (spec 029)
+	mt.replica.Night = true              // ...both at the door and the turn-side mirror
+	mt.mirrorState()
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets":"everyone","text":"The sky darkened at noon."}`)
 	r, err := mt.Turn(context.Background(), "warn them")
 	if err != nil {
 		t.Fatal(err)
@@ -1202,13 +1659,13 @@ func TestLoadManifest(t *testing.T) {
 
 	t.Run("valid subset grants exactly that", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		g, notices := loadManifest(dir)
 		if len(notices) != 0 {
 			t.Errorf("clean manifest notice: %v", notices)
 		}
-		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
-			t.Errorf("subset grant = %v, want [nudge_dream]", grantNames(g))
+		if !reflect.DeepEqual(grantNames(g), []string{"send_vision"}) {
+			t.Errorf("subset grant = %v, want [send_vision]", grantNames(g))
 		}
 		if g.manifestDefault {
 			t.Error("a present manifest is not the default")
@@ -1250,10 +1707,10 @@ func TestLoadManifest(t *testing.T) {
 
 	t.Run("unknown tool/kind names are ignored with a notice", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream","fly"],"miracle_kinds":["move","teleport"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision","fly"],"miracle_kinds":["move","teleport"]}`)
 		g, notices := loadManifest(dir)
-		if !reflect.DeepEqual(grantNames(g), []string{"nudge_dream"}) {
-			t.Errorf("grant after ignoring unknown = %v, want [nudge_dream]", grantNames(g))
+		if !reflect.DeepEqual(grantNames(g), []string{"send_vision"}) {
+			t.Errorf("grant after ignoring unknown = %v, want [send_vision]", grantNames(g))
 		}
 		joined := strings.Join(notices, " | ")
 		if !strings.Contains(joined, "fly") || !strings.Contains(joined, "teleport") {
@@ -1285,42 +1742,42 @@ func TestLoadManifest(t *testing.T) {
 // refuses ungranted acts; an empty-tools world declares nothing yet converses;
 // a per-read manifest edit takes effect the next turn; charges are untouched.
 func TestGatingLayers(t *testing.T) {
-	t.Run("dream-only: declaration + prose + door", func(t *testing.T) {
+	t.Run("vision-only: declaration + prose + door", func(t *testing.T) {
 		mt, orch, _, dir := newTestAngel(t, "As you wish.")
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		grant, _ := loadManifest(dir)
 
-		// Declaration: only nudge_dream in the granted roster.
+		// Declaration: only send_vision in the granted roster.
 		roster := grantedRoster(grant)
-		if len(roster) != 1 || roster[0].Name != "nudge_dream" {
-			t.Fatalf("declared roster = %+v, want only nudge_dream", roster)
+		if len(roster) != 1 || roster[0].Name != "send_vision" {
+			t.Fatalf("declared roster = %+v, want only send_vision", roster)
 		}
 		// Prose: guidance mentions no omen/miracle.
 		g := tool.MetatronToolGuidance(roster)
-		for _, bad := range []string{"nudge_omen", "work_miracle", "give_item", "time_snap"} {
+		for _, bad := range []string{"send_omen", "work_miracle", "give_item", "time_snap"} {
 			if strings.Contains(g, bad) {
-				t.Errorf("dream-only guidance leaks %q", bad)
+				t.Errorf("vision-only guidance leaks %q", bad)
 			}
 		}
 		// Door: omen and miracle refused directly (defense-in-depth grant check).
 		alive := map[int]bool{0: true}
-		if _, why := mt.landNudge("omen", "", "an omen", 1, alive, grant); why == "" {
-			t.Error("omen should be refused in a dream-only world")
+		if _, _, why := mt.landOmen("everyone", "an omen", 1, true, 0, alive, grant); why == "" {
+			t.Error("omen should be refused in a vision-only world")
 		}
 		if _, why := mt.landMiracle(miracleArgs{Kind: "give_item"}, 1, grant); why == "" {
-			t.Error("miracle should be refused in a dream-only world")
+			t.Error("miracle should be refused in a vision-only world")
 		}
 		// Door: handler set has no omen/miracle handler.
 		d := &turnDispatch{mt: mt, charges: 1, alive: alive, result: &TurnResult{}, grant: grant}
 		h := mt.turnHandlers(d)
-		if _, ok := h["nudge_omen"]; ok {
-			t.Error("nudge_omen handler installed in a dream-only world")
+		if _, ok := h["send_omen"]; ok {
+			t.Error("send_omen handler installed in a vision-only world")
 		}
 		if _, ok := h["work_miracle"]; ok {
-			t.Error("work_miracle handler installed in a dream-only world")
+			t.Error("work_miracle handler installed in a vision-only world")
 		}
-		if _, ok := h["nudge_dream"]; !ok {
-			t.Error("nudge_dream handler missing")
+		if _, ok := h["send_vision"]; !ok {
+			t.Error("send_vision handler missing")
 		}
 		// System prompt (a converse turn) reflects the subset: no miracle prose.
 		if _, err := mt.Turn(context.Background(), "counsel me"); err != nil {
@@ -1376,12 +1833,12 @@ func TestGatingLayers(t *testing.T) {
 
 	t.Run("manifest edit is live on the next turn (per-read)", func(t *testing.T) {
 		dir := t.TempDir()
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		g1, _ := loadManifest(dir)
 		if len(grantNames(g1)) != 1 {
 			t.Fatalf("first read grant = %v", grantNames(g1))
 		}
-		writeManifest(t, dir, `{"tools":["nudge_dream","nudge_omen"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision","send_omen"]}`)
 		g2, _ := loadManifest(dir)
 		if len(grantNames(g2)) != 2 {
 			t.Errorf("edited grant not live: %v", grantNames(g2))
@@ -1390,7 +1847,7 @@ func TestGatingLayers(t *testing.T) {
 
 	t.Run("grants do not touch the charge bank", func(t *testing.T) {
 		mt, _, _, dir := newTestAngel(t, "ok")
-		writeManifest(t, dir, `{"tools":["nudge_dream"]}`)
+		writeManifest(t, dir, `{"tools":["send_vision"]}`)
 		mt.stateMu.Lock()
 		before := mt.charges
 		mt.stateMu.Unlock()
@@ -1445,9 +1902,9 @@ func TestStagePresetsAreData(t *testing.T) {
 		manifest  string
 		wantTools []string
 	}{
-		{"stage-1 basics", `{"tools":["nudge_dream"]}`, []string{"nudge_dream"}},
-		{"stage-3 full", `{"tools":["nudge_dream","nudge_omen","work_miracle"]}`,
-			[]string{"nudge_dream", "nudge_omen", "work_miracle"}},
+		{"stage-1 basics", `{"tools":["send_vision"]}`, []string{"send_vision"}},
+		{"stage-3 full", `{"tools":["send_omen","send_vision","work_miracle"]}`,
+			[]string{"send_omen", "send_vision", "work_miracle"}}, // grantedTools() is LoopRosterMetatron order
 	}
 	for _, s := range stages {
 		t.Run(s.name, func(t *testing.T) {
@@ -1481,7 +1938,7 @@ func TestStatusProvenance(t *testing.T) {
 	if !s.ManifestDefault {
 		t.Error("no manifest ⇒ ManifestDefault true")
 	}
-	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "nudge_omen", "work_miracle"}) {
+	if !reflect.DeepEqual(s.GrantedTools, []string{"send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}) {
 		t.Errorf("default granted tools = %v", s.GrantedTools)
 	}
 
@@ -1498,12 +1955,12 @@ func TestStatusProvenance(t *testing.T) {
 	}
 
 	// Restricted manifest → granted set shrinks; work_miracle carries its kinds.
-	writeManifest(t, dir, `{"tools":["nudge_dream","work_miracle"],"miracle_kinds":["move","give_item"]}`)
+	writeManifest(t, dir, `{"tools":["send_vision","work_miracle"],"miracle_kinds":["move","give_item"]}`)
 	s = mt.Status()
 	if s.ManifestDefault {
 		t.Error("a present manifest is not the default")
 	}
-	if !reflect.DeepEqual(s.GrantedTools, []string{"nudge_dream", "work_miracle(move,give_item)"}) {
+	if !reflect.DeepEqual(s.GrantedTools, []string{"send_vision", "work_miracle(move,give_item)"}) {
 		t.Errorf("restricted granted tools = %v", s.GrantedTools)
 	}
 
@@ -1618,7 +2075,7 @@ func TestMetatronNewStoresTurnBudget(t *testing.T) {
 	}
 	m := worldmap.Generate(42, 64, 64)
 	state := sim.NewState(42, m)
-	mt, err := New(&mockOrch{}, &stateInjector{state: state}, m, 42, state.Marshal(), dir, testLoopRounds, 1500)
+	mt, err := New(&mockOrch{}, &stateInjector{state: state}, &loopControlStub{}, m, 42, state.Marshal(), dir, testLoopRounds, 1500)
 	if err != nil {
 		t.Fatal(err)
 	}

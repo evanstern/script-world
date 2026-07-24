@@ -31,9 +31,15 @@ var RosterVillager = func() []string {
 	return append(out, villagerExpressive...)
 }()
 
-// RosterMetatron is the metatron capability set: its converse channel and the
-// two nudge forms.
-var RosterMetatron = []string{"converse", "nudge_dream", "nudge_omen"}
+// RosterMetatron is the metatron capability set (the door name set): its
+// converse channel and the acting tools it may use (spec 029 — send_vision/
+// send_omen replace the retired nudge_dream/nudge_omen; monitor_and_act,
+// cancel_order, work_miracle, and the meta tools pause/start/adjust_speed join
+// it). It mirrors LoopRosterMetatron's names plus converse. Since spec 029 the
+// nudge form is validated against the reducer's explicit form set, not this
+// roster (contracts/events.md), so this set's live consumer is the boot-time
+// name-resolution check in Validate; keeping it in step keeps that gate honest.
+var RosterMetatron = []string{"converse", "send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}
 
 // OnRoster reports whether name is on roster — the door membership check.
 func OnRoster(roster []string, name string) bool {
@@ -80,17 +86,16 @@ func LoopRosterVillager() []Tool {
 }
 
 // loopMetatronTools is the ordered declared-tool list the metatron tool-use
-// loop presents to the model (spec 017 T020): the two nudge forms, then
-// work_miracle (the R13 post-#38 amendment). It is NOT RosterMetatron:
-// converse is DELIBERATELY excluded. converse is the final-answer channel, not
-// a callable tool — the angel speaks by replying with text (toolloop Result
-// Final), and the loop ends naturally (model_done) when it does. Declaring
-// converse would trap a converse call as rejected_unknown (metatron installs no
-// converse handler, by design: "converse is the transcript, not a door"), so it
-// is offered only as the implicit text channel, never as a tool the model can
-// call. work_miracle rides at the end so no existing tool's declared position
-// shifts.
-var loopMetatronTools = []string{"nudge_dream", "nudge_omen", "work_miracle"}
+// loop presents to the model (spec 017 T020; the agency surface, spec 029 R2):
+// send_omen, send_vision, monitor_and_act, cancel_order, work_miracle, then the
+// meta tools pause/start/adjust_speed. It is NOT RosterMetatron: converse is
+// DELIBERATELY excluded. converse is the final-answer channel, not a callable
+// tool — the angel speaks by replying with text (toolloop Result Final), and the
+// loop ends naturally (model_done) when it does. Declaring converse would trap a
+// converse call as rejected_unknown (metatron installs no converse handler, by
+// design: "converse is the transcript, not a door"), so it is offered only as
+// the implicit text channel, never as a tool the model can call.
+var loopMetatronTools = []string{"send_omen", "send_vision", "monitor_and_act", "cancel_order", "work_miracle", "pause", "start", "adjust_speed"}
 
 // LoopRosterMetatron returns the ordered declared-tool list the metatron
 // tool-use loop presents to the model (loopMetatronTools), resolved to full

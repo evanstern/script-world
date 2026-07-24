@@ -8,7 +8,7 @@ sources:
   - internal/sim/recipes.go
   - internal/sim/miracles.go
   - internal/sim/journal.go
-verified_against: 6eb8b60ceb65d760408051eadf50a789603efa18
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Sim state & reducer
@@ -48,7 +48,11 @@ snapshots valid) — and the narrated story: the bounded `State.Chronicle`
 ring ([[chronicle]], TASK-11), which rides snapshots so attaching clients
 get catch-up history for free — Metatron's charge bank
 (`MetatronCharges`, genesis 1, deliberately not `omitempty` so a
-spent-to-zero bank round-trips as 0; [[metatron]], TASK-12) — and the village's
+spent-to-zero bank round-trips as 0; [[metatron]], TASK-12) — the standing-order
+substrate (`MetatronOrders []MetatronOrder`, spec 029, `omitempty` — here an
+empty order set genuinely IS the zero value, unlike the charge bank, so a
+pre-029 snapshot with the field absent unmarshals to nil; [[metatron-orders]])
+— and the village's
 law ([[governance]], TASK-13): `MeetingPlace` (set once), the `Meeting`
 lifecycle (including the TASK-36 emergent-gathering watch fields
 `GatherStart/GatherX/GatherY`), the `MeetingConvention` (TASK-36, nil until a
@@ -135,7 +139,15 @@ the `sim.gathering_observed` watch event (TASK-36) — dispatch to
 `metatron.time_snapped`/`metatron.item_granted`/`metatron.entity_moved`/
 `metatron.entity_removed` (spec 016, [[metatron-miracles]]) dispatch to
 `applyMiracle` in `miracles.go`, alongside `metatron.charge_regenerated`/
-`metatron.nudged`'s `applyMetatron`.
+`metatron.nudged`'s `applyMetatron` — which since spec 029 also arms the
+standing-order lifecycle: `metatron.order_placed` validates and appends (id
+uniqueness, origin, non-empty `event_types`, a 1..7-game-day ttl, valid agent
+index, condition/action length caps, and — player-origin only — the 3-order
+active cap) then prunes to the active set plus the most recent 32 non-active;
+`metatron.order_triggered`/`metatron.order_cancelled`/`metatron.order_expired`
+each transition one order from active to a terminal status via the shared
+`transitionMetatronOrder`, rejecting an unknown id or one not currently active
+([[metatron-orders]]).
 `world.migrated` (spec 012 US6) is the one case that does not incrementally mutate
 fields: after checking the payload's `State.Seed` matches (a mismatched payload
 no-ops, keeping `Apply` total), it replaces `*s` wholesale with the embedded state —
@@ -193,7 +205,10 @@ type, its rune budget, and the two `journal.*` payloads live in `journal.go`);
 [[world-migration]]
 is the sole producer of `world.migrated`; [[metatron-miracles]] covers the
 miracle payload shapes, cost table, and the `rebaseTicks` shift-semantics
-taxonomy `applyTimeSnapped` uses.
+taxonomy `applyTimeSnapped` uses (which, since spec 029, also shifts an active
+standing order's `ExpiresTick` — never its `PlacedTick` — across a time snap);
+[[metatron-orders]] covers the standing-order lifecycle, placement validation,
+and the angel-side trigger/confirm mechanics built on top of this reducer arm.
 
 ## Operational notes
 

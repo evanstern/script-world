@@ -1,6 +1,6 @@
 ---
 name: tool-registry
-description: The single source of truth for agent capabilities (spec 014, extended specs 017/019/021) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; the tool-use loop's declared rosters and InputSchema derivation; the authoritative miracle cost table, RestrictEnum, and the derived Metatron tool guidance (spec 021); boot-time coverage gate
+description: The single source of truth for agent capabilities (spec 014, extended specs 017/019/021/029) — every tool as name + params + gate + effect + cost in one registry; prompt vocabulary, parse validation, sim-door validation, durations, and rosters all derived; the tool-use loop's declared rosters and InputSchema derivation; the authoritative miracle cost table, RestrictEnum, and the derived Metatron tool guidance (spec 021); the spec-029 Metatron agency surface (send_vision/send_omen/monitor_and_act/cancel_order + pause/start/adjust_speed) with authored array schemas and the clock-speed ladder mirror; boot-time coverage gate
 kind: component
 sources:
   - internal/tool/tool.go
@@ -9,7 +9,7 @@ sources:
   - internal/tool/derive.go
   - internal/tool/validate.go
   - internal/sim/toolcheck.go
-verified_against: 8c44bf21ad22c0f1bad07ae7f2a08072a0cb5544
+verified_against: be38288fa137064174eedbfb3b8a94cc5b1fb0b9
 ---
 
 # Tool registry
@@ -28,10 +28,15 @@ curing that drift is the migration's sole permitted behavioral delta (FR-012).
 
 **The catalog** (`registry.go`): the pre-spec-017 30 entries, plus two spec-017
 additions — `set_plan` (a loop-only planning tool) and `work_miracle` (Metatron's
-fourth tool) — plus four spec-019 additions, the journal tools — assembled in
+fourth tool) — plus four spec-019 additions, the journal tools; spec 029 then
+retires the two nudges and adds seven Metatron tools (`send_vision`, `send_omen`,
+`monitor_and_act`, `cancel_order`, `pause`, `start`, `adjust_speed`) — assembled in
 order: `worldTools` (the 24 legacy world verbs, exactly the old goal-vocabulary
 order), `set_plan`, `expressiveTools` (`say`/`gist`/`muse`), `metatronTools`
-(`converse`/`nudge_dream`/`nudge_omen`/`work_miracle`), `journalTools`
+(spec 029's agency surface, [[metatron-orders]]: `converse`/`send_vision`/
+`send_omen`/`monitor_and_act`/`cancel_order`/`pause`/`start`/`adjust_speed`/
+`work_miracle` — the retired `nudge_dream`/`nudge_omen` replaced by
+`send_vision`/`send_omen`), `journalTools`
 (`write_journal_entry`/`delete_from_journal`/`search_journal`/`read_journal`,
 appended last so no existing tool's position shifts). The tool groups are
 declared as separate literals (`worldTools`, `expressiveTools`, `metatronTools`,
@@ -91,16 +96,52 @@ so the plan vocabulary can never drift from the free-text one even though the tw
 can't share one function call (an initialization-cycle constraint). `work_miracle`
 needs no override: its flat parameter surface (`kind` required Enum over
 `miracleKinds` = `move`/`remove`/`give_item`/`time_snap`, plus every per-kind field
-as an optional scalar) is fully Params-derived — deliberately, because the loop
-driver's `validateArgs` routes every `InputSchemaJSON` tool through `set_plan`'s
-structural validator, so an override here would validate `work_miracle` calls
-against the wrong shape. `work_miracle` is `Effect Expressive` (not `World`): it
+as an optional scalar) is fully Params-derived. (Pre-spec-029 this was also
+load-bearing: the loop driver's `validateArgs` routed every `InputSchemaJSON`
+tool through `set_plan`'s validator, so an override here would have validated
+`work_miracle` against the wrong shape. Spec 029 replaced that dispatch with a
+general schema-lite walker that validates each authored tool against ITS OWN
+schema ([[tool-loop]]), so an override would no longer mis-validate — but Params
+derivation stays the right choice regardless, keeping `InputSchema` (what the
+model sees) and `validateArgs` (what the driver enforces) sourced from the same
+`Params`.) `work_miracle` is `Effect Expressive` (not `World`): it
 lands a bounded event batch through the SAME `InjectSocial` door the nudges use
 (`metatron.landMiracle` → `BuildMiracleBatch`), has no intent and no work duration,
 and — decisively — `Validate` forbids a World tool from declaring `Events`, which
 `work_miracle` must (so the sim-side coverage check can pin its event set ⊆ the
 whitelist). There is deliberately no `gratis` parameter: the angel can never waive
 a charge (spec 016 FR-007/SC-005) — structural absence, not a sanitized field.
+
+**The spec-029 metatron agency surface** (`registry.go`, TASK-27,
+[[metatron-orders]]): `nudge_dream`/`nudge_omen` are RETIRED; `metatronTools`
+now declares, in order, `converse`, then `send_vision` (a waking vision for ONE
+living villager at any hour — required `target` AgentName + required `text`,
+`MaxBytes`/`TextCapBytes` 400, `Gate Charge`, `Events`
+`metatron.nudged`/`agent.memory_added`), `send_omen` (required `targets` Text —
+comma-separated living names or `"everyone"` — + required `text`, same cap/gate/
+events; the night-only gate lives in the reducer, not the tool), then the
+`Gate: None` order and meta tools. `monitor_and_act` is the SECOND authored-
+`InputSchemaJSON` tool (`monitorAndActSchema`, arrays the scalar `Param` model
+cannot express): a `{condition ≤300, action ≤400}` NL pair, a required
+`event_types` string array (1..4 items) whose item `enum` is
+`observableEventTypes` — a curated 12-entry vocabulary of genuinely-emitted event
+types (`agent.slept`/`woke`/`died`/`memory_added`/`intent_set`,
+`social.conversation`/`promise_broken`/`rumor_told`, `gru.attacked`,
+`norm.violated`, `sim.night_started`/`day_started`; the spec draft's
+`meeting.norm_enacted` was dropped as un-emitted, `norm.violated` standing in),
+an optional `keywords` array (≤6, each ≤40), a `confirm` boolean (marks a fuzzy
+order needing a `metatron_watch` confirm, [[llm-orchestrator]]/[[cognition]]),
+and `ttl_days` (1..7); its declared `Events` is `metatron.order_placed`.
+`cancel_order` takes a required `id` Text, `Events` `metatron.order_cancelled`.
+The three CHARGE-FREE meta tools `pause`, `start` (optional `speed` Enum), and
+`adjust_speed` (required `speed` Enum) are `Effect Expressive` with EMPTY
+`Events` — the `converse` precedent (acting cardinality applies, but nothing is
+injected; the clock's own `clock.paused`/`clock.resumed` remain the record).
+Their `speed` Enum is `clockSpeeds` (`"1x"`/`"4x"`/`"8x"`/`"16x"`/`"32x"`), a
+hand-carried MIRROR of `internal/clock`'s ladder (`tool` is a leaf and cannot
+import `clock`); `ClockSpeeds()` exports a copy and `internal/metatron`'s
+`TestClockSpeedsMirrorLadder` pins it equal to `clock.CappedLadder()` — the
+drift guard, same pattern as the sim-duration mirror.
 
 **The miracle cost source and the spec-021 derivations** (`registry.go`,
 `derive.go`; TASK-64): the per-kind miracle cost table is declared HERE, beside
@@ -141,10 +182,15 @@ property-name keys, which `encoding/json` sorts lexicographically.
 **Rosters** (`roster.go`): capability is roster membership, expressed as data.
 `RosterVillager` = the legacy world verbs (derived via `isLegacyWorldTool`,
 registration order — `set_plan` excluded) + `say`/`muse`/`gist`; `RosterMetatron`
-= `converse`/`nudge_dream`/`nudge_omen` (unchanged — `work_miracle` is not on this
-door roster). `OnRoster()` is the door predicate: [[sim-loop]]'s intent door
-requires a World tool on the villager roster, and [[metatron]]'s nudge form — both
-the turn-side validation and the reducer dry-run — must be on the Metatron roster.
+= `converse` plus every acting tool the angel may use (spec 029:
+`send_omen`/`send_vision`/`monitor_and_act`/`cancel_order`/`work_miracle`/
+`pause`/`start`/`adjust_speed`) — it mirrors `LoopRosterMetatron`'s names plus
+`converse`, so `work_miracle` IS now on this set (it wasn't pre-029). Since spec
+029 the metatron's nudge/send form is validated against the reducer's explicit
+form set, not this roster ([[metatron-orders]]), so `RosterMetatron`'s only live
+consumer is the boot-time name-resolution check in `Validate` — kept in step to
+keep that gate honest. `OnRoster()` is the door predicate: [[sim-loop]]'s intent
+door requires a World tool on the villager roster.
 Two new roster exports serve [[tool-loop]] specifically, returning full `Tool`
 values (not just names, since `InputSchema` needs `Params`/`InputSchemaJSON`):
 `LoopRosterVillager()` = every legacy World tool, then `set_plan`, then `muse`
@@ -152,7 +198,9 @@ values (not just names, since `InputSchema` needs `Params`/`InputSchemaJSON`):
 remain driver-run, not model-initiated), then the four spec-019 journal tools
 (`write_journal_entry`, `delete_from_journal`, `search_journal`, `read_journal`
 — appended last so no existing declared tool's position shifts);
-`LoopRosterMetatron()` = `nudge_dream`, `nudge_omen`, `work_miracle` —
+`LoopRosterMetatron()` = `send_omen`, `send_vision`, `monitor_and_act`,
+`cancel_order`, `work_miracle`, then the meta tools `pause`, `start`,
+`adjust_speed` (spec 029 order) —
 deliberately NOT `RosterMetatron`, because `converse` is excluded: it is the
 angel's final-answer channel (the loop's `Result.Final`), not a callable tool,
 and declaring it would trap a `converse` call as `rejected_unknown` (Metatron
@@ -197,8 +245,9 @@ new consumer: `Job.Roster` is `tool.LoopRosterVillager()`/`LoopRosterMetatron()`
 and `InputSchema(t)` builds each declared tool's wire schema. [[sim-loop]]'s
 injection doors enforce roster membership at landing; [[reflex-policy]]'s
 `resolveGoal` table and [[executor]]'s duration table are the sim-side
-derivations the coverage gate cross-checks; [[metatron]]'s nudge cap, form
-validation, and `work_miracle` dispatch read the registry; [[daemon-lifecycle]]
+derivations the coverage gate cross-checks; [[metatron]] / [[metatron-orders]]
+read the registry for the `send_vision` text cap, the granted acting-tool
+guidance, and `work_miracle` dispatch; [[daemon-lifecycle]]
 runs the boot gates; [[agent-journal]] is the spec-019 consumer of the four
 journal tools (`write_journal_entry`/`delete_from_journal`/`search_journal`/
 `read_journal`) declared here. The registry formalizes the doors — it does not

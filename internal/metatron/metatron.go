@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -34,6 +35,16 @@ type Injector interface {
 	InjectSocial(events []store.Event) error
 }
 
+// LoopControl is the clock-control surface the meta tools drive (spec 029 US5,
+// R10 / data-model §5): the SAME *sim.Loop.Do the IPC server uses, so a
+// metatron-issued pause/start/adjust_speed lands the loop's own clock.paused /
+// clock.resumed / clock.speed_set events and is indistinguishable from a console
+// one. Injected at New — a second interface over the loop the daemon already
+// passes as Injector (the mind.New(loop, loop) precedent); a test seam otherwise.
+type LoopControl interface {
+	Do(name string, speed clock.Speed) (sim.Status, error)
+}
+
 const (
 	// turnTimeout bounds one console turn's cloud call (SC-001 wants ≤30s
 	// in practice; the cap covers slow routers without wedging the console).
@@ -46,6 +57,7 @@ const (
 type Metatron struct {
 	orch     Submitter
 	social   Injector
+	loop     LoopControl // clock control for the meta tools (spec 029 US5)
 	worldDir string
 
 	replica *sim.State
@@ -78,6 +90,7 @@ type Metatron struct {
 	stateMu sync.Mutex
 	charges int
 	clockAt int64
+	night   bool // mirrored State.Night — the omen night gate reads it turn-side (spec 029 T005)
 	alive   map[int]bool
 	// agentXY mirrors each villager's tile (absorb-owned, refreshed per batch)
 	// so a console turn can resolve a tile-addressed miracle's perception-memory
@@ -85,6 +98,31 @@ type Metatron struct {
 	agentXY [][2]int
 	moments []string // queued, surfaced oldest-first at the next turn
 	story   []string // recent chronicle entries (TASK-11), prompt grounding
+
+	// Standing-order mirror (spec 029 US2/US3, data-model §5): the replica's
+	// MetatronOrders is the authority; the turn worker reads this copy under
+	// stateMu (like charges/alive), and the absorb path matches live events
+	// against it. lastPlaceTick/lastPlaceSeq disambiguate same-tick order ids
+	// (research R7) when the async mirror has not yet reflected a just-placed
+	// order — placements are serialized under turnBusy, so a plain counter is safe.
+	orders        []sim.MetatronOrder
+	lastPlaceTick int64
+	lastPlaceSeq  int
+
+	// Trigger pipeline (spec 029 US3, data-model §5): the absorb goroutine matches
+	// live events against active orders and enqueues onto triggerQ; a dedicated
+	// worker fires each (land order_triggered → system turn → moment). pendingTrigger
+	// (stateMu-guarded) dedups an order already queued but not yet resolved, so an
+	// order fires at most once even across batches before the worker consumes it.
+	triggerQ       chan triggerJob
+	pendingTrigger map[string]bool
+
+	// lastConfirmTick rate-caps fuzzy-order confirms (spec 029 US6, R9): at most
+	// one KindMetatronWatch confirm per confirmRateTicks per order. Absorb-owned
+	// and NOT event-sourced — a skipped confirm is an economy decision, never world
+	// history (data-model §5) — guarded by stateMu alongside pendingTrigger (the
+	// absorb goroutine writes it via matchOrders; unit tests drive matchOrders too).
+	lastConfirmTick map[string]int64
 
 	// digest collection (US4) — absorb-owned.
 	digLines []string
@@ -99,27 +137,35 @@ type Metatron struct {
 // New starts the angel from a state snapshot. The metatron/ dir and an
 // empty soul are created on first flight; existing files are kept.
 //
+// loop is the clock-control seam the meta tools drive (spec 029 US5): the daemon
+// passes the same *sim.Loop it passes as the social Injector — one value, two
+// interfaces (the mind.New(loop, loop) precedent).
+//
 // loopRounds is the tool-use loop's iteration cap (llm.json loop_max_rounds,
 // already normalized by the daemon). The variadic runLoopOverride is a test
 // seam: it installs a scripted loop BEFORE any goroutine starts, for tests that
 // stub the model rather than pass a real *llm.Orchestrator. Production omits it —
 // New wires runLoop from the concrete orchestrator.
-func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, turnTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
+func New(orch Submitter, social Injector, loop LoopControl, m *worldmap.Map, seed uint64, stateJSON []byte, worldDir string, loopRounds int, turnTokens int64, runLoopOverride ...func(context.Context, toolloop.Job) (toolloop.Result, error)) (*Metatron, error) {
 	replica := sim.NewState(seed, m)
 	if err := json.Unmarshal(stateJSON, replica); err != nil {
 		return nil, err
 	}
 	mt := &Metatron{
-		orch:     orch,
-		social:   social,
-		worldDir: worldDir,
-		replica:  replica,
-		m:        m,
-		alive:    map[int]bool{},
-		digQ:     make(chan digJob, 4),
-		digCarry: make(chan []string, 1),
-		events:   make(chan []store.Event, 256),
-		done:     make(chan struct{}),
+		orch:            orch,
+		social:          social,
+		loop:            loop,
+		worldDir:        worldDir,
+		replica:         replica,
+		m:               m,
+		alive:           map[int]bool{},
+		digQ:            make(chan digJob, 4),
+		digCarry:        make(chan []string, 1),
+		events:          make(chan []store.Event, 256),
+		triggerQ:        make(chan triggerJob, 64),
+		pendingTrigger:  map[string]bool{},
+		lastConfirmTick: map[string]int64{},
+		done:            make(chan struct{}),
 	}
 	mt.loopRounds = loopRounds
 	mt.turnTokens = turnTokens
@@ -147,6 +193,7 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 	mt.mirrorState()
 	go mt.run()
 	go mt.digestWorker()
+	go mt.triggerWorker()
 	return mt, nil
 }
 
@@ -179,6 +226,11 @@ func (mt *Metatron) run() {
 				mt.digestNote(e)
 			}
 			mt.mirrorState()
+			// Standing-order matching runs HERE — after the replica applies the
+			// batch and the mirror refreshes — so it sees only LIVE events (spec 029
+			// US3/R6). Replay reconstructs state via json.Unmarshal + Apply with no
+			// angel running, so a predicate can never match during reconstruction.
+			mt.matchOrders(batch)
 		}
 	}
 }
@@ -190,6 +242,7 @@ func (mt *Metatron) mirrorState() {
 	defer mt.stateMu.Unlock()
 	mt.charges = mt.replica.MetatronCharges
 	mt.clockAt = mt.replica.Tick
+	mt.night = mt.replica.Night
 	if len(mt.agentXY) != len(mt.replica.Agents) {
 		mt.agentXY = make([][2]int, len(mt.replica.Agents))
 	}
@@ -197,6 +250,9 @@ func (mt *Metatron) mirrorState() {
 		mt.alive[i] = !mt.replica.Agents[i].Dead
 		mt.agentXY[i] = [2]int{mt.replica.Agents[i].X, mt.replica.Agents[i].Y}
 	}
+	// The standing-order mirror (spec 029): the replica is the authority, copied
+	// so the turn worker reads orders under stateMu without racing the replica.
+	mt.orders = append(mt.orders[:0], mt.replica.MetatronOrders...)
 	// The narrated chronicle (TASK-11) is the village's own story — the
 	// angel reads its tail so conversation is grounded even before its
 	// soul has accreted (fresh reigns, upgraded worlds).

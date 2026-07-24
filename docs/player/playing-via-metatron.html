@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
-<meta name="promptworld-docs:source" content="docs/wiki/metatron.md@8ada1050cc5b108790d0e48640dba0b985632e25">
-<meta name="promptworld-docs:source" content="docs/wiki/metatron-miracles.md@6eb8b60ceb65d760408051eadf50a789603efa18">
+<meta name="promptworld-docs:source" content="docs/wiki/metatron.md@bd02ecccd1930adb5259e24147e566154d1b66f7">
+<meta name="promptworld-docs:source" content="docs/wiki/metatron-miracles.md@bd02ecccd1930adb5259e24147e566154d1b66f7">
+<meta name="promptworld-docs:source" content="docs/wiki/metatron-orders.md@bd02ecccd1930adb5259e24147e566154d1b66f7">
 <meta name="promptworld-docs:source" content="docs/wiki/governance.md@fdd311a7f7e8b0f5d2c759318a486cc8edd4a06f">
 <title>Playing via Metatron — promptworld player docs</title>
 <style>
@@ -74,10 +75,10 @@ your influence.</p>
 <h2>Metatron is your only verb</h2>
 <p>Your words as a player have exactly one destination: Metatron's own prompt.
 Villagers never see what you type — they can only ever receive whatever Metatron
-decides to pass along, and only in the two shaped forms below. This is deliberate:
-Metatron is a gatekeeper, not a megaphone. You talk to it (in the console, or the
-Metatron pane of the full-screen client), it watches the village, and it decides what
-— if anything — to do about what you asked.</p>
+decides to pass along, and only in the shaped forms described below. This is
+deliberate: Metatron is a gatekeeper, not a megaphone. You talk to it (in the console,
+or the Metatron pane of the full-screen client), it watches the village, and it
+decides what — if anything — to do about what you asked.</p>
 
 <h2>Shaping your angel: the charter</h2>
 <p>The real meta-game is prompt-engineering Metatron itself. At the root of your
@@ -88,28 +89,68 @@ very next reply. Think of it like giving your angel a personality and standing
 instructions: sarcastic, protective, meddling, hands-off — whatever tone and
 priorities you write in there is who Metatron becomes.</p>
 <p>You can also add narrower instruction files in a <code>skills/</code> folder next
-to the charter, and control which abilities Metatron is even allowed to use via a
-<code>capabilities.json</code> file. A world with no such file grants the full set of
-abilities by default.</p>
+to the charter, and control exactly which abilities Metatron is allowed to use — visions,
+omens, standing orders, miracles, and clock control alike — via a <code>capabilities.json</code>
+file. A world with no such file grants the full set of abilities by default.</p>
 <p>Underneath anything you write, two rules always hold no matter what the charter
 says: Metatron will never invent an event it didn't actually observe, and it will
 never pass your literal words straight to a villager. Those two guardrails aren't
-editable — everything else about its voice and judgment is yours to shape.</p>
+editable — everything else about its voice and judgment is yours to shape. A related
+rule binds the abilities below: Metatron only acts when you ask it to, or when a
+standing order you placed authorizes it — never on its own initiative.</p>
 
-<h2>Two ways to act: nudges and miracles</h2>
-<p>When Metatron decides to act on your behalf (rather than just answering in words),
-it has two families of moves, spent from a shared bank of "charges":</p>
+<h2>Reaching a villager's mind: visions and omens</h2>
+<p>When Metatron decides to plant something in a villager's mind — rather than
+changing the world directly — it has two forms, spent from the same bank of
+"charges" described below:</p>
 
-<h3>Nudges — a dream, or an omen</h3>
-<p>A <strong>nudge</strong> plants something in a villager's mind, not the world
-itself — it's an experience, not a command. Metatron can send a <strong>dream</strong>
-to one living villager, or an <strong>omen</strong> witnessed by every living villager
-at once. Either way, it lands as a memory the villager will interpret in their own
-persona — a dream doesn't force a villager to do anything, it just gives them
-something to react to, like anyone would react to a strange dream or a shared omen in
-the sky.</p>
+<h3>A vision — one villager, any time</h3>
+<p>A <strong>vision</strong> reaches exactly one living villager, at any hour of the
+day or night. It lands as a memory the villager will interpret in their own persona
+— a vision doesn't force a villager to do anything, it just gives them something to
+react to, like anyone would react to a strange or striking dream.</p>
 
-<h3>Miracles — direct edits to the world</h3>
+<h3>An omen — one villager, a named few, or everyone, but only after dark</h3>
+<p>An <strong>omen</strong> can reach one villager, a comma-separated handful of named
+villagers, or the whole village at once ("everyone") — but only at <strong>night</strong>.
+If you ask for an omen during the day, Metatron doesn't refuse and doesn't lose the
+request: it quietly holds onto it and sends the very same omen automatically the
+moment night falls, to whoever is still alive by then. Either way, landing an omen
+costs exactly one charge, no matter how many villagers it reaches.</p>
+
+<h2>Standing orders: tell it once, and walk away</h2>
+<p>You can also give Metatron a standing instruction — "when Rowan next falls
+asleep, send her a comforting vision" — and simply walk away. The angel keeps
+watching for that condition <strong>for free</strong>; it only spends a charge if and
+when the watched-for moment actually arrives and it acts on your behalf.</p>
+<ul>
+<li>Up to <strong>3</strong> of your own standing orders can be active at once.</li>
+<li>Each one expires on its own after a few game days if it never fires (you can
+choose a shorter or longer window when you place it).</li>
+<li>You can ask Metatron what orders currently stand, and cancel any of them,
+any time.</li>
+<li>When an order fires, Metatron acts through all of its normal rules — the same
+charter, the same guardrails, the same charge economy as anything you ask for
+directly — and tells you what it did the next time you open the console, even if
+that's days later.</li>
+<li>If Metatron's charges (or its model budget) are exhausted right when an order
+fires, it doesn't fake the act — it honestly tells you it couldn't follow through,
+rather than pretending something happened that didn't.</li>
+</ul>
+<p>A watch phrased loosely — "when Rowan seems heartbroken," rather than a plain
+named event — costs Metatron a small, cheap, rate-limited extra check each time
+something plausibly matches, just to confirm the fuzzy condition is really true
+before it acts on it. This never draws from your charge bank; only a landed vision,
+omen, or miracle does that.</p>
+
+<h2>Asking for pause, resume, or a speed change</h2>
+<p>You can also just ask Metatron in conversation to pause the world, start it back
+up (at a given speed, if you like), or change its speed — the same controls
+available from the command line or the full-screen client. This costs nothing, and
+Metatron will only ever touch the clock when you ask directly, or when a standing
+order you placed specifically authorizes it — never on its own initiative.</p>
+
+<h2>Miracles — direct edits to the world</h2>
 <p>A <strong>miracle</strong> is a concrete, direct change to the world itself, of
 which there are exactly four kinds:</p>
 <table>
@@ -127,11 +168,14 @@ lurching forward in an instant; a moved villager feels like an unseen hand lifte
 somewhere new; a given item just appears in the recipient's hands "as if set there by
 an unseen giver."</p>
 
-<h3>The charge economy</h3>
+<h2>The charge economy</h2>
 <p>You start with 1 charge, the bank caps at 3, and it regenerates by 1 every 6 game
-hours. Nudges and most miracles cost 1 charge; snapping time is the priciest move at 2
-charges. Run out, and Metatron will politely decline and explain why — that refusal
-costs nothing, so you can always keep talking even with an empty bank.</p>
+hours. A landed vision or omen costs 1 charge regardless of who it reaches; most
+miracles cost 1 charge too, with snapping time the priciest move at 2 charges. Run
+out, and Metatron will politely decline and explain why — that refusal costs
+nothing, so you can always keep talking even with an empty bank. Placing a standing
+order, and Metatron simply watching for it, are both free; only the eventual landed
+act spends a charge.</p>
 
 <h2>The village's own laws (not Metatron's business)</h2>
 <p>Separately from anything you do, the village governs itself: once a day the

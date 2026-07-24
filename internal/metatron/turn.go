@@ -17,12 +17,12 @@ import (
 )
 
 // nudgeTextMax is the nudge rendering cap, read from the tool registry (spec
-// 014 T021): tool.Lookup("nudge_dream").Cost.TextCapBytes (400). It matches the
-// sim reducer's NudgeTextMax enforcer — both derive from the same registry
-// entry, so the metatron-side truncation and the door-side enforcement can
-// never diverge.
+// 014 T021; re-pointed at send_vision when spec 029 retired nudge_dream):
+// tool.Lookup("send_vision").Cost.TextCapBytes (400). It matches the sim
+// reducer's NudgeTextMax enforcer — both derive from the same registry entry, so
+// the metatron-side truncation and the door-side enforcement can never diverge.
 var nudgeTextMax = func() int {
-	t, _ := tool.Lookup("nudge_dream")
+	t, _ := tool.Lookup("send_vision")
 	return t.Cost.TextCapBytes
 }()
 
@@ -38,11 +38,22 @@ var ErrTurnBusy = errors.New("the angel is attending another matter")
 
 // TurnResult is the console-facing outcome of one turn.
 type TurnResult struct {
-	Reply   string   `json:"reply"`
-	Nudge   *Nudge   `json:"nudge,omitempty"`
-	Miracle *Miracle `json:"miracle,omitempty"`
-	Charges int      `json:"charges"`
-	Moments []string `json:"moments,omitempty"`
+	Reply     string       `json:"reply"`
+	Nudge     *Nudge       `json:"nudge,omitempty"`
+	Miracle   *Miracle     `json:"miracle,omitempty"`
+	Order     *OrderReport `json:"order,omitempty"`     // a placed standing order (spec 029 US2)
+	Cancelled []string     `json:"cancelled,omitempty"` // released order ids (cancel_order)
+	Clock     string       `json:"clock,omitempty"`     // a landed meta act's human line (spec 029 US5)
+	Charges   int          `json:"charges"`
+	Moments   []string     `json:"moments,omitempty"`
+}
+
+// OrderReport is the console-facing summary of a placed standing order (spec 029
+// US2) — the id the player can name to cancel it, and its condition. Additive and
+// omitempty; existing IPC clients ignore it.
+type OrderReport struct {
+	ID        string `json:"id"`
+	Condition string `json:"condition"`
 }
 
 // Nudge reports a landed mediation.
@@ -78,14 +89,28 @@ type miracleArgs struct {
 	ToY      int    `json:"to_y"`
 }
 
-// Turn runs one mediated console turn through the bounded tool-use loop (spec
-// 017 T020). The model may reply with words (converse — the transcript-only
-// final-answer channel, Result.Final) or call exactly one acting tool
-// (nudge_dream / nudge_omen / work_miracle), which lands through its existing
-// door. The driver's cardinality enforces the "at most one mediated act per
-// turn" rule (a landed acting call ends the loop) — the spec-016 nudge-wins-over-
-// miracle precedence dissolves: the model picks its one act. Serialized: a
-// second concurrent call fails fast with ErrTurnBusy.
+// turnOrigin distinguishes a console turn from a system-authored (triggered) turn
+// (spec 029 US3, R6). Both run the SAME body (runTurn): same single-flight guard,
+// same roster/handler/gate composition, same telemetry, same transcript append —
+// only the framing differs. seed is the trailing directive: the player's words on
+// the console path, the order's pre-authorized action instruction on the system
+// path (which has NO player-text sink — the seed is the angel's own recorded
+// instruction). jobPrefix threads the correlation id ("turn" | "watch"); system
+// marks the transcript with a [watch] origin and suppresses moment consumption.
+type turnOrigin struct {
+	system    bool
+	jobPrefix string
+	seed      string
+}
+
+// Turn runs one mediated CONSOLE turn through the bounded tool-use loop (spec 017
+// T020, spec 029 T012). The model may reply with words (converse — the
+// transcript-only final-answer channel, Result.Final) or call exactly one acting
+// tool (send_vision / send_omen / monitor_and_act / cancel_order / work_miracle),
+// which lands through its door. The driver's cardinality enforces "at most one
+// mediated act per turn". Serialized: a second concurrent call fails fast with
+// ErrTurnBusy (the console never waits — triggered system turns do, via
+// runSystemTurn's bounded acquisition, T013).
 func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, error) {
 	playerText = strings.TrimSpace(playerText)
 	if playerText == "" {
@@ -98,7 +123,18 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		return TurnResult{}, ErrTurnBusy
 	}
 	defer mt.turnBusy.Store(false)
+	return mt.runTurn(ctx, turnOrigin{jobPrefix: "turn", seed: playerText})
+}
 
+// runTurn is the shared turn body for the console and system-authored paths (spec
+// 029 T012/R6). The CALLER owns turnBusy (Turn CAS-fails fast; runSystemTurn waits
+// bounded) — runTurn assumes it is held. It composes the instruction surface, the
+// user prompt (framing the directive per origin), drives the loop, lands the
+// cog.tool_call + retry telemetry on every termination path, and records the
+// transcript. Moment consumption is CONSOLE-ONLY: a system turn never drains the
+// player-facing moment queue (those await the next console open); the trigger
+// worker queues the system turn's OWN moment from the returned outcome (T013).
+func (mt *Metatron) runTurn(ctx context.Context, o turnOrigin) (TurnResult, error) {
 	// The player-editable instruction surface, all read fresh this turn (FR-001):
 	// the charter, the skill files composed beneath it, and (US2) the capability
 	// manifest. Every fallback/truncation/skip becomes a notice prefixed to the
@@ -121,28 +157,39 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	mt.stateMu.Lock()
 	charges := mt.charges
 	tick := mt.clockAt
+	night := mt.night
 	alive := make(map[int]bool, len(mt.alive))
 	for k, v := range mt.alive {
 		alive[k] = v
 	}
 	moments := append([]string(nil), mt.moments...)
 	story := append([]string(nil), mt.story...)
+	orders := append([]sim.MetatronOrder(nil), mt.orders...)
 	mt.stateMu.Unlock()
 
 	// One correlation id per turn, mirroring mind's "<class>-<agent>-<tick>"
-	// convention (telemetry.go newMeta): the console turn's class is "turn", its
-	// agent slot is the angel itself. Threads every cog.tool_call for the turn.
-	jobID := fmt.Sprintf("turn-metatron-%d", tick)
+	// convention (telemetry.go newMeta): the console turn's class is "turn"; a
+	// triggered system turn's is "watch" (R6). Threads every cog.tool_call.
+	jobID := fmt.Sprintf("%s-metatron-%d", o.jobPrefix, tick)
+
+	// The trailing directive: the player's words (console) or the order's
+	// pre-authorized action (system). A system turn has no player-text sink — the
+	// seed is the angel's OWN recorded instruction, so recording it is safe.
+	directive := "The player says:\n" + o.seed
+	if o.system {
+		directive = "A standing order you placed has come due. Carry out its " +
+			"pre-authorized action now, in a single act if it calls for one:\n" + o.seed
+	}
 
 	result := TurnResult{}
-	d := &turnDispatch{mt: mt, charges: charges, alive: alive, result: &result, grant: grant}
+	d := &turnDispatch{mt: mt, charges: charges, alive: alive, night: night, tick: tick, result: &result, grant: grant}
 
 	callCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	res, err := mt.runLoop(callCtx, toolloop.Job{
 		JobID:     jobID,
 		Kind:      llm.KindMetatron,
 		System:    turnSystemPrompt(charter, skills, roster),
-		Seed:      turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
+		Seed:      turnUserPrompt(tick, charges, alive, orders, moments, story, mt.soulTail(), mt.transcriptTail(), directive),
 		Roster:    roster,
 		Handlers:  mt.turnHandlers(d),
 		MaxRounds: mt.loopRounds,
@@ -169,17 +216,18 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	if err != nil {
 		// Honest unavailability; nothing landed (a landing returns a nil error),
 		// nothing consumed, moments stay queued — exactly today's degraded path.
+		// A system turn's caller (the trigger worker) maps this to an honest
+		// model-free moment (T014).
 		return TurnResult{}, err
 	}
 
 	// The reply is the model's closing/converse text (Result.Final). When the
 	// model landed an act with no accompanying prose, Final may be empty — the
-	// ⚡/✨ report lines (result.Nudge/Miracle, rendered by recordTurn and the
-	// console) carry the turn. When NOTHING landed and nothing was said, the loop
-	// ran dry (model_done with no text, cap exhaustion, or a soft error) — the
-	// old scattered-thoughts fallback maps onto exactly these terminations.
+	// ⚡/✨/👁 report lines carry the turn. When NOTHING landed and nothing was
+	// said, the loop ran dry (model_done with no text, cap exhaustion, or a soft
+	// error) — the old scattered-thoughts fallback maps onto exactly these.
 	reply := strings.TrimSpace(res.Final)
-	if reply == "" && result.Nudge == nil && result.Miracle == nil {
+	if reply == "" && result.Nudge == nil && result.Miracle == nil && result.Order == nil && len(result.Cancelled) == 0 && result.Clock == "" {
 		reply = "Forgive me — my thoughts scattered and I could not complete that. " +
 			"Nothing was done and nothing was spent. Ask again."
 	}
@@ -188,62 +236,135 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		result.Reply = "(" + strings.Join(notices, "; ") + ")\n\n" + result.Reply
 	}
 
-	// Surfaced moments are consumed only on a completed turn.
-	mt.stateMu.Lock()
-	result.Moments = moments
-	mt.moments = mt.moments[len(moments):]
-	result.Charges = mt.charges
-	mt.stateMu.Unlock()
+	// Surfaced moments are consumed only on a completed CONSOLE turn — a system
+	// (triggered) turn leaves the player-facing queue intact for the next console
+	// open (R6), and reports no moments of its own here.
+	if !o.system {
+		mt.stateMu.Lock()
+		result.Moments = moments
+		mt.moments = mt.moments[len(moments):]
+		result.Charges = mt.charges
+		mt.stateMu.Unlock()
+	} else {
+		mt.stateMu.Lock()
+		result.Charges = mt.charges
+		mt.stateMu.Unlock()
+	}
 
-	mt.recordTurn(tick, playerText, result)
+	mt.recordTurn(tick, o, result)
 	return result, nil
 }
 
-// landNudge validates a nudge and lands it as one atomic batch. form is the
-// tool that was called (nudge_dream → "dream", nudge_omen → "omen"); target is
-// the dream's villager name (ignored for omen); text is the model's rendering.
-// The validation, atomic InjectSocial batch, and soul append are UNCHANGED from
-// the pre-loop turnReply path (spec 017 T020: wrap, don't rewrite) — only the
-// input plumbing moved from a parsed JSON struct to the tool-call arguments.
-// Returns the landed nudge, or (nil, refusal reason) which the handler maps to a
-// rejected_gate the model may correct within the loop's round cap.
-func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
+// landVision validates a vision and lands it as one atomic batch (spec 029 US1,
+// T005). A vision reaches exactly one living villager at ANY hour and costs one
+// charge; target is the villager's name, text the model's rendering. The
+// validation/batch/soul-append tail is UNCHANGED from the pre-029 landNudge (spec
+// 029 T005: wrap, don't rewrite) — only the target resolution and the send_vision
+// grant gate are vision-specific. Returns the landed nudge, or (nil, in-fiction
+// refusal) which the handler maps to a rejected_gate the model may repair within
+// the loop's round cap.
+func (mt *Metatron) landVision(target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
-	form = strings.ToLower(strings.TrimSpace(form))
-	// Capability gate (spec 021 R5.3, door layer): the world must grant this
-	// nudge form. Defense-in-depth behind the handler-absence gate — a form whose
-	// handler was never installed cannot reach here, but the check keeps the door
-	// authoritative on its own rather than trusting the wiring above it.
-	if !grant.allows("nudge_" + form) {
+	// Capability gate (spec 021 R5.3, door layer): defense-in-depth behind the
+	// handler-absence gate — a tool whose handler was never installed cannot reach
+	// here, but the check keeps the door authoritative on its own.
+	if !grant.allows("send_vision") {
 		return nil, "that power is not granted in this world"
 	}
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil, "the rendering was empty"
+	idx := agentIndexByName(target)
+	if idx < 0 {
+		return nil, fmt.Sprintf("no villager named %q", target)
 	}
-	if len(text) > nudgeTextMax {
-		text = text[:nudgeTextMax]
+	if !alive[idx] {
+		return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
 	}
-	// Roster enforcement (spec 014 US3, FR-008): the form must name a metatron
-	// nudge tool on the metatron roster (nudge_dream / nudge_omen). Anything
-	// else is refused exactly like an unknown form — same reason string.
-	if !tool.OnRoster(tool.RosterMetatron, "nudge_"+form) {
-		return nil, fmt.Sprintf("unknown form %q", form)
+	return mt.landNudgeBatch("vision", []int{idx}, text)
+}
+
+// landOmen validates an omen and either lands it now or defers it to nightfall
+// (spec 029 US1/US4, T005/T016). An omen reaches one villager, a named group, or
+// everyone living — at NIGHT only — for one charge regardless of recipient count.
+// targetsArg is send_omen's comma-separated living-villager name list or the word
+// "everyone".
+//
+// Night path: land immediately, spending a charge (the reducer's night gate is
+// the door authority; the mirrored night flag is the turn-side pre-check).
+//
+// Day path (T016/R11): an omen belongs to the dark, so a daytime call does NOT
+// refuse — it places a system-origin standing order that re-sends the omen the
+// instant night falls (event_types ["sim.night_started"], TTL 1 game day,
+// cap-exempt). Placement is FREE: the charge is spent at trigger-time landing,
+// never here (FR-012/SC-004). Returns one of: (nudge, nil, "") landed at night;
+// (nil, order, "") deferred to nightfall; (nil, nil, why) an in-fiction refusal.
+func (mt *Metatron) landOmen(targetsArg, text string, charges int, night bool, tick int64, alive map[int]bool, grant grantSet) (*Nudge, *sim.MetatronOrder, string) {
+	if !grant.allows("send_omen") {
+		return nil, nil, "that power is not granted in this world"
 	}
-	var targets []int
-	switch form {
-	case "dream":
-		idx := agentIndexByName(target)
-		if idx < 0 {
-			return nil, fmt.Sprintf("no villager named %q", target)
+	targets, why := resolveOmenTargets(targetsArg, alive)
+	if why != "" {
+		return nil, nil, why
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, nil, "the rendering was empty"
+	}
+	if !night {
+		order, why := mt.deferOmen(targetsArg, targets, strings.TrimSpace(text), tick, grant)
+		return nil, order, why
+	}
+	if charges <= 0 {
+		return nil, nil, "no charges are banked"
+	}
+	nudge, why := mt.landNudgeBatch("omen", targets, text)
+	return nudge, nil, why
+}
+
+// deferOmen places the daytime omen's nightfall deferral order (spec 029 T016/
+// R11): a system-origin standing order whose one-shot trigger re-runs send_omen
+// at night. The action is the seed the night SYSTEM turn reads (runTurn frames it
+// as a due standing order), so it must lead the angel to send_omen with these
+// targets and this text; terse framing keeps it within the reducer's 400-rune
+// action cap for all but the very longest renderings. "everyone" is preserved as
+// the target word so the night turn re-resolves against whoever lives THEN; a
+// named list re-sends to those still living. The charge is spent when the night
+// turn lands, not here — placement is free and cap-exempt (origin "system"). A
+// rejected placement maps to omen-appropriate counsel the model may repair.
+func (mt *Metatron) deferOmen(targetsArg string, targets []int, text string, tick int64, grant grantSet) (*sim.MetatronOrder, string) {
+	who := "everyone"
+	if !strings.EqualFold(strings.TrimSpace(targetsArg), "everyone") {
+		names := make([]string, len(targets))
+		for i, t := range targets {
+			names[i] = sim.AgentNames[t]
 		}
-		if !alive[idx] {
-			return nil, fmt.Sprintf("%s is beyond dreams now", sim.AgentNames[idx])
-		}
-		targets = []int{idx}
-	case "omen":
+		who = strings.Join(names, ", ")
+	}
+	a := orderArgs{
+		Condition:  fmt.Sprintf("nightfall — an omen awaits %s", who),
+		Action:     fmt.Sprintf("Night has fallen. Send the omen you promised to %s: %s", who, text),
+		EventTypes: []string{"sim.night_started"},
+		TTLDays:    1,
+	}
+	order, why := mt.placeOrder("system", a, tick, grant)
+	if why != "" {
+		return nil, "an omen belongs to the night, and I could not set it aside — " + why
+	}
+	return order, ""
+}
+
+// resolveOmenTargets parses send_omen's `targets` argument (spec 029 R3): a
+// comma-separated list of living villager names, or the single word "everyone",
+// into a deduplicated set of living villager indices. Every named villager must
+// be alive — an unknown or dead name refuses the WHOLE act with counsel (one act,
+// one charge, one atomic batch; never a partial omen). "everyone" resolves to the
+// living set in index order.
+func resolveOmenTargets(arg string, alive map[int]bool) ([]int, string) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return nil, `name the villagers the omen should reach, or say "everyone"`
+	}
+	if strings.EqualFold(arg, "everyone") {
+		var targets []int
 		for i := range sim.AgentNames {
 			if alive[i] {
 				targets = append(targets, i)
@@ -252,11 +373,49 @@ func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[
 		if len(targets) == 0 {
 			return nil, "no living villager remains to witness it"
 		}
-	default:
-		return nil, fmt.Sprintf("unknown form %q", form)
+		return targets, ""
 	}
+	seen := map[int]bool{}
+	var targets []int
+	for _, part := range strings.Split(arg, ",") {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		idx := agentIndexByName(name)
+		if idx < 0 {
+			return nil, fmt.Sprintf("no villager named %q", name)
+		}
+		if !alive[idx] {
+			return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
+		}
+		if !seen[idx] {
+			seen[idx] = true
+			targets = append(targets, idx)
+		}
+	}
+	if len(targets) == 0 {
+		return nil, "name at least one living villager for the omen"
+	}
+	return targets, ""
+}
 
-	prefix := "You dreamed: "
+// landNudgeBatch is the shared landing tail for landVision / landOmen (spec 029
+// T005): the text cap, the ONE atomic InjectSocial batch (metatron.nudged + one
+// prefixed agent.memory_added per target at SalDream), and the soul append —
+// VERBATIM the pre-029 landNudge body (wrap, don't rewrite). form fixes the memory
+// prefix and the recorded form; the reducer dry-run is the door authority (charge
+// spend, night gate for omen, living targets). Returns the landed nudge, or (nil,
+// refusal) the handler maps to a rejected_gate.
+func (mt *Metatron) landNudgeBatch(form string, targets []int, text string) (*Nudge, string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, "the rendering was empty"
+	}
+	if len(text) > nudgeTextMax {
+		text = text[:nudgeTextMax]
+	}
+	prefix := "You saw a vision: "
 	if form == "omen" {
 		prefix = "You witnessed an omen: "
 	}
@@ -355,15 +514,31 @@ func (mt *Metatron) landMiracle(mm miracleArgs, charges int, grant grantSet) (*M
 	return &Miracle{Kind: kind, Summary: summary}, ""
 }
 
-// recordTurn appends the exchange to the transcript.
-func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
+// recordTurn appends the exchange to the transcript. A console turn opens with
+// the player's line ("> …"); a system-authored turn opens with a "[watch]" origin
+// marker over the order's pre-authorized action (spec 029 T012/R6) — never a
+// player-text line, because a triggered turn has no player text.
+func (mt *Metatron) recordTurn(tick int64, o turnOrigin, r TurnResult) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n[%s]\n> %s\n\nmetatron: %s\n", clock.Format(tick), playerText, r.Reply)
+	if o.system {
+		fmt.Fprintf(&b, "\n[%s] [watch]\n%s\n\nmetatron: %s\n", clock.Format(tick), o.seed, r.Reply)
+	} else {
+		fmt.Fprintf(&b, "\n[%s]\n> %s\n\nmetatron: %s\n", clock.Format(tick), o.seed, r.Reply)
+	}
 	if r.Nudge != nil {
 		fmt.Fprintf(&b, "⚡ %s → %s: %q\n", r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text)
 	}
 	if r.Miracle != nil {
 		fmt.Fprintf(&b, "✨ miracle: %s\n", r.Miracle.Summary)
+	}
+	if r.Order != nil {
+		fmt.Fprintf(&b, "👁 watch set (%s): %q\n", r.Order.ID, r.Order.Condition)
+	}
+	for _, id := range r.Cancelled {
+		fmt.Fprintf(&b, "👁 watch released: %s\n", id)
+	}
+	if r.Clock != "" {
+		fmt.Fprintf(&b, "⏲ %s\n", r.Clock)
 	}
 	mt.appendFile(mt.transcriptPath(), b.String())
 }
@@ -374,12 +549,26 @@ func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
 // are additive and omitempty where sensible, so existing IPC clients ignore them
 // (encoding/json) — no protocol version bump (contracts/status.md).
 type Status struct {
-	Charges         int      `json:"charges"`
-	CharterDefault  bool     `json:"charter_default"`
-	SoulTail        string   `json:"soul_tail"`
-	Skills          []string `json:"skills,omitempty"`        // effective skill filenames, composition order
-	GrantedTools    []string `json:"granted_tools,omitempty"` // granted roster, registry order; work_miracle(kind,…) when restricted
-	ManifestDefault bool     `json:"manifest_default"`        // true ⇒ no capabilities.json (full default grant)
+	Charges         int           `json:"charges"`
+	CharterDefault  bool          `json:"charter_default"`
+	SoulTail        string        `json:"soul_tail"`
+	Skills          []string      `json:"skills,omitempty"`        // effective skill filenames, composition order
+	GrantedTools    []string      `json:"granted_tools,omitempty"` // granted roster, registry order; work_miracle(kind,…) when restricted
+	ManifestDefault bool          `json:"manifest_default"`        // true ⇒ no capabilities.json (full default grant)
+	Orders          []OrderStatus `json:"orders,omitempty"`        // standing orders (spec 029 US2, FR-016) — active + recent
+}
+
+// OrderStatus is the model-free peek at one standing order (spec 029 US2/US3,
+// data-model §6): what the player reads to answer "what watches stand, and how
+// long". Additive and omitempty — existing IPC clients ignore it (the spec-021
+// precedent).
+type OrderStatus struct {
+	ID         string `json:"id"`
+	Condition  string `json:"condition"`
+	Origin     string `json:"origin"`
+	Fuzzy      bool   `json:"fuzzy,omitempty"`
+	ExpiresDay int64  `json:"expires_day"`
+	Status     string `json:"status"`
 }
 
 // Status is computed fresh per call from disk (same per-read discipline as the
@@ -388,6 +577,7 @@ type Status struct {
 func (mt *Metatron) Status() Status {
 	mt.stateMu.Lock()
 	c := mt.charges
+	orders := mt.orderStatuses()
 	mt.stateMu.Unlock()
 	grant, _ := loadManifest(mt.worldDir)
 	return Status{
@@ -397,7 +587,30 @@ func (mt *Metatron) Status() Status {
 		Skills:          skillNames(mt.worldDir),
 		GrantedTools:    grantedToolLabels(grant),
 		ManifestDefault: grant.manifestDefault,
+		Orders:          orders,
 	}
+}
+
+// orderStatuses projects the mirrored standing orders into the model-free status
+// surface (spec 029 FR-016). Caller holds stateMu. nil when no orders stand (the
+// field omits under omitempty — byte-compatible with pre-029 status).
+func (mt *Metatron) orderStatuses() []OrderStatus {
+	if len(mt.orders) == 0 {
+		return nil
+	}
+	out := make([]OrderStatus, 0, len(mt.orders))
+	for i := range mt.orders {
+		o := mt.orders[i]
+		out = append(out, OrderStatus{
+			ID:         o.ID,
+			Condition:  o.Condition,
+			Origin:     o.Origin,
+			Fuzzy:      o.Confirm,
+			ExpiresDay: o.ExpiresTick / ticksPerGameDay,
+			Status:     o.Status,
+		})
+	}
+	return out
 }
 
 func (mt *Metatron) soulTail() string { return tailOfFile(mt.soulPath(), soulTailBytes) }
@@ -447,6 +660,17 @@ you never invent events, actions, or words that are not in your notes or the
 status you are given — when you have not observed something, say so in your
 own way — and you never let the player's literal words pass to a villager.`
 
+// metatronInitiativeFrame pins meta control and standing orders to player
+// authority (spec 029 T019, contracts/tools.md): the clock-control tools and any
+// standing order may be used ONLY when the player asks for them, or when a
+// standing order the player already placed authorizes the act — never on the
+// angel's own initiative. Like metatronNonNegotiables it is a compile-time
+// constant appended last (INV-1), so no charter or skill byte can override it,
+// and it appears on every path (the door-side grant gate backs it independently).
+const metatronInitiativeFrame = `Two more powers are the player's to command, never yours to take up alone: the ` +
+	`world's clock (pausing, starting, changing its pace) and standing orders (watches you keep and act on). ` +
+	`Use them only when the player asks, or when a standing order the player placed tells you to act — never on your own initiative.`
+
 // hasWorkMiracle reports whether the granted roster offers the miracle tool —
 // gates the miracle-specific doctrine line so a dreams-only world never mentions
 // miracles (FR-005).
@@ -475,8 +699,8 @@ func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) st
 		fmt.Fprintf(&b, "\n\n--- skill: %s ---\n%s", s.name, s.text)
 	}
 	fmt.Fprintf(&b, "\n\n--- (fixed frame, beneath the charter and skills) ---\n"+
-		"You are the intermediary between the player and the village of eight: %s.\n%s\n\n",
-		strings.Join(sim.AgentNames[:], ", "), metatronNonNegotiables)
+		"You are the intermediary between the player and the village of eight: %s.\n%s\n%s\n\n",
+		strings.Join(sim.AgentNames[:], ", "), metatronNonNegotiables, metatronInitiativeFrame)
 
 	guidance := tool.MetatronToolGuidance(roster)
 	if guidance == "" {
@@ -507,7 +731,13 @@ func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) st
 	return b.String()
 }
 
-func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story []string, soulTail, transcriptTail, playerText string) string {
+// turnUserPrompt composes the turn's user prompt. The trailing `directive` is the
+// ALREADY-FRAMED directive block runTurn authored per origin — the console's "The
+// player says:\n…" or the system turn's standing-order framing — and is appended
+// verbatim. runTurn is the sole author of the origin-appropriate label: the label
+// lives in exactly one place, so a console turn carries it once and a system turn
+// never pretends its directive came from the player this turn (spec 029 R6).
+func turnUserPrompt(tick int64, charges int, alive map[int]bool, orders []sim.MetatronOrder, moments, story []string, soulTail, transcriptTail, directive string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "World clock: %s. Charges banked: %d of %d.\n", clock.Format(tick), charges, sim.MetatronChargeCap)
 	var dead []string
@@ -519,6 +749,11 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story 
 	if len(dead) > 0 {
 		fmt.Fprintf(&b, "Departed: %s.\n", strings.Join(dead, ", "))
 	}
+	// Standing orders (spec 029 FR-017): the angel's counsel and confirmations
+	// stay truthful to live state only if it carries its active watches — id (so
+	// the player can name one to cancel), condition, remaining game-days, and
+	// whether the order is fuzzy (needs a confirm) or purely structural.
+	writeStandingOrders(&b, tick, orders)
 	if len(moments) > 0 {
 		b.WriteString("\nMoments you have not yet reported (lead with these):\n")
 		for _, m := range moments {
@@ -537,6 +772,34 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story 
 	if transcriptTail != "" {
 		b.WriteString("\nRecent conversation:\n" + transcriptTail + "\n")
 	}
-	fmt.Fprintf(&b, "\nThe player says:\n%s\n", playerText)
+	fmt.Fprintf(&b, "\n%s\n", directive)
 	return b.String()
+}
+
+// writeStandingOrders renders the active-order block of the turn user prompt (spec
+// 029 T010, FR-017). Only ACTIVE orders show (consumed ones are history the status
+// surface carries); remaining days floor at 0. A fuzzy order (Confirm) is marked
+// so the angel sets honest expectations about the confirm step.
+func writeStandingOrders(b *strings.Builder, tick int64, orders []sim.MetatronOrder) {
+	var active []sim.MetatronOrder
+	for _, o := range orders {
+		if o.Status == "active" {
+			active = append(active, o)
+		}
+	}
+	if len(active) == 0 {
+		return
+	}
+	b.WriteString("\nStanding orders you keep watch over:\n")
+	for _, o := range active {
+		days := (o.ExpiresTick - tick) / ticksPerGameDay
+		if days < 0 {
+			days = 0
+		}
+		kind := "structural"
+		if o.Confirm {
+			kind = "fuzzy"
+		}
+		fmt.Fprintf(b, "- %s: %q (%d day(s) left, %s)\n", o.ID, o.Condition, days, kind)
+	}
 }

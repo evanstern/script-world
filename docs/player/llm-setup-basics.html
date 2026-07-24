@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="promptworld-docs:generated-by" content="player-docs">
-<meta name="promptworld-docs:source" content="docs/llm-providers.md@258305048f05dd56f8400387421541f9a96540df">
-<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@6db823f64dc0483df12210f03b0aa28e36d1c3ce">
-<meta name="promptworld-docs:source" content="README.md@8fa82e1a4deefb4f7d3923b334ef85f25cf2c298">
+<meta name="promptworld-docs:source" content="docs/llm-providers.md@be38288fa137064174eedbfb3b8a94cc5b1fb0b9">
+<meta name="promptworld-docs:source" content="docs/wiki/llm-orchestrator.md@be38288fa137064174eedbfb3b8a94cc5b1fb0b9">
+<meta name="promptworld-docs:source" content="README.md@be38288fa137064174eedbfb3b8a94cc5b1fb0b9">
 <title>AI setup basics — promptworld player docs</title>
 <style>
   :root {
@@ -102,6 +102,13 @@ higher-quality cloud model instead of the local one. To enable that tier, set an
 key itself is never written into <code>llm.json</code>, only the name of the
 environment variable that holds it. Skip this and those moments simply don't run —
 nothing else breaks.</p>
+<p>The default <code>llm.json</code> also wires up one more, much smaller kind of
+call: a cheap yes/no check Metatron uses to confirm a loosely-phrased standing order
+("when Rowan seems heartbroken") really matches before acting on it. It tries the
+local model first and falls back to cloud, and needs no setup beyond what's already
+above. If you're carrying forward an older world's <code>llm.json</code> from before
+this existed, promptworld fills in that default for you automatically the next time
+the world starts, with one line in the startup log noting it did so.</p>
 
 <h2>Checking it's actually working</h2>
 <ul>

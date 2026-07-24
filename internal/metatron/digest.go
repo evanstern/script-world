@@ -21,10 +21,10 @@ import (
 // — only a console turn builds injection batches.
 
 const (
-	digestWindowTicks  = 6 * 3600
-	digestMaxLines     = 120
-	digestMaxTokens    = 400
-	digestCallTimeout  = 3 * time.Minute
+	digestWindowTicks = 6 * 3600
+	digestMaxLines    = 120
+	digestMaxTokens   = 400
+	digestCallTimeout = 3 * time.Minute
 )
 
 type digJob struct {
@@ -62,6 +62,25 @@ func (mt *Metatron) observeMoment(e store.Event) {
 					break
 				}
 			}
+		}
+	case "metatron.order_expired":
+		// A standing order lapsed with no trigger (spec 029 US2, FR-007): the
+		// executor emitted this as a pure function of state + tick, so it lands the
+		// same model-free moment here as the other drama triggers. The replica has
+		// already applied it (status → expired); look the order up for its
+		// condition so the next reply mentions the specific lapsed watch.
+		var p sim.OrderIDPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			cond := p.ID
+			for i := range mt.replica.MetatronOrders {
+				if mt.replica.MetatronOrders[i].ID == p.ID {
+					if c := mt.replica.MetatronOrders[i].Condition; c != "" {
+						cond = c
+					}
+					break
+				}
+			}
+			line = fmt.Sprintf("%s — a watch lapsed unfulfilled: %q", clock.Format(e.Tick), cond)
 		}
 	}
 	if line == "" {

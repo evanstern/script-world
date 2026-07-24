@@ -199,9 +199,14 @@ func RestrictEnum(t Tool, param string, allowed []string) Tool {
 // only the "what it does" prose; the tool NAMES, ARGUMENT surfaces, and COSTS in
 // the guidance all derive from the registry, so described ≡ declared.
 var metatronToolDesc = map[string]string{
-	"nudge_dream":  "a dream for ONE named villager",
-	"nudge_omen":   "an omen every living villager witnesses",
-	"work_miracle": "a direct world edit",
+	"send_vision":     "a waking vision for ONE living villager, at any hour",
+	"send_omen":       "an omen at night for one villager, a named group, or everyone",
+	"monitor_and_act": "place a standing order: watch for a condition, then act",
+	"cancel_order":    "cancel a standing order by its id",
+	"pause":           "pause the world clock",
+	"start":           "start the world clock (optionally at a named speed)",
+	"adjust_speed":    "change the world clock's speed",
+	"work_miracle":    "a direct world edit",
 }
 
 // miracleKindArgs is the per-kind argument hint rendered under work_miracle,

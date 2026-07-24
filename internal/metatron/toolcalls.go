@@ -20,6 +20,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -35,6 +36,8 @@ type turnDispatch struct {
 	mt      *Metatron
 	charges int
 	alive   map[int]bool
+	night   bool // mirrored State.Night at turn start — the omen gate (spec 029 T005)
+	tick    int64
 	result  *TurnResult
 	grant   grantSet // this world's capability grant (spec 021 US2): gates handlers + land
 
@@ -47,50 +50,129 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 }
 
 // turnHandlers builds the handler map the tool-use loop dispatches against for
-// one console turn. nudge_dream / nudge_omen wrap landNudge (the tool name fixes
-// the form); work_miracle wraps landMiracle. converse is absent by design — it
-// is the final-text channel, and it is not on the declared loop roster
-// (tool.LoopRosterMetatron), so the model never calls it as a tool.
+// one turn — console OR system-authored (spec 029 T012). send_vision / send_omen
+// wrap the influence landers; monitor_and_act / cancel_order wrap the standing-
+// order door (spec 029 T009); work_miracle wraps landMiracle. converse is absent
+// by design — it is the final-text channel, and it is not on the declared loop
+// roster (tool.LoopRosterMetatron), so the model never calls it as a tool.
 //
 // Capability gating (spec 021 US2, door layer / R5.3): a handler is installed
 // ONLY for a tool the world grants. An ungranted tool therefore has no handler
 // and the loop rejects any call to it as rejected_unknown — structural absence
 // at the door, matching the structural absence in the declaration and the prose.
+//
+// The meta tools pause / start / adjust_speed wrap the LoopControl seam (spec 029
+// US5, T018): each is grant-gated like every other tool (structural absence when
+// ungranted), and drives mt.loop.Do — the SAME clock control the IPC server uses.
+// They inject no world event and spend no charge (Effect Expressive, EMPTY Events)
+// but consume the turn's one act.
 func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
-	h := make(map[string]toolloop.Handler, 3)
-	if d.grant.allows("nudge_dream") {
-		h["nudge_dream"] = mt.handleNudge(d, "dream")
+	h := make(map[string]toolloop.Handler, 9)
+	if d.grant.allows("send_vision") {
+		h["send_vision"] = mt.handleVision(d)
 	}
-	if d.grant.allows("nudge_omen") {
-		h["nudge_omen"] = mt.handleNudge(d, "omen")
+	if d.grant.allows("send_omen") {
+		h["send_omen"] = mt.handleOmen(d)
+	}
+	if d.grant.allows("monitor_and_act") {
+		h["monitor_and_act"] = mt.handleMonitor(d)
+	}
+	if d.grant.allows("cancel_order") {
+		h["cancel_order"] = mt.handleCancelOrder(d)
 	}
 	if d.grant.allows("work_miracle") {
 		h["work_miracle"] = mt.handleMiracle(d)
 	}
+	if d.grant.allows("pause") {
+		h["pause"] = mt.handlePause(d)
+	}
+	if d.grant.allows("start") {
+		h["start"] = mt.handleStart(d)
+	}
+	if d.grant.allows("adjust_speed") {
+		h["adjust_speed"] = mt.handleAdjustSpeed(d)
+	}
 	return h
 }
 
-// handleNudge wraps landNudge for one form. Door accept → landed (the report is
-// written onto the shared result); door/validation refusal → rejected_gate
+// handleVision wraps landVision (spec 029 T006). Door accept → landed (the report
+// is written onto the shared result); door/validation refusal → rejected_gate
 // carrying the human-readable reason, fed back so the model may correct a bad
 // target within the round cap.
-func (mt *Metatron) handleNudge(d *turnDispatch, form string) toolloop.Handler {
+func (mt *Metatron) handleVision(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
-		// target is dream-only; the driver already enforced its presence for
-		// nudge_dream (required AgentName param) and its absence is harmless for
-		// omen (landNudge ignores it).
 		target := argString(call.Args, "target")
 		text := argString(call.Args, "text")
-		if nudge, why := mt.landNudge(form, target, text, d.charges, d.alive, d.grant); nudge != nil {
+		if nudge, why := mt.landVision(target, text, d.charges, d.alive, d.grant); nudge != nil {
 			d.result.Nudge = nudge
-			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the " + form + " reached its mark"}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the vision reached its mark"}
 		} else {
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}
 	}
 }
 
-// handleMiracle wraps landMiracle. Same accept/reject translation as handleNudge.
+// handleOmen wraps landOmen (spec 029 T006/T016): the `targets` arg is a
+// comma-list or "everyone" (R3); the mirrored night flag (d.night) chooses the
+// path. A NIGHT omen lands at once (nudge); a DAY omen defers to nightfall as a
+// system-origin standing order (order) — the ResultForModel promises nightfall so
+// the model's reply sets the player's expectation. A bad name / ungranted tool /
+// rejected deferral is fed back as a rejected_gate the model may repair.
+func (mt *Metatron) handleOmen(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		targets := argString(call.Args, "targets")
+		text := argString(call.Args, "text")
+		nudge, order, why := mt.landOmen(targets, text, d.charges, d.night, d.tick, d.alive, d.grant)
+		switch {
+		case nudge != nil:
+			d.result.Nudge = nudge
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the omen will reach them"}
+		case order != nil:
+			d.result.Order = &OrderReport{ID: order.ID, Condition: order.Condition}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded,
+				ResultForModel: "an omen belongs to the night — I have set it to reach them the moment darkness falls (" + order.ID + ")"}
+		default:
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleMonitor wraps placeOrder (spec 029 T009): a monitor_and_act call places a
+// player-origin standing order through the InjectSocial door. A landed placement
+// writes the OrderReport onto the shared result and ends the turn (one act, the
+// Expressive cardinality); a door rejection (cap reached, ttl out of range,
+// unknown watched villager, uncompilable condition) is fed back as a rejected_gate
+// the model may repair within the round cap. The driver's schema already rejected
+// an empty event_types as rejected_malformed; a semantically uncompilable
+// condition (e.g. unknown agent) is this gate's refusal-with-counsel (research R5).
+func (mt *Metatron) handleMonitor(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		if order, why := mt.placeOrder("player", parseOrderArgs(call.Args), d.tick, d.grant); order != nil {
+			d.result.Order = &OrderReport{ID: order.ID, Condition: order.Condition}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the watch is set (" + order.ID + ")"}
+		} else {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleCancelOrder wraps cancelOrder (spec 029 T009): cancel_order lands
+// metatron.order_cancelled for the named id. The reducer resolves the
+// cancel/expiry/trigger race — an unknown or already-lapsed id refuses with
+// counsel. A landed cancel records the id and ends the turn.
+func (mt *Metatron) handleCancelOrder(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		id := argString(call.Args, "id")
+		if why := mt.cancelOrder(id, d.grant); why == "" {
+			d.result.Cancelled = append(d.result.Cancelled, id)
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the watch is released"}
+		} else {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleMiracle wraps landMiracle. Same accept/reject translation as handleVision.
 func (mt *Metatron) handleMiracle(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
 		if miracle, why := mt.landMiracle(parseMiracleArgs(call.Args), d.charges, d.grant); miracle != nil {
@@ -100,6 +182,76 @@ func (mt *Metatron) handleMiracle(d *turnDispatch) toolloop.Handler {
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}
 	}
+}
+
+// handlePause / handleStart / handleAdjustSpeed drive the LoopControl seam (spec
+// 029 US5, T018/R10). Effect Expressive with EMPTY Events: they inject NOTHING
+// (the loop's own clock.paused / clock.resumed / clock.speed_set stay the record),
+// spend no charge, and consume the turn's one act. The mapping is R10's:
+// pause→Do("pause"), start→Do("resume", speed-or-empty), adjust_speed→
+// Do("set_speed", speed). A LoopControl error maps to an in-fiction rejected_gate.
+func (mt *Metatron) handlePause(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, _ llm.ToolCall) toolloop.Outcome {
+		if why := mt.controlLoop(d, "pause", "", "the world holds still — I have paused it"); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world holds still — I have paused it"}
+	}
+}
+
+// handleStart resumes the clock (spec 029 R10, amended at polish per
+// contracts/tools.md's meta section): the loop's resume command ignores its
+// speed argument (internal/sim/loop.go's "resume" case never reads cmd.speed) —
+// a bare start is Do("resume", "") as always, but a start WITH a speed issues
+// two loop commands for the one tool call: Do("set_speed", speed) THEN
+// Do("resume", ""), so the world both paces and moves in a single act.
+func (mt *Metatron) handleStart(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		speed := clock.Speed(argString(call.Args, "speed"))
+		if speed != "" {
+			if why := mt.controlLoop(d, "set_speed", speed, "the world moves again"); why != "" {
+				return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+			}
+		}
+		if why := mt.controlLoop(d, "resume", "", "the world moves again"); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world moves again"}
+	}
+}
+
+// handleAdjustSpeed sets the clock pace (spec 029 R10): adjust_speed→
+// Do("set_speed", speed). The `speed` arg is a required Enum over clockSpeeds, so
+// the driver already gated membership; ParseSpeed is the door-side re-check.
+func (mt *Metatron) handleAdjustSpeed(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		raw := argString(call.Args, "speed")
+		speed, err := clock.ParseSpeed(raw)
+		if err != nil {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal("that is not a pace I can set (" + raw + ")")}
+		}
+		if why := mt.controlLoop(d, "set_speed", speed, "the world now moves at "+raw); why != "" {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+		return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the world now moves at " + raw}
+	}
+}
+
+// controlLoop calls the LoopControl seam and, on success, sets the human-readable
+// Clock line on the shared result (so the turn records the meta act even when the
+// model adds no prose — the "nothing landed" fallback keys on result.Clock too).
+// Returns "" on success or an in-fiction refusal the handler feeds back as a
+// rejected_gate. A nil seam (a world wired without loop control) refuses in
+// fiction rather than panicking — defense-in-depth behind handler absence.
+func (mt *Metatron) controlLoop(d *turnDispatch, name string, speed clock.Speed, clockLine string) string {
+	if mt.loop == nil {
+		return "I cannot touch the flow of time in this world"
+	}
+	if _, err := mt.loop.Do(name, speed); err != nil {
+		return "the world would not heed me (" + err.Error() + ")"
+	}
+	d.result.Clock = clockLine
+	return ""
 }
 
 // refusal guarantees a non-empty rejection reason for the model's feedback and
