@@ -1,10 +1,10 @@
 ---
 id: TASK-27
 title: 'Metatron v2: tool-gated long-running agency'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-24 05:05'
+updated_date: '2026-07-24 12:52'
 labels: []
 dependencies:
   - TASK-53
@@ -90,3 +90,9 @@ Wiki re-pin + player docs complete IN-BRANCH (AC #9 'before merge' honored): 18 
 
 PR #59 open: https://github.com/evanstern/promptworld/pull/59 — 17 commits, one branch, one PR. Remaining after merge: worktree/branch cleanup, ff-pull root, live conversational reign-test when credentials are available (TASK-84 env gap).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Metatron v2 agency shipped: PR #59 merged (fb30dbd), spec specs/029-metatron-agency 26/26 tasks, all 9 human ACs + 8 phase ACs checked. Delivered: send_vision/send_omen taxonomy (dream grandfathered for replay, night-gated group omens, daytime auto-deferral to nightfall), event-sourced standing orders via monitor_and_act (cap 3, TTL 1-7 game days, one-shot, executor-emitted expiry, live-only triggering, cancel_order), system-authored triggered turns through the single-flight path with full trail + budget/charge honesty, rate-capped fuzzy confirms on the new cheap-routed KindMetatronWatch (llm.json route backfill on upgrade), charge-free pause/start/adjust_speed behind a LoopControl seam pinned by the fixed frame, generalized toolloop authored-schema validation, CLI/TUI order+clock surfaces, wiki re-pinned in-branch (18 notes + new metatron-orders.md) + player docs refreshed. Side quests closed en route: TASK-90 (main broken by the #58/#60 cross-merge — fixed) and two sweep-found defects (TUI digest catalog gap, doubled/mislabeled turn-prompt directive). Open follow-up: live conversational reign-test blocked by the TASK-84 credentials/default-model gap.
+<!-- SECTION:FINAL_SUMMARY:END -->
