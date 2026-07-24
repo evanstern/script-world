@@ -107,7 +107,7 @@ reinforcement resets; replay holds.
 - [x] T013 Live validation per quickstart §2/§3/§5 in a scratch home (provenance honesty live, decay/floor
       observation or fixture-accelerated equivalent, SC-005 myth-survives sample); record in
       `specs/030-epistemic-hygiene/quickstart-results.md` (012/T045 precedent for anything out of budget)
-- [ ] T014 Post-merge re-grounding: `/grounding-wiki:wiki-update` (nightly-consolidation, agent-mind,
+- [x] T014 Post-merge re-grounding: `/grounding-wiki:wiki-update` (nightly-consolidation, agent-mind,
       social-fabric, sim-state-reducer, event-types, testing-strategy + any planner-prompt notes touched) +
       player-docs freshness/refresh; `spec-bridge:sync`; worktree cleanup
 
