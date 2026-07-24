@@ -3,10 +3,10 @@ id: TASK-33
 title: >-
   Adaptive time throttling: speed as a ceiling, staleness debt as the governor —
   design session
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-20 20:48'
-updated_date: '2026-07-23 21:24'
+updated_date: '2026-07-24 02:04'
 labels:
   - design
 dependencies:
@@ -32,7 +32,7 @@ Spec: specs/028-adaptive-throttle
 - [x] #6 Spec phase: User Story 2 — The world sheds speed under debt (Priority: P2)
 - [x] #7 Spec phase: User Story 3 — Speed recovers without oscillating (Priority: P3)
 - [x] #8 Spec phase: User Story 4 — The player sees it and stays in charge (Priority: P4)
-- [ ] #9 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #9 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -65,4 +65,12 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · Us
 spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 2/2 · Polish & Cross-Cutting Concerns: 0/3
 
 Implementation complete (2026-07-23): all four stories + T016/T017 polish proven; PR #55 open (https://github.com/evanstern/promptworld/pull/55) — 15 commits on task-33-adaptive-throttle. Live validation captured real shed {32x→16x, debt 1.29, jobs 5} and recovery on gemma4:12b-mlx; full suite + replay byte-identity + no-format-bump gates green. Remaining before Done: merge PR, then T018 (wiki re-pin + player-docs + final sync + worktree cleanup). Follow-up filed: TASK-83 (pre-existing gofmt drift found by the T017 gate).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 2/2 · Polish & Cross-Cutting Concerns: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 2/2 · User Story 1 — Debt is measured and visible (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — The world sheds speed under debt (Priority: P2): 5/5 · User Story 3 — Speed recovers without oscillating (Priority: P3): 2/2 · User Story 4 — The player sees it and stays in charge (Priority: P4): 2/2 · Polish & Cross-Cutting Concerns: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
