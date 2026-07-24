@@ -3,10 +3,10 @@ id: TASK-79
 title: >-
   Epistemic hygiene for emergent lore: honest belief provenance, hearsay decay,
   attribution-preserving gists
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 05:37'
+updated_date: '2026-07-24 13:18'
 labels:
   - emergent-lore
   - epistemics
@@ -48,7 +48,7 @@ Spec: specs/030-epistemic-hygiene
 - [x] #7 Spec phase: User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP
 - [x] #8 Spec phase: User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2)
 - [x] #9 Spec phase: User Story 3 — Gists preserve attribution (Priority: P3)
-- [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
+- [x] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -102,4 +102,12 @@ spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · Us
 Polish dispatch: T012-T013 → Sonnet (routine validation/gate slice, no doctrine logic — default tier per rubric). Branch must merge origin/main (moved substantially: PRs #56/#57, spec 029/031/033) before the full-suite gate; merge not rebase, board notes cite branch hashes. T013 additionally runs quickstart §4's live multi-scene gist sample with the CURRENT prompt on the standard tier — if clean, it completes AC #3's live-sample half per the US3 ruling.
 
 AC #3 checked on the ruling's evidence, with the prompt UNCHANGED: before/after eval numbers recorded (gemma4 0/18 both variants, controls 12/12; decision.md), and the T013 live multi-scene sample shows 0/7 fact-flattened or 'after investigating'-shaped confabulations on the standard tier (quickstart-results.md §4). The gist prompt as-is preserves attribution on the standard local tier; the failing tier's remediation is TASK-89 (world-01 cogito:3b upgrade). T012-T013 accepted: clean merge of main (efcca2b), suite green post-merge, live validation SC-001 13/13, decay readings match, SC-005 myth-survives observed live (d8568a3).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 3/3 — status In Progress → Done
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All spec tasks complete (Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 3/3). Derived Done by spec-bridge sync.
+<!-- SECTION:FINAL_SUMMARY:END -->
