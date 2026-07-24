@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"math"
 
 	"github.com/evanstern/promptworld/internal/store"
 )
@@ -36,6 +37,48 @@ const (
 	ProvenanceTold      = "told"
 	ProvenanceInferred  = "inferred"
 )
+
+// Belief decay doctrine (spec 030 US2, FR-006; research R3). Human-tuned only,
+// from telemetry — never derived. These are the versioned-with-the-code
+// constants the decay curve reads; the initial values + rationale are recorded
+// on TASK-79.
+const (
+	// BeliefHalfLifeDays is the game-day half-life of an unreinforced belief's
+	// effective confidence: every 8 game-days the effective value halves. This
+	// is an order of magnitude slower than memory recency (memory.go
+	// halfLifeTicks halves a memory's weight every SINGLE game-day) — convictions
+	// outlive vividness. A belief last anchored to direct observation 8 days ago
+	// reads at half its stored confidence.
+	BeliefHalfLifeDays = 8
+	// BeliefConfidenceFloor is the effective-confidence threshold below which a
+	// belief stops driving behavior: read sites (T008) drop it from model-facing
+	// prompts and render it in the soul as half-remembered story, not conviction.
+	// Set to 20, just under the rumor tellability floor (25) so the story
+	// outlives the conviction — the myth keeps being retold after nobody stakes a
+	// decision on it. This constant is doctrine here; the read sites enforce it.
+	BeliefConfidenceFloor = 20
+)
+
+// EffectiveConfidence is a belief's confidence as everyone reads it (spec 030
+// US2, FR-006): the stored Confidence diminished by a half-life curve over the
+// game-days since its reinforcement anchor. Computed on read — the stored value
+// NEVER mutates and no decay event is ever logged, exactly the memory-recency
+// precedent (memory.go SelectMemories scores on read, mutates nothing). A belief
+// with Reinforced == 0 is a legacy grandfather: no anchor, no decay, until a
+// revision or reinforcement first stamps it (US2-AC5). Pure tick arithmetic, so
+// pause and speed change nothing about the result; identical (belief, tick)
+// inputs always yield the identical value (byte-identical replay, FR-011).
+func EffectiveConfidence(b Belief, tick int64) int {
+	if b.Reinforced == 0 {
+		return b.Confidence // legacy grandfather: never decays
+	}
+	elapsed := tick - b.Reinforced
+	if elapsed <= 0 {
+		return b.Confidence // at (or defensively before) the anchor: full conviction
+	}
+	days := float64(elapsed) / 86400
+	return int(math.Round(float64(b.Confidence) * math.Pow(0.5, days/BeliefHalfLifeDays)))
+}
 
 // ConsolidationGapTicks is the secondary once-per-night guard: 12 game-hours
 // must separate markers, closing the post-midnight-sleep double-dip (a
@@ -237,6 +280,16 @@ func (s *State) applyConsolidation(e store.Event) error {
 					a.Beliefs[i].Source = p.Source
 					a.Beliefs[i].Subject = p.Subject
 					a.Beliefs[i].Tick = e.Tick
+					// Revision re-anchors the decay clock ONLY when it rests on direct
+					// perception (spec 030 US2-AC3): a nightly revision citing only
+					// hearsay changes the stored confidence but MUST NOT refresh the
+					// clock — otherwise a myth retold every night stays eternally fresh.
+					// Direct-evidence revision (Direct derived by the validator before
+					// landing) refreshes it. Formation always stamps (above); this is the
+					// held-belief case.
+					if p.Direct {
+						a.Beliefs[i].Reinforced = e.Tick
+					}
 					break
 				}
 			} // unknown ID: no-op
