@@ -452,6 +452,26 @@ func (p *Pile) takeSpears(n int) []int {
 	return taken
 }
 
+// takeAxes removes the n most-worn axes (front of the ascending-sorted slice)
+// and returns their remaining uses; the pile stays sorted ascending. The exact
+// takeSpears clone (spec 032 US2).
+func (p *Pile) takeAxes(n int) []int {
+	if n > len(p.Axes) {
+		n = len(p.Axes)
+	}
+	if n <= 0 {
+		return nil
+	}
+	taken := append([]int(nil), p.Axes[:n]...)
+	rest := append([]int(nil), p.Axes[n:]...)
+	if len(rest) == 0 {
+		p.Axes = nil
+	} else {
+		p.Axes = rest
+	}
+	return taken
+}
+
 // Harvest marks a foraged tile regrowing at Regrow.
 type Harvest struct {
 	X      int   `json:"x"`

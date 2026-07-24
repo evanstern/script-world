@@ -961,6 +961,24 @@ func (s *State) Apply(e store.Event) error {
 					a.Inv.Spears = rest
 				}
 			}
+		} else if p.Kind == "axes" {
+			// Spec 032 US2: axes move exactly like spears (durabilities preserved,
+			// most-worn first, both sides sorted ascending).
+			n := p.N
+			if n > len(a.Inv.Axes) {
+				n = len(a.Inv.Axes)
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				pile.Axes = append(pile.Axes, a.Inv.Axes[:n]...)
+				sort.Ints(pile.Axes)
+				rest := append([]int(nil), a.Inv.Axes[n:]...)
+				if len(rest) == 0 {
+					a.Inv.Axes = nil
+				} else {
+					a.Inv.Axes = rest
+				}
+			}
 		} else if n := p.N; n > 0 {
 			if c := carriedCount(a.Inv, p.Kind); n > c {
 				n = c
@@ -1001,6 +1019,12 @@ func (s *State) Apply(e store.Event) error {
 				if taken := pile.takeSpears(n); len(taken) > 0 {
 					a.Inv.Spears = append(a.Inv.Spears, taken...)
 					sort.Ints(a.Inv.Spears)
+				}
+			case p.Kind == "axes":
+				// Spec 032 US2: axes drain most-worn-first, uses preserved, sorted.
+				if taken := pile.takeAxes(n); len(taken) > 0 {
+					a.Inv.Axes = append(a.Inv.Axes, taken...)
+					sort.Ints(a.Inv.Axes)
 				}
 			case isFoodKind(p.Kind):
 				addItems(&a.Inv, []Item{{p.Kind, pile.takeFood(p.Kind, n)}}, 1)
@@ -1045,6 +1069,25 @@ func (s *State) Apply(e store.Event) error {
 						a.Inv.Spears = nil
 					} else {
 						a.Inv.Spears = rest
+					}
+				}
+			} else if p.Kind == "axes" {
+				// Spec 032 US2: axes deposit exactly like spears.
+				n := p.N
+				if n > len(a.Inv.Axes) {
+					n = len(a.Inv.Axes)
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					ch.Store.Axes = append(ch.Store.Axes, a.Inv.Axes[:n]...)
+					sort.Ints(ch.Store.Axes)
+					rest := append([]int(nil), a.Inv.Axes[n:]...)
+					if len(rest) == 0 {
+						a.Inv.Axes = nil
+					} else {
+						a.Inv.Axes = rest
 					}
 				}
 			} else if n := p.N; n > 0 {
@@ -1096,6 +1139,22 @@ func (s *State) Apply(e store.Event) error {
 					}
 					a.Inv.Spears = append(a.Inv.Spears, taken...)
 					sort.Ints(a.Inv.Spears)
+				}
+			} else if p.Kind == "axes" {
+				// Spec 032 US2: axes withdraw exactly like spears (uses preserved).
+				if n > len(ch.Store.Axes) {
+					n = len(ch.Store.Axes)
+				}
+				if n > 0 {
+					taken := append([]int(nil), ch.Store.Axes[:n]...)
+					rest := append([]int(nil), ch.Store.Axes[n:]...)
+					if len(rest) == 0 {
+						ch.Store.Axes = nil
+					} else {
+						ch.Store.Axes = rest
+					}
+					a.Inv.Axes = append(a.Inv.Axes, taken...)
+					sort.Ints(a.Inv.Axes)
 				}
 			} else if n > 0 {
 				if c := carriedCount(*ch.Store, p.Kind); n > c {
@@ -1229,6 +1288,11 @@ func (s *State) Apply(e store.Event) error {
 			if len(a.Inv.Spears) > 0 {
 				pile.Spears = append(pile.Spears, a.Inv.Spears...)
 				sort.Ints(pile.Spears)
+			}
+			if len(a.Inv.Axes) > 0 {
+				// Spec 032 US2: carried axes spill with their durabilities, sorted.
+				pile.Axes = append(pile.Axes, a.Inv.Axes...)
+				sort.Ints(pile.Axes)
 			}
 			a.Inv = Inventory{}
 		}
