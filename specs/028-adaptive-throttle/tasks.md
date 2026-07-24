@@ -129,7 +129,7 @@ resume window resets; max-speed refusal regression.
       `specs/028-adaptive-throttle/quickstart-results.md` (live-observation precedent: 012/T045)
 - [x] T017 [P] Full-suite gate `go test ./...` green + `go vet ./...`; confirm no format bump needed
       (snapshot-byte test from T007 passes on pre-028 fixtures)
-- [ ] T018 Post-merge re-grounding: `/grounding-wiki:wiki-update` for touched notes (sim-loop, cognition,
+- [x] T018 Post-merge re-grounding: `/grounding-wiki:wiki-update` for touched notes (sim-loop, cognition,
       llm-orchestrator, event-types, ipc-protocol, ipc-server, tui-client, game-clock connections) + player-docs
       refresh (`node .claude/skills/player-docs/scripts/check-freshness.mjs --check`); then `spec-bridge:sync`
       and worktree cleanup
