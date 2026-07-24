@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-24 03:18'
-updated_date: '2026-07-24 03:32'
+updated_date: '2026-07-24 03:59'
 labels:
   - cognition
   - bug
@@ -41,15 +41,15 @@ Spec: specs/031-estimator-breach-adoption
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A sustained step change in observed sec/pt (>3x the current estimate) is followed by the live estimate within one full window (20 samples) — no permanent freeze; regression test reproduces the world-01 shape (seed 0.52, sustained ~12 s/pt samples) and asserts the estimate converges
-- [ ] #2 Genuine one-shot spikes (1-2 spikes within a window) still barely move the estimate — existing spike-rejection tests stay green or are consciously retuned
+- [x] #1 A sustained step change in observed sec/pt (>3x the current estimate) is followed by the live estimate within one full window (20 samples) — no permanent freeze; regression test reproduces the world-01 shape (seed 0.52, sustained ~12 s/pt samples) and asserts the estimate converges
+- [x] #2 Genuine one-shot spikes (1-2 spikes within a window) still barely move the estimate — existing spike-rejection tests stay green or are consciously retuned
 - [ ] #3 The recalibration/adoption behavior is visible in telemetry (event emitted when the estimator re-seeds or adapts) and the wiki cognition note + specs/007 calibration contract are updated to the new doctrine
-- [ ] #4 Router admission returns truthful: in a saturated-load scenario predicted drift tracks actual within the spike factor, so suppression fires before landing-door rejection dominates
-- [ ] #5 Spec phase: Setup
-- [ ] #6 Spec phase: Foundational (Blocking Prerequisites)
-- [ ] #7 Spec phase: User Story 1 — The estimate follows a sustained slowdown (Priority: P1) 🎯 MVP
-- [ ] #8 Spec phase: User Story 2 — One-shot lag spikes are still rejected (Priority: P2)
-- [ ] #9 Spec phase: User Story 3 — Adoption is auditable (Priority: P3)
+- [x] #4 Router admission returns truthful: in a saturated-load scenario predicted drift tracks actual within the spike factor, so suppression fires before landing-door rejection dominates
+- [x] #5 Spec phase: Setup
+- [x] #6 Spec phase: Foundational (Blocking Prerequisites)
+- [x] #7 Spec phase: User Story 1 — The estimate follows a sustained slowdown (Priority: P1) 🎯 MVP
+- [x] #8 Spec phase: User Story 2 — One-shot lag spikes are still rejected (Priority: P2)
+- [x] #9 Spec phase: User Story 3 — Adoption is auditable (Priority: P3)
 - [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
@@ -57,4 +57,8 @@ Spec: specs/031-estimator-breach-adoption
 
 <!-- SECTION:NOTES:BEGIN -->
 Tier decision (constitution Principle V): implementation delegated to spec-implementer on OPUS 4.8. Rubric justification: internal/cognition estimator logic is doctrine-adjacent behavior change in the scheduling/governor family (router admission arithmetic input), explicitly named a senior-tier slice; concurrency-sensitive (per-provider estimator shared across in-flight completions, adoption must be atomic with breach detection). Spec artifacts: specs/031-estimator-breach-adoption (plan.md Constitution Check records the same).
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — The estimate follows a sustained slowdown (Priority: P1) 🎯 MVP: 4/4 · User Story 2 — One-shot lag spikes are still rejected (Priority: P2): 1/1 · User Story 3 — Adoption is auditable (Priority: P3): 4/4 · Polish & Cross-Cutting Concerns: 3/4
+
+Implementation complete on Opus 4.8 spec-implementer, gated by planning tier. PR: https://github.com/evanstern/promptworld/pull/56 (branch task-86-estimator-breach-adoption, 5 commits, rebased onto origin/main). Gates: go test ./... all 19 packages ok; go vet clean; gofmt clean on touched files (5 pre-existing drift files = TASK-83); -race clean on cognition/llm. Review finding caught and fixed (6c4f22b): the breached armed-flag became dead state after adoption — removed; fire-once/re-arm is structural via ring reset. Noted deviations recorded in PR body: breach verdict now on the window-completing 20th sample (SC-001 requires it); T006 arithmetic corrected (1152 ticks at 32x admits ≤ budget 1200; suppression shown at 40 t/s). AC #3 stays open pending post-merge wiki re-pin (docs/wiki/cognition.md) — the telemetry event and specs/007 contract halves are done.
 <!-- SECTION:NOTES:END -->
