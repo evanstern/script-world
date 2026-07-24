@@ -627,6 +627,23 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
 	case "build_fire", "build_shelter", "build_oven", "build_chest":
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
+	case "build_wall_plank", "build_wall_stone":
+		// Spec 032 US1 (FR-007, research R2): walls build ADJACENT — the wall
+		// lands on the Res tile while the builder stands on Target. Re-validate
+		// the Res tile is still a build site AND holds no agent (never entomb
+		// someone by walling their tile); a failed guard resolves via intent_done
+		// with no wall and no spend (contested/occupancy pattern).
+		valid = buildSite(m, s, in.ResX, in.ResY) && !agentAt(s, in.ResX, in.ResY)
+	case "demolish":
+		// Contested-wall (research R5): someone else may have destroyed this wall
+		// while the demolisher worked — a vanished wall resolves via intent_done.
+		valid = wallAt(s, in.ResX, in.ResY) != nil
+	case "repair":
+		// Repair needs a still-standing, still-damaged wall AND 1 matching
+		// material still carried; any of those failing (wall gone, mended by
+		// another, material spent) resolves via intent_done (research R5).
+		w := wallAt(s, in.ResX, in.ResY)
+		valid = w != nil && w.HP < wallMaxHP(w.Kind) && invField(a.Inv, wallRepairMaterial(w.Kind)) >= 1
 	case "quarry":
 		// Contested-resource pattern (FR-002, spec 012 AC#5): someone else may
 		// have quarried this outcrop while this agent walked over.
@@ -752,6 +769,33 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 					PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "Watched %s build a chest for the village.", a.Name))
 			}
 		}
+	case "build_wall_plank", "build_wall_stone":
+		// Spec 032 US1: the wall lands on the Res tile (adjacent-stand build). The
+		// reducer stamps HP = wallMaxHP(kind) and spends the recipe inputs. A
+		// situated builder memory rides along at the shelter salience tier
+		// (events.md: "wall builds emit a situated builder memory"); the wall is
+		// at Res, so the memory is situated by the builder's own stand tile.
+		r, _ := recipeFor(in.Goal)
+		emit("agent.built", BuiltPayload{Agent: i, Kind: r.Structure, X: in.ResX, Y: in.ResY})
+		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason, "Built a wall."))
+	case "demolish":
+		// Spec 032 US1 (research R5): one chip per completed work cycle. When the
+		// chip would leave the wall standing (HP − chip ≥ 1) emit wall_chipped and
+		// the reducer re-arms the work gate (WorkStart = 0) for the next cycle;
+		// otherwise emit wall_destroyed and the reducer removes the wall and clears
+		// the intent. Validity above guarantees the wall still stands here. No
+		// memory — a chip is not formative (spam avoidance, forage/chop precedent).
+		if w := wallAt(s, in.ResX, in.ResY); w != nil && w.HP-demolishChipHP >= 1 {
+			emit("agent.wall_chipped", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		} else {
+			emit("agent.wall_destroyed", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
+		}
+	case "repair":
+		// Spec 032 US1 (research R5): one repair per completed work cycle. The
+		// reducer consumes 1 matching material, clamps HP up to the derived max,
+		// and either re-arms the work gate (still damaged AND material remains) or
+		// clears the intent. Validity above guarantees a damaged wall + material.
+		emit("agent.wall_repaired", WallWorkPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "quarry":
 		emit("agent.quarried", HarvestPayload{Agent: i, X: in.ResX, Y: in.ResY})
 	case "collect_water":

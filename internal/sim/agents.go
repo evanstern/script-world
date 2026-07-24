@@ -853,6 +853,17 @@ type (
 		Y int `json:"y"`
 	}
 
+	// WallWorkPayload (spec 032 US1) is the {agent,x,y} shape shared by the three
+	// wall work-cycle events — agent.wall_chipped, agent.wall_destroyed,
+	// agent.wall_repaired. (x,y) is the wall tile (the intent's Res); Agent is the
+	// actor, so the reducer can reset that agent's Intent.WorkStart to 0 and
+	// re-arm the executor's work gate for the next demolish/repair cycle (R5).
+	WallWorkPayload struct {
+		Agent int `json:"agent"`
+		X     int `json:"x"`
+		Y     int `json:"y"`
+	}
+
 	// --- spec 013 inventory/storage v1 payloads ---
 	// Field order below is the canonical serialization order (see
 	// contracts/events.md); every count is the ACTUAL post-clamp moved amount
