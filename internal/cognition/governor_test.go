@@ -147,6 +147,55 @@ func TestDebtIsDeterministic(t *testing.T) {
 	}
 }
 
+// TestGovernorWorld01ZeroShedRegression (spec 033 FR-005, SC-001) pins the
+// world-01 zero-shed defect red-first: the saturation shape that produced ZERO
+// governor sheds while 17/31 planner thoughts landed rejected-stale. Eight
+// planner thoughts predicted 1.573 s but 30 s into flight, sampled at 8 ticks/s,
+// are the worked example in contracts/debt-formula.md. Under the old floored
+// arithmetic each overdue thought contributes zero, so debt is 0.0, jobs 0, and
+// the governor never sheds — the throttle sits blind exactly while the system
+// drowns. Under accrued-drift debt each contributes 30 × 8 / 1200 = 0.2, so debt
+// is 1.6 over the 1.0 shed threshold and a shed fires when the breach window
+// completes. This test fails on the current arithmetic; T003 turns it green.
+func TestGovernorWorld01ZeroShedRegression(t *testing.T) {
+	const (
+		predicted = 1.573 // frozen-optimistic prediction (spec 031 estimator freeze)
+		elapsed   = 30.0  // long in flight — well past the prediction
+		tps       = 8.0   // 8 ticks/sec
+	)
+	pending := make([]PendingDebtInput, 8)
+	for i := range pending {
+		pending[i] = PendingDebtInput{Kind: "planner", PredictedSec: predicted, ElapsedSec: elapsed}
+	}
+
+	debt, jobs := Debt(pending, tps)
+	// planner budget 1200 ticks: each overdue thought counts 30 × 8 / 1200 = 0.2.
+	if wantDebt := 8 * (elapsed * tps / 1200); math.Abs(debt-wantDebt) > 1e-9 {
+		t.Errorf("world-01 debt = %g, want %g — overdue thoughts must count their accrued drift, not zero", debt, wantDebt)
+	}
+	if jobs != 8 {
+		t.Errorf("world-01 jobs = %d, want 8 — every overdue thought contributes", jobs)
+	}
+
+	// The same debt sampled every cadence drives a shed once the breach window
+	// completes: effective and requested both 8x, unpaused, so there is a lower
+	// notch (4x) to shed to. A shed fires on the fifth consecutive over-threshold
+	// sample (breachSamples = 5) and never before.
+	g := &Governor{}
+	for i := 1; i < breachSamples; i++ {
+		if d := g.Sample(debt, jobs, false, clock.Speed8x, clock.Speed8x); d.Action != ActionNone {
+			t.Fatalf("world-01 sample %d/%d shed early: %+v", i, breachSamples, d)
+		}
+	}
+	d := g.Sample(debt, jobs, false, clock.Speed8x, clock.Speed8x)
+	if d.Action != ActionShed {
+		t.Fatalf("world-01 sample %d did not shed: %+v — the throttle stayed blind while the system drowned", breachSamples, d)
+	}
+	if d.To != clock.Speed4x {
+		t.Errorf("world-01 shed To = %q, want 4x (one notch below 8x)", d.To)
+	}
+}
+
 // --- Governor state machine: shed path (spec 028 US2, T009) ---
 //
 // The controller counts SAMPLES, not durations; breachSamples (= BreachWindow /
