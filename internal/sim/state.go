@@ -569,8 +569,21 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// US1-AS2 (T010): yield truncates to free bulk; the tree still clears.
-		a.Inv.Wood += minInt(chopWood, freeBulk(a.Inv))
+		// T014 (spec 032 US2): yield is chopYieldBare (1) bare-handed, chopYieldAxe
+		// (3) with a carried axe — re-derived from the SAME pre-mutation state the
+		// emitter checked (spear-hunt precedent), and the axe spends Axes[0]'s use.
+		// Free-bulk truncation (US1-AS2) applies on top: the spear/axe spend frees
+		// no bulk mid-event (decrementing a use leaves len(Axes) unchanged), and a
+		// broken axe's removal rides its own companion agent.axe_broke — so free
+		// space is read once, before the wood is added, with the axe still counted.
+		yield := chopYieldBare
+		if len(a.Inv.Axes) > 0 {
+			yield = chopYieldAxe
+		}
+		a.Inv.Wood += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes[0]--
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Cleared = append(s.Cleared, Point{X: p.X, Y: p.Y})
@@ -644,6 +657,12 @@ func (s *State) Apply(e store.Event) error {
 			st.Owner = p.Agent
 			st.Store = &Inventory{}
 		}
+		if isWall(p.Kind) {
+			// T008 (spec 032 US1, research R1): a fresh wall stands at full health,
+			// derived from its kind (never stored as a separate max — fire lit-ness
+			// doctrine). The recipe delta above already spent the wall's material.
+			st.HP = wallMaxHP(p.Kind)
+		}
 		s.Structures = append(s.Structures, st)
 	case "agent.ate":
 		// T018: outcome-payload eat — the emitter computed the
@@ -673,8 +692,17 @@ func (s *State) Apply(e store.Event) error {
 		if err != nil {
 			return err
 		}
-		// US1-AS2 (T010): yield truncates to free bulk; the outcrop still depletes.
-		a.Inv.Stone += minInt(quarryYield, freeBulk(a.Inv))
+		// T014 (spec 032 US2): quarryYieldBare (1) bare / quarryYieldAxe (3) with a
+		// carried axe, same axe-spend and pre-mutation derivation as chop above.
+		// Free-bulk truncation still applies; the outcrop depletes regardless.
+		yield := quarryYieldBare
+		if len(a.Inv.Axes) > 0 {
+			yield = quarryYieldAxe
+		}
+		a.Inv.Stone += minInt(yield, freeBulk(a.Inv))
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes[0]--
+		}
 		a.Intent = nil
 		a.IdleSince = e.Tick
 		s.Quarried = append(s.Quarried, Point{X: p.X, Y: p.Y})
@@ -711,10 +739,17 @@ func (s *State) Apply(e store.Event) error {
 			return fmt.Errorf("apply %s: no recipe for crafted kind %q", e.Type, p.Kind)
 		}
 		addItems(&a.Inv, r.Inputs, -1)
-		if p.Kind == "spear" {
+		switch p.Kind {
+		case "spear":
 			a.Inv.Spears = append(a.Inv.Spears, spearDurability)
 			sort.Ints(a.Inv.Spears)
-		} else {
+		case "axe":
+			// T014 (spec 032 US2): like a spear, an axe's durability lives in a
+			// slice, not a plain int field — a fresh axe (axeDurability uses) is
+			// appended and kept sorted ascending so harvests spend the most-worn first.
+			a.Inv.Axes = append(a.Inv.Axes, axeDurability)
+			sort.Ints(a.Inv.Axes)
+		default:
 			addItems(&a.Inv, r.Outputs, 1)
 		}
 		a.Intent = nil
@@ -800,9 +835,101 @@ func (s *State) Apply(e store.Event) error {
 		if len(a.Inv.Spears) > 0 {
 			a.Inv.Spears = a.Inv.Spears[1:]
 		}
+	case "agent.axe_broke":
+		// T014 (spec 032 US2): the batch's preceding agent.chopped/quarried already
+		// decremented Axes[0] to zero (spent its last use) — this event removes the
+		// now-empty entry (spear_broke clone). The companion memory rides alongside
+		// as its own agent.memory_added event, not part of this payload.
+		var p AxeBrokePayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if len(a.Inv.Axes) > 0 {
+			a.Inv.Axes = a.Inv.Axes[1:]
+		}
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
+
+	// --- spec 032 walls: multi-cycle demolish / repair ---
+	case "agent.wall_chipped":
+		// T008 (spec 032 US1, research R5): one demolish cycle chips the wall's
+		// health, then re-arms the executor's work gate (Intent.WorkStart = 0) so
+		// the next cycle runs under the same intent — the whole multi-cycle loop,
+		// no new scheduling. The executor only emits this when HP − chip ≥ 1, so
+		// the wall stays standing; the ≥1 clamp defends the invariant that a
+		// standing wall never serializes ≤ 0 (data-model.md).
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if w := wallAt(s, p.X, p.Y); w != nil {
+			w.HP -= demolishChipHP
+			if w.HP < 1 {
+				w.HP = 1
+			}
+		}
+		if a.Intent != nil {
+			a.Intent.WorkStart = 0
+		}
+	case "agent.wall_destroyed":
+		// T008: the final demolish cycle (or a chip that would reach ≤ 0) removes
+		// the wall — its tile is passable again by construction — and clears the
+		// demolisher's intent. Metatron's entity_removed reaches the same end
+		// through the miracle path (contracts/events.md).
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if i := s.structureIndexAt(p.X, p.Y); i >= 0 && isWall(s.Structures[i].Kind) {
+			s.removeStructureAt(i)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.wall_repaired":
+		// T008 (spec 032 US1, research R5): one repair cycle consumes 1 matching
+		// material and restores HP up to (never past) the derived max. If the wall
+		// is still damaged AND material remains the work gate re-arms for another
+		// cycle (WorkStart = 0, intent kept); otherwise the intent clears. The
+		// emitter validated a damaged wall + material; the reducer clamps
+		// defensively so replay never drifts.
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if w := wallAt(s, p.X, p.Y); w != nil {
+			mat := wallRepairMaterial(w.Kind)
+			maxHP := wallMaxHP(w.Kind)
+			if invField(a.Inv, mat) >= 1 {
+				addItems(&a.Inv, []Item{{mat, 1}}, -1)
+			}
+			w.HP = minInt(maxHP, w.HP+repairHPPerUnit)
+			if w.HP < maxHP && invField(a.Inv, mat) >= 1 {
+				if a.Intent != nil {
+					a.Intent.WorkStart = 0
+				}
+				break // still damaged with material in hand — keep repairing
+			}
+		}
+		// Fully mended, out of material, or the wall vanished: the work is done.
+		a.Intent = nil
+		a.IdleSince = e.Tick
 
 	// --- spec 013 inventory/storage v1 event surface ---
 	case "agent.dropped":
@@ -834,6 +961,24 @@ func (s *State) Apply(e store.Event) error {
 					a.Inv.Spears = nil
 				} else {
 					a.Inv.Spears = rest
+				}
+			}
+		} else if p.Kind == "axes" {
+			// Spec 032 US2: axes move exactly like spears (durabilities preserved,
+			// most-worn first, both sides sorted ascending).
+			n := p.N
+			if n > len(a.Inv.Axes) {
+				n = len(a.Inv.Axes)
+			}
+			if n > 0 {
+				pile := s.pileFor(p.X, p.Y)
+				pile.Axes = append(pile.Axes, a.Inv.Axes[:n]...)
+				sort.Ints(pile.Axes)
+				rest := append([]int(nil), a.Inv.Axes[n:]...)
+				if len(rest) == 0 {
+					a.Inv.Axes = nil
+				} else {
+					a.Inv.Axes = rest
 				}
 			}
 		} else if n := p.N; n > 0 {
@@ -876,6 +1021,12 @@ func (s *State) Apply(e store.Event) error {
 				if taken := pile.takeSpears(n); len(taken) > 0 {
 					a.Inv.Spears = append(a.Inv.Spears, taken...)
 					sort.Ints(a.Inv.Spears)
+				}
+			case p.Kind == "axes":
+				// Spec 032 US2: axes drain most-worn-first, uses preserved, sorted.
+				if taken := pile.takeAxes(n); len(taken) > 0 {
+					a.Inv.Axes = append(a.Inv.Axes, taken...)
+					sort.Ints(a.Inv.Axes)
 				}
 			case isFoodKind(p.Kind):
 				addItems(&a.Inv, []Item{{p.Kind, pile.takeFood(p.Kind, n)}}, 1)
@@ -920,6 +1071,25 @@ func (s *State) Apply(e store.Event) error {
 						a.Inv.Spears = nil
 					} else {
 						a.Inv.Spears = rest
+					}
+				}
+			} else if p.Kind == "axes" {
+				// Spec 032 US2: axes deposit exactly like spears.
+				n := p.N
+				if n > len(a.Inv.Axes) {
+					n = len(a.Inv.Axes)
+				}
+				if n > free {
+					n = free
+				}
+				if n > 0 {
+					ch.Store.Axes = append(ch.Store.Axes, a.Inv.Axes[:n]...)
+					sort.Ints(ch.Store.Axes)
+					rest := append([]int(nil), a.Inv.Axes[n:]...)
+					if len(rest) == 0 {
+						a.Inv.Axes = nil
+					} else {
+						a.Inv.Axes = rest
 					}
 				}
 			} else if n := p.N; n > 0 {
@@ -971,6 +1141,22 @@ func (s *State) Apply(e store.Event) error {
 					}
 					a.Inv.Spears = append(a.Inv.Spears, taken...)
 					sort.Ints(a.Inv.Spears)
+				}
+			} else if p.Kind == "axes" {
+				// Spec 032 US2: axes withdraw exactly like spears (uses preserved).
+				if n > len(ch.Store.Axes) {
+					n = len(ch.Store.Axes)
+				}
+				if n > 0 {
+					taken := append([]int(nil), ch.Store.Axes[:n]...)
+					rest := append([]int(nil), ch.Store.Axes[n:]...)
+					if len(rest) == 0 {
+						ch.Store.Axes = nil
+					} else {
+						ch.Store.Axes = rest
+					}
+					a.Inv.Axes = append(a.Inv.Axes, taken...)
+					sort.Ints(a.Inv.Axes)
 				}
 			} else if n > 0 {
 				if c := carriedCount(*ch.Store, p.Kind); n > c {
@@ -1104,6 +1290,11 @@ func (s *State) Apply(e store.Event) error {
 			if len(a.Inv.Spears) > 0 {
 				pile.Spears = append(pile.Spears, a.Inv.Spears...)
 				sort.Ints(pile.Spears)
+			}
+			if len(a.Inv.Axes) > 0 {
+				// Spec 032 US2: carried axes spill with their durabilities, sorted.
+				pile.Axes = append(pile.Axes, a.Inv.Axes...)
+				sort.Ints(pile.Axes)
 			}
 			a.Inv = Inventory{}
 		}

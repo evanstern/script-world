@@ -175,6 +175,15 @@ func TestWorldToolDurationsMatchSimConstants(t *testing.T) {
 		"build_chest":   buildFireTicks, // recipes.go's build_chest recipe entry reuses buildFireTicks (600)
 		"deposit":       0,
 		"withdraw":      0,
+		// Spec 032 US1 (walls).
+		"build_wall_plank": buildWallTicks,
+		"build_wall_stone": buildWallTicks,
+		"demolish":         demolishTicks,
+		"repair":           repairTicks,
+		// Spec 032 US2 (axe) — 240-tick hand-craft, reusing craftSpearTicks.
+		"craft_axe": craftSpearTicks,
+		// Spec 032 US3 (path).
+		"build_path": buildPathTicks,
 	}
 
 	seen := make(map[string]bool, len(want))

@@ -249,6 +249,7 @@ const (
 	// the same band as SalDream, so a broken spear or a new oven doesn't
 	// outrank real trauma at cognition-landing time.
 	salSpearBroke = 8 // US3: the spear that spent its last use
+	salAxeBroke   = 8 // spec 032 US2: the axe that spent its last harvest use (spear-broke band)
 	salBath       = 5 // US4: medium, positive tone
 	salOvenBuilt  = 7 // US4: high, village-visible (builder + nearby witnesses)
 	// Spec 013 (inventory & storage, research R5). Same "high = memorable, not

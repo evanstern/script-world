@@ -182,6 +182,26 @@ func buildGoalResolvers() map[string]goalResolver {
 		}
 		return &Intent{Goal: goal, TargetX: a.X, TargetY: a.Y}, "", nil
 	}
+	// wallBuild resolves both wall builds (spec 032 US1, research R2). Unlike
+	// fire/shelter/oven/chest (which build on the tile the agent stands on),
+	// walls build ADJACENT: the builder stands on a passable tile (Target) and
+	// the wall lands on the neighboring buildable tile (Res). Building where you
+	// stand would entomb the builder the instant the wall lands (FR-007), so
+	// nearestAdjacentTo over buildSite gives the stand/build pair — the chop/
+	// quarry adjacency pattern.
+	wallBuild := func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
+		r, ok := recipeFor(goal)
+		if !ok {
+			return nil, "", fmt.Errorf("unknown recipe %q", goal)
+		}
+		if !hasItems(a.Inv, r.Inputs) {
+			return nil, "", fmt.Errorf("%s lacks inputs for %s", a.Name, goal)
+		}
+		if stand, res, ok := nearestAdjacentTo(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+			return &Intent{Goal: goal, TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
+		}
+		return nil, "", fmt.Errorf("no build site reachable")
+	}
 	// talk resolves both talk_to (the planner verb) and its internal "seek"
 	// alias — they shared one switch arm.
 	talk := func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
@@ -302,6 +322,47 @@ func buildGoalResolvers() map[string]goalResolver {
 		"craft_planks": craft,
 		"craft_stone":  craft,
 		"craft_spear":  craft,
+		"craft_axe":    craft, // spec 032 US2: same shared hand-craft closure
+		"build_path": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
+			// Spec 032 US3 (research R3): a path is built ON the tile the agent
+			// stands on (stand-on-target, the build_fire pattern) — paths are
+			// walkable, so there is no entombment risk, unlike walls. The generic
+			// build completion + reducer arm handle the rest.
+			r, _ := recipeFor("build_path")
+			if !hasItems(a.Inv, r.Inputs) {
+				return nil, "", fmt.Errorf("%s lacks stone for a path (%d < %d)", a.Name, a.Inv.Stone, pathStoneCost)
+			}
+			if p, ok := nearest(m, s, a.X, a.Y, func(x, y int) bool { return buildSite(m, s, x, y) }); ok {
+				return &Intent{Goal: goal, TargetX: p.X, TargetY: p.Y}, "", nil
+			}
+			return nil, "", fmt.Errorf("no build site reachable")
+		},
+		"build_wall_plank": wallBuild,
+		"build_wall_stone": wallBuild,
+		"demolish": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
+			// Spec 032 US1 (research R5): tear down the nearest wall. Adjacent-
+			// stand (wall tiles are impassable), so nearestAdjacentTo over isWall
+			// gives the stand tile (Target) beside the wall tile (Res). No material
+			// needed to demolish.
+			if stand, res, ok := nearestAdjacentTo(m, s, a.X, a.Y, func(x, y int) bool { return wallAt(s, x, y) != nil }); ok {
+				return &Intent{Goal: "demolish", TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
+			}
+			return nil, "", fmt.Errorf("no wall reachable to demolish")
+		},
+		"repair": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
+			// Spec 032 US1 (research R5): mend the nearest DAMAGED wall the agent
+			// can afford — HP below the derived max AND at least 1 unit of that
+			// wall's build material carried (planks for a plank wall, refined
+			// stone for a stone wall). A wall already at full health never
+			// resolves (nothing to repair). Adjacent-stand, like demolish.
+			if stand, res, ok := nearestAdjacentTo(m, s, a.X, a.Y, func(x, y int) bool {
+				w := wallAt(s, x, y)
+				return w != nil && w.HP < wallMaxHP(w.Kind) && invField(a.Inv, wallRepairMaterial(w.Kind)) >= 1
+			}); ok {
+				return &Intent{Goal: "repair", TargetX: stand.X, TargetY: stand.Y, ResX: res.X, ResY: res.Y}, "", nil
+			}
+			return nil, "", fmt.Errorf("%s has no damaged wall reachable to repair (with the right material)", a.Name)
+		},
 		"refuel_fire": func(s *State, m *worldmap.Map, a *Agent, idx int, goal string, targetAgent int, kind string, qty int, tick int64) (*Intent, string, error) {
 			// T020: planner OR reflex (the one shared goal, FR-020). Target the
 			// nearest fire, lit or cold — the completion relights a cold one.

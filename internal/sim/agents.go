@@ -40,6 +40,11 @@ type Inventory struct {
 	FoodCooked   int   `json:"food_cooked,omitempty"`
 	Meals        int   `json:"meals,omitempty"`
 	Spears       []int `json:"spears,omitempty"` // remaining uses per spear, sorted ascending
+	// Axes (spec 032 US2) mirror Spears exactly: remaining harvest uses per
+	// carried axe, sorted ascending (harvests spend the most-worn first). A
+	// carried axe triples chop/quarry yield. omitempty keeps pre-032 inventories
+	// byte-identical.
+	Axes []int `json:"axes,omitempty"`
 }
 
 // Intent is one multi-step goal being executed unattended: walk to
@@ -191,13 +196,20 @@ type Memory struct {
 // chestCap via the same derived bulk() used for agents — chests preserve food
 // indefinitely, so it needs no batches. Both omitempty keep non-chest and
 // pre-013 snapshots byte-identical.
+// HP (spec 032, research R1) applies to walls only: a standing wall's current
+// health, 1..wallMaxHP(kind). Max HP is derived from the kind (never stored),
+// same doctrine as fire lit-ness from FuelUntil. A standing wall always has
+// HP ≥ 1 — the reducer removes the structure in the same application that would
+// take it to ≤ 0, so hp never serializes as 0. omitempty keeps non-wall and
+// pre-032 snapshots byte-identical.
 type Structure struct {
-	Kind      string     `json:"kind"` // "fire" | "shelter" | "oven" | "chest"
+	Kind      string     `json:"kind"` // "fire" | "shelter" | "oven" | "chest" | "wall_plank" | "wall_stone" | "path"
 	X         int        `json:"x"`
 	Y         int        `json:"y"`
 	FuelUntil int64      `json:"fuel_until,omitempty"` // fires only
 	Owner     int        `json:"owner,omitempty"`      // chests only: builder agent index, permanent
 	Store     *Inventory `json:"store,omitempty"`      // chests only: contents (no rot inside)
+	HP        int        `json:"hp,omitempty"`         // walls only: current health, 1..wallMaxHP(kind)
 }
 
 // FoodBatch is one drop of food on the ground with its own spoilage deadline —
@@ -226,6 +238,7 @@ type Pile struct {
 	Planks       int         `json:"planks,omitempty"`
 	RefinedStone int         `json:"refined_stone,omitempty"`
 	Spears       []int       `json:"spears,omitempty"` // remaining uses, sorted ascending
+	Axes         []int       `json:"axes,omitempty"`   // remaining uses, sorted ascending (spec 032 US2)
 	Food         []FoodBatch `json:"food,omitempty"`   // drop order; same (Kind,SpoilAt) merges
 }
 
@@ -234,7 +247,7 @@ type Pile struct {
 // removed; data-model.md).
 func (p *Pile) empty() bool {
 	return p.Wood == 0 && p.Stone == 0 && p.Water == 0 && p.Planks == 0 &&
-		p.RefinedStone == 0 && len(p.Spears) == 0 && len(p.Food) == 0
+		p.RefinedStone == 0 && len(p.Spears) == 0 && len(p.Axes) == 0 && len(p.Food) == 0
 }
 
 // addFood merges n of a food kind into the pile: an existing batch with the
@@ -259,7 +272,7 @@ func (p *Pile) addFood(kind string, n int, spoilAt int64) {
 // Kind-empty pick_up/withdraw walks these in this exact order (spec 013 US2).
 var canonicalKinds = []string{
 	"wood", "stone", "water", "planks", "refined_stone",
-	"food_raw", "food_cooked", "meals", "spears",
+	"food_raw", "food_cooked", "meals", "spears", "axes",
 }
 
 // isFoodKind reports whether a kind is one of the batch-tracked food forms
@@ -277,8 +290,11 @@ var foodKinds = []string{"food_raw", "food_cooked", "meals"}
 // carriedCount is how many units of a kind an agent carries: spears counted
 // (durability lives in the slice), every other kind its flat inventory field.
 func carriedCount(inv Inventory, kind string) int {
-	if kind == "spears" {
+	switch kind {
+	case "spears":
 		return len(inv.Spears)
+	case "axes":
+		return len(inv.Axes)
 	}
 	return invField(inv, kind)
 }
@@ -300,6 +316,8 @@ func (p *Pile) avail(kind string) int {
 		return p.RefinedStone
 	case "spears":
 		return len(p.Spears)
+	case "axes":
+		return len(p.Axes)
 	case "food_raw", "food_cooked", "meals":
 		n := 0
 		for _, b := range p.Food {
@@ -441,6 +459,26 @@ func (p *Pile) takeSpears(n int) []int {
 	return taken
 }
 
+// takeAxes removes the n most-worn axes (front of the ascending-sorted slice)
+// and returns their remaining uses; the pile stays sorted ascending. The exact
+// takeSpears clone (spec 032 US2).
+func (p *Pile) takeAxes(n int) []int {
+	if n > len(p.Axes) {
+		n = len(p.Axes)
+	}
+	if n <= 0 {
+		return nil
+	}
+	taken := append([]int(nil), p.Axes[:n]...)
+	rest := append([]int(nil), p.Axes[n:]...)
+	if len(rest) == 0 {
+		p.Axes = nil
+	} else {
+		p.Axes = rest
+	}
+	return taken
+}
+
 // Harvest marks a foraged tile regrowing at Regrow.
 type Harvest struct {
 	X      int   `json:"x"`
@@ -484,8 +522,8 @@ const (
 	buildShelterTicks = 1200
 	huntTicks         = 900
 
-	// Yields and costs.
-	chopWood        = 2
+	// Yields and costs. chopWood (spec 012's flat 2) is deleted by spec 032 T014
+	// — chop yield is now chopYieldBare/chopYieldAxe (agents.go spec-032 block).
 	fireWoodCost    = 2
 	shelterWoodCost = 5
 
@@ -552,7 +590,8 @@ const (
 	// v2 gather rescale (wired T013 quarry/water, T017 forage/hunt). The legacy
 	// forageYield/huntYield constants are gone (T017): agent.foraged now yields
 	// forageYieldV2 FoodRaw, agent.hunted huntYieldBare (spear boost is T027).
-	quarryYield       = 2
+	// quarryYield (spec 012's flat 2) is deleted by spec 032 T014 — quarry yield
+	// is now quarryYieldBare/quarryYieldAxe (agents.go spec-032 block).
 	quarryTicks       = 400
 	collectWaterYield = 1
 	collectWaterTicks = 60
@@ -594,6 +633,37 @@ const (
 	theftMemoryTone     = -60  // owner/witness memory tone (gossip seed)
 )
 
+// --- spec 032 walls/axes/paths tuning ---
+//
+// The single scalar tuning surface for this feature, mirrored in
+// specs/032-walls-axes-paths/contracts/recipes.md and research R8. Ticks are
+// game-seconds (a game-hour is 3600 ticks). Wall max HP is DERIVED from the kind
+// via wallMaxHP (terrain.go), never stored — the fire lit-ness doctrine. The
+// legacy flat chopWood/quarryYield are deleted in T014, replaced by the
+// bare/axe yield pairs below.
+const (
+	wallPlankCost   = 2   // planks → wall_plank (build_wall_plank recipe input)
+	wallStoneCost   = 2   // refined_stone → wall_stone (build_wall_stone recipe input)
+	wallPlankHP     = 200 // plank wall max health
+	wallStoneHP     = 600 // stone wall max health — 3x plank (spec FR-003: ≥2x)
+	buildWallTicks  = 600 // per-wall build work duration
+	demolishChipHP  = 100 // HP removed per demolish work cycle (plank: 2 cycles; stone: 6)
+	demolishTicks   = 300 // per demolish chip cycle
+	repairHPPerUnit = 100 // HP restored per material unit consumed, clamped to max
+	repairTicks     = 240 // per repair work cycle
+	pathStoneCost   = 1   // raw stone per path tile (build_path recipe input)
+	buildPathTicks  = 240 // path build work duration
+	axeDurability   = 10  // harvest uses per fresh axe (chop/quarry far outpace hunting)
+
+	// Harvest yield rebalance (spec FR-009/010): bare-handed drops from the
+	// legacy flat 2 to 1; a carried axe triples it to 3. Replaces chopWood /
+	// quarryYield (deleted T014).
+	chopYieldBare   = 1 // wood per bare-handed chop
+	chopYieldAxe    = 3 // wood per axe-assisted chop
+	quarryYieldBare = 1 // stone per bare-handed quarry
+	quarryYieldAxe  = 3 // stone per axe-assisted quarry
+)
+
 // bulk is an agent's (or a chest's) carried load: one per unit of every
 // inventory kind plus one per carried spear (data-model.md). Derived, never
 // stored — same doctrine as fire lit-ness from FuelUntil: a derived value
@@ -602,7 +672,7 @@ const (
 // Chest capacity uses this same function over *Store.
 func bulk(inv Inventory) int {
 	return inv.Wood + inv.Stone + inv.Water + inv.Planks + inv.RefinedStone +
-		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears)
+		inv.FoodRaw + inv.FoodCooked + inv.Meals + len(inv.Spears) + len(inv.Axes)
 }
 
 // freeBulk is the remaining carry capacity under the cap: bulkCap − bulk(inv),
@@ -633,6 +703,14 @@ const ChestCap = chestCap
 
 func Bulk(inv Inventory) int {
 	return bulk(inv)
+}
+
+// WallMaxHP is wallMaxHP exported for internal/tui (spec 032): the map view dims
+// a wall glyph when its current HP is below the derived per-kind maximum
+// (cold-fire precedent), and only sim knows that maximum. Mirrors the Bulk/
+// BulkCap export — sim stays the single source of truth for the derived value.
+func WallMaxHP(kind string) int {
+	return wallMaxHP(kind)
 }
 
 // intentDurations is the per-goal-door-world-tool base work duration, DERIVED
@@ -816,11 +894,29 @@ type (
 	SpearBrokePayload struct {
 		Agent int `json:"agent"`
 	}
+	// AxeBrokePayload (spec 032 US2): the axe that spent its last harvest use,
+	// co-emitted immediately after the chop/quarry completion when the pre-event
+	// Axes[0] == 1 — the exact SpearBrokePayload clone. A companion memory rides
+	// the same batch.
+	AxeBrokePayload struct {
+		Agent int `json:"agent"`
+	}
 	// FireBurnedOutPayload: the fuel sweep's once-per-burnout signal. No state
 	// effect (lit-ness is derived from FuelUntil); chronicle/TUI material.
 	FireBurnedOutPayload struct {
 		X int `json:"x"`
 		Y int `json:"y"`
+	}
+
+	// WallWorkPayload (spec 032 US1) is the {agent,x,y} shape shared by the three
+	// wall work-cycle events — agent.wall_chipped, agent.wall_destroyed,
+	// agent.wall_repaired. (x,y) is the wall tile (the intent's Res); Agent is the
+	// actor, so the reducer can reset that agent's Intent.WorkStart to 0 and
+	// re-arm the executor's work gate for the next demolish/repair cycle (R5).
+	WallWorkPayload struct {
+		Agent int `json:"agent"`
+		X     int `json:"x"`
+		Y     int `json:"y"`
 	}
 
 	// --- spec 013 inventory/storage v1 payloads ---
