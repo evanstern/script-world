@@ -248,6 +248,54 @@ func TestGovernorSamplerShedsAfterBreachWindow(t *testing.T) {
 	}
 }
 
+// TestGovernorSamplerShedsOnOverdueThoughts (spec 033 SC-001, FR-005): the
+// world-01 saturation shape driven end to end through the sampler. Eight planner
+// thoughts predicted 1.573 s but 30 s in flight at 8x each accrue 30*8/1200 = 0.2
+// budget-fractions, so aggregate debt is 1.6 over the shed threshold — the shape
+// that produced zero sheds under the old floor. The sampler now sheds within one
+// breach window and stores a snapshot reflecting the overdue set (Debt 1.6,
+// Jobs 8), so the visible jobs figure recovers alongside the shed.
+func TestGovernorSamplerShedsOnOverdueThoughts(t *testing.T) {
+	breachSamples := int(cognition.BreachWindow / cognition.GovernorCadence)
+	pending := &fakePending{}
+	overdue := make([]llm.PendingThought, 8)
+	for i := range overdue {
+		overdue[i] = llm.PendingThought{Kind: "planner", PredictedSec: 1.573, ElapsedSec: 30}
+	}
+	pending.set(overdue)
+	status := &fakeStatus{speed: clock.Speed8x}
+	s := newGovernorSampler(pending, status)
+
+	for i := 1; i < breachSamples; i++ {
+		s.sample()
+		if calls := status.governCalls(); len(calls) != 0 {
+			t.Fatalf("shed after only %d samples, before the breach window closed: %+v", i, calls)
+		}
+	}
+	s.sample() // completes the breach window
+
+	// The stored snapshot reflects the overdue set — the visible jobs figure, blind
+	// under the old floor (world-01 showed 0 jobs while thoughts drowned), now sees
+	// all eight.
+	if snap := s.Snapshot(); math.Abs(snap.Debt-1.6) > 1e-9 || snap.Jobs != 8 {
+		t.Errorf("snapshot = %+v, want Debt 1.6 Jobs 8 (overdue thoughts count their accrued drift)", snap)
+	}
+
+	calls := status.governCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one Govern(shed) within the breach window, got %d: %+v", len(calls), calls)
+	}
+	if calls[0].to != clock.Speed4x {
+		t.Errorf("Govern to = %q, want 4x (one notch below 8x)", calls[0].to)
+	}
+	if calls[0].jobs != 8 {
+		t.Errorf("Govern jobs = %d, want 8", calls[0].jobs)
+	}
+	if math.Abs(calls[0].debt-1.6) > 1e-9 {
+		t.Errorf("Govern debt = %v, want 1.6", calls[0].debt)
+	}
+}
+
 // TestGovernorSamplerReshedsAtRaisedCeiling (spec 028 US4-AC3, FR-009): after a
 // player raises the ceiling — the loop's set_speed collapsed governed state, so
 // the sampler now reads an ungoverned world sitting at the newly requested speed
