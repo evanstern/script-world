@@ -73,6 +73,12 @@ func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
 	if d.grant.allows("send_omen") {
 		h["send_omen"] = mt.handleOmen(d)
 	}
+	if d.grant.allows("monitor_and_act") {
+		h["monitor_and_act"] = mt.handleMonitor(d)
+	}
+	if d.grant.allows("cancel_order") {
+		h["cancel_order"] = mt.handleCancelOrder(d)
+	}
 	if d.grant.allows("work_miracle") {
 		h["work_miracle"] = mt.handleMiracle(d)
 	}
@@ -113,7 +119,42 @@ func (mt *Metatron) handleOmen(d *turnDispatch) toolloop.Handler {
 	}
 }
 
-// handleMiracle wraps landMiracle. Same accept/reject translation as handleNudge.
+// handleMonitor wraps placeOrder (spec 029 T009): a monitor_and_act call places a
+// player-origin standing order through the InjectSocial door. A landed placement
+// writes the OrderReport onto the shared result and ends the turn (one act, the
+// Expressive cardinality); a door rejection (cap reached, ttl out of range,
+// unknown watched villager, uncompilable condition) is fed back as a rejected_gate
+// the model may repair within the round cap. The driver's schema already rejected
+// an empty event_types as rejected_malformed; a semantically uncompilable
+// condition (e.g. unknown agent) is this gate's refusal-with-counsel (research R5).
+func (mt *Metatron) handleMonitor(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		if order, why := mt.placeOrder("player", parseOrderArgs(call.Args), d.tick, d.grant); order != nil {
+			d.result.Order = &OrderReport{ID: order.ID, Condition: order.Condition}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the watch is set (" + order.ID + ")"}
+		} else {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleCancelOrder wraps cancelOrder (spec 029 T009): cancel_order lands
+// metatron.order_cancelled for the named id. The reducer resolves the
+// cancel/expiry/trigger race — an unknown or already-lapsed id refuses with
+// counsel. A landed cancel records the id and ends the turn.
+func (mt *Metatron) handleCancelOrder(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		id := argString(call.Args, "id")
+		if why := mt.cancelOrder(id, d.grant); why == "" {
+			d.result.Cancelled = append(d.result.Cancelled, id)
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the watch is released"}
+		} else {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleMiracle wraps landMiracle. Same accept/reject translation as handleVision.
 func (mt *Metatron) handleMiracle(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
 		if miracle, why := mt.landMiracle(parseMiracleArgs(call.Args), d.charges, d.grant); miracle != nil {

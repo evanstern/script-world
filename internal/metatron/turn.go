@@ -38,11 +38,21 @@ var ErrTurnBusy = errors.New("the angel is attending another matter")
 
 // TurnResult is the console-facing outcome of one turn.
 type TurnResult struct {
-	Reply   string   `json:"reply"`
-	Nudge   *Nudge   `json:"nudge,omitempty"`
-	Miracle *Miracle `json:"miracle,omitempty"`
-	Charges int      `json:"charges"`
-	Moments []string `json:"moments,omitempty"`
+	Reply     string       `json:"reply"`
+	Nudge     *Nudge       `json:"nudge,omitempty"`
+	Miracle   *Miracle     `json:"miracle,omitempty"`
+	Order     *OrderReport `json:"order,omitempty"`     // a placed standing order (spec 029 US2)
+	Cancelled []string     `json:"cancelled,omitempty"` // released order ids (cancel_order)
+	Charges   int          `json:"charges"`
+	Moments   []string     `json:"moments,omitempty"`
+}
+
+// OrderReport is the console-facing summary of a placed standing order (spec 029
+// US2) — the id the player can name to cancel it, and its condition. Additive and
+// omitempty; existing IPC clients ignore it.
+type OrderReport struct {
+	ID        string `json:"id"`
+	Condition string `json:"condition"`
 }
 
 // Nudge reports a landed mediation.
@@ -128,6 +138,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	}
 	moments := append([]string(nil), mt.moments...)
 	story := append([]string(nil), mt.story...)
+	orders := append([]sim.MetatronOrder(nil), mt.orders...)
 	mt.stateMu.Unlock()
 
 	// One correlation id per turn, mirroring mind's "<class>-<agent>-<tick>"
@@ -143,7 +154,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		JobID:     jobID,
 		Kind:      llm.KindMetatron,
 		System:    turnSystemPrompt(charter, skills, roster),
-		Seed:      turnUserPrompt(tick, charges, alive, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
+		Seed:      turnUserPrompt(tick, charges, alive, orders, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
 		Roster:    roster,
 		Handlers:  mt.turnHandlers(d),
 		MaxRounds: mt.loopRounds,
@@ -180,7 +191,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	// ran dry (model_done with no text, cap exhaustion, or a soft error) — the
 	// old scattered-thoughts fallback maps onto exactly these terminations.
 	reply := strings.TrimSpace(res.Final)
-	if reply == "" && result.Nudge == nil && result.Miracle == nil {
+	if reply == "" && result.Nudge == nil && result.Miracle == nil && result.Order == nil && len(result.Cancelled) == 0 {
 		reply = "Forgive me — my thoughts scattered and I could not complete that. " +
 			"Nothing was done and nothing was spent. Ask again."
 	}
@@ -428,6 +439,12 @@ func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
 	if r.Miracle != nil {
 		fmt.Fprintf(&b, "✨ miracle: %s\n", r.Miracle.Summary)
 	}
+	if r.Order != nil {
+		fmt.Fprintf(&b, "👁 watch set (%s): %q\n", r.Order.ID, r.Order.Condition)
+	}
+	for _, id := range r.Cancelled {
+		fmt.Fprintf(&b, "👁 watch released: %s\n", id)
+	}
 	mt.appendFile(mt.transcriptPath(), b.String())
 }
 
@@ -437,12 +454,26 @@ func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
 // are additive and omitempty where sensible, so existing IPC clients ignore them
 // (encoding/json) — no protocol version bump (contracts/status.md).
 type Status struct {
-	Charges         int      `json:"charges"`
-	CharterDefault  bool     `json:"charter_default"`
-	SoulTail        string   `json:"soul_tail"`
-	Skills          []string `json:"skills,omitempty"`        // effective skill filenames, composition order
-	GrantedTools    []string `json:"granted_tools,omitempty"` // granted roster, registry order; work_miracle(kind,…) when restricted
-	ManifestDefault bool     `json:"manifest_default"`        // true ⇒ no capabilities.json (full default grant)
+	Charges         int           `json:"charges"`
+	CharterDefault  bool          `json:"charter_default"`
+	SoulTail        string        `json:"soul_tail"`
+	Skills          []string      `json:"skills,omitempty"`        // effective skill filenames, composition order
+	GrantedTools    []string      `json:"granted_tools,omitempty"` // granted roster, registry order; work_miracle(kind,…) when restricted
+	ManifestDefault bool          `json:"manifest_default"`        // true ⇒ no capabilities.json (full default grant)
+	Orders          []OrderStatus `json:"orders,omitempty"`        // standing orders (spec 029 US2, FR-016) — active + recent
+}
+
+// OrderStatus is the model-free peek at one standing order (spec 029 US2/US3,
+// data-model §6): what the player reads to answer "what watches stand, and how
+// long". Additive and omitempty — existing IPC clients ignore it (the spec-021
+// precedent).
+type OrderStatus struct {
+	ID         string `json:"id"`
+	Condition  string `json:"condition"`
+	Origin     string `json:"origin"`
+	Fuzzy      bool   `json:"fuzzy,omitempty"`
+	ExpiresDay int64  `json:"expires_day"`
+	Status     string `json:"status"`
 }
 
 // Status is computed fresh per call from disk (same per-read discipline as the
@@ -451,6 +482,7 @@ type Status struct {
 func (mt *Metatron) Status() Status {
 	mt.stateMu.Lock()
 	c := mt.charges
+	orders := mt.orderStatuses()
 	mt.stateMu.Unlock()
 	grant, _ := loadManifest(mt.worldDir)
 	return Status{
@@ -460,7 +492,30 @@ func (mt *Metatron) Status() Status {
 		Skills:          skillNames(mt.worldDir),
 		GrantedTools:    grantedToolLabels(grant),
 		ManifestDefault: grant.manifestDefault,
+		Orders:          orders,
 	}
+}
+
+// orderStatuses projects the mirrored standing orders into the model-free status
+// surface (spec 029 FR-016). Caller holds stateMu. nil when no orders stand (the
+// field omits under omitempty — byte-compatible with pre-029 status).
+func (mt *Metatron) orderStatuses() []OrderStatus {
+	if len(mt.orders) == 0 {
+		return nil
+	}
+	out := make([]OrderStatus, 0, len(mt.orders))
+	for i := range mt.orders {
+		o := mt.orders[i]
+		out = append(out, OrderStatus{
+			ID:         o.ID,
+			Condition:  o.Condition,
+			Origin:     o.Origin,
+			Fuzzy:      o.Confirm,
+			ExpiresDay: o.ExpiresTick / ticksPerGameDay,
+			Status:     o.Status,
+		})
+	}
+	return out
 }
 
 func (mt *Metatron) soulTail() string { return tailOfFile(mt.soulPath(), soulTailBytes) }
@@ -570,7 +625,7 @@ func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) st
 	return b.String()
 }
 
-func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story []string, soulTail, transcriptTail, playerText string) string {
+func turnUserPrompt(tick int64, charges int, alive map[int]bool, orders []sim.MetatronOrder, moments, story []string, soulTail, transcriptTail, playerText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "World clock: %s. Charges banked: %d of %d.\n", clock.Format(tick), charges, sim.MetatronChargeCap)
 	var dead []string
@@ -582,6 +637,11 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story 
 	if len(dead) > 0 {
 		fmt.Fprintf(&b, "Departed: %s.\n", strings.Join(dead, ", "))
 	}
+	// Standing orders (spec 029 FR-017): the angel's counsel and confirmations
+	// stay truthful to live state only if it carries its active watches — id (so
+	// the player can name one to cancel), condition, remaining game-days, and
+	// whether the order is fuzzy (needs a confirm) or purely structural.
+	writeStandingOrders(&b, tick, orders)
 	if len(moments) > 0 {
 		b.WriteString("\nMoments you have not yet reported (lead with these):\n")
 		for _, m := range moments {
@@ -602,4 +662,32 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, moments, story 
 	}
 	fmt.Fprintf(&b, "\nThe player says:\n%s\n", playerText)
 	return b.String()
+}
+
+// writeStandingOrders renders the active-order block of the turn user prompt (spec
+// 029 T010, FR-017). Only ACTIVE orders show (consumed ones are history the status
+// surface carries); remaining days floor at 0. A fuzzy order (Confirm) is marked
+// so the angel sets honest expectations about the confirm step.
+func writeStandingOrders(b *strings.Builder, tick int64, orders []sim.MetatronOrder) {
+	var active []sim.MetatronOrder
+	for _, o := range orders {
+		if o.Status == "active" {
+			active = append(active, o)
+		}
+	}
+	if len(active) == 0 {
+		return
+	}
+	b.WriteString("\nStanding orders you keep watch over:\n")
+	for _, o := range active {
+		days := (o.ExpiresTick - tick) / ticksPerGameDay
+		if days < 0 {
+			days = 0
+		}
+		kind := "structural"
+		if o.Confirm {
+			kind = "fuzzy"
+		}
+		fmt.Fprintf(b, "- %s: %q (%d day(s) left, %s)\n", o.ID, o.Condition, days, kind)
+	}
 }

@@ -87,6 +87,16 @@ type Metatron struct {
 	moments []string // queued, surfaced oldest-first at the next turn
 	story   []string // recent chronicle entries (TASK-11), prompt grounding
 
+	// Standing-order mirror (spec 029 US2/US3, data-model §5): the replica's
+	// MetatronOrders is the authority; the turn worker reads this copy under
+	// stateMu (like charges/alive), and the absorb path matches live events
+	// against it. lastPlaceTick/lastPlaceSeq disambiguate same-tick order ids
+	// (research R7) when the async mirror has not yet reflected a just-placed
+	// order — placements are serialized under turnBusy, so a plain counter is safe.
+	orders        []sim.MetatronOrder
+	lastPlaceTick int64
+	lastPlaceSeq  int
+
 	// digest collection (US4) — absorb-owned.
 	digLines []string
 	digFrom  int64
@@ -199,6 +209,9 @@ func (mt *Metatron) mirrorState() {
 		mt.alive[i] = !mt.replica.Agents[i].Dead
 		mt.agentXY[i] = [2]int{mt.replica.Agents[i].X, mt.replica.Agents[i].Y}
 	}
+	// The standing-order mirror (spec 029): the replica is the authority, copied
+	// so the turn worker reads orders under stateMu without racing the replica.
+	mt.orders = append(mt.orders[:0], mt.replica.MetatronOrders...)
 	// The narrated chronicle (TASK-11) is the village's own story — the
 	// angel reads its tail so conversation is grounded even before its
 	// soul has accreted (fresh reigns, upgraded worlds).
