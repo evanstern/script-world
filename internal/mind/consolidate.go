@@ -227,7 +227,8 @@ func (md *Mind) runConsolidation(job consolJob) {
 		add("agent.belief_revised", sim.BeliefRevisedPayload{
 			Agent: job.agent, BeliefID: b.ID, Statement: b.Statement,
 			Confidence: b.Confidence, Provenance: b.Provenance,
-			Source: b.Source, Subject: b.Subject})
+			Source: b.Source, Subject: b.Subject,
+			Evidence: b.resolved, Direct: b.direct})
 	}
 	add("agent.narrative_set", sim.NarrativeSetPayload{Agent: job.agent, Text: out.Narrative})
 	add("agent.consolidated", sim.ConsolidatedPayload{

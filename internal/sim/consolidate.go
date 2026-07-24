@@ -24,6 +24,11 @@ type Belief struct {
 	Source     int    `json:"source"`     // teller for "told"; -1 otherwise
 	Subject    int    `json:"subject"`    // agent the belief is about; -1 = world
 	Tick       int64  `json:"tick"`       // last revision
+	// Reinforced (spec 030) is the game tick the belief was last anchored to a
+	// direct observation — set at formation, refreshed by a direct-evidence
+	// revision or a reinforcement event. The decay clock (US2) reads it; 0 =
+	// legacy grandfather (no decay). omitempty keeps pre-030 beliefs byte-stable.
+	Reinforced int64 `json:"reinforced,omitempty"`
 }
 
 const (
@@ -118,6 +123,13 @@ type BeliefRevisedPayload struct {
 	Provenance string `json:"provenance"`
 	Source     int    `json:"source"`
 	Subject    int    `json:"subject"`
+	// Evidence (spec 030) is the resolved durable identities of the memories the
+	// belief cites; Direct is whether >=1 of them is direct perception — both
+	// derived by the validator BEFORE landing so replay never re-classifies.
+	// Direct drives the revision-time reinforcement refresh (US2). Both omitempty
+	// so a pre-030 belief_revised event replays byte-identically.
+	Evidence []MemoryRef `json:"evidence,omitempty"`
+	Direct   bool        `json:"direct,omitempty"`
 }
 
 type NarrativeSetPayload struct {
@@ -207,9 +219,13 @@ func (s *State) applyConsolidation(e store.Event) error {
 			if s.NextBeliefID == 0 {
 				s.NextBeliefID = 1
 			}
+			// Formation always anchors the decay clock to now (spec 030 normative
+			// note): the curve starts at formation for every new belief, direct or
+			// not. Subsequent direct-evidence revisions refresh it (US2, T006).
 			a.Beliefs = append(a.Beliefs, Belief{
 				ID: s.NextBeliefID, Statement: p.Statement, Confidence: conf,
-				Provenance: p.Provenance, Source: p.Source, Subject: p.Subject, Tick: e.Tick,
+				Provenance: p.Provenance, Source: p.Source, Subject: p.Subject,
+				Tick: e.Tick, Reinforced: e.Tick,
 			})
 			s.NextBeliefID++
 		} else {

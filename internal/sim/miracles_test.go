@@ -766,6 +766,7 @@ func TestRebaseTaxonomyComplete(t *testing.T) {
 		"DenUse.Ready":             shift,
 		"FoodBatch.SpoilAt":        shift,
 		"Debt.Due":                 shift,
+		"Belief.Reinforced":        shift, // spec 030: decay anchor, non-zero shifts; 0 = grandfather stays 0
 		"Gru.LastAttack":           shift,
 		"MeetingState.OpenedTick":  shift,
 		"MeetingState.GatherStart": shift,
