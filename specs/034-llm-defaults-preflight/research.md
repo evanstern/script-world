@@ -154,3 +154,25 @@ default that requires editing config before first light contradicts SC-002.
   golden-ish assertions; TUI header badge unit test (existing views test pattern).
 - Defaults: `DefaultConfig()`/`WriteDefault` golden assertions + docs greps live in
   quickstart validation (SC-004).
+
+## R8 — durable-append strategy for condition events (Phase 2 implementer finding, 2026-07-24)
+
+Finding: `store.AppendEvents` has no internal locking — the sim loop is the single
+writer (store.go:76-79; loop.go:413/547/606). `daemon.started`/`stopped` are safe
+only because they append outside `loop.Run`'s lifetime. The condition hook fires
+from worker/preflight goroutines **while the loop runs**; a direct `appendDaemonEvent`
+there races seq assignment (dup PK → AppendEvents error → loop treats as fatal).
+
+**Decision**: add a narrow operator-event door on the loop —
+`Loop.InjectOperator(events)` following the `InjectSocial` command pattern
+(loop.go:265-279), whitelisted to `daemon.llm_warning` — so the append, tick
+stamping, Apply (no-op), and notify all happen inside the loop goroutine.
+The daemon's condition hook routes the durable event through this door; if the
+door reports loop-not-running (shutdown window), it degrades to the log line only
+(status fields still carry the condition; re-probe re-raises). The hook is never
+fired from the loop goroutine itself (worker/preflight/detector only), so the
+synchronous door cannot self-deadlock.
+**Alternatives considered**: mutex inside `store.AppendEvents` — rejected:
+relaxes the documented single-writer model and still hand-stamps ticks racily;
+buffering conditions for the loop to poll — rejected: more machinery, delayed
+loudness.
