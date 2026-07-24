@@ -245,6 +245,21 @@ func horizonSummary(secPerPt float64) string {
 	return cognition.HorizonSummary(secPerPt)
 }
 
+// sequentialFloorDisclosure is printed once per calibrate run, adjacent to
+// the horizon summary (spec 035 US4/FR-005, contracts/warnings.md §4): the
+// measurement is one reference call at a time while a live world drives the
+// same endpoint concurrently (many agents queue on it), so the measured
+// seconds-per-point is a FLOOR — the effective rate under concurrent load
+// runs higher, and the live estimator (spec 031) adapts upward at runtime.
+// Printed in both calibrateLegacy and calibrateDeclaredProviders — research
+// R6 records the deliberate supersession of spec 024 T020's legacy
+// byte-identity guarantee for this one addition.
+func sequentialFloorDisclosure() string {
+	return "note: calibration measures one call at a time; a live world runs N agents concurrently against\n" +
+		"      the same endpoint, so measured s/pt is a floor — effective rate under load runs higher\n" +
+		"      (the live estimator adapts at runtime).\n"
+}
+
 // memMeter satisfies llm.MeterStore without touching world.db — local-tier
 // calibration spends nothing and must not contend with a running daemon's
 // store.
@@ -350,6 +365,7 @@ func calibrateLegacy(w *world.World, cfg *llm.Config, tierFlag string, samples i
 	sample := orchSampler(orch, rounds)
 
 	failed := 0
+	disclosed := false
 	for _, t := range tiers {
 		fmt.Printf("calibrating %s tier (%d samples per shape)...\n", t, samples)
 		tp, err := calibrateTier(sample, t, samples)
@@ -384,7 +400,15 @@ func calibrateLegacy(w *world.World, cfg *llm.Config, tierFlag string, samples i
 		fmt.Printf("  seconds_per_point: %.1f\n", tp.SecondsPerPoint)
 		if t == llm.TierLocal {
 			fmt.Printf("  cognition at this profile: %s\n", horizonSummary(tp.SecondsPerPoint))
+			fmt.Print(sequentialFloorDisclosure())
+			disclosed = true
 		}
+	}
+	// US4/FR-005: every run discloses the sequential-measurement floor exactly
+	// once, adjacent to the horizon summary when one printed above; a
+	// cloud-only run (no local tier, no horizon line) still gets it.
+	if !disclosed {
+		fmt.Print(sequentialFloorDisclosure())
 	}
 	if len(prof.Tiers) == 0 {
 		return fmt.Errorf("no tier produced a usable profile; calibration.json not written")
@@ -494,6 +518,7 @@ func calibrateDeclaredProviders(w *world.World, cfg *llm.Config, tierFlag, provi
 	rounds, _ := cfg.Rounds()
 
 	failed := 0
+	disclosed := false
 	for _, name := range selected {
 		pc, _ := orch.ProviderConfig(name)
 		p := priced(pc)
@@ -524,7 +549,17 @@ func calibrateDeclaredProviders(w *world.World, cfg *llm.Config, tierFlag, provi
 		fmt.Printf("  seconds_per_point: %.1f\n", tp.SecondsPerPoint)
 		if !p {
 			fmt.Printf("  cognition at this profile: %s\n", horizonSummary(tp.SecondsPerPoint))
+			if !disclosed {
+				fmt.Print(sequentialFloorDisclosure())
+				disclosed = true
+			}
 		}
+	}
+	// US4/FR-005: every run discloses the sequential-measurement floor exactly
+	// once, adjacent to the first horizon summary printed above; a run that
+	// calibrates only priced providers (no horizon line) still gets it.
+	if !disclosed {
+		fmt.Print(sequentialFloorDisclosure())
 	}
 	if len(prof.Tiers) == 0 {
 		return fmt.Errorf("no provider produced a usable profile; calibration.json not written")
