@@ -88,14 +88,28 @@ type miracleArgs struct {
 	ToY      int    `json:"to_y"`
 }
 
-// Turn runs one mediated console turn through the bounded tool-use loop (spec
-// 017 T020). The model may reply with words (converse — the transcript-only
-// final-answer channel, Result.Final) or call exactly one acting tool
-// (nudge_dream / nudge_omen / work_miracle), which lands through its existing
-// door. The driver's cardinality enforces the "at most one mediated act per
-// turn" rule (a landed acting call ends the loop) — the spec-016 nudge-wins-over-
-// miracle precedence dissolves: the model picks its one act. Serialized: a
-// second concurrent call fails fast with ErrTurnBusy.
+// turnOrigin distinguishes a console turn from a system-authored (triggered) turn
+// (spec 029 US3, R6). Both run the SAME body (runTurn): same single-flight guard,
+// same roster/handler/gate composition, same telemetry, same transcript append —
+// only the framing differs. seed is the trailing directive: the player's words on
+// the console path, the order's pre-authorized action instruction on the system
+// path (which has NO player-text sink — the seed is the angel's own recorded
+// instruction). jobPrefix threads the correlation id ("turn" | "watch"); system
+// marks the transcript with a [watch] origin and suppresses moment consumption.
+type turnOrigin struct {
+	system    bool
+	jobPrefix string
+	seed      string
+}
+
+// Turn runs one mediated CONSOLE turn through the bounded tool-use loop (spec 017
+// T020, spec 029 T012). The model may reply with words (converse — the
+// transcript-only final-answer channel, Result.Final) or call exactly one acting
+// tool (send_vision / send_omen / monitor_and_act / cancel_order / work_miracle),
+// which lands through its door. The driver's cardinality enforces "at most one
+// mediated act per turn". Serialized: a second concurrent call fails fast with
+// ErrTurnBusy (the console never waits — triggered system turns do, via
+// runSystemTurn's bounded acquisition, T013).
 func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, error) {
 	playerText = strings.TrimSpace(playerText)
 	if playerText == "" {
@@ -108,7 +122,18 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		return TurnResult{}, ErrTurnBusy
 	}
 	defer mt.turnBusy.Store(false)
+	return mt.runTurn(ctx, turnOrigin{jobPrefix: "turn", seed: playerText})
+}
 
+// runTurn is the shared turn body for the console and system-authored paths (spec
+// 029 T012/R6). The CALLER owns turnBusy (Turn CAS-fails fast; runSystemTurn waits
+// bounded) — runTurn assumes it is held. It composes the instruction surface, the
+// user prompt (framing the directive per origin), drives the loop, lands the
+// cog.tool_call + retry telemetry on every termination path, and records the
+// transcript. Moment consumption is CONSOLE-ONLY: a system turn never drains the
+// player-facing moment queue (those await the next console open); the trigger
+// worker queues the system turn's OWN moment from the returned outcome (T013).
+func (mt *Metatron) runTurn(ctx context.Context, o turnOrigin) (TurnResult, error) {
 	// The player-editable instruction surface, all read fresh this turn (FR-001):
 	// the charter, the skill files composed beneath it, and (US2) the capability
 	// manifest. Every fallback/truncation/skip becomes a notice prefixed to the
@@ -142,9 +167,18 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	mt.stateMu.Unlock()
 
 	// One correlation id per turn, mirroring mind's "<class>-<agent>-<tick>"
-	// convention (telemetry.go newMeta): the console turn's class is "turn", its
-	// agent slot is the angel itself. Threads every cog.tool_call for the turn.
-	jobID := fmt.Sprintf("turn-metatron-%d", tick)
+	// convention (telemetry.go newMeta): the console turn's class is "turn"; a
+	// triggered system turn's is "watch" (R6). Threads every cog.tool_call.
+	jobID := fmt.Sprintf("%s-metatron-%d", o.jobPrefix, tick)
+
+	// The trailing directive: the player's words (console) or the order's
+	// pre-authorized action (system). A system turn has no player-text sink — the
+	// seed is the angel's OWN recorded instruction, so recording it is safe.
+	directive := "The player says:\n" + o.seed
+	if o.system {
+		directive = "A standing order you placed has come due. Carry out its " +
+			"pre-authorized action now, in a single act if it calls for one:\n" + o.seed
+	}
 
 	result := TurnResult{}
 	d := &turnDispatch{mt: mt, charges: charges, alive: alive, night: night, tick: tick, result: &result, grant: grant}
@@ -154,7 +188,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		JobID:     jobID,
 		Kind:      llm.KindMetatron,
 		System:    turnSystemPrompt(charter, skills, roster),
-		Seed:      turnUserPrompt(tick, charges, alive, orders, moments, story, mt.soulTail(), mt.transcriptTail(), playerText),
+		Seed:      turnUserPrompt(tick, charges, alive, orders, moments, story, mt.soulTail(), mt.transcriptTail(), directive),
 		Roster:    roster,
 		Handlers:  mt.turnHandlers(d),
 		MaxRounds: mt.loopRounds,
@@ -181,15 +215,16 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	if err != nil {
 		// Honest unavailability; nothing landed (a landing returns a nil error),
 		// nothing consumed, moments stay queued — exactly today's degraded path.
+		// A system turn's caller (the trigger worker) maps this to an honest
+		// model-free moment (T014).
 		return TurnResult{}, err
 	}
 
 	// The reply is the model's closing/converse text (Result.Final). When the
 	// model landed an act with no accompanying prose, Final may be empty — the
-	// ⚡/✨ report lines (result.Nudge/Miracle, rendered by recordTurn and the
-	// console) carry the turn. When NOTHING landed and nothing was said, the loop
-	// ran dry (model_done with no text, cap exhaustion, or a soft error) — the
-	// old scattered-thoughts fallback maps onto exactly these terminations.
+	// ⚡/✨/👁 report lines carry the turn. When NOTHING landed and nothing was
+	// said, the loop ran dry (model_done with no text, cap exhaustion, or a soft
+	// error) — the old scattered-thoughts fallback maps onto exactly these.
 	reply := strings.TrimSpace(res.Final)
 	if reply == "" && result.Nudge == nil && result.Miracle == nil && result.Order == nil && len(result.Cancelled) == 0 {
 		reply = "Forgive me — my thoughts scattered and I could not complete that. " +
@@ -200,14 +235,22 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 		result.Reply = "(" + strings.Join(notices, "; ") + ")\n\n" + result.Reply
 	}
 
-	// Surfaced moments are consumed only on a completed turn.
-	mt.stateMu.Lock()
-	result.Moments = moments
-	mt.moments = mt.moments[len(moments):]
-	result.Charges = mt.charges
-	mt.stateMu.Unlock()
+	// Surfaced moments are consumed only on a completed CONSOLE turn — a system
+	// (triggered) turn leaves the player-facing queue intact for the next console
+	// open (R6), and reports no moments of its own here.
+	if !o.system {
+		mt.stateMu.Lock()
+		result.Moments = moments
+		mt.moments = mt.moments[len(moments):]
+		result.Charges = mt.charges
+		mt.stateMu.Unlock()
+	} else {
+		mt.stateMu.Lock()
+		result.Charges = mt.charges
+		mt.stateMu.Unlock()
+	}
 
-	mt.recordTurn(tick, playerText, result)
+	mt.recordTurn(tick, o, result)
 	return result, nil
 }
 
@@ -429,10 +472,17 @@ func (mt *Metatron) landMiracle(mm miracleArgs, charges int, grant grantSet) (*M
 	return &Miracle{Kind: kind, Summary: summary}, ""
 }
 
-// recordTurn appends the exchange to the transcript.
-func (mt *Metatron) recordTurn(tick int64, playerText string, r TurnResult) {
+// recordTurn appends the exchange to the transcript. A console turn opens with
+// the player's line ("> …"); a system-authored turn opens with a "[watch]" origin
+// marker over the order's pre-authorized action (spec 029 T012/R6) — never a
+// player-text line, because a triggered turn has no player text.
+func (mt *Metatron) recordTurn(tick int64, o turnOrigin, r TurnResult) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n[%s]\n> %s\n\nmetatron: %s\n", clock.Format(tick), playerText, r.Reply)
+	if o.system {
+		fmt.Fprintf(&b, "\n[%s] [watch]\n%s\n\nmetatron: %s\n", clock.Format(tick), o.seed, r.Reply)
+	} else {
+		fmt.Fprintf(&b, "\n[%s]\n> %s\n\nmetatron: %s\n", clock.Format(tick), o.seed, r.Reply)
+	}
 	if r.Nudge != nil {
 		fmt.Fprintf(&b, "⚡ %s → %s: %q\n", r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text)
 	}

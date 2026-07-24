@@ -12,13 +12,18 @@ package metatron
 // worker + system turn) lives alongside in metatron.go / this file's T013 half.
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/evanstern/promptworld/internal/clock"
+	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 )
@@ -250,4 +255,218 @@ func eventConcernsAgent(e store.Event, idx int) bool {
 		}
 	}
 	return false
+}
+
+// --- Trigger pipeline (spec 029 US3, T013/T014) ---
+
+// systemTurnBusyWait bounds how long a triggered system turn waits for the
+// single-flight slot before degrading (spec 029 R6): system turns WAIT for the
+// slot (unlike the console's fail-fast ErrTurnBusy), but never forever — a wedged
+// console turn degrades the trigger to an honest moment rather than hanging.
+const systemTurnBusyWait = 90 * time.Second
+
+// triggerJob is one matched order queued for firing (spec 029 US3). It snapshots
+// the order at match time (its action/origin/condition are needed to run and
+// narrate the system turn) plus the matched event's type + tick for the trail.
+type triggerJob struct {
+	order       sim.MetatronOrder
+	matchedType string
+	matchedTick int64
+}
+
+// matchOrders scans active orders against a just-applied LIVE event batch and
+// enqueues a trigger job for each structural hit (spec 029 US3/R6). Called by the
+// absorb goroutine AFTER replica apply + mirror refresh, so it is live-only by
+// construction (replay never runs the angel). Orders fire in order-id order within
+// a batch, at most once — pendingTrigger dedups an order already queued but not
+// yet resolved, and one job is enqueued per order per batch. Fuzzy orders
+// (Confirm) are matched structurally but NOT fired here: their confirm step is
+// Batch C (T021), so a fuzzy hit is skipped so it never triggers unconfirmed
+// (FR-008/FR-009) — a Batch C hand-off.
+func (mt *Metatron) matchOrders(batch []store.Event) {
+	if mt.social == nil {
+		return
+	}
+	mt.stateMu.Lock()
+	orders := append([]sim.MetatronOrder(nil), mt.orders...)
+	mt.stateMu.Unlock()
+	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	for i := range orders {
+		o := orders[i]
+		if o.Status != "active" || o.Confirm {
+			continue // fuzzy orders route through the Batch C confirm path (T021)
+		}
+		mt.stateMu.Lock()
+		pending := mt.pendingTrigger[o.ID]
+		mt.stateMu.Unlock()
+		if pending {
+			continue
+		}
+		for _, e := range batch {
+			if !orderMatches(o, e) {
+				continue
+			}
+			mt.stateMu.Lock()
+			mt.pendingTrigger[o.ID] = true
+			mt.stateMu.Unlock()
+			select {
+			case mt.triggerQ <- triggerJob{order: o, matchedType: e.Type, matchedTick: e.Tick}:
+			default:
+				log.Printf("metatron: trigger queue full, order %s dropped", o.ID)
+				mt.stateMu.Lock()
+				delete(mt.pendingTrigger, o.ID)
+				mt.stateMu.Unlock()
+			}
+			break // one job per order per batch
+		}
+	}
+}
+
+// triggerWorker consumes the trigger queue FIFO, firing each matched order through
+// runTrigger (spec 029 US3). One worker → triggered turns serialize with each
+// other and, via the shared turnBusy, with console turns (R6).
+func (mt *Metatron) triggerWorker() {
+	for {
+		select {
+		case <-mt.done:
+			return
+		case job := <-mt.triggerQ:
+			mt.runTrigger(job)
+		}
+	}
+}
+
+// runTrigger fires one matched standing order (spec 029 US3, T013/T014):
+//
+//  1. Land metatron.order_triggered through the door — the dry-run enforces the
+//     order is STILL active, so a cancel/expiry that raced the match wins here and
+//     the trigger is abandoned silently (edge case: exactly one of triggered/
+//     cancelled/expired lands, never both).
+//  2. Empty-bank precheck for known-act (deferral) orders (T014/R12): a
+//     system-origin order's act is a known charge spend, so an empty bank
+//     short-circuits to an honest moment — no model call, no cloud cost.
+//  3. Acquire turnBusy with a bounded wait (system turns wait; the console stays
+//     fail-fast) and run the pre-authorized action as a system-authored turn.
+//  4. Queue a moment from the outcome — the act on success, or ONE model-free
+//     honest moment per failure family, never a retry (FR-011).
+func (mt *Metatron) runTrigger(job triggerJob) {
+	defer func() {
+		mt.stateMu.Lock()
+		delete(mt.pendingTrigger, job.order.ID)
+		mt.stateMu.Unlock()
+	}()
+
+	trig := []store.Event{{Type: "metatron.order_triggered", Payload: mustJSON(sim.OrderTriggeredPayload{
+		ID: job.order.ID, MatchedType: job.matchedType, MatchedTick: job.matchedTick})}}
+	if err := mt.social.InjectSocial(trig); err != nil {
+		// Cancelled or expired before its trigger landed: the loser abandons
+		// silently (the winning terminal already surfaced its own trail).
+		log.Printf("metatron: order %s trigger abandoned at the door: %v", job.order.ID, err)
+		return
+	}
+	mt.appendFile(mt.soulPath(), fmt.Sprintf("\n- %s — a watch woke me (%s): %q\n",
+		clock.Format(job.matchedTick), job.order.ID, job.order.Condition))
+
+	if mt.knownActEmptyBank(job.order) {
+		mt.queueMoment(fmt.Sprintf("%s — a watch came due, but my strength was spent; I could not send what you asked.",
+			clock.Format(job.matchedTick)))
+		return
+	}
+
+	if !mt.acquireTurnBusy() {
+		mt.queueMoment(fmt.Sprintf("%s — a watch came due, but I was too long attending another matter to act on it.",
+			clock.Format(job.matchedTick)))
+		return
+	}
+	res, err := mt.runTurn(context.Background(), turnOrigin{system: true, jobPrefix: "watch", seed: job.order.Action})
+	mt.turnBusy.Store(false)
+
+	if err != nil {
+		mt.queueMoment(mt.degradedMoment(job.matchedTick, err))
+		return
+	}
+	mt.queueMoment(mt.triggeredMoment(job.matchedTick, job.order, res))
+}
+
+// knownActEmptyBank reports whether an order's action is a KNOWN charge-spending
+// act (a deferral order — origin "system", always omen/vision-bearing per R11) AND
+// the charge bank is empty at trigger time (T014/R12). Only then is the empty-bank
+// precheck honest: a free-form player monitor order's action may be advisory or a
+// meta act, so it still runs the turn. (Batch B places no system-origin orders —
+// deferral is Batch C T016 — so this is dormant-but-correct, guarding exactly the
+// deferral orders it will meet.)
+func (mt *Metatron) knownActEmptyBank(o sim.MetatronOrder) bool {
+	if o.Origin != "system" {
+		return false
+	}
+	mt.stateMu.Lock()
+	c := mt.charges
+	mt.stateMu.Unlock()
+	return c <= 0
+}
+
+// acquireTurnBusy waits (bounded by systemTurnBusyWait) for the single-flight turn
+// slot for a SYSTEM turn (spec 029 R6). Returns false if the slot could not be
+// acquired in time (the caller degrades to an honest moment) or the angel is
+// closing. The console path never calls this — it CAS-fails fast with ErrTurnBusy.
+func (mt *Metatron) acquireTurnBusy() bool {
+	deadline := time.Now().Add(systemTurnBusyWait)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if mt.turnBusy.CompareAndSwap(false, true) {
+			return true
+		}
+		select {
+		case <-mt.done:
+			return false
+		case <-tick.C:
+		}
+		if time.Now().After(deadline) {
+			return mt.turnBusy.CompareAndSwap(false, true)
+		}
+	}
+}
+
+// queueMoment appends a model-free moment to the soul and the player-facing queue
+// (the same discipline as observeMoment's drama moments) — how a triggered turn's
+// outcome reaches the next console reply (spec 029 US3, SC-003).
+func (mt *Metatron) queueMoment(line string) {
+	if line == "" {
+		return
+	}
+	mt.appendFile(mt.soulPath(), "\n**MOMENT** "+line+"\n")
+	mt.stateMu.Lock()
+	mt.moments = append(mt.moments, line)
+	mt.stateMu.Unlock()
+}
+
+// triggeredMoment renders the model-free moment describing a COMPLETED triggered
+// turn (spec 029 US3): what the angel did while the player was away, so the next
+// console reply leads with it. It names the landed act (omen/vision/miracle) when
+// one landed, else that the watch woke and was attended.
+func (mt *Metatron) triggeredMoment(tick int64, o sim.MetatronOrder, r TurnResult) string {
+	switch {
+	case r.Nudge != nil:
+		return fmt.Sprintf("%s — a watch came due (%q): I sent a %s to %s.",
+			clock.Format(tick), o.Condition, r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "))
+	case r.Miracle != nil:
+		return fmt.Sprintf("%s — a watch came due (%q): I worked a miracle — %s.",
+			clock.Format(tick), o.Condition, r.Miracle.Summary)
+	default:
+		return fmt.Sprintf("%s — a watch came due (%q): I attended it.", clock.Format(tick), o.Condition)
+	}
+}
+
+// degradedMoment maps a FAILED system turn to ONE model-free honest moment per
+// failure family (spec 029 T014/R12, FR-011) — never a retry. Empty bank is caught
+// earlier (knownActEmptyBank); this covers exhausted budget, a downed/busy tier,
+// and transport failures the loop already retried once internally.
+func (mt *Metatron) degradedMoment(tick int64, err error) string {
+	switch {
+	case errors.Is(err, llm.ErrBudgetExhausted), errors.Is(err, llm.ErrTierDown), errors.Is(err, llm.ErrTierBusy):
+		return fmt.Sprintf("%s — a watch came due, but my sight dimmed and I could not act. Nothing was spent.", clock.Format(tick))
+	default:
+		return fmt.Sprintf("%s — a watch came due, but I faltered and could not complete it. Nothing was spent.", clock.Format(tick))
+	}
 }

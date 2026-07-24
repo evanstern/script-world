@@ -97,6 +97,14 @@ type Metatron struct {
 	lastPlaceTick int64
 	lastPlaceSeq  int
 
+	// Trigger pipeline (spec 029 US3, data-model §5): the absorb goroutine matches
+	// live events against active orders and enqueues onto triggerQ; a dedicated
+	// worker fires each (land order_triggered → system turn → moment). pendingTrigger
+	// (stateMu-guarded) dedups an order already queued but not yet resolved, so an
+	// order fires at most once even across batches before the worker consumes it.
+	triggerQ       chan triggerJob
+	pendingTrigger map[string]bool
+
 	// digest collection (US4) — absorb-owned.
 	digLines []string
 	digFrom  int64
@@ -121,16 +129,18 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 		return nil, err
 	}
 	mt := &Metatron{
-		orch:     orch,
-		social:   social,
-		worldDir: worldDir,
-		replica:  replica,
-		m:        m,
-		alive:    map[int]bool{},
-		digQ:     make(chan digJob, 4),
-		digCarry: make(chan []string, 1),
-		events:   make(chan []store.Event, 256),
-		done:     make(chan struct{}),
+		orch:           orch,
+		social:         social,
+		worldDir:       worldDir,
+		replica:        replica,
+		m:              m,
+		alive:          map[int]bool{},
+		digQ:           make(chan digJob, 4),
+		digCarry:       make(chan []string, 1),
+		events:         make(chan []store.Event, 256),
+		triggerQ:       make(chan triggerJob, 64),
+		pendingTrigger: map[string]bool{},
+		done:           make(chan struct{}),
 	}
 	mt.loopRounds = loopRounds
 	mt.turnTokens = turnTokens
@@ -158,6 +168,7 @@ func New(orch Submitter, social Injector, m *worldmap.Map, seed uint64, stateJSO
 	mt.mirrorState()
 	go mt.run()
 	go mt.digestWorker()
+	go mt.triggerWorker()
 	return mt, nil
 }
 
@@ -190,6 +201,11 @@ func (mt *Metatron) run() {
 				mt.digestNote(e)
 			}
 			mt.mirrorState()
+			// Standing-order matching runs HERE — after the replica applies the
+			// batch and the mirror refreshes — so it sees only LIVE events (spec 029
+			// US3/R6). Replay reconstructs state via json.Unmarshal + Apply with no
+			// angel running, so a predicate can never match during reconstruction.
+			mt.matchOrders(batch)
 		}
 	}
 }

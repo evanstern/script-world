@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/persona"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
+	"github.com/evanstern/promptworld/internal/toolloop"
+	"github.com/evanstern/promptworld/internal/worldmap"
 )
 
 // seedOrder installs an order into both the injector's state (the door) and the
@@ -285,5 +290,314 @@ func TestOrderHandlerGating(t *testing.T) {
 	}
 	if why := mt.cancelOrder("ord-1-0", partial); why == "" {
 		t.Error("cancel_order should refuse when ungranted")
+	}
+}
+
+// --- US3: triggered orders act while away (spec 029 T015) ---
+
+// systemActLoop scripts a runLoop that lands one act on a SYSTEM (watch) turn and
+// converses on a console turn — distinguishing by the jobID prefix (R6). It lets a
+// trigger test drive a real handler landing through the system-turn path.
+func systemActLoop(mt *Metatron, name, args string) func(context.Context, toolloop.Job) (toolloop.Result, error) {
+	return func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		c := toolCall(name, args)
+		out := j.Handlers[name](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: name,
+			Args: c.Args, Verdict: out.Verdict, Reason: out.ResultForModel, Tier: "cloud"})
+		if out.Verdict == toolloop.VerdictLanded {
+			return toolloop.Result{Term: toolloop.TermLanded, Landed: &c}, nil
+		}
+		return toolloop.Result{Term: toolloop.TermCapExhausted}, nil
+	}
+}
+
+// TestTriggerFiresEndToEnd (US3 AC-1/AC-2, spec 029 T015): a live matching event
+// enqueues a trigger job; firing it lands order_triggered (the order is consumed),
+// runs the pre-authorized act as a system turn (one charge spent), and queues a
+// moment for the next console reply.
+func TestTriggerFiresEndToEnd(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "It is done.")
+	o := activePlayerOrder("ord-1-0", 1)
+	o.Condition = "when someone sleeps"
+	o.Action = "send Fern a comforting vision"
+	seedOrder(mt, inj, o)
+	mt.runLoop = systemActLoop(mt, "send_vision", `{"target":"Fern","text":"rest easy"}`)
+
+	slept := mustEvent("agent.slept", map[string]any{"agent": 3})
+	slept.Tick = 5000
+	mt.matchOrders([]store.Event{slept})
+	var job triggerJob
+	select {
+	case job = <-mt.triggerQ:
+	default:
+		t.Fatal("a matching live event did not enqueue a trigger job")
+	}
+	if job.order.ID != "ord-1-0" || job.matchedType != "agent.slept" {
+		t.Fatalf("trigger job = %+v", job)
+	}
+
+	mt.runTrigger(job)
+
+	if inj.state.MetatronOrders[0].Status != "triggered" {
+		t.Fatalf("order not consumed one-shot: %+v", inj.state.MetatronOrders[0])
+	}
+	fern := agentIndexByName("Fern")
+	if len(inj.state.Agents[fern].Memories) != 1 {
+		t.Error("triggered vision did not land on Fern")
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("triggered act spent %d charges, want 1", sim.MetatronGenesisCharges-inj.state.MetatronCharges)
+	}
+	mt.stateMu.Lock()
+	moments := append([]string(nil), mt.moments...)
+	mt.stateMu.Unlock()
+	if len(moments) != 1 || !strings.Contains(moments[0], "vision") {
+		t.Fatalf("triggered moment not queued: %+v", moments)
+	}
+}
+
+// TestTriggerSerializesWithConsoleTurn (US3 AC-5, spec 029 T015): a trigger firing
+// while a console turn holds the single-flight slot lands order_triggered at once
+// (the door doesn't need the slot) but its ACT waits until the console releases —
+// both leave complete trails, neither is dropped.
+func TestTriggerSerializesWithConsoleTurn(t *testing.T) {
+	// A LIVE angel (done open): the system turn's bounded turnBusy wait must be
+	// able to block on the console, not bail on a closed done. The absorb/trigger
+	// goroutines stay idle (no Observe, runTrigger driven directly).
+	mt, _, inj, _ := newLiveTestAngel(t, "released")
+	o := activePlayerOrder("ord-1-0", 1)
+	o.Action = "send Fern a vision"
+	seedOrder(mt, inj, o)
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		if strings.HasPrefix(j.JobID, "turn-") { // console turn parks here
+			close(entered)
+			<-release
+			return toolloop.Result{Final: "released", Term: toolloop.TermModelDone}, nil
+		}
+		// system (watch) turn: land the vision
+		c := toolCall("send_vision", `{"target":"Fern","text":"peace"}`)
+		out := j.Handlers["send_vision"](ctx, c)
+		j.Record(toolloop.CallRecord{JobID: j.JobID, Ordinal: 1, Tool: "send_vision",
+			Args: c.Args, Verdict: out.Verdict, Reason: out.ResultForModel, Tier: "cloud"})
+		return toolloop.Result{Term: toolloop.TermLanded, Landed: &c}, nil
+	}
+
+	fern := agentIndexByName("Fern")
+	memCount := func() int {
+		inj.mu.Lock()
+		defer inj.mu.Unlock()
+		return len(inj.state.Agents[fern].Memories)
+	}
+	orderStatus := func() string {
+		inj.mu.Lock()
+		defer inj.mu.Unlock()
+		return inj.state.MetatronOrders[0].Status
+	}
+
+	doneA := make(chan struct{})
+	go func() { mt.Turn(context.Background(), "hello"); close(doneA) }()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("console turn never entered the loop")
+	}
+
+	doneB := make(chan struct{})
+	go func() {
+		mt.runTrigger(triggerJob{order: o, matchedType: "agent.slept", matchedTick: 5000})
+		close(doneB)
+	}()
+
+	// order_triggered lands without the slot; the act must WAIT for the console.
+	waitFor(t, 2*time.Second, func() bool { return orderStatus() == "triggered" })
+	if memCount() != 0 {
+		t.Fatal("system turn acted while a console turn held the single-flight slot")
+	}
+
+	close(release)
+	select {
+	case <-doneA:
+	case <-time.After(2 * time.Second):
+		t.Fatal("console turn never completed")
+	}
+	select {
+	case <-doneB:
+	case <-time.After(2 * time.Second):
+		t.Fatal("system turn never completed after the slot freed")
+	}
+	if memCount() != 1 {
+		t.Error("system turn did not act after the console released the slot")
+	}
+}
+
+// TestCancelledOrderRaceResolvesAtDoor (US3 edge case, spec 029 T015): an order
+// cancelled before its trigger lands — the door rejects order_triggered (the order
+// is no longer active), so the trigger abandons: no system turn, no act, no moment.
+// Exactly one terminal (cancelled) stands.
+func TestCancelledOrderRaceResolvesAtDoor(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "")
+	o := activePlayerOrder("ord-1-0", 1)
+	o.Action = "send Fern a vision"
+	seedOrder(mt, inj, o)
+	// The cancel wins the race (lands first).
+	if err := inj.state.Apply(mustEvent("metatron.order_cancelled", sim.OrderIDPayload{ID: "ord-1-0"})); err != nil {
+		t.Fatal(err)
+	}
+	fired := false
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		fired = true
+		return toolloop.Result{Term: toolloop.TermModelDone}, nil
+	}
+	mt.runTrigger(triggerJob{order: o, matchedType: "agent.slept", matchedTick: 5000})
+
+	if fired {
+		t.Error("a cancelled order still ran its system turn")
+	}
+	if inj.state.MetatronOrders[0].Status != "cancelled" {
+		t.Errorf("terminal is not cancelled: %q", inj.state.MetatronOrders[0].Status)
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("an abandoned trigger spent a charge")
+	}
+	mt.stateMu.Lock()
+	n := len(mt.moments)
+	mt.stateMu.Unlock()
+	if n != 0 {
+		t.Errorf("an abandoned trigger queued %d moments, want 0", n)
+	}
+}
+
+// TestEmptyBankPrecheckSpendsNothing (US3 AC-3, spec 029 T014/T015): a system-
+// origin (deferral) order firing on an empty bank skips the model call entirely
+// and queues the honest "strength was spent" moment — the order is still consumed
+// (one-shot), nothing is spent, and no model is called.
+func TestEmptyBankPrecheckSpendsNothing(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "")
+	mt.replica.MetatronCharges = 0
+	inj.state.MetatronCharges = 0
+	mt.mirrorState()
+	o := sim.MetatronOrder{ID: "ord-1-0", Origin: "system", Condition: "deferred omen",
+		Action: "deliver the omen", EventTypes: []string{"sim.night_started"}, Agent: -1,
+		PlacedTick: 1, ExpiresTick: 1 + ticksPerGameDay, Status: "active"}
+	seedOrder(mt, inj, o)
+
+	called := false
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		called = true
+		return toolloop.Result{Term: toolloop.TermModelDone}, nil
+	}
+	mt.runTrigger(triggerJob{order: o, matchedType: "sim.night_started", matchedTick: 5000})
+
+	if called {
+		t.Error("empty-bank precheck still called the model")
+	}
+	if inj.state.MetatronCharges != 0 {
+		t.Errorf("spent from an empty bank: %d", inj.state.MetatronCharges)
+	}
+	if inj.state.MetatronOrders[0].Status != "triggered" {
+		t.Error("order not consumed one-shot on the empty-bank path")
+	}
+	mt.stateMu.Lock()
+	moments := append([]string(nil), mt.moments...)
+	mt.stateMu.Unlock()
+	if len(moments) != 1 || !strings.Contains(moments[0], "strength was spent") {
+		t.Fatalf("honest empty-bank moment not queued: %+v", moments)
+	}
+}
+
+// TestTriggerBudgetExhaustedOneMomentNoRetry (US3 AC-4, spec 029 T014/T015): a
+// system turn that fails with ErrBudgetExhausted yields exactly ONE honest moment
+// and ZERO retries — the trigger worker never re-runs a failed turn.
+func TestTriggerBudgetExhaustedOneMomentNoRetry(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "")
+	o := activePlayerOrder("ord-1-0", 1) // player origin: no precheck, runs the turn
+	o.Action = "send Fern a vision"
+	seedOrder(mt, inj, o)
+
+	calls := 0
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		calls++
+		return toolloop.Result{Term: toolloop.TermProviderError}, llm.ErrBudgetExhausted
+	}
+	mt.runTrigger(triggerJob{order: o, matchedType: "agent.slept", matchedTick: 5000})
+
+	if calls != 1 {
+		t.Errorf("failed system turn was retried: %d model calls, want 1", calls)
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("a degraded trigger spent a charge")
+	}
+	// order_triggered legitimately landed (one-shot consumption), but NO influence
+	// act did — no villager gained a memory from the failed turn.
+	if inj.state.MetatronOrders[0].Status != "triggered" {
+		t.Error("order not consumed on the degraded path")
+	}
+	for i := range inj.state.Agents {
+		if len(inj.state.Agents[i].Memories) != 0 {
+			t.Fatalf("a budget-exhausted trigger landed an influence on agent %d", i)
+		}
+	}
+	mt.stateMu.Lock()
+	moments := append([]string(nil), mt.moments...)
+	mt.stateMu.Unlock()
+	if len(moments) != 1 {
+		t.Fatalf("degraded trigger queued %d moments, want exactly 1: %+v", len(moments), moments)
+	}
+	if !strings.Contains(moments[0], "dimmed") {
+		t.Errorf("degraded moment not the sight-dimmed family: %q", moments[0])
+	}
+}
+
+// TestReplayReconstructsWithoutFiring (US3 edge case / SC-002, spec 029 T015): an
+// angel reconstructed from a snapshot whose history already triggered an order
+// rebuilds the consumed order from state alone — no live firing during
+// reconstruction, and a later matching event cannot re-fire a consumed order.
+func TestReplayReconstructsWithoutFiring(t *testing.T) {
+	m := worldmap.Generate(42, 64, 64)
+	state := sim.NewState(42, m)
+	o := sim.MetatronOrder{ID: "ord-1-0", Origin: "player", Condition: "when someone sleeps",
+		Action: "send a vision", EventTypes: []string{"agent.slept"}, Agent: -1,
+		PlacedTick: 1, ExpiresTick: 1 + 3*ticksPerGameDay, Status: "active"}
+	if err := state.Apply(mustEvent("metatron.order_placed", o)); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.Apply(mustEvent("metatron.order_triggered",
+		sim.OrderTriggeredPayload{ID: "ord-1-0", MatchedType: "agent.slept", MatchedTick: 5000})); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	if err := persona.Genesis(dir); err != nil {
+		t.Fatal(err)
+	}
+	orch := &mockOrch{}
+	inj := &stateInjector{state: state}
+	mt, err := New(orch, inj, m, 42, state.Marshal(), dir, testLoopRounds, testTurnTokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mt.Close() // stop goroutines; drive matching directly
+	mt.runLoop = converseLoop(mt)
+
+	mt.stateMu.Lock()
+	orders := append([]sim.MetatronOrder(nil), mt.orders...)
+	mt.stateMu.Unlock()
+	if len(orders) != 1 || orders[0].Status != "triggered" {
+		t.Fatalf("reconstruction did not rebuild the consumed order: %+v", orders)
+	}
+	// No metatron.order_triggered was emitted during reconstruction (New unmarshals
+	// state; it does not run the absorb path), so nothing landed through the door.
+	if len(inj.batches) != 0 {
+		t.Errorf("reconstruction emitted %d batches, want 0 (no live firing)", len(inj.batches))
+	}
+	// A matching event now cannot re-fire the consumed order.
+	mt.matchOrders([]store.Event{mustEvent("agent.slept", map[string]any{"agent": 0})})
+	select {
+	case <-mt.triggerQ:
+		t.Fatal("a consumed order re-fired on a fresh matching event")
+	default:
 	}
 }
