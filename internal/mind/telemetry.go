@@ -234,14 +234,17 @@ func (md *Mind) emitCog(events ...store.Event) {
 }
 
 // RecalibrateSignal is the orchestrator's drift hook (installed by the
-// daemon): the live estimator's spike rate breached threshold — record it. The
-// hook is per provider now (spec 024 T009); the breaching provider's name rides
-// the payload's Tier field, which stays named Tier because it is a recorded
-// telemetry field (replay-relevant schema — untouched by the rename).
-func (md *Mind) RecalibrateSignal(provider string, estimate, spikeRate float64) {
+// daemon): the live estimator's spike rate breached threshold and adopted the
+// window median — record it. The hook is per provider now (spec 024 T009); the
+// breaching provider's name rides the payload's Tier field, which stays named
+// Tier because it is a recorded telemetry field (replay-relevant schema —
+// untouched by the rename). The adoption arithmetic (prior → adopted, spec 031)
+// rides additive payload fields; estimate is the post-adoption value.
+func (md *Mind) RecalibrateSignal(provider string, estimate, spikeRate, prior, adopted float64) {
 	b, _ := json.Marshal(sim.RecalibrationPayload{
 		Tier: provider, EstimateSPerPt: estimate,
 		SpikeRate: spikeRate, Window: cognition.WindowSize,
+		PriorSPerPt: prior, AdoptedSPerPt: adopted,
 	})
 	md.emitCog(store.Event{Type: "cog.recalibration_recommended", Payload: b})
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/evanstern/promptworld/internal/cognition"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -135,6 +136,36 @@ func TestPlannerSuppressedAtHighSpeed(t *testing.T) {
 		}
 	}
 	h.model.mu.Unlock()
+}
+
+// TestRecalibrateSignalEmitsAdoption (spec 031 US3, FR-005): the drift hook
+// records one cog.recalibration_recommended event carrying the breaching
+// provider's name, spike rate, window, and the adoption arithmetic (prior →
+// adopted), with the emission-time estimate equal to the adopted value.
+func TestRecalibrateSignalEmitsAdoption(t *testing.T) {
+	h := newHarnessAt(t, `{"goal":"wander","reason":"stretching"}`, "16x")
+	h.mind.RecalibrateSignal("gemma", 11.8, 1.0, 0.524, 11.8)
+	evs := h.waitEvents(t, 10*time.Second, func(e store.Event) bool {
+		if e.Type != "cog.recalibration_recommended" {
+			return false
+		}
+		var p sim.RecalibrationPayload
+		return json.Unmarshal(e.Payload, &p) == nil && p.Tier == "gemma"
+	})
+	if len(evs) != 1 {
+		t.Fatalf("emitted %d recalibration events for the driven breach, want exactly 1", len(evs))
+	}
+	var p sim.RecalibrationPayload
+	if err := json.Unmarshal(evs[0].Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.SpikeRate != 1.0 || p.Window != cognition.WindowSize {
+		t.Errorf("core fields: spike=%g window=%d", p.SpikeRate, p.Window)
+	}
+	if p.PriorSPerPt != 0.524 || p.AdoptedSPerPt != 11.8 || p.EstimateSPerPt != 11.8 {
+		t.Errorf("adoption arithmetic: prior=%g adopted=%g est=%g (est must equal adopted)",
+			p.PriorSPerPt, p.AdoptedSPerPt, p.EstimateSPerPt)
+	}
 }
 
 // TestFutureDatedLine (US4): the helper states now and the landing estimate;
