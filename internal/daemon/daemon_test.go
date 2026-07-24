@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/sim"
@@ -127,5 +128,22 @@ func TestSeedMeetingConventionNoCoords(t *testing.T) {
 	}
 	if state.MeetingConvention == nil || state.MeetingPlace == nil {
 		t.Fatalf("convention/place missing: conv=%+v place=%+v", state.MeetingConvention, state.MeetingPlace)
+	}
+}
+
+// TestUncalibratedBootWarningContainsContractElements (spec 035 US2, T011):
+// the boot warning block carries all three contracts/warnings.md §1
+// elements — the uncalibrated statement, the per-class horizon at bootstrap
+// seeds, and the exact calibrate command for this world.
+func TestUncalibratedBootWarningContainsContractElements(t *testing.T) {
+	got := uncalibratedBootWarning("demo-ux")
+	if !strings.Contains(got, "UNCALIBRATED") || !strings.Contains(got, "bootstrap defaults") {
+		t.Errorf("missing the uncalibrated statement: %q", got)
+	}
+	if !strings.Contains(got, "planner") || !strings.Contains(got, "conversation") {
+		t.Errorf("missing the per-class horizon summary: %q", got)
+	}
+	if !strings.Contains(got, "promptworld calibrate demo-ux") {
+		t.Errorf("missing the exact calibrate command with the real world name: %q", got)
 	}
 }
