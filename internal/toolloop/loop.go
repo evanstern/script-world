@@ -447,8 +447,9 @@ func isActing(t tool.Tool) bool {
 // landing door re-validates everything semantic against live state; this only
 // catches shapes the model can repair (missing required args, wrong scalar
 // type, enum membership, number bounds, text caps). A tool with an authored
-// InputSchemaJSON override (set_plan) gets structural validation instead
-// (validateSetPlan). Returns "" when the arguments pass.
+// InputSchemaJSON override (set_plan, monitor_and_act, …) is validated against
+// that schema by the schema-lite walker (validateAuthored, spec 029 R5).
+// Returns "" when the arguments pass.
 func validateArgs(t tool.Tool, raw json.RawMessage) string {
 	args := map[string]json.RawMessage{}
 	if len(raw) > 0 {
@@ -457,7 +458,7 @@ func validateArgs(t tool.Tool, raw json.RawMessage) string {
 		}
 	}
 	if len(t.InputSchemaJSON) > 0 {
-		return validateSetPlan(args)
+		return validateAuthored(t.InputSchemaJSON, raw)
 	}
 	for _, p := range t.Params {
 		rawv, present := args[p.Name]
@@ -507,51 +508,158 @@ func validateArgs(t tool.Tool, raw json.RawMessage) string {
 	return ""
 }
 
-// validateSetPlan is the minimal structural check for set_plan's authored
-// schema (spec 017 R11): a "steps" array of 1..PlanStepCap objects, each with a
-// "goal" from the legacy world-goal vocabulary and an optional "kind" (item
-// vocabulary) and "qty" (integer >= 1). The inject door re-validates the plan
-// against live state; this only rejects a shape the model can repair.
-func validateSetPlan(args map[string]json.RawMessage) string {
-	stepsRaw, ok := args["steps"]
-	if !ok {
-		return `missing required argument "steps"`
+// validateAuthored validates raw arguments against a tool's authored
+// InputSchemaJSON with a schema-lite walker (spec 029 R5 / T002), generalizing
+// the retired set_plan-only structural check. It understands the JSON-Schema
+// subset the registry actually authors and RECURSES through it — object
+// `required` + `properties`, array `minItems`/`maxItems`/`items`, string
+// `enum`/`maxLength`, and integer `minimum`/`maximum` — so set_plan (a "steps"
+// array of step objects) validates identically to the old validateSetPlan and
+// monitor_and_act (string arrays with enum/bounds, spec 029) rides the same
+// code. Like the Params path it is deliberately structural: it rejects only the
+// shapes the model can repair, and the landing door re-validates everything
+// semantic against live state. Unknown keywords and additionalProperties are
+// ignored — the old dispatch enforced neither, so this never rejects more than
+// it did. Returns "" on success.
+func validateAuthored(schemaJSON, raw json.RawMessage) string {
+	var schema map[string]any
+	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+		// An authored schema that is not a JSON object is a registry bug caught
+		// by tool.Validate at boot, never a model-repairable argument error.
+		return ""
 	}
-	var steps []map[string]json.RawMessage
-	if err := json.Unmarshal(stepsRaw, &steps); err != nil {
-		return `"steps" must be an array of step objects`
-	}
-	if len(steps) < 1 {
-		return `"steps" must contain at least one step`
-	}
-	if len(steps) > tool.PlanStepCap {
-		return fmt.Sprintf(`"steps" must contain at most %d steps`, tool.PlanStepCap)
-	}
-	goals := tool.WorldGoals()
-	kinds := tool.ItemKinds()
-	for i, step := range steps {
-		goalRaw, ok := step["goal"]
+	return walkSchema("", schema, raw)
+}
+
+// walkSchema validates one JSON value (raw) against one schema-lite node,
+// recursing into object properties and array items. `path` names the value in
+// the returned reason (e.g. `steps[2].goal`), empty at the top level. A
+// malformed or type-less schema node passes (nothing to enforce) rather than
+// panicking — the "structural only" contract.
+func walkSchema(path string, schema map[string]any, raw json.RawMessage) string {
+	typ, _ := schema["type"].(string)
+	switch typ {
+	case "object":
+		fields := map[string]json.RawMessage{}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				return fmt.Sprintf("%s must be an object", labelOr(path, "arguments"))
+			}
+		}
+		for _, req := range schemaStrings(schema["required"]) {
+			if _, ok := fields[req]; !ok {
+				return fmt.Sprintf("missing required argument %q", childPath(path, req))
+			}
+		}
+		// Presence is `required`'s job; each present property is validated
+		// against its own sub-schema. Keys absent from `properties`
+		// (additionalProperties) are ignored, as the old dispatch was.
+		props, _ := schema["properties"].(map[string]any)
+		for name, sub := range props {
+			child, ok := fields[name]
+			if !ok {
+				continue
+			}
+			subSchema, ok := sub.(map[string]any)
+			if !ok {
+				continue
+			}
+			if reason := walkSchema(childPath(path, name), subSchema, child); reason != "" {
+				return reason
+			}
+		}
+	case "array":
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return fmt.Sprintf("%s must be an array", labelOr(path, "arguments"))
+		}
+		if min, ok := schemaInt(schema["minItems"]); ok && len(items) < min {
+			return fmt.Sprintf("%s must contain at least %d item(s)", labelOr(path, "arguments"), min)
+		}
+		if max, ok := schemaInt(schema["maxItems"]); ok && len(items) > max {
+			return fmt.Sprintf("%s must contain at most %d item(s)", labelOr(path, "arguments"), max)
+		}
+		if itemSchema, ok := schema["items"].(map[string]any); ok {
+			for i, elem := range items {
+				if reason := walkSchema(fmt.Sprintf("%s[%d]", path, i), itemSchema, elem); reason != "" {
+					return reason
+				}
+			}
+		}
+	case "string":
+		s, ok := jsonString(raw)
 		if !ok {
-			return fmt.Sprintf("step %d is missing a goal", i+1)
+			return fmt.Sprintf("%s must be a string", labelOr(path, "argument"))
 		}
-		goal, ok := jsonString(goalRaw)
-		if !ok || !goals[goal] {
-			return fmt.Sprintf("step %d has an unknown goal", i+1)
+		if max, ok := schemaInt(schema["maxLength"]); ok && utf8.RuneCountInString(s) > max {
+			return fmt.Sprintf("%s exceeds its %d-character cap", labelOr(path, "argument"), max)
 		}
-		if kindRaw, ok := step["kind"]; ok {
-			k, ok := jsonString(kindRaw)
-			if !ok || !contains(kinds, k) {
-				return fmt.Sprintf("step %d has an unknown item kind", i+1)
-			}
+		if enum := schemaStrings(schema["enum"]); len(enum) > 0 && !contains(enum, s) {
+			return fmt.Sprintf("%s must be one of %v", labelOr(path, "argument"), enum)
 		}
-		if qtyRaw, ok := step["qty"]; ok {
-			n, ok := jsonInt(qtyRaw)
-			if !ok || n < 1 {
-				return fmt.Sprintf("step %d qty must be an integer >= 1", i+1)
-			}
+	case "integer":
+		n, ok := jsonInt(raw)
+		if !ok {
+			return fmt.Sprintf("%s must be an integer", labelOr(path, "argument"))
+		}
+		if min, ok := schemaInt(schema["minimum"]); ok && n < int64(min) {
+			return fmt.Sprintf("%s must be >= %d", labelOr(path, "argument"), min)
+		}
+		if max, ok := schemaInt(schema["maximum"]); ok && n > int64(max) {
+			return fmt.Sprintf("%s must be <= %d", labelOr(path, "argument"), max)
+		}
+	case "boolean":
+		var b bool
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return fmt.Sprintf("%s must be a boolean", labelOr(path, "argument"))
 		}
 	}
 	return ""
+}
+
+// childPath joins an object path with a property name for a readable reason;
+// the top-level path is empty, so a top-level property reads as its bare name.
+func childPath(parent, name string) string {
+	if parent == "" {
+		return name
+	}
+	return parent + "." + name
+}
+
+// labelOr returns path, or fallback when path is empty (the top-level value has
+// no name of its own).
+func labelOr(path, fallback string) string {
+	if path == "" {
+		return fallback
+	}
+	return path
+}
+
+// schemaStrings coerces a schema keyword (`required`, `enum`) that json.Unmarshal
+// left as []any into a []string, dropping any non-string member.
+func schemaStrings(v any) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, e := range arr {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// schemaInt coerces a numeric schema keyword (`minItems`, `maximum`,
+// `maxLength`, …), which json.Unmarshal decodes as float64, into an int; ok is
+// false when the keyword is absent or non-numeric (nothing to enforce).
+func schemaInt(v any) (int, bool) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, false
+	}
+	return int(f), true
 }
 
 func jsonString(raw json.RawMessage) (string, bool) {

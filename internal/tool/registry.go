@@ -170,11 +170,12 @@ func MiracleCostsByEvent() map[string]int {
 // (kind/class/villager/item as strings, day/qty/x/y/to_x/to_y as integers), so
 // work_miracle needs NO authored InputSchemaJSON: its schema is Params-derived
 // (InputSchema, derive.go), unlike set_plan whose steps ARRAY the scalar model
-// cannot express. This is also load-bearing for the loop driver — its
-// validateArgs routes every InputSchemaJSON tool through set_plan's structural
-// validator (toolloop/loop.go), so an authored override here would be validated
-// against set_plan's `steps` shape and every work_miracle call rejected; Params
-// keeps InputSchema derivation and validateArgs in agreement.
+// cannot express. Since spec 029 the loop driver's validateArgs validates each
+// authored tool against ITS OWN schema (a schema-lite walker, toolloop/loop.go),
+// so an override here would no longer mis-validate against set_plan's shape;
+// Params derivation stays the right choice regardless, keeping InputSchema
+// (what the model sees) and validateArgs (what the driver enforces) in agreement
+// from one source.
 func miracleParams() []Param {
 	return []Param{
 		{Name: "kind", Kind: Enum, Required: true, Enum: miracleKinds},

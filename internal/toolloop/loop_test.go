@@ -634,6 +634,62 @@ func TestValidateArgs(t *testing.T) {
 	}
 }
 
+// TestValidateAuthoredWalker (spec 029 T002): the generalized schema-lite walker
+// validates a monitor_and_act-shaped authored schema — nested string arrays with
+// an enum + item bounds, a bounded integer, and a boolean — the shape the retired
+// set_plan-only validator could not express. The schema is inlined (the registry
+// entry lands in T003) so this pins the driver seam on its own. Reasons are not
+// asserted (the driver contract records the verdict, not the wording); only
+// accept/reject, exactly as TestValidateArgs does.
+func TestValidateAuthoredWalker(t *testing.T) {
+	// The monitor_and_act schema from specs/029-metatron-agency/contracts/tools.md.
+	schema := `{
+		"type": "object",
+		"properties": {
+			"condition":   {"type": "string", "maxLength": 300},
+			"action":      {"type": "string", "maxLength": 400},
+			"event_types": {"type": "array", "minItems": 1, "maxItems": 4,
+			                "items": {"type": "string", "enum": ["agent.slept","agent.woke","agent.died","sim.night_started"]}},
+			"agent":       {"type": "string"},
+			"keywords":    {"type": "array", "maxItems": 6, "items": {"type": "string", "maxLength": 40}},
+			"confirm":     {"type": "boolean"},
+			"ttl_days":    {"type": "integer", "minimum": 1, "maximum": 7}
+		},
+		"required": ["condition", "action", "event_types"]
+	}`
+	tl := tool.Tool{Name: "monitor_and_act", InputSchemaJSON: json.RawMessage(schema)}
+
+	cases := []struct {
+		name    string
+		args    string
+		wantErr bool
+	}{
+		{"minimal ok", `{"condition":"when Rowan sleeps","action":"comfort her","event_types":["agent.slept"]}`, false},
+		{"full ok", `{"condition":"c","action":"a","event_types":["agent.slept","agent.woke"],"agent":"rowan","keywords":["harvest","well"],"confirm":true,"ttl_days":5}`, false},
+		{"missing required event_types", `{"condition":"c","action":"a"}`, true},
+		{"missing required condition", `{"action":"a","event_types":["agent.slept"]}`, true},
+		{"bad enum member", `{"condition":"c","action":"a","event_types":["agent.flew"]}`, true},
+		{"event_types empty (minItems)", `{"condition":"c","action":"a","event_types":[]}`, true},
+		{"event_types over maxItems", `{"condition":"c","action":"a","event_types":["agent.slept","agent.woke","agent.died","sim.night_started","agent.slept"]}`, true},
+		{"wrong scalar type (condition int)", `{"condition":123,"action":"a","event_types":["agent.slept"]}`, true},
+		{"confirm not boolean", `{"condition":"c","action":"a","event_types":["agent.slept"],"confirm":"yes"}`, true},
+		{"ttl over maximum", `{"condition":"c","action":"a","event_types":["agent.slept"],"ttl_days":8}`, true},
+		{"ttl below minimum", `{"condition":"c","action":"a","event_types":["agent.slept"],"ttl_days":0}`, true},
+		{"keywords over maxItems", `{"condition":"c","action":"a","event_types":["agent.slept"],"keywords":["1","2","3","4","5","6","7"]}`, true},
+		{"keyword over item maxLength", `{"condition":"c","action":"a","event_types":["agent.slept"],"keywords":["` + strings.Repeat("x", 41) + `"]}`, true},
+		{"event_types not an array", `{"condition":"c","action":"a","event_types":"agent.slept"}`, true},
+		{"not an object", `["nope"]`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := validateArgs(tl, json.RawMessage(c.args))
+			if (got != "") != c.wantErr {
+				t.Errorf("validateArgs(%s) = %q, wantErr=%v", c.args, got, c.wantErr)
+			}
+		})
+	}
+}
+
 // capArgs truncates oversized arguments to the valid-JSON marker and copies
 // small payloads verbatim without aliasing.
 func TestCapArgs(t *testing.T) {
