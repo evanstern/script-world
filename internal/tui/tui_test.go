@@ -476,6 +476,28 @@ func TestMinibufferReply(t *testing.T) {
 	}
 }
 
+// TestMinibufferReplyOrderAndClock (spec 029 T023): a landed standing order,
+// a cancellation, and a meta-tool's clock line each render into the
+// transcript alongside the reply/nudge report lines.
+func TestMinibufferReplyOrderAndClock(t *testing.T) {
+	m := testModel(t)
+	m.active = paneMetatron
+	m.dockTab = paneMetatron
+	var mdl tea.Model = m
+	mdl, _ = mdl.(Model).Update(consoleReplyMsg{result: &metatron.TurnResult{
+		Reply:     "As you say.",
+		Order:     &metatron.OrderReport{ID: "ord-120-1", Condition: "Rowan falls asleep"},
+		Cancelled: []string{"ord-90-2"},
+		Clock:     "the world moves again",
+	}})
+	view := mdl.(Model).metatronView()
+	for _, want := range []string{"watch set", "ord-120-1", "Rowan falls asleep", "watch released", "ord-90-2", "the world moves again"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("console view missing %q: %s", want, view)
+		}
+	}
+}
+
 // TestMetatronBadgeWhenTabNotVisible is minibuffer.md's reply-arrival rule:
 // stream in place if the metatron tab/pane is visible, otherwise badge the
 // dock tab and flash the minibuffer once — never steal the selected tab.

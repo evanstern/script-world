@@ -11,6 +11,7 @@ import (
 
 	"github.com/evanstern/promptworld/internal/ipc"
 	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 )
@@ -221,9 +222,9 @@ func TestRenderChronicleRowSelectionReverse(t *testing.T) {
 		typ     string
 		payload string
 	}{
-		{"agent.died", `{"agent":0,"cause":"starvation"}`},   // alert path
-		{"clock.speed_set", `{"speed":"4x"}`},                 // labeled-voice path
-		{"agent.moved", `{"agent":0,"x":1,"y":1}`},             // phrase-voice, segment-wise path
+		{"agent.died", `{"agent":0,"cause":"starvation"}`}, // alert path
+		{"clock.speed_set", `{"speed":"4x"}`},              // labeled-voice path
+		{"agent.moved", `{"agent":0,"x":1,"y":1}`},         // phrase-voice, segment-wise path
 	}
 	for _, c := range cases {
 		e := store.Event{Seq: 1, Tick: 60, Type: c.typ, Payload: json.RawMessage(c.payload)}
@@ -342,6 +343,43 @@ func TestLLMProviderLinesEmpty(t *testing.T) {
 	}
 	if lines := llmProviderLines(&llm.Status{}); lines != nil {
 		t.Errorf("empty registry: %v", lines)
+	}
+}
+
+// TestOrderStatusLinesFields (spec 029 T023): the metatron pane's
+// standing-orders block carries id, fuzzy marker, origin, expiry day, status,
+// and condition for every order, headed by a count line.
+func TestOrderStatusLinesFields(t *testing.T) {
+	orders := []metatron.OrderStatus{
+		{ID: "ord-120-1", Condition: "Rowan falls asleep", Origin: "player", ExpiresDay: 6, Status: "active"},
+		{ID: "ord-130-1", Condition: "Rowan seems heartbroken", Origin: "system", Fuzzy: true, ExpiresDay: 7, Status: "active"},
+	}
+	lines := orderStatusLines(orders)
+	if len(lines) != 3 {
+		t.Fatalf("got %d lines, want 3 (header + 2 orders): %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], "2") {
+		t.Errorf("header should carry the order count: %q", lines[0])
+	}
+	for _, want := range []string{"ord-120-1", "player", "day 6", "active", "Rowan falls asleep"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("structural order row missing %q: %q", want, lines[1])
+		}
+	}
+	if strings.Contains(lines[1], "~") {
+		t.Errorf("a structural (non-fuzzy) order should carry no fuzzy marker: %q", lines[1])
+	}
+	for _, want := range []string{"ord-130-1", "~", "system", "day 7", "Rowan seems heartbroken"} {
+		if !strings.Contains(lines[2], want) {
+			t.Errorf("fuzzy order row missing %q: %q", want, lines[2])
+		}
+	}
+}
+
+// TestOrderStatusLinesEmpty: no standing orders renders no rows.
+func TestOrderStatusLinesEmpty(t *testing.T) {
+	if lines := orderStatusLines(nil); lines != nil {
+		t.Errorf("no orders: %v", lines)
 	}
 }
 

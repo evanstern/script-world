@@ -8,6 +8,7 @@ import (
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
 	"github.com/evanstern/promptworld/internal/worldmap"
@@ -1366,6 +1367,9 @@ func (m Model) metatronView() string {
 	}
 
 	content := header + "\n\n" + body
+	for _, row := range orderStatusLines(m.consoleOrders) {
+		content += "\n" + row
+	}
 	if m.status != nil && m.status.LLM != nil {
 		l := m.status.LLM
 		for _, row := range llmProviderLines(l) {
@@ -1381,6 +1385,28 @@ func (m Model) metatronView() string {
 	// bordered pane, which adds its own chrome on top.
 	content += "\n\n" + m.minibufferView(width)
 	return styleBox.Render(content)
+}
+
+// orderStatusLines renders the metatron pane's standing-orders block (spec 029
+// T023, FR-016): a header count, then one compact row per order — id, a fuzzy
+// marker, origin, remaining game-day, and status, followed by the condition
+// text. nil when no orders stand (the pane shows nothing extra, matching the
+// Status.Orders omitempty contract).
+func orderStatusLines(orders []metatron.OrderStatus) []string {
+	if len(orders) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(orders)+1)
+	lines = append(lines, styleDim.Render(fmt.Sprintf("👁 standing orders (%d)", len(orders))))
+	for _, o := range orders {
+		fuzzy := ""
+		if o.Fuzzy {
+			fuzzy = "~"
+		}
+		lines = append(lines, fmt.Sprintf("  %s%s [%s · day %d · %s] %q",
+			o.ID, fuzzy, o.Origin, o.ExpiresDay, o.Status, o.Condition))
+	}
+	return lines
 }
 
 // llmProviderNameWidth / llmProviderModelWidth are the provider table's fixed

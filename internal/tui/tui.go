@@ -106,10 +106,11 @@ type Model struct {
 	// transcript is dock/pane content; mbInput/mbFocused/mbBusy are the
 	// minibuffer's own state, governed by the focus contract
 	// (patterns/focus-contract.md) everywhere it appears.
-	transcript     []string // rendered transcript rows, newest last
-	consoleCharter string   // "default charter" | "custom charter" | ""
-	consoleSkills  int      // count of effective skill files (spec 021 US3)
-	consoleTools   string   // granted-tool summary, e.g. "tools: dream, omen"; "" when quiet default
+	transcript     []string               // rendered transcript rows, newest last
+	consoleCharter string                 // "default charter" | "custom charter" | ""
+	consoleSkills  int                    // count of effective skill files (spec 021 US3)
+	consoleTools   string                 // granted-tool summary, e.g. "tools: dream, omen"; "" when quiet default
+	consoleOrders  []metatron.OrderStatus // standing orders peek (spec 029 T023, FR-016)
 
 	mbFocused bool
 	mbInput   string
@@ -396,6 +397,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.consoleCharter = ""
 			m.consoleSkills = 0
 			m.consoleTools = ""
+			m.consoleOrders = nil
 		} else {
 			if msg.status.CharterDefault {
 				m.consoleCharter = "default charter"
@@ -404,6 +406,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.consoleSkills = len(msg.status.Skills)
 			m.consoleTools = consoleToolsSummary(msg.status)
+			m.consoleOrders = msg.status.Orders
 		}
 		return m, nil
 
@@ -421,6 +424,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if r.Nudge != nil {
 			m.transcript = append(m.transcript, fmt.Sprintf("⚡ %s → %s: %q",
 				r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text))
+		}
+		if r.Order != nil {
+			m.transcript = append(m.transcript, fmt.Sprintf("👁 watch set (%s): %q", r.Order.ID, r.Order.Condition))
+		}
+		for _, id := range r.Cancelled {
+			m.transcript = append(m.transcript, fmt.Sprintf("👁 watch released: %s", id))
+		}
+		if r.Clock != "" {
+			m.transcript = append(m.transcript, fmt.Sprintf("⏲ %s", r.Clock))
 		}
 		if len(m.transcript) > 200 {
 			m.transcript = m.transcript[len(m.transcript)-200:]

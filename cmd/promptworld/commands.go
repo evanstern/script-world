@@ -20,6 +20,7 @@ import (
 	"github.com/evanstern/promptworld/internal/daemon"
 	"github.com/evanstern/promptworld/internal/ipc"
 	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/persona"
 	"github.com/evanstern/promptworld/internal/sim"
 	"github.com/evanstern/promptworld/internal/store"
@@ -347,6 +348,12 @@ func cmdMetatron(args []string) error {
 		}
 		fmt.Printf("charges %s (%d/%d) · %s · charter.md at %s\n",
 			chargeGlyphs(st.Charges), st.Charges, sim.MetatronChargeCap, charter, w.CharterPath())
+		if len(st.Orders) > 0 {
+			fmt.Printf("\n--- standing orders ---\n")
+			for _, o := range st.Orders {
+				fmt.Printf("%s\n", orderStatusLine(o))
+			}
+		}
 		if strings.TrimSpace(st.SoulTail) != "" {
 			fmt.Printf("\n--- recent notes ---\n%s\n", strings.TrimSpace(st.SoulTail))
 		}
@@ -364,8 +371,28 @@ func cmdMetatron(args []string) error {
 	if r.Nudge != nil {
 		fmt.Printf("\n⚡ %s → %s: %q\n", r.Nudge.Form, strings.Join(r.Nudge.Targets, ", "), r.Nudge.Text)
 	}
+	if r.Order != nil {
+		fmt.Printf("\n👁 watch set (%s): %q\n", r.Order.ID, r.Order.Condition)
+	}
+	for _, id := range r.Cancelled {
+		fmt.Printf("\n👁 watch released: %s\n", id)
+	}
+	if r.Clock != "" {
+		fmt.Printf("\n⏲ %s\n", r.Clock)
+	}
 	fmt.Printf("\n[charges %s %d/%d]\n", chargeGlyphs(r.Charges), r.Charges, sim.MetatronChargeCap)
 	return nil
+}
+
+// orderStatusLine renders one standing order for the CLI status peek (spec 029
+// T023): id, a fuzzy marker, origin, remaining game-day, and status, followed
+// by the condition text — the same fields the console/TUI surfaces show.
+func orderStatusLine(o metatron.OrderStatus) string {
+	fuzzy := ""
+	if o.Fuzzy {
+		fuzzy = " (fuzzy)"
+	}
+	return fmt.Sprintf("👁 %s%s [%s · day %d · %s]: %q", o.ID, fuzzy, o.Origin, o.ExpiresDay, o.Status, o.Condition)
 }
 
 func chargeGlyphs(n int) string {

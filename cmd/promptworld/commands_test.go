@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/llm"
+	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/world"
 	"github.com/evanstern/promptworld/internal/worlds"
 )
@@ -320,5 +321,31 @@ func TestFormatLLMOneShotPrintsSkippedReasons(t *testing.T) {
 	out := formatLLMOneShot(resp)
 	if !strings.Contains(out, "skipped: cogito (circuit-open), bogus (queue-full)\n") {
 		t.Errorf("skipped line missing/wrong: %q", out)
+	}
+}
+
+// --- T023: orderStatusLine (spec 029 polish, `promptworld metatron` status peek) ---
+
+// TestOrderStatusLineFields: id, fuzzy marker, origin, expiry day, status, and
+// condition all appear; a structural (non-fuzzy) order carries no marker.
+func TestOrderStatusLineFields(t *testing.T) {
+	structural := metatron.OrderStatus{
+		ID: "ord-120-1", Condition: "Rowan falls asleep", Origin: "player", ExpiresDay: 6, Status: "active",
+	}
+	line := orderStatusLine(structural)
+	for _, want := range []string{"ord-120-1", "player", "day 6", "active", "Rowan falls asleep"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("structural order line missing %q: %q", want, line)
+		}
+	}
+	if strings.Contains(line, "fuzzy") {
+		t.Errorf("a structural order should carry no fuzzy marker: %q", line)
+	}
+
+	fuzzy := metatron.OrderStatus{
+		ID: "ord-130-1", Condition: "Rowan seems heartbroken", Origin: "system", Fuzzy: true, ExpiresDay: 7, Status: "active",
+	}
+	if line := orderStatusLine(fuzzy); !strings.Contains(line, "fuzzy") {
+		t.Errorf("fuzzy order line missing fuzzy marker: %q", line)
 	}
 }
