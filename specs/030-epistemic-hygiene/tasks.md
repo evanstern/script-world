@@ -68,7 +68,7 @@ reinforcement resets; replay holds.
       (`internal/sim/loop.go` whitelist + total reducer arm in `internal/sim/consolidate.go`); tests emitting it
       through the door incl. vanished-target no-op; replay suite extended with a reinforcement event (SC-003
       second half); seam documented in the events contract (already) + doc comment naming the future producer
-- [ ] T008 [US2] Read sites: scribe Beliefs section renders effective values and the hedged below-floor form
+- [x] T008 [US2] Read sites: scribe Beliefs section renders effective values and the hedged below-floor form
       (`internal/scribe/scribe.go`); consolidation held-beliefs block shows effective values with "(faded)"
       markers (`internal/mind/consolidate.go`); any other belief-surfacing prompt excludes below-floor; render
       tests pinning the hedged form and the exclusion
