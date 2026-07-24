@@ -76,18 +76,18 @@ green at each commit.
 shows new tools); daytime omen behavior arrives with US4 — until then the
 landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
-- [ ] T005 [US1] Rework `internal/metatron/turn.go`: replace `landNudge` with
+- [X] T005 [US1] Rework `internal/metatron/turn.go`: replace `landNudge` with
   `landVision(target, text, …)` and `landOmen(targets, text, …)` (comma-list/
   `everyone` parsing, alive-set validation, night check against a new mirrored
   `night` flag — add `State.Night` to `mirrorState` in
   `internal/metatron/metatron.go`; day path: temporary refusal-with-counsel,
   superseded in Phase 6); memory prefixes per contracts/events.md; soul-append
   lines; keep the atomic batch shape.
-- [ ] T006 [US1] Rework `internal/metatron/toolcalls.go` handlers: `send_vision`/
+- [X] T006 [US1] Rework `internal/metatron/toolcalls.go` handlers: `send_vision`/
   `send_omen` replace `nudge_dream`/`nudge_omen` in `turnHandlers` (grant-gated
   as before); update `grantedRoster`/`grantSet` plumbing in
   `internal/metatron/charter.go` if tool-name literals appear there.
-- [ ] T007 [US1] Update `internal/metatron/metatron_test.go` +
+- [X] T007 [US1] Update `internal/metatron/metatron_test.go` +
   `metatron_gaps_test.go`: sentinel/firewall audit covers the new handler names;
   adversarial rows (dead target, two-villager vision, empty text, ungranted tool
   structurally absent); determinism fixtures; retire dream-path tests that assert
@@ -104,7 +104,7 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 **Independent Test**: quickstart Scenario 2 steps 1, 3 (status/restart/replay),
 4 (cap), 5 (cancel), 6 (TTL) — trigger execution itself is US3.
 
-- [ ] T008 [US2] Create `internal/metatron/orders.go`: order mirror (mirrorState
+- [X] T008 [US2] Create `internal/metatron/orders.go`: order mirror (mirrorState
   copies `replica.MetatronOrders`), `placeOrder` (id `ord-<tick>-<seq>` per
   research R7, lands `metatron.order_placed` via InjectSocial, in-fiction refusal
   mapping for cap/uncompilable), `cancelOrder` (lands `order_cancelled`), and the
@@ -112,15 +112,15 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
   agent index, lowercase keyword search over payload text) with unit tests in
   `internal/metatron/orders_test.go` (match/no-match matrix, replay-never-matches
   guard is US3).
-- [ ] T009 [US2] Wire `monitor_and_act` + `cancel_order` handlers into
+- [X] T009 [US2] Wire `monitor_and_act` + `cancel_order` handlers into
   `internal/metatron/toolcalls.go` (grant-gated; empty event_types → gate refusal
   with counsel per research R5); thread order placement through `turnDispatch`.
-- [ ] T010 [US2] Surfaces in `internal/metatron/turn.go` + `metatron.go`:
+- [X] T010 [US2] Surfaces in `internal/metatron/turn.go` + `metatron.go`:
   `Status.Orders []OrderStatus` (additive, omitempty); standing-orders block in
   `turnUserPrompt` (id, condition, remaining game-days, fuzzy marker); expiry
   moment line in `internal/metatron/digest.go`'s observeMoment path
   (`metatron.order_expired` → model-free moment); soul lines for place/cancel.
-- [ ] T011 [US2] Tests in `internal/metatron/metatron_test.go`: placement lands
+- [X] T011 [US2] Tests in `internal/metatron/metatron_test.go`: placement lands
   and mirrors, 4th player order refused, cancel frees slot, status lists orders,
   prompt block renders, expiry queues a moment; extend the sentinel audit to
   `monitor_and_act`/`cancel_order` handler gating.
@@ -135,24 +135,24 @@ landOmen day path refuses with counsel (temporary, replaced in Phase 6).
 
 **Independent Test**: quickstart Scenario 2 step 2 and Scenario 5.
 
-- [ ] T012 [US3] Refactor `internal/metatron/turn.go`: extract the shared body of
+- [X] T012 [US3] Refactor `internal/metatron/turn.go`: extract the shared body of
   `Turn` into `runTurn(origin turnOrigin, seed string, …)` — console path
   unchanged byte-for-byte in behavior (jobID `turn-metatron-<tick>`); system path
   (jobID `watch-metatron-<tick>`, transcript rendered with a `[watch]` origin
   marker, no player-text sink) per research R6.
-- [ ] T013 [US3] Trigger pipeline in `internal/metatron/orders.go` +
+- [X] T013 [US3] Trigger pipeline in `internal/metatron/orders.go` +
   `metatron.go`: absorb-path matching (live events only — `run()` matches AFTER
   replica apply; nothing matches during construction from snapshot), buffered
   trigger channel + worker goroutine (FIFO, order-id order within a batch),
   land `metatron.order_triggered` via InjectSocial (door resolves cancel/expiry
   races), bounded-wait acquisition of `turnBusy` for system turns (console keeps
   fail-fast ErrTurnBusy), moment queued from the system turn's outcome.
-- [ ] T014 [US3] Budget/degradation honesty in `internal/metatron/orders.go`:
+- [X] T014 [US3] Budget/degradation honesty in `internal/metatron/orders.go`:
   empty-bank precheck for known-act (deferral) orders skips the model call and
   queues "strength was spent"; failed system turns (ErrBudgetExhausted /
   ErrTierDown / transport / cap-dry) map each failure family to one model-free
   honest moment, never retry (research R12).
-- [ ] T015 [US3] Tests in `internal/metatron/metatron_test.go` +
+- [X] T015 [US3] Tests in `internal/metatron/metatron_test.go` +
   `orders_test.go` (scripted runLoop seam): trigger fires → order_triggered +
   system turn + moment; trigger while console turn in flight serializes; cancelled
   order racing its trigger resolves at the door (exactly one of

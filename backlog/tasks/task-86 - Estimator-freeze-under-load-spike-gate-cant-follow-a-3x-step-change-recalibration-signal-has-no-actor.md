@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-24 03:18'
-updated_date: '2026-07-24 03:31'
+updated_date: '2026-07-24 03:32'
 labels:
   - cognition
   - bug
@@ -52,3 +52,9 @@ Spec: specs/031-estimator-breach-adoption
 - [ ] #9 Spec phase: User Story 3 — Adoption is auditable (Priority: P3)
 - [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Tier decision (constitution Principle V): implementation delegated to spec-implementer on OPUS 4.8. Rubric justification: internal/cognition estimator logic is doctrine-adjacent behavior change in the scheduling/governor family (router admission arithmetic input), explicitly named a senior-tier slice; concurrency-sensitive (per-provider estimator shared across in-flight completions, adoption must be atomic with breach detection). Spec artifacts: specs/031-estimator-breach-adoption (plan.md Constitution Check records the same).
+<!-- SECTION:NOTES:END -->
