@@ -193,6 +193,35 @@ func TestMapRendersChestGlyphAndInspection(t *testing.T) {
 	}
 }
 
+// TestMapRendersWallGlyphs covers spec 032 T010 (US1, SC-006): plank/stone wall
+// glyphs appear on the map, a damaged wall renders dim (the cold-fire
+// precedent), and the legend documents the wall key.
+func TestMapRendersWallGlyphs(t *testing.T) {
+	m := testModel(t)
+	cx, cy := m.gameMap.W/2, m.gameMap.H/2
+	m.replica.Agents = []sim.Agent{{Name: "Ash", X: cx, Y: cy}}
+	m.replica.Structures = []sim.Structure{
+		// Full-health plank wall (normal glyph) and a damaged stone wall (dim),
+		// both off the agent's own tile so the agent glyph doesn't mask them.
+		{Kind: "wall_plank", X: cx + 1, Y: cy, HP: sim.WallMaxHP("wall_plank")},
+		{Kind: "wall_stone", X: cx + 2, Y: cy, HP: 100},
+	}
+	view := m.mapView()
+	lines := strings.Split(view, "\n")
+	gridOnly := strings.Join(lines[:len(lines)-1], "\n")
+	legend := lines[len(lines)-1]
+
+	if !strings.Contains(gridOnly, styleWall.Render("▤")) {
+		t.Error("full-health plank wall glyph ▤ (normal style) missing from map grid")
+	}
+	if !strings.Contains(gridOnly, styleWallDamaged.Render("▩")) {
+		t.Error("damaged stone wall glyph ▩ should render dim (styleWallDamaged)")
+	}
+	if !strings.Contains(legend, "▤▩wall") {
+		t.Errorf("legend key should document the wall glyphs, got: %s", legend)
+	}
+}
+
 // TestDescribeChestEmptyStore covers the empty-chest and out-of-range-owner
 // edges of T026's inspection line: an empty Store reads "empty" rather than
 // a blank/zero-padded contents string, and an owner index outside the

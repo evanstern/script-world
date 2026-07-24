@@ -399,6 +399,20 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 				structures[[2]int{st.X, st.Y}] = styleOven.Render("▣")
 			case "chest":
 				structures[[2]int{st.X, st.Y}] = styleChest.Render("☐")
+			case "wall_plank", "wall_stone":
+				// Spec 032 US1: walls block movement (structures win over terrain
+				// in tile()), so they always show. A damaged wall (HP below the
+				// derived max) renders dim, the cold-fire precedent, so the player
+				// can spot a wall under demolition at a glance.
+				glyph := "▤"
+				if st.Kind == "wall_stone" {
+					glyph = "▩"
+				}
+				if st.HP < sim.WallMaxHP(st.Kind) {
+					structures[[2]int{st.X, st.Y}] = styleWallDamaged.Render(glyph)
+				} else {
+					structures[[2]int{st.X, st.Y}] = styleWall.Render(glyph)
+				}
 			}
 		}
 		for _, q := range m.replica.Quarried {
@@ -541,7 +555,7 @@ func (m Model) renderMapGrid(vw, vh int) (grid, legend string) {
 		}
 	}
 	legend = styleDim.Render(fmt.Sprintf(
-		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
+		"%s · [%d,%d–%d,%d of %d×%d] · ~water ♠wood \"forage ^rock ,quarried ᴥden ▲fire △cold ⌂shelter ▣oven %%pile ☐chest ▤▩wall · agents by initial (lowercase asleep, †dead) · arrows pan, c center%s%s",
 		phase, x0, y0, x0+vw-1, y0+vh-1, gm.W, gm.H, pilesInfo, chestsInfo))
 	return grid, legend
 }
@@ -746,7 +760,13 @@ var (
 	// tan (178) and shelter's brown (130) without matching either, so a
 	// chest never gets mistaken for a stockpile or a house at a glance.
 	styleChest = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("136"))
-	styleGru   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	// Wall (spec 032 US1): "▤" (plank) / "▩" (stone) read as solid barriers
+	// distinct from every existing glyph; slate gray (250) sets them apart from
+	// intact rock's "^" (245) and the burnt-orange structures. A damaged wall
+	// (HP < max) renders faint (240), the cold-fire dim precedent.
+	styleWall        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("250"))
+	styleWallDamaged = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240"))
+	styleGru         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
 )
 
 // mapView is the narrow-fallback map pane: today's vw/vh formula,

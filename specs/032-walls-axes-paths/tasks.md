@@ -41,7 +41,7 @@
 - [x] T007 [US1] Executor work in internal/sim/executor.go: wall-build completion re-validates buildSite(ResX,ResY) && !agentAt(ResX,ResY) and emits agent.built with Res coords + a situated builder memory (shelter salience); demolish cycles emit agent.wall_chipped or (HP ≤ chip) agent.wall_destroyed; repair cycles re-validate wall+damage+material and emit agent.wall_repaired; contested-wall completions resolve via agent.intent_done (contracts/events.md ordering rules)
 - [x] T008 [US1] Reducer arms in internal/sim/state.go: agent.built stamps HP=wallMaxHP for wall kinds; agent.wall_chipped subtracts demolishChipHP and resets the actor's Intent.WorkStart=0; agent.wall_destroyed removes the structure and clears the intent; agent.wall_repaired consumes 1 matching material, clamps HP to max, and either resets WorkStart (damaged + material remains) or clears the intent
 - [x] T009 [US1] Scenario tests in internal/sim/wall_test.go: full wall lifecycle (build→chip×N→destroy→tile passable), plank 2 cycles vs stone 6, repair math + at-full-HP no-resolve, occupancy guard, no-agent-ever-on-wall-tile over a long run, replay hash identical (quickstart scenarios 2–4, 7)
-- [ ] T010 [P] [US1] TUI glyphs in internal/tui/views.go: wall_plank "▤", wall_stone "▩", dim style when HP < wallMaxHP (cold-fire precedent); extend internal/tui/tui_test.go fixture
+- [x] T010 [P] [US1] TUI glyphs in internal/tui/views.go: wall_plank "▤", wall_stone "▩", dim style when HP < wallMaxHP (cold-fire precedent); extend internal/tui/tui_test.go fixture
 
 **Checkpoint**: walls fully functional and demoable with no axe/path code present
 

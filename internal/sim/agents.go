@@ -666,6 +666,14 @@ func Bulk(inv Inventory) int {
 	return bulk(inv)
 }
 
+// WallMaxHP is wallMaxHP exported for internal/tui (spec 032): the map view dims
+// a wall glyph when its current HP is below the derived per-kind maximum
+// (cold-fire precedent), and only sim knows that maximum. Mirrors the Bulk/
+// BulkCap export — sim stays the single source of truth for the derived value.
+func WallMaxHP(kind string) int {
+	return wallMaxHP(kind)
+}
+
 // intentDurations is the per-goal-door-world-tool base work duration, DERIVED
 // from the tool registry's Cost.DurationTicks at init (spec 014, R7). It
 // replaces the hand-written intentDuration switch — the registry now carries
