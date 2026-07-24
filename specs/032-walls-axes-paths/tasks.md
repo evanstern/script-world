@@ -22,7 +22,7 @@
 
 **Purpose**: state fields and pure helpers that US1 and US3 both build on
 
-- [ ] T002 Add Structure.HP (`json:"hp,omitempty"`) to internal/sim/agents.go and the pure helpers isWall/wallMaxHP/wallAt/pathAt/agentAt to internal/sim/terrain.go (data-model.md helper table); assert pre-032 snapshot bytes are unchanged by the additive field in internal/sim/state_test.go
+- [x] T002 Add Structure.HP (`json:"hp,omitempty"`) to internal/sim/agents.go and the pure helpers isWall/wallMaxHP/wallAt/pathAt/agentAt to internal/sim/terrain.go (data-model.md helper table); assert pre-032 snapshot bytes are unchanged by the additive field in internal/sim/state_test.go
 
 **Checkpoint**: compiles green, no behavior change — user stories can begin
 

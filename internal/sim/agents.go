@@ -184,13 +184,20 @@ type Memory struct {
 // chestCap via the same derived bulk() used for agents — chests preserve food
 // indefinitely, so it needs no batches. Both omitempty keep non-chest and
 // pre-013 snapshots byte-identical.
+// HP (spec 032, research R1) applies to walls only: a standing wall's current
+// health, 1..wallMaxHP(kind). Max HP is derived from the kind (never stored),
+// same doctrine as fire lit-ness from FuelUntil. A standing wall always has
+// HP ≥ 1 — the reducer removes the structure in the same application that would
+// take it to ≤ 0, so hp never serializes as 0. omitempty keeps non-wall and
+// pre-032 snapshots byte-identical.
 type Structure struct {
-	Kind      string     `json:"kind"` // "fire" | "shelter" | "oven" | "chest"
+	Kind      string     `json:"kind"` // "fire" | "shelter" | "oven" | "chest" | "wall_plank" | "wall_stone" | "path"
 	X         int        `json:"x"`
 	Y         int        `json:"y"`
 	FuelUntil int64      `json:"fuel_until,omitempty"` // fires only
 	Owner     int        `json:"owner,omitempty"`      // chests only: builder agent index, permanent
 	Store     *Inventory `json:"store,omitempty"`      // chests only: contents (no rot inside)
+	HP        int        `json:"hp,omitempty"`         // walls only: current health, 1..wallMaxHP(kind)
 }
 
 // FoodBatch is one drop of food on the ground with its own spoilage deadline —

@@ -143,3 +143,21 @@ func TestUngovernedSnapshotOmitsRequestedSpeed(t *testing.T) {
 		t.Errorf("governed snapshot missing requested_speed key:\n%s", got)
 	}
 }
+
+// TestStructureHPOmitemptyStable (spec 032 T002, research R7): the additive
+// Structure.HP field is omitempty, so a non-wall structure (or any pre-032
+// structure, which never set HP) marshals with NO "hp" key — pre-032 snapshot
+// bytes are unchanged. A standing wall (HP ≥ 1) does carry the key.
+func TestStructureHPOmitemptyStable(t *testing.T) {
+	s := NewState(42, testMap(42))
+	// A pre-032-shaped structure (fire) never sets HP → the key must not appear.
+	s.Structures = []Structure{{Kind: "fire", X: 1, Y: 1, FuelUntil: 8 * 3600}}
+	if got := s.Marshal(); bytes.Contains(got, []byte(`"hp"`)) {
+		t.Errorf("non-wall structure leaked an hp key:\n%s", got)
+	}
+	// A standing wall carries its current health.
+	s.Structures = []Structure{{Kind: "wall_plank", X: 2, Y: 2, HP: wallPlankHP}}
+	if got := s.Marshal(); !bytes.Contains(got, []byte(`"hp":200`)) {
+		t.Errorf("wall snapshot missing hp key:\n%s", got)
+	}
+}
