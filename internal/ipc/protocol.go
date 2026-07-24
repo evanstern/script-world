@@ -112,6 +112,13 @@ type StatusData struct {
 	Log    LogStatus    `json:"log"`
 	// LLM is present only when the world has an orchestrator (llm.json).
 	LLM *llm.Status `json:"llm,omitempty"`
+	// Warning is set ONLY on the set_speed reply path (spec 035 FR-002): the
+	// requested speed lands on a notch where a bootstrap-seeded provider's
+	// cognition class is suppressed under its current estimate. Never set on
+	// status/pause/resume — omitempty keeps those replies byte-identical
+	// (FR-008). The warning never blocks the speed change; it always applied
+	// by the time this is set.
+	Warning string `json:"warning,omitempty"`
 }
 
 type WorldStatus struct {

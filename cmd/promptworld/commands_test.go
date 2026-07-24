@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/evanstern/promptworld/internal/ipc"
 	"github.com/evanstern/promptworld/internal/llm"
 	"github.com/evanstern/promptworld/internal/metatron"
 	"github.com/evanstern/promptworld/internal/world"
@@ -347,5 +348,55 @@ func TestOrderStatusLineFields(t *testing.T) {
 	}
 	if line := orderStatusLine(fuzzy); !strings.Contains(line, "fuzzy") {
 		t.Errorf("fuzzy order line missing fuzzy marker: %q", line)
+	}
+}
+
+// --- T009/T013: calibration-UX rendering (spec 035) ---
+
+// TestSetSpeedLineWithWarning: a set_speed reply carrying a warning renders
+// it on its own line, visually distinct from the clock line.
+func TestSetSpeedLineWithWarning(t *testing.T) {
+	sd := &ipc.StatusData{Warning: "uncalibrated world at 32x: planner, conversation suppressed at current estimates — run `promptworld calibrate demo`"}
+	sd.Clock.Speed = "32x"
+	sd.Clock.GameTime = "day 1, 06:00"
+	out := setSpeedLine(sd)
+	if !strings.Contains(out, "speed 32x") {
+		t.Errorf("clock line missing from output: %q", out)
+	}
+	if !strings.Contains(out, "WARNING: uncalibrated world at 32x") {
+		t.Errorf("warning missing/misrendered: %q", out)
+	}
+}
+
+// TestSetSpeedLineWithoutWarning: no warning field means no WARNING line —
+// a calibrated (or no-LLM) world's rendering is unchanged.
+func TestSetSpeedLineWithoutWarning(t *testing.T) {
+	sd := &ipc.StatusData{}
+	sd.Clock.Speed = "4x"
+	sd.Clock.GameTime = "day 1, 06:00"
+	out := setSpeedLine(sd)
+	if strings.Contains(out, "WARNING") {
+		t.Errorf("no-warning reply must not render a WARNING line: %q", out)
+	}
+}
+
+// TestProviderCalibrationLineBootstrap: an empty CalibratedAt renders the
+// explicit "uncalibrated (bootstrap)" marker (FR-004).
+func TestProviderCalibrationLineBootstrap(t *testing.T) {
+	line := providerCalibrationLine(llm.ProviderStatus{Name: "local", Model: "gemma3:12b"})
+	if !strings.Contains(line, "local") || !strings.Contains(line, "uncalibrated (bootstrap)") {
+		t.Errorf("bootstrap provider line = %q", line)
+	}
+}
+
+// TestProviderCalibrationLineCalibrated: a present CalibratedAt renders the
+// profile's timestamp, not the bootstrap marker.
+func TestProviderCalibrationLineCalibrated(t *testing.T) {
+	line := providerCalibrationLine(llm.ProviderStatus{Name: "cloud", Model: "claude-opus-4-8", CalibratedAt: "2026-07-20T21:40:00Z"})
+	if !strings.Contains(line, "2026-07-20T21:40:00Z") {
+		t.Errorf("calibrated provider line missing timestamp: %q", line)
+	}
+	if strings.Contains(line, "bootstrap") {
+		t.Errorf("calibrated provider line must not show the bootstrap marker: %q", line)
 	}
 }
