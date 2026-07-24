@@ -34,7 +34,7 @@
 
 **Independent Test**: quickstart scenarios 2–4 — build a wall and watch routes detour; chip a plank wall down in 2 cycles / stone in 6 under one intent; repair a chipped wall; occupancy guard rejects building onto an occupied tile
 
-- [ ] T003 [P] [US1] Add build_wall_plank (2 planks) and build_wall_stone (2 refined_stone) recipes plus the wallRepairMaterial helper to internal/sim/recipes.go; extend the contract-mirror assertions in internal/sim/recipes_test.go with the contracts/recipes.md literals
+- [x] T003 [P] [US1] Add build_wall_plank (2 planks) and build_wall_stone (2 refined_stone) recipes plus the wallRepairMaterial helper to internal/sim/recipes.go; extend the contract-mirror assertions in internal/sim/recipes_test.go with the contracts/recipes.md literals
 - [ ] T004 [P] [US1] Teach passable() to return false on standing-wall tiles in internal/sim/terrain.go; add reroute-around-wall and unreachable-when-enclosed BFS tests in internal/sim/wall_test.go (new file)
 - [ ] T005 [US1] Add worldToolsBase rows build_wall_plank/build_wall_stone/demolish/repair with PromptGloss lines (walls block movement + HP + repairable; demolish cycles; repair cost) in internal/tool/registry.go — lands with T006 (coverage gate)
 - [ ] T006 [US1] Add goalResolvers arms in internal/sim/policy.go: wall builds via nearestAdjacentTo over buildSite (stand=Target, build=Res; input check per recipe), demolish targeting the nearest wall via nearestAdjacentTo over isWall, repair targeting the nearest damaged wall (HP < wallMaxHP) with 1 matching material carried

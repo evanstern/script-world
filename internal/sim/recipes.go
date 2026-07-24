@@ -58,6 +58,13 @@ var recipes = []Recipe{
 	// build time. Build-site validation (all build_*) additionally rejects tiles
 	// holding a pile (FR-007), wired with the goal in Phase 5.
 	{Goal: "build_chest", Inputs: []Item{{"planks", chestPlankCost}}, Structure: "chest", Duration: buildFireTicks, Site: SiteOnSite},
+	// Walls (spec 032 US1): two Structure kinds, two recipes — the reducer's
+	// generic agent.built arm derives each cost via recipeFor("build_"+Kind), so
+	// two kinds fall out the same way fire always has (research R1). Adjacent-
+	// stand builds (the resolver stands the builder beside the wall tile) so a
+	// builder never entombs itself.
+	{Goal: "build_wall_plank", Inputs: []Item{{"planks", wallPlankCost}}, Structure: "wall_plank", Duration: buildWallTicks, Site: SiteOnSite},
+	{Goal: "build_wall_stone", Inputs: []Item{{"refined_stone", wallStoneCost}}, Structure: "wall_stone", Duration: buildWallTicks, Site: SiteOnSite},
 
 	// Station actions. cook_fire is fuel-free (the fire's own fuel); cook_oven
 	// and bathe each burn 1 wood from the worker's inventory.
@@ -185,6 +192,22 @@ func craftGoalFor(kind string) string {
 		return "craft_stone"
 	case "spear":
 		return "craft_spear"
+	}
+	return ""
+}
+
+// wallRepairMaterial is the inventory kind a wall of the given kind is repaired
+// with (spec 032 US1, research R5): a plank wall mends with planks, a stone wall
+// with refined stone — the same material each was built from. "" for non-wall
+// kinds. The repair resolver requires 1 unit carried; the reducer consumes 1 per
+// repair cycle. It doubles as the demolish/repair damage-material source, so the
+// build cost and the repair cost can never name different materials.
+func wallRepairMaterial(kind string) string {
+	switch kind {
+	case "wall_plank":
+		return "planks"
+	case "wall_stone":
+		return "refined_stone"
 	}
 	return ""
 }

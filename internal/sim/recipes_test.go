@@ -19,6 +19,9 @@ func TestRecipeTableMirror(t *testing.T) {
 		"build_shelter": {Goal: "build_shelter", Inputs: []Item{{"planks", 8}}, Structure: "shelter", Duration: 1200, Site: SiteOnSite},
 		"build_oven":    {Goal: "build_oven", Inputs: []Item{{"refined_stone", 4}, {"planks", 2}}, Structure: "oven", Duration: 900, Site: SiteOnSite},
 		"build_chest":   {Goal: "build_chest", Inputs: []Item{{"planks", 6}}, Structure: "chest", Duration: 600, Site: SiteOnSite},
+		// Spec 032 (walls) — contracts/recipes.md literals.
+		"build_wall_plank": {Goal: "build_wall_plank", Inputs: []Item{{"planks", 2}}, Structure: "wall_plank", Duration: 600, Site: SiteOnSite},
+		"build_wall_stone": {Goal: "build_wall_stone", Inputs: []Item{{"refined_stone", 2}}, Structure: "wall_stone", Duration: 600, Site: SiteOnSite},
 		"cook_fire":     {Goal: "cook_fire", Inputs: []Item{{"food_raw", 8}}, Outputs: []Item{{"food_cooked", 8}}, Duration: 240, Site: SiteStation},
 		"cook_oven":     {Goal: "cook_oven", Inputs: []Item{{"wood", 1}, {"food_raw", 8}}, Outputs: []Item{{"meals", 8}}, Duration: 360, Site: SiteStation},
 		"bathe":         {Goal: "bathe", Inputs: []Item{{"water", 1}, {"wood", 1}}, Duration: 240, Site: SiteStation},
@@ -78,5 +81,40 @@ func TestGatherTuningMirror(t *testing.T) {
 		if c.got != c.want {
 			t.Errorf("%s = %d, want %d", c.name, c.got, c.want)
 		}
+	}
+}
+
+// TestWallTuningMirror pins the spec-032 wall tuning constants (research R8 /
+// contracts/recipes.md) and the derived-max-HP / repair-material helpers.
+func TestWallTuningMirror(t *testing.T) {
+	checks := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"wallPlankHP", wallPlankHP, 200},
+		{"wallStoneHP", wallStoneHP, 600},
+		{"buildWallTicks", buildWallTicks, 600},
+		{"demolishChipHP", demolishChipHP, 100},
+		{"demolishTicks", demolishTicks, 300},
+		{"repairHPPerUnit", repairHPPerUnit, 100},
+		{"repairTicks", repairTicks, 240},
+		{"wallMaxHP(wall_plank)", wallMaxHP("wall_plank"), 200},
+		{"wallMaxHP(wall_stone)", wallMaxHP("wall_stone"), 600},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %d, want %d", c.name, c.got, c.want)
+		}
+	}
+	// Stone endures strictly more damage than plank (spec FR-003: ≥2x).
+	if wallStoneHP < 2*wallPlankHP {
+		t.Errorf("stone wall HP (%d) must be at least twice plank HP (%d)", wallStoneHP, wallPlankHP)
+	}
+	if got := wallRepairMaterial("wall_plank"); got != "planks" {
+		t.Errorf("wallRepairMaterial(wall_plank) = %q, want planks", got)
+	}
+	if got := wallRepairMaterial("wall_stone"); got != "refined_stone" {
+		t.Errorf("wallRepairMaterial(wall_stone) = %q, want refined_stone", got)
 	}
 }
