@@ -1152,7 +1152,7 @@ func (s *State) Apply(e store.Event) error {
 		return s.applySocial(e)
 
 	case "agent.memory_promoted", "agent.memory_faded", "agent.belief_revised",
-		"agent.narrative_set", "agent.consolidated":
+		"agent.narrative_set", "agent.consolidated", "agent.belief_reinforced":
 		return s.applyConsolidation(e)
 
 	case "gru.emerged", "gru.moved", "gru.sighted", "gru.attacked", "gru.withdrew":

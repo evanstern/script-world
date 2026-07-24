@@ -175,6 +175,15 @@ type BeliefRevisedPayload struct {
 	Direct   bool        `json:"direct,omitempty"`
 }
 
+// BeliefReinforcedPayload re-anchors a held belief's decay clock (spec 030 US2,
+// FR-008). The grounded-observation seam: whitelisted through the injection door
+// and reduced here, but no in-tree producer exists yet — the perception-of-
+// absence task is the intended one. 030 ships consumer + tests only.
+type BeliefReinforcedPayload struct {
+	Agent    int `json:"agent"`
+	BeliefID int `json:"belief_id"`
+}
+
 type NarrativeSetPayload struct {
 	Agent int    `json:"agent"`
 	Text  string `json:"text"`
@@ -196,7 +205,7 @@ type ConsolidatedPayload struct {
 	CostUSD float64 `json:"cost_usd,omitempty"`
 }
 
-// applyConsolidation is the reducer arm for the five consolidation event
+// applyConsolidation is the reducer arm for the six consolidation event
 // types, dispatched from State.Apply.
 func (s *State) applyConsolidation(e store.Event) error {
 	agent := func(i int) (*Agent, error) {
@@ -294,6 +303,27 @@ func (s *State) applyConsolidation(e store.Event) error {
 				}
 			} // unknown ID: no-op
 		}
+
+	case "agent.belief_reinforced":
+		var p BeliefReinforcedPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		// The grounded-observation seam (spec 030 US2, FR-008): re-anchor the named
+		// belief's decay clock to now. Total, like the other consolidation arms — a
+		// vanished belief (ID no longer held) degrades to a no-op, never an error.
+		// The intended future PRODUCER is the perception-of-absence channel; 030
+		// ships this consumer arm + tests only, no producer.
+		for i := range a.Beliefs {
+			if a.Beliefs[i].ID == p.BeliefID {
+				a.Beliefs[i].Reinforced = e.Tick
+				break
+			}
+		} // vanished target: no-op
 
 	case "agent.narrative_set":
 		var p NarrativeSetPayload
