@@ -697,3 +697,181 @@ func TestDeferredOmenCancelledNeverLands(t *testing.T) {
 		}
 	}
 }
+
+// --- US6: fuzzy conditions confirmed cheaply (spec 029 T021/T022) ---
+
+// fuzzyOrder builds an active fuzzy (Confirm) player order watching agent.slept.
+func fuzzyOrder(id string, tick int64) sim.MetatronOrder {
+	o := activePlayerOrder(id, tick)
+	o.Confirm = true
+	o.Condition = "when Rowan seems to grieve in her sleep"
+	o.Action = "send Fern a comforting vision"
+	return o
+}
+
+// dequeued reports whether a trigger job is waiting on the queue (non-blocking).
+func dequeued(q chan triggerJob) bool {
+	select {
+	case <-q:
+		return true
+	default:
+		return false
+	}
+}
+
+// TestFuzzyNoConfirmWithoutHit (US6 SC-001, spec 029 T021/T022): a fuzzy order
+// whose coarse filter does NOT match enqueues nothing — zero confirm calls without
+// a structural hit (the confirm is never even reached).
+func TestFuzzyNoConfirmWithoutHit(t *testing.T) {
+	mt, orch, inj, _ := newTestAngel(t, "yes")
+	o := fuzzyOrder("ord-1-0", 1)
+	o.EventTypes = []string{"social.conversation"}
+	o.Keywords = []string{"harvest"}
+	seedOrder(mt, inj, o)
+	convo := mustEvent("social.conversation", map[string]any{"gist": "they argued about firewood"})
+	convo.Tick = 5000
+	mt.matchOrders([]store.Event{convo})
+	if dequeued(mt.triggerQ) {
+		t.Fatal("a non-matching event enqueued a confirm job")
+	}
+	if len(orch.requests()) != 0 {
+		t.Errorf("a non-matching event issued a confirm Submit: %+v", orch.requests())
+	}
+}
+
+// TestFuzzyRateCapSkipsExcess (US6 SC-008, spec 029 T021/T022): repeated structural
+// hits within confirmRateTicks yield at most one confirm per order; a hit past the
+// window confirms again. (pendingTrigger is cleared between hits to isolate the rate
+// cap from the in-flight dedup.)
+func TestFuzzyRateCapSkipsExcess(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "no")
+	o := fuzzyOrder("ord-1-0", 1)
+	seedOrder(mt, inj, o)
+
+	clearPending := func() {
+		mt.stateMu.Lock()
+		delete(mt.pendingTrigger, o.ID)
+		mt.stateMu.Unlock()
+	}
+	slept := func(tick int64) store.Event {
+		e := mustEvent("agent.slept", map[string]any{"agent": 3})
+		e.Tick = tick
+		return e
+	}
+
+	mt.matchOrders([]store.Event{slept(5000)})
+	if !dequeued(mt.triggerQ) {
+		t.Fatal("first fuzzy hit did not enqueue a confirm")
+	}
+	clearPending()
+	// A hit still inside the rate window is skipped, not re-enqueued.
+	mt.matchOrders([]store.Event{slept(5000 + confirmRateTicks - 1)})
+	if dequeued(mt.triggerQ) {
+		t.Fatal("a within-window fuzzy hit was not rate-capped")
+	}
+	clearPending()
+	// A hit past the window confirms again.
+	mt.matchOrders([]store.Event{slept(5000 + confirmRateTicks + 1)})
+	if !dequeued(mt.triggerQ) {
+		t.Error("a fuzzy hit past the rate window did not confirm")
+	}
+}
+
+// TestFuzzyNegativeVerdictLeavesArmed (US6 FR-009, spec 029 T021/T022): a no,
+// garbage, or empty confirm verdict leaves the order active and fires nothing; the
+// in-flight marker is cleared so a later hit can confirm again.
+func TestFuzzyNegativeVerdictLeavesArmed(t *testing.T) {
+	for _, reply := range []string{"no", "maybe not", ""} {
+		name := reply
+		if name == "" {
+			name = "(empty)"
+		}
+		t.Run(name, func(t *testing.T) {
+			mt, _, inj, _ := newTestAngel(t, reply)
+			o := fuzzyOrder("ord-1-0", 1)
+			seedOrder(mt, inj, o)
+			mt.runLoop = func(context.Context, toolloop.Job) (toolloop.Result, error) {
+				t.Fatal("a negative confirm still ran the trigger turn")
+				return toolloop.Result{}, nil
+			}
+			mt.stateMu.Lock()
+			mt.pendingTrigger[o.ID] = true
+			mt.stateMu.Unlock()
+			mt.runConfirm(triggerJob{order: o, matched: mustEvent("agent.slept", map[string]any{"agent": 3}),
+				matchedType: "agent.slept", matchedTick: 5000, confirm: true})
+			if inj.state.MetatronOrders[0].Status != "active" {
+				t.Errorf("a negative confirm changed the order status: %q", inj.state.MetatronOrders[0].Status)
+			}
+			if len(inj.batches) != 0 {
+				t.Errorf("a negative confirm landed a world event: %+v", inj.batches)
+			}
+			mt.stateMu.Lock()
+			pending := mt.pendingTrigger[o.ID]
+			mt.stateMu.Unlock()
+			if pending {
+				t.Error("a negative confirm left the in-flight marker set")
+			}
+		})
+	}
+}
+
+// TestFuzzyYesTriggers (US6, spec 029 T021/T022): a yes verdict proceeds to the
+// normal trigger pipeline — order_triggered lands, the pre-authorized act runs, and
+// the confirm was exactly ONE KindMetatronWatch call (MaxTokens 16) carrying the
+// condition + matched event.
+func TestFuzzyYesTriggers(t *testing.T) {
+	mt, orch, inj, _ := newTestAngel(t, "Yes.")
+	o := fuzzyOrder("ord-1-0", 1)
+	seedOrder(mt, inj, o)
+	mt.runLoop = systemActLoop(mt, "send_vision", `{"target":"Fern","text":"rest easy"}`)
+	mt.stateMu.Lock()
+	mt.pendingTrigger[o.ID] = true
+	mt.stateMu.Unlock()
+	mt.runConfirm(triggerJob{order: o, matched: mustEvent("agent.slept", map[string]any{"agent": 3}),
+		matchedType: "agent.slept", matchedTick: 5000, confirm: true})
+
+	if inj.state.MetatronOrders[0].Status != "triggered" {
+		t.Fatalf("a yes confirm did not fire the order: %+v", inj.state.MetatronOrders[0])
+	}
+	reqs := orch.requests()
+	if len(reqs) != 1 || reqs[0].Kind != llm.KindMetatronWatch || reqs[0].MaxTokens != 16 {
+		t.Fatalf("confirm Submit shape wrong: %+v", reqs)
+	}
+	if !strings.Contains(reqs[0].Prompt, o.Condition) || !strings.Contains(reqs[0].Prompt, "fell asleep") {
+		t.Errorf("confirm prompt missing the condition or the rendered event: %q", reqs[0].Prompt)
+	}
+}
+
+// TestFuzzyConfirmFailureNoRetry (US6, spec 029 T021/T022): a confirm that fails
+// (budget / tier / transport) is unconfirmed with NO retry — one Submit, the order
+// stays active, and no turn runs.
+func TestFuzzyConfirmFailureNoRetry(t *testing.T) {
+	for _, ce := range []error{llm.ErrBudgetExhausted, llm.ErrTierDown, context.DeadlineExceeded} {
+		t.Run(ce.Error(), func(t *testing.T) {
+			mt, orch, inj, _ := newTestAngel(t, "")
+			orch.err = ce
+			o := fuzzyOrder("ord-1-0", 1)
+			seedOrder(mt, inj, o)
+			ranTurn := false
+			mt.runLoop = func(context.Context, toolloop.Job) (toolloop.Result, error) {
+				ranTurn = true
+				return toolloop.Result{Term: toolloop.TermModelDone}, nil
+			}
+			mt.stateMu.Lock()
+			mt.pendingTrigger[o.ID] = true
+			mt.stateMu.Unlock()
+			mt.runConfirm(triggerJob{order: o, matched: mustEvent("agent.slept", map[string]any{"agent": 3}),
+				matchedType: "agent.slept", matchedTick: 5000, confirm: true})
+
+			if ranTurn {
+				t.Error("a failed confirm still ran the trigger turn")
+			}
+			if inj.state.MetatronOrders[0].Status != "active" {
+				t.Errorf("a failed confirm changed the order status: %q", inj.state.MetatronOrders[0].Status)
+			}
+			if len(orch.requests()) != 1 {
+				t.Errorf("confirm retried: %d Submit calls, want 1", len(orch.requests()))
+			}
+		})
+	}
+}

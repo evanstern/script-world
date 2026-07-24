@@ -117,6 +117,13 @@ type Metatron struct {
 	triggerQ       chan triggerJob
 	pendingTrigger map[string]bool
 
+	// lastConfirmTick rate-caps fuzzy-order confirms (spec 029 US6, R9): at most
+	// one KindMetatronWatch confirm per confirmRateTicks per order. Absorb-owned
+	// and NOT event-sourced — a skipped confirm is an economy decision, never world
+	// history (data-model §5) — guarded by stateMu alongside pendingTrigger (the
+	// absorb goroutine writes it via matchOrders; unit tests drive matchOrders too).
+	lastConfirmTick map[string]int64
+
 	// digest collection (US4) — absorb-owned.
 	digLines []string
 	digFrom  int64
@@ -145,19 +152,20 @@ func New(orch Submitter, social Injector, loop LoopControl, m *worldmap.Map, see
 		return nil, err
 	}
 	mt := &Metatron{
-		orch:           orch,
-		social:         social,
-		loop:           loop,
-		worldDir:       worldDir,
-		replica:        replica,
-		m:              m,
-		alive:          map[int]bool{},
-		digQ:           make(chan digJob, 4),
-		digCarry:       make(chan []string, 1),
-		events:         make(chan []store.Event, 256),
-		triggerQ:       make(chan triggerJob, 64),
-		pendingTrigger: map[string]bool{},
-		done:           make(chan struct{}),
+		orch:            orch,
+		social:          social,
+		loop:            loop,
+		worldDir:        worldDir,
+		replica:         replica,
+		m:               m,
+		alive:           map[int]bool{},
+		digQ:            make(chan digJob, 4),
+		digCarry:        make(chan []string, 1),
+		events:          make(chan []store.Event, 256),
+		triggerQ:        make(chan triggerJob, 64),
+		pendingTrigger:  map[string]bool{},
+		lastConfirmTick: map[string]int64{},
+		done:            make(chan struct{}),
 	}
 	mt.loopRounds = loopRounds
 	mt.turnTokens = turnTokens

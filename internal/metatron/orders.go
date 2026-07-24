@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/evanstern/promptworld/internal/clock"
 	"github.com/evanstern/promptworld/internal/llm"
@@ -270,24 +271,34 @@ func eventConcernsAgent(e store.Event, idx int) bool {
 // console turn degrades the trigger to an honest moment rather than hanging.
 const systemTurnBusyWait = 90 * time.Second
 
-// triggerJob is one matched order queued for firing (spec 029 US3). It snapshots
-// the order at match time (its action/origin/condition are needed to run and
-// narrate the system turn) plus the matched event's type + tick for the trail.
+// triggerJob is one matched order queued for firing (spec 029 US3/US6). It
+// snapshots the order at match time (its action/origin/condition are needed to run
+// and narrate the system turn), the matched event (rendered into a fuzzy order's
+// confirm prompt, T021), the matched type + tick for the trail, and whether this is
+// a fuzzy order that must pass the watch confirm before firing (confirm).
 type triggerJob struct {
 	order       sim.MetatronOrder
+	matched     store.Event
 	matchedType string
 	matchedTick int64
+	confirm     bool
 }
 
+// confirmRateTicks caps fuzzy-order confirms to one per 30 game minutes per order
+// (spec 029 US6/R9): 1800 ticks at 1 tick = 1 game second. A tighter storm of
+// matching events costs at most one watch call per window per order.
+const confirmRateTicks = 30 * 60
+
 // matchOrders scans active orders against a just-applied LIVE event batch and
-// enqueues a trigger job for each structural hit (spec 029 US3/R6). Called by the
+// enqueues a job for each structural hit (spec 029 US3/US6/R6/R9). Called by the
 // absorb goroutine AFTER replica apply + mirror refresh, so it is live-only by
 // construction (replay never runs the angel). Orders fire in order-id order within
-// a batch, at most once — pendingTrigger dedups an order already queued but not
-// yet resolved, and one job is enqueued per order per batch. Fuzzy orders
-// (Confirm) are matched structurally but NOT fired here: their confirm step is
-// Batch C (T021), so a fuzzy hit is skipped so it never triggers unconfirmed
-// (FR-008/FR-009) — a Batch C hand-off.
+// a batch, at most once — pendingTrigger dedups an order already queued but not yet
+// resolved, and one job is enqueued per order per batch. A fuzzy order (Confirm) is
+// matched structurally here too, but its hit is routed as a CONFIRM job (confirm
+// true) — the worker runs one watch call before firing (T021) — and is rate-capped
+// to one confirm per confirmRateTicks per order via lastConfirmTick; a rate-capped
+// hit is logged and skipped so a storm never triggers a flood of watch calls.
 func (mt *Metatron) matchOrders(batch []store.Event) {
 	if mt.social == nil {
 		return
@@ -298,8 +309,8 @@ func (mt *Metatron) matchOrders(batch []store.Event) {
 	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
 	for i := range orders {
 		o := orders[i]
-		if o.Status != "active" || o.Confirm {
-			continue // fuzzy orders route through the Batch C confirm path (T021)
+		if o.Status != "active" {
+			continue
 		}
 		mt.stateMu.Lock()
 		pending := mt.pendingTrigger[o.ID]
@@ -311,15 +322,35 @@ func (mt *Metatron) matchOrders(batch []store.Event) {
 			if !orderMatches(o, e) {
 				continue
 			}
+			// Fuzzy orders pay the rate cap BEFORE the in-flight marker: a hit within
+			// confirmRateTicks of the last confirm is skipped (logged), leaving the
+			// order armed for a later window (R9).
+			if o.Confirm {
+				mt.stateMu.Lock()
+				last, seen := mt.lastConfirmTick[o.ID]
+				capped := seen && e.Tick-last < confirmRateTicks
+				mt.stateMu.Unlock()
+				if capped {
+					log.Printf("metatron: fuzzy order %s confirm rate-capped (last %d, event %d)", o.ID, last, e.Tick)
+					break // one hit per order per batch, capped or not
+				}
+			}
 			mt.stateMu.Lock()
 			mt.pendingTrigger[o.ID] = true
+			if o.Confirm {
+				mt.lastConfirmTick[o.ID] = e.Tick
+			}
 			mt.stateMu.Unlock()
 			select {
-			case mt.triggerQ <- triggerJob{order: o, matchedType: e.Type, matchedTick: e.Tick}:
+			case mt.triggerQ <- triggerJob{order: o, matched: e, matchedType: e.Type, matchedTick: e.Tick, confirm: o.Confirm}:
 			default:
 				log.Printf("metatron: trigger queue full, order %s dropped", o.ID)
 				mt.stateMu.Lock()
 				delete(mt.pendingTrigger, o.ID)
+				if o.Confirm {
+					// No confirm was enqueued, so it must not count against the rate cap.
+					delete(mt.lastConfirmTick, o.ID)
+				}
 				mt.stateMu.Unlock()
 			}
 			break // one job per order per batch
@@ -327,18 +358,168 @@ func (mt *Metatron) matchOrders(batch []store.Event) {
 	}
 }
 
-// triggerWorker consumes the trigger queue FIFO, firing each matched order through
-// runTrigger (spec 029 US3). One worker → triggered turns serialize with each
-// other and, via the shared turnBusy, with console turns (R6).
+// triggerWorker consumes the trigger queue FIFO (spec 029 US3/US6). A structural
+// (non-fuzzy) job fires straight through runTrigger; a fuzzy job first runs the
+// watch confirm (runConfirm), which fires only on a yes verdict. One worker →
+// triggered turns and confirms serialize with each other and, via the shared
+// turnBusy, with console turns (R6).
 func (mt *Metatron) triggerWorker() {
 	for {
 		select {
 		case <-mt.done:
 			return
 		case job := <-mt.triggerQ:
-			mt.runTrigger(job)
+			if job.confirm {
+				mt.runConfirm(job)
+			} else {
+				mt.runTrigger(job)
+			}
 		}
 	}
+}
+
+// confirmCallTimeout bounds the single fuzzy-order watch confirm.
+const confirmCallTimeout = 30 * time.Second
+
+// confirmSystem is the fixed system prompt for the fuzzy-order watch confirm (spec
+// 029 US6/R9, contracts/routing.md): a bounded yes/no judge — no tools, no
+// preamble, one word out.
+const confirmSystem = `You are Metatron's watchful eye. A standing order watches for a condition ` +
+	`that cannot be checked mechanically; a candidate event has just occurred. Decide whether the ` +
+	`event TRULY satisfies the condition. Answer with a single word — "yes" if it does, "no" if it ` +
+	`does not. Say nothing else.`
+
+// runConfirm runs a fuzzy order's watch confirm (spec 029 US6/R9). A yes verdict
+// proceeds to the normal trigger pipeline (runTrigger, which clears the in-flight
+// marker); a no, garbage, or FAILED verdict leaves the order armed with NO retry
+// (the confirm is a single bare call, not a loop) — only the in-flight marker is
+// cleared here so a later hit can confirm again, subject to the rate cap.
+func (mt *Metatron) runConfirm(job triggerJob) {
+	confirmed, err := mt.confirmOrder(job)
+	if err != nil || !confirmed {
+		mt.stateMu.Lock()
+		delete(mt.pendingTrigger, job.order.ID)
+		mt.stateMu.Unlock()
+		return
+	}
+	mt.runTrigger(job)
+}
+
+// confirmOrder issues the ONE bounded watch-confirm Submit (spec 029 US6, R9 /
+// contracts/routing.md): KindMetatronWatch, MaxTokens 16, the fixed system prompt,
+// and a user prompt of the order's condition + the matched event in the digest
+// vocabulary. Reply contract: a single leading yes/no token (case-insensitive);
+// anything else, empty, or an error is a NO (unconfirmed). Budget/tier/transport
+// failures return (false, err) — unconfirmed, never retried (no loop to retry).
+func (mt *Metatron) confirmOrder(job triggerJob) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), confirmCallTimeout)
+	defer cancel()
+	resp, err := mt.orch.Submit(ctx, llm.Request{
+		Kind:      llm.KindMetatronWatch,
+		System:    confirmSystem,
+		Prompt:    confirmPrompt(job.order, job.matched),
+		MaxTokens: 16,
+	})
+	if err != nil {
+		log.Printf("metatron: watch confirm for %s unconfirmed: %v", job.order.ID, err)
+		return false, err
+	}
+	return confirmYes(resp.Text), nil
+}
+
+// confirmYes applies the yes/no reply contract (spec 029 R9): the FIRST token,
+// case-insensitively and stripped of punctuation, must be exactly "yes"; anything
+// else — "no", prose, or empty — is a NO.
+func confirmYes(text string) bool {
+	fields := strings.Fields(strings.ToLower(text))
+	if len(fields) == 0 {
+		return false
+	}
+	tok := strings.TrimFunc(fields[0], func(r rune) bool { return !unicode.IsLetter(r) })
+	return tok == "yes"
+}
+
+// confirmPrompt renders the watch-confirm user prompt (spec 029 R9): the order's
+// original condition plus the matched event described in the same digest vocabulary
+// the soul uses, so the watch model judges the phrasing the angel would recognize.
+func confirmPrompt(o sim.MetatronOrder, e store.Event) string {
+	return fmt.Sprintf("The condition you watch for:\n%s\n\nWhat just happened:\n%s\n\nDoes it satisfy the condition?",
+		o.Condition, describeEvent(e))
+}
+
+// describeEvent renders an observable event in the digest vocabulary for the watch
+// confirm (spec 029 R9). It reads the STATIC sim.AgentNames rather than the replica
+// the absorb goroutine owns (the confirm runs on the trigger worker), and falls
+// back to the bare type for an unrecognized shape — never a panic on odd payloads.
+func describeEvent(e store.Event) string {
+	name := func(i int) string {
+		if i >= 0 && i < len(sim.AgentNames) {
+			return sim.AgentNames[i]
+		}
+		return "someone"
+	}
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal(e.Payload, &m)
+	agentName := func(field string) string {
+		if raw, ok := m[field]; ok {
+			var v int
+			if json.Unmarshal(raw, &v) == nil {
+				return name(v)
+			}
+		}
+		return ""
+	}
+	switch e.Type {
+	case "agent.slept":
+		if a := agentName("agent"); a != "" {
+			return a + " fell asleep"
+		}
+	case "agent.woke":
+		if a := agentName("agent"); a != "" {
+			return a + " woke"
+		}
+	case "agent.died":
+		var p sim.DiedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			return fmt.Sprintf("%s died of %s", name(p.Agent), p.Cause)
+		}
+	case "agent.memory_added":
+		var p sim.MemoryAddedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			return fmt.Sprintf("%s gained a memory: %q", name(p.Agent), p.Text)
+		}
+	case "agent.intent_set":
+		if a := agentName("agent"); a != "" {
+			return a + " set out on something new"
+		}
+	case "social.conversation":
+		var p sim.ConversationPayload
+		if json.Unmarshal(e.Payload, &p) == nil && p.Gist != "" {
+			return fmt.Sprintf("villagers talked: %q", p.Gist)
+		}
+	case "social.promise_broken":
+		return "a promise was broken"
+	case "social.rumor_told":
+		var p sim.RumorToldPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			return fmt.Sprintf("%s told %s a rumor: %q", name(p.From), name(p.To), p.Text)
+		}
+	case "gru.attacked":
+		var p sim.GruAttackedPayload
+		if json.Unmarshal(e.Payload, &p) == nil {
+			return fmt.Sprintf("the gru attacked %s", name(p.Agent))
+		}
+	case "norm.violated":
+		if a := agentName("agent"); a != "" {
+			return a + " broke a village norm"
+		}
+		return "a village norm was broken"
+	case "sim.night_started":
+		return "night fell"
+	case "sim.day_started":
+		return "day broke"
+	}
+	return "an event occurred (" + e.Type + ")"
 }
 
 // runTrigger fires one matched standing order (spec 029 US3, T013/T014):
