@@ -434,8 +434,11 @@ func TestOmenLandsOnAllLiving(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "The sky will speak.")
 	mt.runLoop = actLoop(mt, "send_omen",
 		`{"targets": "everyone", "text": "At dusk the clouds parted in the shape of an open hand."}`)
-	// An omen lands only at night (spec 029 reducer gate).
+	// An omen lands only at night (spec 029): the reducer gate AND the turn-side
+	// mirror both read night — set it on the injector's state (the door) and the
+	// replica (the mirror landOmen reads via d.night).
 	inj.state.Night = true
+	mt.replica.Night = true
 	inj.state.Agents[2].Dead = true
 	mt.replica.Agents[2].Dead = true
 	mt.mirrorState()
@@ -523,6 +526,169 @@ func TestDeadTargetRefused(t *testing.T) {
 	tcs := cogToolCalls(inj)
 	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond reach") {
 		t.Errorf("dead-target refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestVisionRejectsMultiTarget (US1, spec 029 T007): send_vision's schema carries
+// a single `target` param, so a two-villager vision arrives as a comma-joined
+// name that resolves to no villager — refused with in-fiction counsel, nothing
+// lands, nothing spent. Multi-target reach is structurally an omen's, never a
+// vision's (FR-001: a vision reaches exactly one).
+func TestVisionRejectsMultiTarget(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "One at a time.")
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Fern, Ash", "text": "hush"}`)
+	r, err := mt.Turn(context.Background(), "reach Fern and Ash at once")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Nudge != nil || len(landedBatches(inj)) != 0 {
+		t.Error("a multi-name vision landed")
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Errorf("a refused vision spent a charge: %d", inj.state.MetatronCharges)
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" || !strings.Contains(tcs[0].Reason, "no villager named") {
+		t.Errorf("multi-target vision refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestOmenLandsOnNamedGroup (US1, spec 029 T007/R3): a night omen naming a
+// comma-separated living subset lands on EXACTLY those villagers — one atomic
+// batch, one charge — and reaches no one else.
+func TestOmenLandsOnNamedGroup(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "They will see it.")
+	mt.replica.Night = true
+	inj.state.Night = true
+	mt.mirrorState()
+	mt.runLoop = actLoop(mt, "send_omen",
+		`{"targets": "Ash, Fern", "text": "The well ran clear under a red moon."}`)
+	if _, err := mt.Turn(context.Background(), "warn Ash and Fern"); err != nil {
+		t.Fatal(err)
+	}
+	ash, fern := agentIndexByName("Ash"), agentIndexByName("Fern")
+	for i := range inj.state.Agents {
+		got := len(inj.state.Agents[i].Memories)
+		want := 0
+		if i == ash || i == fern {
+			want = 1
+		}
+		if got != want {
+			t.Errorf("agent %d (%s) memories = %d, want %d", i, sim.AgentNames[i], got, want)
+		}
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("group omen spent %d charges, want 1", sim.MetatronGenesisCharges-inj.state.MetatronCharges)
+	}
+}
+
+// TestOmenDeadTargetRefused (US1, spec 029 T007): a night omen naming a dead
+// villager refuses the WHOLE act with counsel — never a partial batch — and
+// spends nothing.
+func TestOmenDeadTargetRefused(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "One of them is gone.")
+	mt.replica.Night = true
+	inj.state.Night = true
+	mt.replica.Agents[2].Dead = true // Cedar
+	inj.state.Agents[2].Dead = true
+	mt.mirrorState()
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "Ash, Cedar", "text": "beware"}`)
+	if _, err := mt.Turn(context.Background(), "warn Ash and Cedar"); err != nil {
+		t.Fatal(err)
+	}
+	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("an omen naming the dead landed or spent")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "beyond reach") {
+		t.Errorf("dead-in-group omen refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestOmenDayRefusedWithCounsel (US1, spec 029 T005 temporary day path): a
+// daytime send_omen is refused with in-fiction "night/dark" counsel and lands
+// nothing — Batch C (T016) upgrades this to a nightfall deferral order.
+func TestOmenDayRefusedWithCounsel(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Not while the sun holds.")
+	// Genesis is day (Night defaults false); leave the mirror as-is.
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "everyone", "text": "look up"}`)
+	if _, err := mt.Turn(context.Background(), "send an omen now"); err != nil {
+		t.Fatal(err)
+	}
+	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("a daytime omen landed or spent")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" ||
+		!(strings.Contains(tcs[0].Reason, "night") || strings.Contains(tcs[0].Reason, "dark")) {
+		t.Errorf("daytime omen not refused with nightfall counsel: %+v", tcs)
+	}
+}
+
+// TestEmptyTextRefused (US1, spec 029 T007): an influence whose rendering is
+// empty is refused before anything lands — the empty-text guard in the shared
+// landing tail.
+func TestEmptyTextRefused(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Say what?")
+	mt.runLoop = actLoop(mt, "send_vision", `{"target": "Fern", "text": "   "}`)
+	if _, err := mt.Turn(context.Background(), "send Fern a vision"); err != nil {
+		t.Fatal(err)
+	}
+	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("an empty-text vision landed or spent")
+	}
+	tcs := cogToolCalls(inj)
+	if len(tcs) != 1 || !strings.Contains(tcs[0].Reason, "empty") {
+		t.Errorf("empty-text refusal not recorded with counsel: %+v", tcs)
+	}
+}
+
+// TestHandlerFirewallAudit (US1, spec 029 T007/R14, SC-007): the turn handler map
+// is built ONLY from the granted roster — so under a full grant every installed
+// handler name is an acting tool on RosterMetatron, converse (the final-text
+// channel) is NEVER a handler, and an ungranted tool has no handler. This is the
+// structural firewall: no model output reaches a world door except through a
+// registered acting-tool handler. It tolerates the Batch C hand-off (the meta
+// tools pause/start/adjust_speed are declared but not yet handled) by asserting a
+// SUBSET of the acting tools, not an exact set.
+func TestHandlerFirewallAudit(t *testing.T) {
+	mt, _, _, _ := newTestAngel(t, "ok")
+	full := fullGrant()
+	d := &turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: full, result: &TurnResult{}}
+	h := mt.turnHandlers(d)
+
+	if _, ok := h["converse"]; ok {
+		t.Error("converse must never be a handler — it is the final-text channel")
+	}
+	// Meta tools are the Batch C hand-off: declared on the roster, not yet handled.
+	for _, meta := range []string{"pause", "start", "adjust_speed"} {
+		if _, ok := h[meta]; ok {
+			t.Errorf("%s handler installed — meta tools are the Batch C hand-off (T018)", meta)
+		}
+	}
+	// Every installed handler is an acting tool on the door roster (RosterMetatron).
+	onRoster := map[string]bool{}
+	for _, n := range tool.RosterMetatron {
+		onRoster[n] = true
+	}
+	for name := range h {
+		if !onRoster[name] {
+			t.Errorf("handler %q is not on RosterMetatron — an unregistered world path", name)
+		}
+	}
+	// send_vision / send_omen are wired this batch (T006); assert their presence so
+	// the audit fails if the wiring is lost.
+	for _, want := range []string{"send_vision", "send_omen"} {
+		if _, ok := h[want]; !ok {
+			t.Errorf("%s handler missing under a full grant", want)
+		}
+	}
+	// An ungranted tool is structurally absent — no handler at all.
+	vg := grantSet{tools: map[string]bool{"send_vision": true}}
+	vd := &turnDispatch{mt: mt, charges: 1, alive: map[int]bool{}, grant: vg, result: &TurnResult{}}
+	vh := mt.turnHandlers(vd)
+	if _, ok := vh["send_omen"]; ok {
+		t.Error("send_omen handler installed in a vision-only world")
 	}
 }
 
@@ -878,6 +1044,8 @@ func TestInvalidTargetRetryThenLand(t *testing.T) {
 func TestLandedActEmptyProse(t *testing.T) {
 	mt, _, inj, _ := newTestAngel(t, "") // no closing prose
 	inj.state.Night = true               // an omen lands only at night (spec 029)
+	mt.replica.Night = true              // ...both at the door and the turn-side mirror
+	mt.mirrorState()
 	mt.runLoop = actLoop(mt, "send_omen", `{"targets":"everyone","text":"The sky darkened at noon."}`)
 	r, err := mt.Turn(context.Background(), "warn them")
 	if err != nil {
@@ -1308,7 +1476,7 @@ func TestGatingLayers(t *testing.T) {
 		}
 		// Door: omen and miracle refused directly (defense-in-depth grant check).
 		alive := map[int]bool{0: true}
-		if _, why := mt.landNudge("omen", "", "an omen", 1, alive, grant); why == "" {
+		if _, why := mt.landOmen("everyone", "an omen", 1, true, alive, grant); why == "" {
 			t.Error("omen should be refused in a vision-only world")
 		}
 		if _, why := mt.landMiracle(miracleArgs{Kind: "give_item"}, 1, grant); why == "" {

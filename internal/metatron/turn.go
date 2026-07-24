@@ -121,6 +121,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	mt.stateMu.Lock()
 	charges := mt.charges
 	tick := mt.clockAt
+	night := mt.night
 	alive := make(map[int]bool, len(mt.alive))
 	for k, v := range mt.alive {
 		alive[k] = v
@@ -135,7 +136,7 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	jobID := fmt.Sprintf("turn-metatron-%d", tick)
 
 	result := TurnResult{}
-	d := &turnDispatch{mt: mt, charges: charges, alive: alive, result: &result, grant: grant}
+	d := &turnDispatch{mt: mt, charges: charges, alive: alive, night: night, tick: tick, result: &result, grant: grant}
 
 	callCtx, cancel := context.WithTimeout(ctx, turnTimeout)
 	res, err := mt.runLoop(callCtx, toolloop.Job{
@@ -199,61 +200,75 @@ func (mt *Metatron) Turn(ctx context.Context, playerText string) (TurnResult, er
 	return result, nil
 }
 
-// landNudge validates a nudge and lands it as one atomic batch. form is the
-// influence form the calling tool fixes (send_vision → "vision", send_omen →
-// "omen"); target is the vision's villager name (ignored for omen); text is the
-// model's rendering. The validation, atomic InjectSocial batch, and soul append
-// are otherwise UNCHANGED from the pre-loop turnReply path. Returns the landed
-// nudge, or (nil, refusal reason) which the handler maps to a rejected_gate the
-// model may correct within the loop's round cap.
-//
-// SPEC 029 BATCH-A BRIDGE: this is a temporary shared lander that keeps the turn
-// acting under the new tool names (send_vision→vision, send_omen→omen) while the
-// reducer/registry migration lands. Batch B (T005/T006) REPLACES it with the
-// proper landVision / landOmen split: omen group-targeting (comma list /
-// "everyone" — this bridge lands all-living, the old omen shape) and the daytime
-// deferral (this bridge lets the reducer's night gate refuse a day omen as a
-// rejected_gate). The dream form is gone from every live path (grandfathered in
-// the reducer for replay only).
-func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
+// landVision validates a vision and lands it as one atomic batch (spec 029 US1,
+// T005). A vision reaches exactly one living villager at ANY hour and costs one
+// charge; target is the villager's name, text the model's rendering. The
+// validation/batch/soul-append tail is UNCHANGED from the pre-029 landNudge (spec
+// 029 T005: wrap, don't rewrite) — only the target resolution and the send_vision
+// grant gate are vision-specific. Returns the landed nudge, or (nil, in-fiction
+// refusal) which the handler maps to a rejected_gate the model may repair within
+// the loop's round cap.
+func (mt *Metatron) landVision(target, text string, charges int, alive map[int]bool, grant grantSet) (*Nudge, string) {
 	if charges <= 0 {
 		return nil, "no charges are banked"
 	}
-	form = strings.ToLower(strings.TrimSpace(form))
-	// Capability gate (spec 021 R5.3, door layer): the world must grant the tool
-	// for this form. Defense-in-depth behind the handler-absence gate — a tool
-	// whose handler was never installed cannot reach here, but the check keeps the
-	// door authoritative on its own rather than trusting the wiring above it.
-	// (Batch-A bridge: form→tool mapping; Batch B's landVision/landOmen each
-	// grant-check their own tool directly.)
-	grantTool := map[string]string{"vision": "send_vision", "omen": "send_omen"}[form]
-	if grantTool == "" || !grant.allows(grantTool) {
+	// Capability gate (spec 021 R5.3, door layer): defense-in-depth behind the
+	// handler-absence gate — a tool whose handler was never installed cannot reach
+	// here, but the check keeps the door authoritative on its own.
+	if !grant.allows("send_vision") {
 		return nil, "that power is not granted in this world"
 	}
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil, "the rendering was empty"
+	idx := agentIndexByName(target)
+	if idx < 0 {
+		return nil, fmt.Sprintf("no villager named %q", target)
 	}
-	if len(text) > nudgeTextMax {
-		text = text[:nudgeTextMax]
+	if !alive[idx] {
+		return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
 	}
-	// Form dispatch: a vision reaches exactly one living villager; an omen reaches
-	// every living villager (the reducer's night gate decides whether it may land
-	// at all). The reducer's explicit form-set validation is the door authority
-	// (spec 029) — the old OnRoster(RosterMetatron, "nudge_"+form) check is gone
-	// with the nudge tools.
-	var targets []int
-	switch form {
-	case "vision":
-		idx := agentIndexByName(target)
-		if idx < 0 {
-			return nil, fmt.Sprintf("no villager named %q", target)
-		}
-		if !alive[idx] {
-			return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
-		}
-		targets = []int{idx}
-	case "omen":
+	return mt.landNudgeBatch("vision", []int{idx}, text)
+}
+
+// landOmen validates an omen and lands it as one atomic batch (spec 029 US1,
+// T005). An omen reaches one villager, a named group, or everyone living — at
+// NIGHT only — for one charge regardless of recipient count. targetsArg is
+// send_omen's comma-separated living-villager name list or the word "everyone".
+//
+// Day path (Batch B, temporary): an omen belongs to the dark, so a daytime call
+// is refused with in-fiction counsel until Batch C (T016) upgrades the day path
+// to a system-origin nightfall deferral order (FR-012). night is the turn's
+// mirrored State.Night (the reducer's night gate is the door authority; this is
+// the turn-side counsel so the model hears why before the door refuses). The
+// validation/batch/soul tail is the pre-029 landNudge's, unchanged.
+func (mt *Metatron) landOmen(targetsArg, text string, charges int, night bool, alive map[int]bool, grant grantSet) (*Nudge, string) {
+	if charges <= 0 {
+		return nil, "no charges are banked"
+	}
+	if !grant.allows("send_omen") {
+		return nil, "that power is not granted in this world"
+	}
+	if !night {
+		return nil, "an omen belongs to the night — wait for the dark and I will send it"
+	}
+	targets, why := resolveOmenTargets(targetsArg, alive)
+	if why != "" {
+		return nil, why
+	}
+	return mt.landNudgeBatch("omen", targets, text)
+}
+
+// resolveOmenTargets parses send_omen's `targets` argument (spec 029 R3): a
+// comma-separated list of living villager names, or the single word "everyone",
+// into a deduplicated set of living villager indices. Every named villager must
+// be alive — an unknown or dead name refuses the WHOLE act with counsel (one act,
+// one charge, one atomic batch; never a partial omen). "everyone" resolves to the
+// living set in index order.
+func resolveOmenTargets(arg string, alive map[int]bool) ([]int, string) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return nil, `name the villagers the omen should reach, or say "everyone"`
+	}
+	if strings.EqualFold(arg, "everyone") {
+		var targets []int
 		for i := range sim.AgentNames {
 			if alive[i] {
 				targets = append(targets, i)
@@ -262,10 +277,48 @@ func (mt *Metatron) landNudge(form, target, text string, charges int, alive map[
 		if len(targets) == 0 {
 			return nil, "no living villager remains to witness it"
 		}
-	default:
-		return nil, fmt.Sprintf("unknown form %q", form)
+		return targets, ""
 	}
+	seen := map[int]bool{}
+	var targets []int
+	for _, part := range strings.Split(arg, ",") {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		idx := agentIndexByName(name)
+		if idx < 0 {
+			return nil, fmt.Sprintf("no villager named %q", name)
+		}
+		if !alive[idx] {
+			return nil, fmt.Sprintf("%s is beyond reach now", sim.AgentNames[idx])
+		}
+		if !seen[idx] {
+			seen[idx] = true
+			targets = append(targets, idx)
+		}
+	}
+	if len(targets) == 0 {
+		return nil, "name at least one living villager for the omen"
+	}
+	return targets, ""
+}
 
+// landNudgeBatch is the shared landing tail for landVision / landOmen (spec 029
+// T005): the text cap, the ONE atomic InjectSocial batch (metatron.nudged + one
+// prefixed agent.memory_added per target at SalDream), and the soul append —
+// VERBATIM the pre-029 landNudge body (wrap, don't rewrite). form fixes the memory
+// prefix and the recorded form; the reducer dry-run is the door authority (charge
+// spend, night gate for omen, living targets). Returns the landed nudge, or (nil,
+// refusal) the handler maps to a rejected_gate.
+func (mt *Metatron) landNudgeBatch(form string, targets []int, text string) (*Nudge, string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, "the rendering was empty"
+	}
+	if len(text) > nudgeTextMax {
+		text = text[:nudgeTextMax]
+	}
 	prefix := "You saw a vision: "
 	if form == "omen" {
 		prefix = "You witnessed an omen: "

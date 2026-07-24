@@ -35,6 +35,8 @@ type turnDispatch struct {
 	mt      *Metatron
 	charges int
 	alive   map[int]bool
+	night   bool // mirrored State.Night at turn start — the omen gate (spec 029 T005)
+	tick    int64
 	result  *TurnResult
 	grant   grantSet // this world's capability grant (spec 021 US2): gates handlers + land
 
@@ -47,30 +49,29 @@ func (d *turnDispatch) record(r toolloop.CallRecord) {
 }
 
 // turnHandlers builds the handler map the tool-use loop dispatches against for
-// one console turn. send_vision / send_omen wrap landNudge (the tool name fixes
-// the form); work_miracle wraps landMiracle. converse is absent by design — it
-// is the final-text channel, and it is not on the declared loop roster
-// (tool.LoopRosterMetatron), so the model never calls it as a tool.
+// one turn — console OR system-authored (spec 029 T012). send_vision / send_omen
+// wrap the influence landers; monitor_and_act / cancel_order wrap the standing-
+// order door (spec 029 T009); work_miracle wraps landMiracle. converse is absent
+// by design — it is the final-text channel, and it is not on the declared loop
+// roster (tool.LoopRosterMetatron), so the model never calls it as a tool.
 //
 // Capability gating (spec 021 US2, door layer / R5.3): a handler is installed
 // ONLY for a tool the world grants. An ungranted tool therefore has no handler
 // and the loop rejects any call to it as rejected_unknown — structural absence
 // at the door, matching the structural absence in the declaration and the prose.
 //
-// SPEC 029 BATCH-A BRIDGE: send_vision / send_omen replace nudge_dream /
-// nudge_omen, mapped to landNudge (form vision/omen). The other agency tools —
-// monitor_and_act, cancel_order, and the meta tools pause/start/adjust_speed —
-// are DECLARED on the loop roster but have no handler yet: a call to one hits
-// rejected_unknown (the ungranted-equivalent absence) until Batch B wires
-// landVision/landOmen (T006), the order handlers (T009), and the LoopControl
-// meta handlers (T018).
+// SPEC 029 BATCH-C HAND-OFF: the meta tools pause / start / adjust_speed are
+// DECLARED on the loop roster (Batch A) but have no handler yet — a call to one
+// hits rejected_unknown (the ungranted-equivalent absence) until Batch C (T018)
+// wires the LoopControl seam. The sentinel/audit tests tolerate this
+// declared-but-not-yet-handled surface (T007/T011/T015).
 func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
-	h := make(map[string]toolloop.Handler, 3)
+	h := make(map[string]toolloop.Handler, 6)
 	if d.grant.allows("send_vision") {
-		h["send_vision"] = mt.handleNudge(d, "vision")
+		h["send_vision"] = mt.handleVision(d)
 	}
 	if d.grant.allows("send_omen") {
-		h["send_omen"] = mt.handleNudge(d, "omen")
+		h["send_omen"] = mt.handleOmen(d)
 	}
 	if d.grant.allows("work_miracle") {
 		h["work_miracle"] = mt.handleMiracle(d)
@@ -78,20 +79,34 @@ func (mt *Metatron) turnHandlers(d *turnDispatch) map[string]toolloop.Handler {
 	return h
 }
 
-// handleNudge wraps landNudge for one form. Door accept → landed (the report is
-// written onto the shared result); door/validation refusal → rejected_gate
+// handleVision wraps landVision (spec 029 T006). Door accept → landed (the report
+// is written onto the shared result); door/validation refusal → rejected_gate
 // carrying the human-readable reason, fed back so the model may correct a bad
 // target within the round cap.
-func (mt *Metatron) handleNudge(d *turnDispatch, form string) toolloop.Handler {
+func (mt *Metatron) handleVision(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
-		// target is dream-only; the driver already enforced its presence for
-		// nudge_dream (required AgentName param) and its absence is harmless for
-		// omen (landNudge ignores it).
 		target := argString(call.Args, "target")
 		text := argString(call.Args, "text")
-		if nudge, why := mt.landNudge(form, target, text, d.charges, d.alive, d.grant); nudge != nil {
+		if nudge, why := mt.landVision(target, text, d.charges, d.alive, d.grant); nudge != nil {
 			d.result.Nudge = nudge
-			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the " + form + " reached its mark"}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the vision reached its mark"}
+		} else {
+			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
+		}
+	}
+}
+
+// handleOmen wraps landOmen (spec 029 T006): the `targets` arg is a comma-list or
+// "everyone" (R3); the mirrored night flag (d.night) gates the day path. Same
+// accept/reject translation as handleVision — a daytime refusal or a bad name is
+// fed back as a rejected_gate the model may repair within the round cap.
+func (mt *Metatron) handleOmen(d *turnDispatch) toolloop.Handler {
+	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
+		targets := argString(call.Args, "targets")
+		text := argString(call.Args, "text")
+		if nudge, why := mt.landOmen(targets, text, d.charges, d.night, d.alive, d.grant); nudge != nil {
+			d.result.Nudge = nudge
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the omen will reach them"}
 		} else {
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}

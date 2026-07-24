@@ -78,6 +78,7 @@ type Metatron struct {
 	stateMu sync.Mutex
 	charges int
 	clockAt int64
+	night   bool // mirrored State.Night — the omen night gate reads it turn-side (spec 029 T005)
 	alive   map[int]bool
 	// agentXY mirrors each villager's tile (absorb-owned, refreshed per batch)
 	// so a console turn can resolve a tile-addressed miracle's perception-memory
@@ -190,6 +191,7 @@ func (mt *Metatron) mirrorState() {
 	defer mt.stateMu.Unlock()
 	mt.charges = mt.replica.MetatronCharges
 	mt.clockAt = mt.replica.Tick
+	mt.night = mt.replica.Night
 	if len(mt.agentXY) != len(mt.replica.Agents) {
 		mt.agentXY = make([][2]int, len(mt.replica.Agents))
 	}
