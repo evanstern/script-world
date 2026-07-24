@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-07-23 17:49'
-updated_date: '2026-07-24 04:30'
+updated_date: '2026-07-24 04:32'
 labels:
   - emergent-lore
   - epistemics
@@ -47,7 +47,7 @@ Spec: specs/030-epistemic-hygiene
 - [x] #6 Spec phase: Foundational (Blocking Prerequisites)
 - [x] #7 Spec phase: User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP
 - [x] #8 Spec phase: User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2)
-- [ ] #9 Spec phase: User Story 3 — Gists preserve attribution (Priority: P3)
+- [x] #9 Spec phase: User Story 3 — Gists preserve attribution (Priority: P3)
 - [ ] #10 Spec phase: Polish & Cross-Cutting Concerns
 <!-- AC:END -->
 
@@ -96,4 +96,6 @@ US3 eval gate verdict: NOT MET — prompt not shipped, convo.go unchanged (AC #3
 — gemma4:12b-mlx (standard local tier, authoritative; N=3, temp 0.8, reasoning_effort:none matching daemon): old 0/18 defects (0.00%), controls 12/12; new 0/16 (0.00%, 2 parse-fails on the longest fixture), controls 12/12. Reduction n/a — baseline already clean.
 — cogito:3b (corroboration — the tier world-01 actually runs): old 3/18 (16.7%), controls 9/12; new 5/18 (27.8%), controls 10/12. No reduction; most new-variant flags are judge over-penalty, two are genuine small-model failures.
 Orchestrator ruling (Option A, from artifacts): DO NOT ship — standard tier is already honest with the current prompt; the failing tier (world-01 llm.json: local=cogito:3b — verified this session) is not helped by wording. The Thornspire confabulation class is model-tier, not prompt. T011 closed won't-ship in tasks.md per decision.md; operational follow-up task filed to upgrade world-01's local tier. Tier note: T009-T010 ran on Opus 4.8 per dispatch ruling.
+
+spec-bridge sync: Setup: 1/1 · Foundational (Blocking Prerequisites): 1/1 · User Story 1 — Beliefs carry honest provenance (Priority: P1) 🎯 MVP: 3/3 · User Story 2 — Unconfirmed beliefs fade into myth (Priority: P2): 3/3 · User Story 3 — Gists preserve attribution (Priority: P3): 2/2 · Polish & Cross-Cutting Concerns: 0/3
 <!-- SECTION:NOTES:END -->
