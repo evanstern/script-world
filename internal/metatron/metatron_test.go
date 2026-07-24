@@ -389,6 +389,46 @@ func TestTurnConverses(t *testing.T) {
 	}
 }
 
+// TestTurnDirectiveLabelSingleOrigin (spec 029 R6, wiki-sweep finding): the
+// origin-appropriate directive label lives in exactly ONE place — runTurn frames
+// it, turnUserPrompt appends it verbatim. A CONSOLE turn's user prompt therefore
+// carries exactly ONE "The player says:" label, immediately followed by the
+// player's text; a SYSTEM (triggered) turn's user prompt carries ZERO such labels
+// (its directive must not pretend it came from the player this turn) and instead
+// carries the standing-order framing over the pre-authorized action.
+func TestTurnDirectiveLabelSingleOrigin(t *testing.T) {
+	t.Run("console carries the label exactly once", func(t *testing.T) {
+		mt, orch, _, _ := newTestAngel(t, "The village sleeps, sovereign.")
+		if _, err := mt.Turn(context.Background(), "how fare they?"); err != nil {
+			t.Fatal(err)
+		}
+		prompt := orch.requests()[0].Prompt
+		if n := strings.Count(prompt, "The player says:"); n != 1 {
+			t.Fatalf("console prompt has %d %q labels, want exactly 1: %q", n, "The player says:", prompt)
+		}
+		if !strings.Contains(prompt, "The player says:\nhow fare they?") {
+			t.Errorf("console label is not followed immediately by the player text: %q", prompt)
+		}
+	})
+	t.Run("system carries no player label, uses the standing-order framing", func(t *testing.T) {
+		mt, orch, _, _ := newTestAngel(t, "It is done.")
+		const seed = "Send Fern a comforting vision."
+		if _, err := mt.runTurn(context.Background(), turnOrigin{system: true, jobPrefix: "watch", seed: seed}); err != nil {
+			t.Fatal(err)
+		}
+		prompt := orch.requests()[0].Prompt
+		if n := strings.Count(prompt, "The player says:"); n != 0 {
+			t.Fatalf("system prompt has %d %q labels, want 0 (a system turn has no player-text sink): %q", n, "The player says:", prompt)
+		}
+		if !strings.Contains(prompt, "A standing order you placed has come due") {
+			t.Errorf("system prompt missing the standing-order framing: %q", prompt)
+		}
+		if !strings.Contains(prompt, seed) {
+			t.Errorf("system prompt missing the pre-authorized action seed: %q", prompt)
+		}
+	})
+}
+
 // TestTurnDegradedHonesty (US1): orchestrator failure surfaces as an error;
 // nothing recorded, nothing spent, moments retained.
 func TestTurnDegradedHonesty(t *testing.T) {

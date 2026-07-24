@@ -731,7 +731,13 @@ func turnSystemPrompt(charter string, skills []skillFile, roster []tool.Tool) st
 	return b.String()
 }
 
-func turnUserPrompt(tick int64, charges int, alive map[int]bool, orders []sim.MetatronOrder, moments, story []string, soulTail, transcriptTail, playerText string) string {
+// turnUserPrompt composes the turn's user prompt. The trailing `directive` is the
+// ALREADY-FRAMED directive block runTurn authored per origin — the console's "The
+// player says:\n…" or the system turn's standing-order framing — and is appended
+// verbatim. runTurn is the sole author of the origin-appropriate label: the label
+// lives in exactly one place, so a console turn carries it once and a system turn
+// never pretends its directive came from the player this turn (spec 029 R6).
+func turnUserPrompt(tick int64, charges int, alive map[int]bool, orders []sim.MetatronOrder, moments, story []string, soulTail, transcriptTail, directive string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "World clock: %s. Charges banked: %d of %d.\n", clock.Format(tick), charges, sim.MetatronChargeCap)
 	var dead []string
@@ -766,7 +772,7 @@ func turnUserPrompt(tick int64, charges int, alive map[int]bool, orders []sim.Me
 	if transcriptTail != "" {
 		b.WriteString("\nRecent conversation:\n" + transcriptTail + "\n")
 	}
-	fmt.Fprintf(&b, "\nThe player says:\n%s\n", playerText)
+	fmt.Fprintf(&b, "\n%s\n", directive)
 	return b.String()
 }
 
