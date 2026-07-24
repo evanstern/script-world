@@ -1,10 +1,10 @@
 ---
 id: TASK-27
 title: 'Metatron v2: tool-gated long-running agency'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-07-20 19:06'
-updated_date: '2026-07-22 04:34'
+updated_date: '2026-07-24 01:58'
 labels: []
 dependencies:
   - TASK-53
@@ -31,6 +31,8 @@ Meta tools: pause / start / adjust_speed wrap the existing loop controls (same f
 Budget honesty: triggered turns respect ErrBudgetExhausted/ErrTierDown like console turns — degrade to a queued moment, never retry-loop. Cost shape: tool-loop turn = 1+k cloud calls (~3-6k prompt tokens); pennies/day on haiku, safe against the $100 ceiling. The only dangerous shape is unfiltered per-event model evaluation — structurally prevented by the compile-at-placement design.
 
 Grounding: docs/wiki/metatron.md, docs/wiki/llm-orchestrator.md, docs/wiki/chronicle.md, docs/wiki/ipc-protocol.md. Event vocabulary confirmed: agent.slept/agent.woke exist, so 'when Rowan next falls asleep' compiles to a structural predicate. Next step when work begins: speckit-specify -> specs/006-metatron-agency + spec-bridge:link back to this task.
+
+Spec: specs/029-metatron-agency
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -44,7 +46,30 @@ Grounding: docs/wiki/metatron.md, docs/wiki/llm-orchestrator.md, docs/wiki/chron
 - [ ] #7 A triggered order executes through the single-flight turn path, lands its nudge, appends to transcript, and surfaces as a queued moment in the next console reply
 - [ ] #8 Budget/degraded honesty: an order firing with empty charge bank or exhausted budget queues an honest moment instead of acting or retry-looping
 - [ ] #9 docs/wiki re-pinned for touched notes (metatron, llm-orchestrator, event-types) via grounding-wiki:wiki-update before merge
+- [ ] #10 Spec phase: Foundational (Blocking Prerequisites)
+- [ ] #11 Spec phase: User Story 1 — Omens and visions replace dreams (P1)
+- [ ] #12 Spec phase: User Story 2 — Standing orders via monitor_and_act (P1)
+- [ ] #13 Spec phase: User Story 3 — Triggered orders act while away (P1)
+- [ ] #14 Spec phase: User Story 4 — Daytime omens defer to nightfall (P2)
+- [ ] #15 Spec phase: User Story 5 — Meta tools: pause, start, adjust speed (P2)
+- [ ] #16 Spec phase: User Story 6 — Fuzzy conditions confirmed cheaply (P3)
+- [ ] #17 Spec phase: Polish & Cross-Cutting
 <!-- AC:END -->
+
+
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Re-ground against shipped TASK-52/53 substrate (done: metatron runs toolloop.Run with LoopRosterMetatron; registry owns schemas/costs; capabilities.json gates roster)
+2. Worktree .worktrees/task-27 (branch task-27-metatron-agency) — root stays on main
+3. speckit-specify -> specs/029-metatron-agency (next free number; 006 taken)
+4. Clarify ambiguities from the task's recorded design decisions (artifact-first), then speckit-plan + speckit-tasks
+5. spec-bridge:link back to TASK-27
+6. Implement via spec-implementer on Opus 4.8 (doctrine-adjacent, cross-package: internal/llm routing kind, internal/metatron, internal/sim event-sourced orders)
+7. wiki-update re-pin (metatron, llm-orchestrator, event-types, tool-registry, tool-loop) + player-docs freshness
+8. One PR from the worktree
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
