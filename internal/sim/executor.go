@@ -255,8 +255,14 @@ func stepEvents(s *State, m *worldmap.Map, nextTick int64) []store.Event {
 			continue // frozen in place: no stepping toward the target
 		}
 
-		// En route: one tile per moveEveryTicks, staggered like decisions.
-		if (nextTick+int64(i)*3)%moveEveryTicks == 0 {
+		// En route: one tile per moveEveryTicks, staggered like decisions. Spec 032
+		// US3 (research R3): a second stateless cadence slot at phase 2 fires only
+		// when the agent is standing ON a path tile, so stepping FROM a path moves
+		// at exactly 2x (two steps per 5-tick window) — the tile stepped from
+		// decides, matching the spec. Phase 0 always steps (baseline speed intact);
+		// off-path agents never see phase 2, so no existing behavior changes.
+		phase := (nextTick + int64(i)*3) % moveEveryTicks
+		if phase == 0 || (phase == 2 && pathAt(s, a.X, a.Y)) {
 			nx, ny := nextStep(m, s, a.X, a.Y, in.TargetX, in.TargetY)
 			if nx == a.X && ny == a.Y {
 				emit("agent.intent_done", AgentPayload{Agent: i}) // unreachable
@@ -625,7 +631,9 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		valid = effectiveKind(m, s, in.ResX, in.ResY) == worldmap.Tree
 	case "hunt":
 		valid = denReadyAt(s, in.TargetX, in.TargetY, nextTick)
-	case "build_fire", "build_shelter", "build_oven", "build_chest":
+	case "build_fire", "build_shelter", "build_oven", "build_chest", "build_path":
+		// build_path is stand-on-target like fire/oven/chest (paths are walkable),
+		// so it re-validates the same buildSite(Target) way (spec 032 US3, T018).
 		valid = buildSite(m, s, in.TargetX, in.TargetY)
 	case "build_wall_plank", "build_wall_stone":
 		// Spec 032 US1 (FR-007, research R2): walls build ADJACENT — the wall
@@ -792,6 +800,12 @@ func executeAtTarget(s *State, m *worldmap.Map, i int, nextTick int64) []store.E
 		r, _ := recipeFor(in.Goal)
 		emit("agent.built", BuiltPayload{Agent: i, Kind: r.Structure, X: in.ResX, Y: in.ResY})
 		events = append(events, situatedMemoryEvent(nextTick, i, salShelter, where, in.Reason, "Built a wall."))
+	case "build_path":
+		// Spec 032 US3: the generic reducer arm spends the stone and appends the
+		// path structure (no HP — isWall is false for "path"). Built on the Target
+		// tile (stand-on-target). No builder memory — a path is not formative
+		// (events.md: paths emit none, the forage/chop spam-avoidance precedent).
+		emit("agent.built", BuiltPayload{Agent: i, Kind: "path", X: in.TargetX, Y: in.TargetY})
 	case "demolish":
 		// Spec 032 US1 (research R5): one chip per completed work cycle. When the
 		// chip would leave the wall standing (HP − chip ≥ 1) emit wall_chipped and

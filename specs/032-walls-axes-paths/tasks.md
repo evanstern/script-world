@@ -71,7 +71,7 @@
 **Independent Test**: quickstart scenario 5 — paved corridor traversed in half the ticks (±1 step); only steps FROM path tiles accelerate
 
 - [x] T017 [US3] Add the build_path recipe (1 stone, no HP) to internal/sim/recipes.go + contract-mirror test; add the build_path worldToolsBase row + path gloss to internal/tool/registry.go; add the build_path goalResolvers arm (stand-on-target build, build_fire pattern) to internal/sim/policy.go (single commit group — coverage gate)
-- [ ] T018 [US3] Movement cadence in internal/sim/executor.go: replace the single modulo gate with phase := (nextTick+int64(i)*3)%moveEveryTicks; step on phase==0 always, and on phase==2 iff pathAt(s, a.X, a.Y) (research R3); wall/oven-style completion validation for build_path is the existing generic buildSite arm — extend the executor's build-kind switch to include it
+- [x] T018 [US3] Movement cadence in internal/sim/executor.go: replace the single modulo gate with phase := (nextTick+int64(i)*3)%moveEveryTicks; step on phase==0 always, and on phase==2 iff pathAt(s, a.X, a.Y) (research R3); wall/oven-style completion validation for build_path is the existing generic buildSite arm — extend the executor's build-kind switch to include it
 - [ ] T019 [P] [US3] TUI path glyph "·" (terrain-level, structures/agents win) in internal/tui/views.go
 - [ ] T020 [US3] Tests in internal/sim/path_speed_test.go (new): N-tile paved corridor = half the unpaved ticks (±1), mixed-route per-step acceleration, off-path agents unaffected, replay hash identical
 
