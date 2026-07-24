@@ -282,32 +282,73 @@ func (mt *Metatron) landVision(target, text string, charges int, alive map[int]b
 	return mt.landNudgeBatch("vision", []int{idx}, text)
 }
 
-// landOmen validates an omen and lands it as one atomic batch (spec 029 US1,
-// T005). An omen reaches one villager, a named group, or everyone living — at
-// NIGHT only — for one charge regardless of recipient count. targetsArg is
-// send_omen's comma-separated living-villager name list or the word "everyone".
+// landOmen validates an omen and either lands it now or defers it to nightfall
+// (spec 029 US1/US4, T005/T016). An omen reaches one villager, a named group, or
+// everyone living — at NIGHT only — for one charge regardless of recipient count.
+// targetsArg is send_omen's comma-separated living-villager name list or the word
+// "everyone".
 //
-// Day path (Batch B, temporary): an omen belongs to the dark, so a daytime call
-// is refused with in-fiction counsel until Batch C (T016) upgrades the day path
-// to a system-origin nightfall deferral order (FR-012). night is the turn's
-// mirrored State.Night (the reducer's night gate is the door authority; this is
-// the turn-side counsel so the model hears why before the door refuses). The
-// validation/batch/soul tail is the pre-029 landNudge's, unchanged.
-func (mt *Metatron) landOmen(targetsArg, text string, charges int, night bool, alive map[int]bool, grant grantSet) (*Nudge, string) {
-	if charges <= 0 {
-		return nil, "no charges are banked"
-	}
+// Night path: land immediately, spending a charge (the reducer's night gate is
+// the door authority; the mirrored night flag is the turn-side pre-check).
+//
+// Day path (T016/R11): an omen belongs to the dark, so a daytime call does NOT
+// refuse — it places a system-origin standing order that re-sends the omen the
+// instant night falls (event_types ["sim.night_started"], TTL 1 game day,
+// cap-exempt). Placement is FREE: the charge is spent at trigger-time landing,
+// never here (FR-012/SC-004). Returns one of: (nudge, nil, "") landed at night;
+// (nil, order, "") deferred to nightfall; (nil, nil, why) an in-fiction refusal.
+func (mt *Metatron) landOmen(targetsArg, text string, charges int, night bool, tick int64, alive map[int]bool, grant grantSet) (*Nudge, *sim.MetatronOrder, string) {
 	if !grant.allows("send_omen") {
-		return nil, "that power is not granted in this world"
-	}
-	if !night {
-		return nil, "an omen belongs to the night — wait for the dark and I will send it"
+		return nil, nil, "that power is not granted in this world"
 	}
 	targets, why := resolveOmenTargets(targetsArg, alive)
 	if why != "" {
-		return nil, why
+		return nil, nil, why
 	}
-	return mt.landNudgeBatch("omen", targets, text)
+	if strings.TrimSpace(text) == "" {
+		return nil, nil, "the rendering was empty"
+	}
+	if !night {
+		order, why := mt.deferOmen(targetsArg, targets, strings.TrimSpace(text), tick, grant)
+		return nil, order, why
+	}
+	if charges <= 0 {
+		return nil, nil, "no charges are banked"
+	}
+	nudge, why := mt.landNudgeBatch("omen", targets, text)
+	return nudge, nil, why
+}
+
+// deferOmen places the daytime omen's nightfall deferral order (spec 029 T016/
+// R11): a system-origin standing order whose one-shot trigger re-runs send_omen
+// at night. The action is the seed the night SYSTEM turn reads (runTurn frames it
+// as a due standing order), so it must lead the angel to send_omen with these
+// targets and this text; terse framing keeps it within the reducer's 400-rune
+// action cap for all but the very longest renderings. "everyone" is preserved as
+// the target word so the night turn re-resolves against whoever lives THEN; a
+// named list re-sends to those still living. The charge is spent when the night
+// turn lands, not here — placement is free and cap-exempt (origin "system"). A
+// rejected placement maps to omen-appropriate counsel the model may repair.
+func (mt *Metatron) deferOmen(targetsArg string, targets []int, text string, tick int64, grant grantSet) (*sim.MetatronOrder, string) {
+	who := "everyone"
+	if !strings.EqualFold(strings.TrimSpace(targetsArg), "everyone") {
+		names := make([]string, len(targets))
+		for i, t := range targets {
+			names[i] = sim.AgentNames[t]
+		}
+		who = strings.Join(names, ", ")
+	}
+	a := orderArgs{
+		Condition:  fmt.Sprintf("nightfall — an omen awaits %s", who),
+		Action:     fmt.Sprintf("Night has fallen. Send the omen you promised to %s: %s", who, text),
+		EventTypes: []string{"sim.night_started"},
+		TTLDays:    1,
+	}
+	order, why := mt.placeOrder("system", a, tick, grant)
+	if why != "" {
+		return nil, "an omen belongs to the night, and I could not set it aside — " + why
+	}
+	return order, ""
 }
 
 // resolveOmenTargets parses send_omen's `targets` argument (spec 029 R3): a

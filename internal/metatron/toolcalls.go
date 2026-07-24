@@ -102,18 +102,26 @@ func (mt *Metatron) handleVision(d *turnDispatch) toolloop.Handler {
 	}
 }
 
-// handleOmen wraps landOmen (spec 029 T006): the `targets` arg is a comma-list or
-// "everyone" (R3); the mirrored night flag (d.night) gates the day path. Same
-// accept/reject translation as handleVision — a daytime refusal or a bad name is
-// fed back as a rejected_gate the model may repair within the round cap.
+// handleOmen wraps landOmen (spec 029 T006/T016): the `targets` arg is a
+// comma-list or "everyone" (R3); the mirrored night flag (d.night) chooses the
+// path. A NIGHT omen lands at once (nudge); a DAY omen defers to nightfall as a
+// system-origin standing order (order) — the ResultForModel promises nightfall so
+// the model's reply sets the player's expectation. A bad name / ungranted tool /
+// rejected deferral is fed back as a rejected_gate the model may repair.
 func (mt *Metatron) handleOmen(d *turnDispatch) toolloop.Handler {
 	return func(_ context.Context, call llm.ToolCall) toolloop.Outcome {
 		targets := argString(call.Args, "targets")
 		text := argString(call.Args, "text")
-		if nudge, why := mt.landOmen(targets, text, d.charges, d.night, d.alive, d.grant); nudge != nil {
+		nudge, order, why := mt.landOmen(targets, text, d.charges, d.night, d.tick, d.alive, d.grant)
+		switch {
+		case nudge != nil:
 			d.result.Nudge = nudge
 			return toolloop.Outcome{Verdict: toolloop.VerdictLanded, ResultForModel: "the omen will reach them"}
-		} else {
+		case order != nil:
+			d.result.Order = &OrderReport{ID: order.ID, Condition: order.Condition}
+			return toolloop.Outcome{Verdict: toolloop.VerdictLanded,
+				ResultForModel: "an omen belongs to the night — I have set it to reach them the moment darkness falls (" + order.ID + ")"}
+		default:
 			return toolloop.Outcome{Verdict: toolloop.VerdictRejectedGate, ResultForModel: refusal(why)}
 		}
 	}

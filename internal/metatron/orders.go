@@ -97,7 +97,12 @@ func (mt *Metatron) nextOrderID(tick int64) string {
 // driver is guarded too. Returns the placed order (id for the reply/status) or
 // (nil, refusal).
 func (mt *Metatron) placeOrder(origin string, a orderArgs, tick int64, grant grantSet) (*sim.MetatronOrder, string) {
-	if !grant.allows("monitor_and_act") {
+	// The monitor_and_act grant gates only PLAYER placements (a console tool call).
+	// A system-origin deferral (T016) is internally initiated by an already-granted
+	// act — the daytime send_omen that spawned it — so it carries THAT tool's gate
+	// (checked in landOmen), not monitor_and_act's: a world granting send_omen but
+	// withholding monitor_and_act can still defer a daytime omen to nightfall.
+	if origin == "player" && !grant.allows("monitor_and_act") {
 		return nil, "that power is not granted in this world"
 	}
 	if len(a.EventTypes) == 0 {

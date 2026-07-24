@@ -605,23 +605,73 @@ func TestOmenDeadTargetRefused(t *testing.T) {
 	}
 }
 
-// TestOmenDayRefusedWithCounsel (US1, spec 029 T005 temporary day path): a
-// daytime send_omen is refused with in-fiction "night/dark" counsel and lands
-// nothing — Batch C (T016) upgrades this to a nightfall deferral order.
-func TestOmenDayRefusedWithCounsel(t *testing.T) {
-	mt, _, inj, _ := newTestAngel(t, "Not while the sun holds.")
+// TestOmenDayDefersToNightfall (US4 AC-1, spec 029 T016/T017): a daytime
+// send_omen does NOT refuse — it places a system-origin nightfall deferral order.
+// Nothing nudged, nothing spent, and the placement is cap-exempt; the deferral is
+// visible in status.
+func TestOmenDayDefersToNightfall(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "It will reach them at dark.")
 	// Genesis is day (Night defaults false); leave the mirror as-is.
 	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "everyone", "text": "look up"}`)
-	if _, err := mt.Turn(context.Background(), "send an omen now"); err != nil {
+	r, err := mt.Turn(context.Background(), "send an omen now")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(landedBatches(inj)) != 0 || inj.state.MetatronCharges != sim.MetatronGenesisCharges {
-		t.Error("a daytime omen landed or spent")
+	// No nudge landed and no charge spent — the omen was DEFERRED, not sent.
+	if r.Nudge != nil {
+		t.Error("a daytime omen sent a nudge instead of deferring")
 	}
-	tcs := cogToolCalls(inj)
-	if len(tcs) != 1 || tcs[0].Verdict != "rejected_gate" ||
-		!(strings.Contains(tcs[0].Reason, "night") || strings.Contains(tcs[0].Reason, "dark")) {
-		t.Errorf("daytime omen not refused with nightfall counsel: %+v", tcs)
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Errorf("a deferred daytime omen spent a charge: %d", inj.state.MetatronCharges)
+	}
+	// A system-origin order landed active.
+	if len(inj.state.MetatronOrders) != 1 {
+		t.Fatalf("daytime omen did not place a deferral order: %+v", inj.state.MetatronOrders)
+	}
+	ord := inj.state.MetatronOrders[0]
+	if ord.Origin != "system" || ord.Status != "active" {
+		t.Errorf("deferral order not system/active: %+v", ord)
+	}
+	if len(ord.EventTypes) != 1 || ord.EventTypes[0] != "sim.night_started" {
+		t.Errorf("deferral order watches the wrong event: %+v", ord.EventTypes)
+	}
+	if ord.ExpiresTick-ord.PlacedTick != ticksPerGameDay {
+		t.Errorf("deferral TTL = %d ticks, want one game day", ord.ExpiresTick-ord.PlacedTick)
+	}
+	// The console reported the placed order; nothing nudged.
+	if r.Order == nil || r.Order.ID != ord.ID {
+		t.Fatalf("deferral not reported to the console: %+v", r.Order)
+	}
+	// Visible in status (FR-016).
+	syncOrdersFromDoor(mt, inj)
+	s := mt.Status()
+	if len(s.Orders) != 1 || s.Orders[0].Origin != "system" {
+		t.Errorf("status.Orders does not surface the deferral: %+v", s.Orders)
+	}
+}
+
+// TestOmenDayDeferralCapExempt (US4, spec 029 T016/T017): a daytime omen defers
+// even when the player already holds the full three active orders — a system-origin
+// deferral is exempt from the player cap (FR-012).
+func TestOmenDayDeferralCapExempt(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "Set aside for the dark.")
+	for i := 0; i < sim.MetatronPlayerOrderCap; i++ {
+		seedOrder(mt, inj, activePlayerOrder(fmt.Sprintf("ord-1-%d", i), 1))
+	}
+	mt.runLoop = actLoop(mt, "send_omen", `{"targets": "Ash", "text": "beware"}`)
+	r, err := mt.Turn(context.Background(), "send Ash an omen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Order == nil {
+		t.Fatal("daytime omen deferral was refused despite the cap exemption")
+	}
+	// Four orders now stand: three player + one system deferral.
+	if len(inj.state.MetatronOrders) != sim.MetatronPlayerOrderCap+1 {
+		t.Fatalf("deferral did not land past the player cap: %d orders", len(inj.state.MetatronOrders))
+	}
+	if inj.state.MetatronOrders[sim.MetatronPlayerOrderCap].Origin != "system" {
+		t.Error("the cap-exempt order is not system-origin")
 	}
 }
 
@@ -1476,7 +1526,7 @@ func TestGatingLayers(t *testing.T) {
 		}
 		// Door: omen and miracle refused directly (defense-in-depth grant check).
 		alive := map[int]bool{0: true}
-		if _, why := mt.landOmen("everyone", "an omen", 1, true, alive, grant); why == "" {
+		if _, _, why := mt.landOmen("everyone", "an omen", 1, true, 0, alive, grant); why == "" {
 			t.Error("omen should be refused in a vision-only world")
 		}
 		if _, why := mt.landMiracle(miracleArgs{Kind: "give_item"}, 1, grant); why == "" {

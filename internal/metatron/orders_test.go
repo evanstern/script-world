@@ -601,3 +601,99 @@ func TestReplayReconstructsWithoutFiring(t *testing.T) {
 	default:
 	}
 }
+
+// --- US4: daytime omens defer to nightfall (spec 029 T016/T017) ---
+
+// deferralOmenOrder builds the system-origin nightfall deferral order deferOmen
+// produces for a daytime everyone-omen (spec 029 T016).
+func deferralOmenOrder(id string, tick int64) sim.MetatronOrder {
+	return sim.MetatronOrder{
+		ID: id, Origin: "system",
+		Condition:  "nightfall — an omen awaits everyone",
+		Action:     "Night has fallen. Send the omen you promised to everyone: look up",
+		EventTypes: []string{"sim.night_started"}, Agent: -1,
+		PlacedTick: tick, ExpiresTick: tick + ticksPerGameDay, Status: "active",
+	}
+}
+
+// TestDeferredOmenTriggersAtNightfall (US4 AC-2, spec 029 T016/T017): the
+// system-origin deferral fires on sim.night_started, running a system turn that
+// lands send_omen at night — one charge spent, the order consumed one-shot, and a
+// moment queued for the next console reply.
+func TestDeferredOmenTriggersAtNightfall(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "The omen goes out.")
+	mt.replica.Night = true // night has come (the deferral watches sim.night_started)
+	inj.state.Night = true
+	o := deferralOmenOrder("ord-1-0", 1)
+	seedOrder(mt, inj, o)
+	mt.runLoop = systemActLoop(mt, "send_omen", `{"targets":"everyone","text":"look up"}`)
+
+	night := mustEvent("sim.night_started", map[string]any{})
+	night.Tick = 6 * 3600
+	mt.matchOrders([]store.Event{night})
+	var job triggerJob
+	select {
+	case job = <-mt.triggerQ:
+	default:
+		t.Fatal("nightfall did not enqueue the deferral trigger")
+	}
+	mt.runTrigger(job)
+
+	if inj.state.MetatronOrders[0].Status != "triggered" {
+		t.Fatalf("deferral not consumed one-shot: %+v", inj.state.MetatronOrders[0])
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges-1 {
+		t.Errorf("nightfall omen spent %d charges, want 1", sim.MetatronGenesisCharges-inj.state.MetatronCharges)
+	}
+	reached := 0
+	for i := range inj.state.Agents {
+		if !inj.state.Agents[i].Dead && len(inj.state.Agents[i].Memories) == 1 &&
+			strings.HasPrefix(inj.state.Agents[i].Memories[0].Text, "You witnessed an omen: ") {
+			reached++
+		}
+	}
+	if reached == 0 {
+		t.Error("the nightfall omen reached no one")
+	}
+	mt.stateMu.Lock()
+	moments := append([]string(nil), mt.moments...)
+	mt.stateMu.Unlock()
+	if len(moments) != 1 {
+		t.Fatalf("nightfall omen queued %d moments, want 1: %+v", len(moments), moments)
+	}
+}
+
+// TestDeferredOmenCancelledNeverLands (US4 AC-3, spec 029 T016/T017): a deferral
+// cancelled before nightfall never fires — the trigger abandons at the door, no
+// system turn runs, and no omen lands.
+func TestDeferredOmenCancelledNeverLands(t *testing.T) {
+	mt, _, inj, _ := newTestAngel(t, "")
+	mt.replica.Night = true
+	inj.state.Night = true
+	o := deferralOmenOrder("ord-1-0", 1)
+	seedOrder(mt, inj, o)
+	if err := inj.state.Apply(mustEvent("metatron.order_cancelled", sim.OrderIDPayload{ID: "ord-1-0"})); err != nil {
+		t.Fatal(err)
+	}
+	fired := false
+	mt.runLoop = func(ctx context.Context, j toolloop.Job) (toolloop.Result, error) {
+		fired = true
+		return toolloop.Result{Term: toolloop.TermModelDone}, nil
+	}
+	mt.runTrigger(triggerJob{order: o, matchedType: "sim.night_started", matchedTick: 6 * 3600})
+
+	if fired {
+		t.Error("a cancelled deferral still ran its system turn")
+	}
+	if inj.state.MetatronOrders[0].Status != "cancelled" {
+		t.Errorf("terminal is not cancelled: %q", inj.state.MetatronOrders[0].Status)
+	}
+	if inj.state.MetatronCharges != sim.MetatronGenesisCharges {
+		t.Error("a cancelled deferral spent a charge")
+	}
+	for i := range inj.state.Agents {
+		if len(inj.state.Agents[i].Memories) != 0 {
+			t.Fatalf("a cancelled deferral landed an omen on agent %d", i)
+		}
+	}
+}
