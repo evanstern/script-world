@@ -587,6 +587,37 @@ const (
 	theftMemoryTone     = -60  // owner/witness memory tone (gossip seed)
 )
 
+// --- spec 032 walls/axes/paths tuning ---
+//
+// The single scalar tuning surface for this feature, mirrored in
+// specs/032-walls-axes-paths/contracts/recipes.md and research R8. Ticks are
+// game-seconds (a game-hour is 3600 ticks). Wall max HP is DERIVED from the kind
+// via wallMaxHP (terrain.go), never stored — the fire lit-ness doctrine. The
+// legacy flat chopWood/quarryYield are deleted in T014, replaced by the
+// bare/axe yield pairs below.
+const (
+	wallPlankCost   = 2   // planks → wall_plank (build_wall_plank recipe input)
+	wallStoneCost   = 2   // refined_stone → wall_stone (build_wall_stone recipe input)
+	wallPlankHP     = 200 // plank wall max health
+	wallStoneHP     = 600 // stone wall max health — 3x plank (spec FR-003: ≥2x)
+	buildWallTicks  = 600 // per-wall build work duration
+	demolishChipHP  = 100 // HP removed per demolish work cycle (plank: 2 cycles; stone: 6)
+	demolishTicks   = 300 // per demolish chip cycle
+	repairHPPerUnit = 100 // HP restored per material unit consumed, clamped to max
+	repairTicks     = 240 // per repair work cycle
+	pathStoneCost   = 1   // raw stone per path tile (build_path recipe input)
+	buildPathTicks  = 240 // path build work duration
+	axeDurability   = 10  // harvest uses per fresh axe (chop/quarry far outpace hunting)
+
+	// Harvest yield rebalance (spec FR-009/010): bare-handed drops from the
+	// legacy flat 2 to 1; a carried axe triples it to 3. Replaces chopWood /
+	// quarryYield (deleted T014).
+	chopYieldBare   = 1 // wood per bare-handed chop
+	chopYieldAxe    = 3 // wood per axe-assisted chop
+	quarryYieldBare = 1 // stone per bare-handed quarry
+	quarryYieldAxe  = 3 // stone per axe-assisted quarry
+)
+
 // bulk is an agent's (or a chest's) carried load: one per unit of every
 // inventory kind plus one per carried spear (data-model.md). Derived, never
 // stored — same doctrine as fire lit-ness from FuelUntil: a derived value

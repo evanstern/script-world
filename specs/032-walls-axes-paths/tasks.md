@@ -14,7 +14,7 @@
 
 **Purpose**: the shared tuning surface every story reads
 
-- [ ] T001 Add the spec-032 constants block to internal/sim/agents.go (wallPlankCost/wallStoneCost/wallPlankHP/wallStoneHP/buildWallTicks/demolishChipHP/demolishTicks/repairHPPerUnit/repairTicks/pathStoneCost/buildPathTicks/axeDurability/chopYieldBare/chopYieldAxe/quarryYieldBare/quarryYieldAxe — literals per contracts/recipes.md and research R8; leave chopWood/quarryYield in place until T014 replaces their uses)
+- [x] T001 Add the spec-032 constants block to internal/sim/agents.go (wallPlankCost/wallStoneCost/wallPlankHP/wallStoneHP/buildWallTicks/demolishChipHP/demolishTicks/repairHPPerUnit/repairTicks/pathStoneCost/buildPathTicks/axeDurability/chopYieldBare/chopYieldAxe/quarryYieldBare/quarryYieldAxe — literals per contracts/recipes.md and research R8; leave chopWood/quarryYield in place until T014 replaces their uses)
 
 ---
 
