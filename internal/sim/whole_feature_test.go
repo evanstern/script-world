@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/evanstern/promptworld/internal/store"
@@ -601,5 +603,173 @@ func TestStorageEventsNoOpUnderUnknownConvention(t *testing.T) {
 		if s.Hash() != before {
 			t.Errorf("%s under the unknown-type convention mutated state, want a total no-op", c.typ)
 		}
+	}
+}
+
+// TestReplayByteIdentityWallsAxesPaths is spec 032 T021 / quickstart scenario 7
+// over the ENTIRE feature: one scripted single-agent session exercising every
+// new spec-032 event — craft_axe, an axe-assisted chop, a wall build, a full
+// demolish (chip + destroy), and a path build — then a replay from genesis (log
+// only) to a byte-identical state hash. Chaining idiom matches the spec-012/013
+// whole-feature tests: each goal is a genuine planner-sourced agent.intent_set
+// driven to its completion via stepUntil, so no idle gap exceeds the reflex
+// grace and the reflex never preempts the script.
+func TestReplayByteIdentityWallsAxesPaths(t *testing.T) {
+	const seed = 42
+	m := testMap(seed)
+
+	genesis := func() *State {
+		s := NewState(seed, m)
+		isolateAgents(s)
+		a := &s.Agents[0]
+		a.Dead = false
+		a.Needs = Needs{Health: 1000, Food: 900, Rest: 900, Warmth: 900, Morale: 900}
+		// Enough for craft_axe (1 plank + 1 stone), a wall (2 planks), a path
+		// (1 stone), with a little slack.
+		a.Inv = Inventory{Planks: 4, Stone: 4}
+		return s
+	}
+
+	live := genesis()
+	a := &live.Agents[0]
+
+	stepUntil := func(maxTick int64, match func(store.Event) bool) []store.Event {
+		t.Helper()
+		var out []store.Event
+		for live.Tick < maxTick {
+			next := live.Tick + 1
+			evs := stepEvents(live, m, next)
+			live.Tick = next
+			for _, e := range evs {
+				if err := live.Apply(e); err != nil {
+					t.Fatalf("apply %s at tick %d: %v", e.Type, live.Tick, err)
+				}
+			}
+			out = append(out, evs...)
+			for _, e := range evs {
+				if match(e) {
+					return out
+				}
+			}
+		}
+		t.Fatalf("expected event not observed by tick %d", maxTick)
+		return out
+	}
+	setIntent := func(goal string, tx, ty, rx, ry int) store.Event {
+		e := store.Event{Tick: live.Tick, Type: "agent.intent_set", Payload: mustPayload(IntentSetPayload{
+			Agent: 0, Goal: goal, TargetX: tx, TargetY: ty, ResX: rx, ResY: ry, Source: "planner"})}
+		if err := live.Apply(e); err != nil {
+			t.Fatalf("apply intent_set %s: %v", goal, err)
+		}
+		return e
+	}
+	const budget = 5000
+	isType := func(typ string) func(store.Event) bool {
+		return func(e store.Event) bool { return e.Type == typ }
+	}
+
+	var log []store.Event
+
+	// --- craft_axe ---
+	log = append(log, setIntent("craft_axe", a.X, a.Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+budget, isType("agent.crafted"))...)
+	if len(a.Inv.Axes) != 1 {
+		t.Fatalf("no axe after craft_axe: Axes=%v", a.Inv.Axes)
+	}
+
+	// --- axe-assisted chop (spends one axe use) ---
+	tStand, tRes := treeStand(t, m, live, a.X, a.Y)
+	log = append(log, setIntent("chop", tStand.X, tStand.Y, tRes.X, tRes.Y))
+	log = append(log, stepUntil(live.Tick+budget, isType("agent.chopped"))...)
+	if a.Inv.Axes[0] != axeDurability-1 {
+		t.Fatalf("axe use not spent on the chop: Axes=%v", a.Inv.Axes)
+	}
+
+	// --- build a plank wall (adjacent-stand) ---
+	wStand, wRes, ok := nearestAdjacentTo(m, live, a.X, a.Y, func(x, y int) bool { return buildSite(m, live, x, y) })
+	if !ok {
+		t.Fatal("no adjacent build site for the wall")
+	}
+	log = append(log, setIntent("build_wall_plank", wStand.X, wStand.Y, wRes.X, wRes.Y))
+	log = append(log, stepUntil(live.Tick+budget, isType("agent.built"))...)
+	if wallAt(live, wRes.X, wRes.Y) == nil {
+		t.Fatal("no wall after build_wall_plank")
+	}
+
+	// --- demolish it fully (chip + destroy) ---
+	log = append(log, setIntent("demolish", wStand.X, wStand.Y, wRes.X, wRes.Y))
+	log = append(log, stepUntil(live.Tick+budget, isType("agent.wall_destroyed"))...)
+	if wallAt(live, wRes.X, wRes.Y) != nil {
+		t.Fatal("wall survived demolition")
+	}
+
+	// --- build a path (stand-on-target) ---
+	pSite, ok := nearest(m, live, a.X, a.Y, func(x, y int) bool { return buildSite(m, live, x, y) })
+	if !ok {
+		t.Fatal("no build site for the path")
+	}
+	log = append(log, setIntent("build_path", pSite.X, pSite.Y, 0, 0))
+	log = append(log, stepUntil(live.Tick+budget, func(e store.Event) bool {
+		if e.Type != "agent.built" {
+			return false
+		}
+		var p BuiltPayload
+		mustUnmarshal(t, e.Payload, &p)
+		return p.Kind == "path"
+	})...)
+	if !pathAt(live, pSite.X, pSite.Y) {
+		t.Fatal("no path after build_path")
+	}
+
+	// Every required spec-032 event actually occurred.
+	seen := map[string]bool{}
+	for _, e := range log {
+		seen[e.Type] = true
+	}
+	for _, typ := range []string{"agent.crafted", "agent.chopped", "agent.built",
+		"agent.wall_chipped", "agent.wall_destroyed"} {
+		if !seen[typ] {
+			t.Errorf("required spec-032 event %q never occurred", typ)
+		}
+	}
+
+	// Replay from genesis (log only) to a byte-identical state hash.
+	replay := genesis()
+	for _, e := range log {
+		if err := replay.Apply(e); err != nil {
+			t.Fatalf("replay apply %s: %v", e.Type, err)
+		}
+		replay.Tick = e.Tick
+	}
+	driveTicks(t, replay, m, live.Tick, nil)
+	if live.Hash() != replay.Hash() {
+		t.Fatalf("walls/axes/paths replay diverged:\nlive:     %s\nreplayed: %s",
+			string(live.Marshal()), string(replay.Marshal()))
+	}
+}
+
+// TestPre032SnapshotLoadsUnchanged is spec 032 T021 / research R7: a canonical
+// snapshot in the pre-032 shape (structures with no hp, inventories/piles with
+// no axes) carries none of the new keys, and round-trips through
+// unmarshal→marshal byte-identically — so a world saved before spec 032 loads
+// unchanged under the additive omitempty fields (no format-version bump).
+func TestPre032SnapshotLoadsUnchanged(t *testing.T) {
+	s := NewState(42, testMap(42))
+	// Pre-032-shaped content: a fire (no hp), a stocked chest, carried spears —
+	// none of which set hp or axes.
+	s.Structures = []Structure{{Kind: "fire", X: 1, Y: 1, FuelUntil: 8 * 3600}}
+	s.Agents[0].Inv = Inventory{Wood: 3, Spears: []int{2, 3}}
+	s.Piles = []Pile{{X: 2, Y: 2, Wood: 1, Spears: []int{1}}}
+
+	b1 := s.Marshal()
+	if bytes.Contains(b1, []byte(`"hp"`)) || bytes.Contains(b1, []byte(`"axes"`)) {
+		t.Fatalf("pre-032-shaped state leaked an hp/axes key:\n%s", b1)
+	}
+	var s2 State
+	if err := json.Unmarshal(b1, &s2); err != nil {
+		t.Fatalf("unmarshal pre-032 snapshot: %v", err)
+	}
+	if b2 := s2.Marshal(); !bytes.Equal(b1, b2) {
+		t.Fatalf("pre-032 snapshot did not round-trip byte-identically:\n%s\n%s", b1, b2)
 	}
 }
