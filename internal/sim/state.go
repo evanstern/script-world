@@ -642,6 +642,12 @@ func (s *State) Apply(e store.Event) error {
 			st.Owner = p.Agent
 			st.Store = &Inventory{}
 		}
+		if isWall(p.Kind) {
+			// T008 (spec 032 US1, research R1): a fresh wall stands at full health,
+			// derived from its kind (never stored as a separate max — fire lit-ness
+			// doctrine). The recipe delta above already spent the wall's material.
+			st.HP = wallMaxHP(p.Kind)
+		}
 		s.Structures = append(s.Structures, st)
 	case "agent.ate":
 		// T018: outcome-payload eat — the emitter computed the
@@ -801,6 +807,82 @@ func (s *State) Apply(e store.Event) error {
 	case "sim.fire_burned_out":
 		// T019: no state effect — lit-ness is derived from FuelUntil; the event
 		// is the once-per-burnout chronicle/TUI signal (the sweep emits it).
+
+	// --- spec 032 walls: multi-cycle demolish / repair ---
+	case "agent.wall_chipped":
+		// T008 (spec 032 US1, research R5): one demolish cycle chips the wall's
+		// health, then re-arms the executor's work gate (Intent.WorkStart = 0) so
+		// the next cycle runs under the same intent — the whole multi-cycle loop,
+		// no new scheduling. The executor only emits this when HP − chip ≥ 1, so
+		// the wall stays standing; the ≥1 clamp defends the invariant that a
+		// standing wall never serializes ≤ 0 (data-model.md).
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if w := wallAt(s, p.X, p.Y); w != nil {
+			w.HP -= demolishChipHP
+			if w.HP < 1 {
+				w.HP = 1
+			}
+		}
+		if a.Intent != nil {
+			a.Intent.WorkStart = 0
+		}
+	case "agent.wall_destroyed":
+		// T008: the final demolish cycle (or a chip that would reach ≤ 0) removes
+		// the wall — its tile is passable again by construction — and clears the
+		// demolisher's intent. Metatron's entity_removed reaches the same end
+		// through the miracle path (contracts/events.md).
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if i := s.structureIndexAt(p.X, p.Y); i >= 0 && isWall(s.Structures[i].Kind) {
+			s.removeStructureAt(i)
+		}
+		a.Intent = nil
+		a.IdleSince = e.Tick
+	case "agent.wall_repaired":
+		// T008 (spec 032 US1, research R5): one repair cycle consumes 1 matching
+		// material and restores HP up to (never past) the derived max. If the wall
+		// is still damaged AND material remains the work gate re-arms for another
+		// cycle (WorkStart = 0, intent kept); otherwise the intent clears. The
+		// emitter validated a damaged wall + material; the reducer clamps
+		// defensively so replay never drifts.
+		var p WallWorkPayload
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			return fmt.Errorf("apply %s: %w", e.Type, err)
+		}
+		a, err := agent(p.Agent)
+		if err != nil {
+			return err
+		}
+		if w := wallAt(s, p.X, p.Y); w != nil {
+			mat := wallRepairMaterial(w.Kind)
+			maxHP := wallMaxHP(w.Kind)
+			if invField(a.Inv, mat) >= 1 {
+				addItems(&a.Inv, []Item{{mat, 1}}, -1)
+			}
+			w.HP = minInt(maxHP, w.HP+repairHPPerUnit)
+			if w.HP < maxHP && invField(a.Inv, mat) >= 1 {
+				if a.Intent != nil {
+					a.Intent.WorkStart = 0
+				}
+				break // still damaged with material in hand — keep repairing
+			}
+		}
+		// Fully mended, out of material, or the wall vanished: the work is done.
+		a.Intent = nil
+		a.IdleSince = e.Tick
 
 	// --- spec 013 inventory/storage v1 event surface ---
 	case "agent.dropped":
