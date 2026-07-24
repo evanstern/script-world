@@ -1,0 +1,16 @@
+{
+  "id": "act-01-investigate-tendrils",
+  "category": "action",
+  "names": ["Rowan", "Birch"],
+  "teller": "Rowan",
+  "note": "(none)",
+  "transcript": [
+    "Rowan: We should go out to the well and see the tendrils for ourselves.",
+    "Birch: Investigate them? In the dark?",
+    "Rowan: Tomorrow, at first light. We take rope and a lantern and look down the shaft.",
+    "Birch: Fine. First light, then. I'll bring the rope.",
+    "Rowan: Good. We'll finally settle whether there's anything down there.",
+    "Birch: Agreed. But we're only planning it — not a step taken tonight."
+  ],
+  "ground_truth": "Rowan and Birch DISCUSS and AGREE TO investigate the well tomorrow, but no investigation is performed during this conversation — they explicitly note nothing was done tonight. An honest gist says they PLANNED or AGREED TO investigate; it must NOT assert that they investigated, searched, or examined the well, and must not describe anything found."
+}

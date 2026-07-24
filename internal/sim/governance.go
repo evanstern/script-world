@@ -674,7 +674,7 @@ func speakingTurn(s *State, nextTick int64) []store.Event {
 	}
 	emit("meeting.turn_taken", TurnTakenPayload{Agent: speaker, Raised: raised})
 	events = append(events, situatedMemoryEvent(nextTick, speaker, salMeetingSpoke,
-		PlaceAt(s, s.Agents[speaker].X, s.Agents[speaker].Y), "", "Spoke at the village meeting."))
+		PlaceAt(s, s.Agents[speaker].X, s.Agents[speaker].Y), "", OriginAction, "Spoke at the village meeting."))
 
 	if prop == nil {
 		return events
@@ -692,10 +692,10 @@ func speakingTurn(s *State, nextTick int64) []store.Event {
 	proposer := &s.Agents[prop.Proposer]
 	if passed {
 		events = append(events, situatedMemoryEvent(nextTick, prop.Proposer, salMeetingOutcome,
-			PlaceAt(s, proposer.X, proposer.Y), "", "The village passed my proposal: %s", prop.Text))
+			PlaceAt(s, proposer.X, proposer.Y), "", OriginAction, "The village passed my proposal: %s", prop.Text))
 	} else {
 		events = append(events, situatedMemoryEvent(nextTick, prop.Proposer, salMeetingOutcome,
-			PlaceAt(s, proposer.X, proposer.Y), "", "The village voted my proposal down: %s", prop.Text))
+			PlaceAt(s, proposer.X, proposer.Y), "", OriginAction, "The village voted my proposal down: %s", prop.Text))
 	}
 	for _, v := range append(append([]int{}, yeas...), nays...) {
 		if v == prop.Proposer || v < 0 || v >= len(s.Agents) || s.Agents[v].Dead {
@@ -710,11 +710,11 @@ func speakingTurn(s *State, nextTick int64) []store.Event {
 			outcome = "failed"
 		}
 		events = append(events, situatedMemoryAboutEvent(nextTick, v, prop.Proposer, tone, salMeetingOutcome,
-			PlaceAt(s, s.Agents[v].X, s.Agents[v].Y), "Voted %s %s's proposal (%s): %s", verb, proposer.Name, outcome, prop.Text))
+			PlaceAt(s, s.Agents[v].X, s.Agents[v].Y), OriginWitness, "Voted %s %s's proposal (%s): %s", verb, proposer.Name, outcome, prop.Text))
 	}
 	if passed && prop.Kind == ProposeExile && prop.Target >= 0 && prop.Target < len(s.Agents) && !s.Agents[prop.Target].Dead {
 		events = append(events, situatedMemoryEvent(nextTick, prop.Target, salExiled,
-			PlaceAt(s, s.Agents[prop.Target].X, s.Agents[prop.Target].Y), "", "The village voted to cast me out."))
+			PlaceAt(s, s.Agents[prop.Target].X, s.Agents[prop.Target].Y), "", OriginAction, "The village voted to cast me out."))
 	}
 	return events
 }
@@ -947,7 +947,7 @@ func violationEvents(s *State, n *Norm, violator int, nextTick int64) []store.Ev
 	}
 	for _, w := range witnesses {
 		events = append(events, situatedMemoryAboutEvent(nextTick, w, violator, toneViolation, salNormViolation,
-			PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), "%s %s: %s", s.Agents[violator].Name, verb, n.Text))
+			PlaceAt(s, s.Agents[w].X, s.Agents[w].Y), OriginWitness, "%s %s: %s", s.Agents[violator].Name, verb, n.Text))
 	}
 	return events
 }

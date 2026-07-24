@@ -169,6 +169,14 @@ func (md *Mind) runConsolidation(job consolJob) {
 	if len(out.Beliefs) > maxBeliefEdits {
 		out.Beliefs = out.Beliefs[:maxBeliefEdits]
 	}
+	// Evidence citations are pre-trimmed best-first per belief (spec 030): an
+	// over-long list is enthusiasm, kept as its best-first prefix, never a
+	// rejected night (contracts/consolidation-contract.md).
+	for i := range out.Beliefs {
+		if len(out.Beliefs[i].Evidence) > maxBeliefEvidence {
+			out.Beliefs[i].Evidence = out.Beliefs[i].Evidence[:maxBeliefEvidence]
+		}
+	}
 	if verr := validateConsolidation(out, job.agent, job.buffer, job.held, job.anchor, job.drift); verr != nil {
 		snippet := resp.Text
 		if len(snippet) > 180 {
@@ -178,6 +186,11 @@ func (md *Mind) runConsolidation(job consolJob) {
 		md.landMarker(job, sim.ConsolidationRejected, verr.Error(), resp.CostUSD)
 		return
 	}
+
+	// Provenance enforcement (spec 030, deterministic, post-validation): resolve
+	// each belief's evidence and coerce "witnessed" claims that lack direct
+	// perception. Never rejects — the coercion count rides the marker telemetry.
+	coerced := enforceProvenance(out.Beliefs, job.buffer)
 
 	// Accepted: build the whole night as one atomic batch.
 	var batch []store.Event
@@ -209,19 +222,20 @@ func (md *Mind) runConsolidation(job consolJob) {
 			Agent: job.agent, MemTick: m.Tick, TextHash: sim.MemoryHash(m.Text)})
 	}
 	add("agent.memory_added", sim.MemoryAddedPayload{
-		Agent: job.agent, Text: out.Gist, Salience: sim.SalDayGist, Subject: -1})
+		Agent: job.agent, Text: out.Gist, Salience: sim.SalDayGist, Subject: -1, Origin: sim.OriginDigest})
 	for _, b := range out.Beliefs {
 		add("agent.belief_revised", sim.BeliefRevisedPayload{
 			Agent: job.agent, BeliefID: b.ID, Statement: b.Statement,
 			Confidence: b.Confidence, Provenance: b.Provenance,
-			Source: b.Source, Subject: b.Subject})
+			Source: b.Source, Subject: b.Subject,
+			Evidence: b.resolved, Direct: b.direct})
 	}
 	add("agent.narrative_set", sim.NarrativeSetPayload{Agent: job.agent, Text: out.Narrative})
 	add("agent.consolidated", sim.ConsolidatedPayload{
 		Agent: job.agent, Night: job.night, UpTo: job.upTo,
 		Outcome:  sim.ConsolidationAccepted,
 		Promoted: len(out.Promote), Faded: len(out.Fade), Beliefs: len(out.Beliefs),
-		CostUSD: resp.CostUSD})
+		Coerced: coerced, CostUSD: resp.CostUSD})
 
 	if err := md.social.InjectSocial(batch); err != nil {
 		log.Printf("mind: consolidation %s night %d injection rejected: %v", job.name, job.night, err)
@@ -267,7 +281,18 @@ func consolidateUserPrompt(job consolJob) string {
 	if len(job.held) > 0 {
 		b.WriteString("\nBeliefs you already hold:\n")
 		for _, bl := range job.held {
-			fmt.Fprintf(&b, "- [id %d] (confidence %d, %s) %s\n", bl.ID, bl.Confidence, bl.Provenance, bl.Statement)
+			// Spec 030 (US2, FR-006): the model reads the EFFECTIVE confidence
+			// (decayed, never the stored value) so it revises against what the
+			// belief actually feels like tonight. Unlike other belief-surfacing
+			// prompts, below-floor beliefs are NOT excluded here — they stay
+			// listed by ID (still revisable; a reinforcement-worthy revision can
+			// bring one back), just marked faded (data-model.md read sites).
+			eff := sim.EffectiveConfidence(bl, job.sleepTick)
+			faded := ""
+			if eff < sim.BeliefConfidenceFloor {
+				faded = " (faded)"
+			}
+			fmt.Fprintf(&b, "- [id %d] (confidence %d, %s) %s%s\n", bl.ID, eff, bl.Provenance, bl.Statement, faded)
 		}
 	}
 	if job.social != "" {
@@ -277,14 +302,17 @@ func consolidateUserPrompt(job consolJob) string {
 		fmt.Fprintf(&b, "\nYour current self-narrative:\n%s\n", job.narrative)
 	}
 	fmt.Fprintf(&b, "\nIn \"nature\", copy this line exactly, word for word: %s\n", job.anchor)
+	b.WriteString("\nFor every belief, cite in \"evidence\" the memory labels it rests on. " +
+		"Use \"witnessed\" ONLY for what you directly did or directly received (an omen or a dream); " +
+		"a claim you only heard about in conversation is \"told\", and a conclusion you reasoned to is \"inferred\".\n")
 	fmt.Fprintf(&b, `
 Reply with ONLY this JSON:
 {"nature": "<your nature, restated verbatim>",
  "gist": "<ONE short sentence remembering this day, your voice, under 200 characters>",
  "promote": ["m1"],   // up to %d memory labels worth keeping sharp
  "fade": ["m2"],      // up to %d trivial memory labels to let go
- "beliefs": [{"id": 0, "statement": "...", "confidence": 0-100, "provenance": "witnessed|told|inferred", "source": -1, "subject": -1}],  // up to %d; id 0 = new belief, or a held belief's id to revise it; subject/source are villager numbers, -1 = none
+ "beliefs": [{"id": 0, "statement": "...", "confidence": 0-100, "provenance": "witnessed|told|inferred", "source": -1, "subject": -1, "evidence": ["m3"]}],  // up to %d; id 0 = new belief, or a held belief's id to revise it; subject/source are villager numbers, -1 = none; evidence lists up to %d supporting memory labels, best first
  "narrative": "<who you are becoming, first person, your voice, max 1200 chars>"}`,
-		maxPromotes, maxFades, maxBeliefEdits)
+		maxPromotes, maxFades, maxBeliefEdits, maxBeliefEvidence)
 	return b.String()
 }

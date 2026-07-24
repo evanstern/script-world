@@ -1,0 +1,16 @@
+{
+  "id": "ctrl-04-gratitude",
+  "category": "control",
+  "names": ["Mira", "Birch"],
+  "teller": "Mira",
+  "note": "(none)",
+  "transcript": [
+    "Mira: I never thanked you properly for sitting with me when the fever took me.",
+    "Birch: You'd have done the same. You were in a bad way for three days.",
+    "Mira: I was. I'd not have pulled through without the broth you kept bringing.",
+    "Birch: You're strong. The broth just gave you something to fight with.",
+    "Mira: Still. I owe you, and I won't forget it.",
+    "Birch: Then we're friends, and that's payment enough."
+  ],
+  "ground_truth": "A warm exchange of gratitude: Mira thanks Birch for nursing her through a three-day fever with broth; Birch is modest. The past caregiving is established fact between them. A faithful gist captures Mira's gratitude for Birch's care during her illness. No speculation, no fabricated action."
+}

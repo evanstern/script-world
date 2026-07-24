@@ -29,6 +29,38 @@ import (
 // emitted unsituated: a new memory site must pick a situated constructor and
 // therefore a Where.
 
+// --- spec 030: memory provenance origin (model-free) ---
+//
+// Origin is stamped at every emission site (the closed vocabulary below) and is
+// the ONLY signal the belief validator reads to classify direct perception —
+// no text inspection, no heuristics (FR-002). Direct perception = an own act
+// (OriginAction), a witnessed event (OriginWitness), or a delivered omen/dream
+// (OriginOmen). Secondhand = a chest-owner's any-distance report (OriginReport),
+// a conversation gist (OriginGist), a nightly digest (OriginDigest), or an
+// absent/legacy origin ("" — treated as secondhand, the conservative direction:
+// hygiene may under-grant "witnessed", never over-grant it).
+const (
+	OriginAction  = "action"  // own executed act (situated personal constructors)
+	OriginWitness = "witness" // saw it happen (situated about-event constructor)
+	OriginReport  = "report"  // learned of it at any distance (chest-owner taking memory)
+	OriginOmen    = "omen"    // a delivered omen/dream/miracle (Metatron)
+	OriginGist    = "gist"    // a conversation summary written into memory
+	OriginDigest  = "digest"  // a nightly day-gist
+)
+
+// DirectPerception reports whether a memory's recorded origin is a direct
+// perception. Pure function on the stored field (FR-002): OriginAction /
+// OriginWitness / OriginOmen are direct; everything else (report, gist, digest,
+// absent/legacy) is secondhand. The belief validator gates "witnessed" on this.
+func DirectPerception(origin string) bool {
+	switch origin {
+	case OriginAction, OriginWitness, OriginOmen:
+		return true
+	default:
+		return false
+	}
+}
+
 // placeScanRadius bounds describePlace's deterministic feature scan (Manhattan).
 const placeScanRadius = 2
 
@@ -151,23 +183,27 @@ func situateText(base string, where *MemoryPlace, why string) string {
 // situatedMemoryEvent is memoryEvent with situated context (spec 019): the
 // where/why are baked into the payload AND composed into the text. Where is the
 // acting agent's tile; Why is the driving intent's reason ("" for reflex).
-func situatedMemoryEvent(tick int64, agent, salience int, where *MemoryPlace, why string, format string, args ...any) store.Event {
+// origin (spec 030) is the emission-stamped provenance class — a required
+// parameter so the compiler forces every emission site to declare it (a new
+// unstamped site cannot compile).
+func situatedMemoryEvent(tick int64, agent, salience int, where *MemoryPlace, why, origin, format string, args ...any) store.Event {
 	return store.Event{
 		Tick: tick, Type: "agent.memory_added",
 		Payload: mustPayload(MemoryAddedPayload{
 			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, why),
-			Salience: salience, Subject: -1, Where: where, Why: why,
+			Salience: salience, Subject: -1, Where: where, Why: why, Origin: origin,
 		}),
 	}
 }
 
-// situatedMemoryToned is memoryEventToned with situated context (spec 019).
-func situatedMemoryToned(tick int64, agent, salience, tone int, where *MemoryPlace, why string, format string, args ...any) store.Event {
+// situatedMemoryToned is memoryEventToned with situated context (spec 019);
+// origin is the spec-030 provenance class (see situatedMemoryEvent).
+func situatedMemoryToned(tick int64, agent, salience, tone int, where *MemoryPlace, why, origin, format string, args ...any) store.Event {
 	return store.Event{
 		Tick: tick, Type: "agent.memory_added",
 		Payload: mustPayload(MemoryAddedPayload{
 			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, why),
-			Salience: salience, Subject: -1, Tone: tone, Where: where, Why: why,
+			Salience: salience, Subject: -1, Tone: tone, Where: where, Why: why, Origin: origin,
 		}),
 	}
 }
@@ -175,13 +211,14 @@ func situatedMemoryToned(tick int64, agent, salience, tone int, where *MemoryPla
 // situatedMemoryAboutEvent is memoryAboutEvent with situated context (spec 019):
 // a gossip-worthy memory about another agent, situated by the WITNESS's own
 // location. Witness memories carry no Why — the witness did not drive the act
-// (contracts/memory-context.md rule 2).
-func situatedMemoryAboutEvent(tick int64, agent, subject, tone, salience int, where *MemoryPlace, format string, args ...any) store.Event {
+// (contracts/memory-context.md rule 2). origin is the spec-030 provenance class:
+// OriginWitness for a seen event, OriginReport for a learned-at-a-distance one.
+func situatedMemoryAboutEvent(tick int64, agent, subject, tone, salience int, where *MemoryPlace, origin, format string, args ...any) store.Event {
 	return store.Event{
 		Tick: tick, Type: "agent.memory_added",
 		Payload: mustPayload(MemoryAddedPayload{
 			Agent: agent, Text: situateText(fmt.Sprintf(format, args...), where, ""),
-			Salience: salience, Subject: subject, Tone: tone, Where: where,
+			Salience: salience, Subject: subject, Tone: tone, Where: where, Origin: origin,
 		}),
 	}
 }

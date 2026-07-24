@@ -1,0 +1,68 @@
+[
+  {
+    "variant": "new",
+    "treatment": {
+      "n": 18,
+      "defects": 5,
+      "flattened": 5,
+      "confabulated_action": 1,
+      "defect_rate_pct": 27.78
+    },
+    "by_category": {
+      "action": {
+        "n": 9,
+        "defects": 2,
+        "faithful": 7
+      },
+      "control": {
+        "n": 12,
+        "defects": 2,
+        "faithful": 10
+      },
+      "speculation": {
+        "n": 9,
+        "defects": 3,
+        "faithful": 6
+      }
+    },
+    "control": {
+      "n": 12,
+      "faithful": 10,
+      "faithful_rate_pct": 83.33
+    },
+    "parse_failures": 0
+  },
+  {
+    "variant": "old",
+    "treatment": {
+      "n": 18,
+      "defects": 3,
+      "flattened": 2,
+      "confabulated_action": 1,
+      "defect_rate_pct": 16.67
+    },
+    "by_category": {
+      "action": {
+        "n": 9,
+        "defects": 0,
+        "faithful": 9
+      },
+      "control": {
+        "n": 12,
+        "defects": 2,
+        "faithful": 9
+      },
+      "speculation": {
+        "n": 9,
+        "defects": 3,
+        "faithful": 6
+      }
+    },
+    "control": {
+      "n": 12,
+      "faithful": 9,
+      "faithful_rate_pct": 75
+    },
+    "parse_failures": 0
+  }
+]

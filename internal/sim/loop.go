@@ -198,6 +198,12 @@ var injectSocialWhitelist = map[string]bool{
 	"agent.belief_revised":     true,
 	"agent.narrative_set":      true,
 	"agent.consolidated":       true,
+	// The grounded-observation seam (spec 030 US2, FR-008): re-anchors a held
+	// belief's decay clock when the villager directly observes supporting
+	// evidence. 030 ships the consumer only (whitelist + reducer arm + tests);
+	// the perception-of-absence task is the intended future PRODUCER — nothing
+	// emits this in-tree yet.
+	"agent.belief_reinforced": true,
 	// Musings (TASK-21): interiority with no state effect — recorded
 	// chronicle material only.
 	"agent.thought": true,

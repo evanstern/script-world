@@ -1,0 +1,16 @@
+{
+  "id": "ctrl-02-trade",
+  "category": "control",
+  "names": ["Wren", "Ash"],
+  "teller": "Wren",
+  "note": "(none)",
+  "transcript": [
+    "Wren: I've a sack of barley spare. You still short on stone for the wall?",
+    "Ash: I am. I've three good blocks cut and dressed — take them for the barley?",
+    "Wren: Done. Here's the sack.",
+    "Ash: And here's the stone. Pleasure doing business, Wren.",
+    "Wren: Likewise. The wall'll stand and my bread'll rise.",
+    "Ash: Fair trade all round."
+  ],
+  "ground_truth": "A completed, mundane trade: within the conversation Wren hands over a sack of barley and Ash hands over three dressed stone blocks — the exchange actually happens on the spot. A faithful gist may state that they traded barley for stone (this action really occurred). No speculation, no fabrication."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "ctrl-03-debt-quarrel",
+  "category": "control",
+  "names": ["Fen", "Rowan"],
+  "teller": "Fen",
+  "note": "(none)",
+  "transcript": [
+    "Fen: You still owe me two days' labour, Rowan. I built your fence and you've done nothing back.",
+    "Rowan: I said I'd help with your roof and I will. Winter's not here yet.",
+    "Fen: You've been saying that for a month. My roof leaks now.",
+    "Rowan: Fine. You've made your point. I'll come by tomorrow and start on it.",
+    "Fen: See that you do. I don't like being taken for a fool.",
+    "Rowan: You're not. I'll make it right."
+  ],
+  "ground_truth": "A quarrel about an unpaid debt: Fen accuses Rowan of owing him two days' labour for a fence, Rowan admits it and promises to start on Fen's roof tomorrow. Everything stated is grounded in the exchange (the fence was built, the debt is real between them). A faithful gist captures the quarrel and Rowan's promise. No speculation or invented facts; the roof repair is promised, not yet done."
+}

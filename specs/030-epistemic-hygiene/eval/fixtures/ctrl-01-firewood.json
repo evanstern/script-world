@@ -1,0 +1,16 @@
+{
+  "id": "ctrl-01-firewood",
+  "category": "control",
+  "names": ["Cedar", "Mira"],
+  "teller": "Cedar",
+  "note": "(none)",
+  "transcript": [
+    "Cedar: Cold morning. The woodpile's near empty.",
+    "Mira: Aye, bitter. We'll want more before nightfall.",
+    "Cedar: I'll take the axe to the deadfall by the ridge if you gather kindling.",
+    "Mira: Fair split. I'll have the kindling in by midday.",
+    "Cedar: Good. We'll keep the fire through the night yet.",
+    "Mira: We will. Off I go."
+  ],
+  "ground_truth": "An ordinary chore conversation: Cedar and Mira note the low woodpile and split the work — Cedar to chop deadfall, Mira to gather kindling. No unverified claims, no fabricated actions. A faithful gist simply summarizes that they agreed to split the firewood work; it should read as an accurate, useful summary."
+}

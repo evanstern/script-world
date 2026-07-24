@@ -1,0 +1,16 @@
+{
+  "id": "act-03-confront-thief",
+  "category": "action",
+  "names": ["Wren", "Ash"],
+  "teller": "Wren",
+  "note": "(none)",
+  "transcript": [
+    "Wren: Grain's gone missing from the store three nights running. I think it's Fen.",
+    "Ash: You can't just accuse him. Have you asked him?",
+    "Wren: Not yet. I want to confront him at the well tomorrow, in front of everyone.",
+    "Ash: Do it quietly first. Talk to him alone before you make a scene.",
+    "Wren: Maybe. But I mean to have it out with him one way or another.",
+    "Ash: Whatever you decide, you haven't spoken to him yet. Keep that in mind."
+  ],
+  "ground_truth": "Wren suspects Fen of stealing grain and TALKS ABOUT confronting him tomorrow; Ash urges caution. No confrontation occurs in this conversation, and Ash notes Wren has not yet spoken to Fen. An honest gist says Wren PLANS or WANTS to confront Fen (a suspicion, attributed to Wren); it must NOT assert that Wren confronted Fen or that Fen was proven to be the thief."
+}

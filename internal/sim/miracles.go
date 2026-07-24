@@ -167,6 +167,8 @@ func (s *State) applyTimeSnapped(e store.Event) error {
 //	DenUse.Ready          den cooldown deadline
 //	FoodBatch.SpoilAt     ground-food rot deadline
 //	Debt.Due              repayment deadline; ONLY non-zero
+//	Belief.Reinforced     decay anchor (elapsed = tick-Reinforced); ONLY non-zero
+//	                      (0 = legacy grandfather, must stay 0 so it never decays)
 //	Gru.LastAttack        attack-cooldown anchor; ONLY non-zero (0 = never) and
 //	                      only while the gru is abroad
 //	Meeting.OpenedTick    assembly-phase anchor; ONLY non-zero (in-flight meeting)
@@ -208,6 +210,9 @@ func rebaseTicks(s *State, delta int64) {
 		a.IdleSince += delta // unconditional: zero is genesis-idle, not "never"
 		shift(&a.LastTalk)
 		shift(&a.LastGive)
+		for j := range a.Beliefs {
+			shift(&a.Beliefs[j].Reinforced) // spec 030: decay anchor (elapsed = tick-Reinforced); 0 = grandfather, stays 0
+		}
 		if a.Intent != nil {
 			shift(&a.Intent.WorkStart)
 		}

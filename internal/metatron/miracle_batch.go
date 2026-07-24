@@ -83,7 +83,7 @@ func BuildMiracleBatch(s *sim.State, kind string, p MiracleParams, gratis bool) 
 	batch := []store.Event{main}
 	for _, r := range recipients {
 		batch = append(batch, store.Event{Type: "agent.memory_added", Payload: mustJSON(sim.MemoryAddedPayload{
-			Agent: r, Text: text, Salience: sim.SalDream, Subject: -1})})
+			Agent: r, Text: text, Salience: sim.SalDream, Subject: -1, Origin: sim.OriginOmen})})
 	}
 	return batch, nil
 }
